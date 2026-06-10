@@ -1,0 +1,136 @@
+# mise.toml del plugin trinity — runtime del SERVIZIO Hindsight (server MCP :8888).
+#
+# Questo file NON è caricato automaticamente da Claude Code né da mise nei progetti:
+# viene usato esplicitamente dagli hook del plugin via `mise -C <plugin_root> run <task>`
+# (vedi hooks/hindsight/hindsight-ensure-up.sh). Hindsight è un singleton di macchina:
+# l'env qui sotto serve SOLO al processo server al momento del lancio, i progetti
+# parlano con il server già configurato via HTTP.
+#
+# I task di laboratorio (benchmark, dashboard log, check aggiornamenti) restano nel
+# .mise.toml del repo Trinity, che duplica l'[env] per necessità dei benchmark.
+
+[tools]
+python = "3.13"
+# Node nativo Windows: serve per il Control Plane di Hindsight (app Next.js avviata
+# via `npx @vectorize-io/hindsight-control-plane`). NB: l'npx del Node MSYS2 UCRT64
+# (/ucrt64/bin) crasha (segfault/bad_weak_ptr) — questo Node mise lo rimpiazza.
+node = "lts"
+
+[env]
+# Espone gli entry-point script di hindsight-api (hindsight-local-mcp, hindsight-api, ecc.)
+# La Scripts dir del Python mise non e' nel PATH per default sotto MSYS2.
+_.path = [
+  "C:/msys64/home/EN27553/.local/share/mise/installs/python/3.13.13/Scripts",
+]
+
+# Forza Python a usare UTF-8 per stdin/stdout/stderr. Hindsight stampa un banner
+# ANSI con caratteri Unicode che crasha sotto cp1252 (default Windows non-EN).
+PYTHONUTF8 = "1"
+
+# Verifica TLS via il CA bundle aziendale (lo stesso che usa curl), NON certifi.
+# Il proxy ENINET fa MITM TLS intermittente con un certificato self-signed: certifi
+# non ha la CA root aziendale → CERTIFICATE_VERIFY_FAILED intermittenti sulle chiamate
+# httpx (embedding zembed-1 + reranker zerank-2). Questo bundle (Mozilla + CA aziendale)
+# le fa verificare correttamente. NON è un downgrade: allinea Python al trust del SO.
+SSL_CERT_FILE = "C:/certs/cacert.pem"
+REQUESTS_CA_BUNDLE = "C:/certs/cacert.pem"
+# Equivalente per Node/npm/npx (Control Plane): Node usa il proprio CA store, non quello
+# del SO → stesso rischio MITM del proxy sui download npm.
+NODE_EXTRA_CA_CERTS = "C:/certs/cacert.pem"
+
+# Provider LLM per le operazioni retain/recall/reflect di hindsight.
+HINDSIGHT_API_LLM_PROVIDER = "openai"
+HINDSIGHT_API_LLM_MODEL = "gpt-4.1-mini"
+# La chiave viene risolta a runtime dall'env utente (OPENAI_API_KEY), non hardcodata qui.
+# Senza default: se manca la chiave il task abortisce subito — voluto, è il LLM di produzione.
+HINDSIGHT_API_LLM_API_KEY = "{{env.OPENAI_API_KEY}}"
+
+# --- LLM dedicato alla CONSOLIDATION (generazione delle observation) ---------
+# A/B 3-vie del 2026-06-02 su seed reale (23 fatti, tag claude-code):
+#   nano       → 0 observation: sul cold-start emette UPDATE su id inesistenti, mai CREATE
+#   gpt-4.1-mini → 16 observation, con update incrementale corretto tra i batch
+#   gpt-5-mini (reasoning, effort low) → 15 observation, qualità simile ma ~1.5-2x latenza
+# Scelto gpt-4.1-mini. NB: la consolidation è server-level (no override per-bank);
+# cambiarla richiede restart.
+HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER = "openai"
+HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-4.1-mini"
+HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{env.OPENAI_API_KEY}}"
+HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
+
+# PRODUZIONE: zembed-1 (ZeroEntropy) dal 2026-05-27. Per tornare a Gemini: rimetti "google"
+# (richiede rebuild del bank). Le righe Gemini sotto restano come fallback documentato.
+HINDSIGHT_API_EMBEDDINGS_PROVIDER = "zeroentropy"
+# default(''): nel plugin la chiave Gemini è opzionale (fallback non attivo) — non deve
+# abortire il lancio del server se manca nell'ambiente.
+HINDSIGHT_API_EMBEDDINGS_GEMINI_API_KEY = "{{ env.GEMINI_API_KEY | default(value='') }}"
+# NB: gemini-embedding-2 NON e' compatibile (l'API multimodale rende 1 embedding per
+# N input → rompe il batching 1:1 di hindsight-api). Restare su 001.
+HINDSIGHT_API_EMBEDDINGS_GEMINI_MODEL = "gemini-embedding-001"
+HINDSIGHT_API_EMBEDDINGS_GEMINI_OUTPUT_DIMENSIONALITY = 1536
+
+# Modelli locali multilingua (contenuti in italiano), usati solo se provider = local.
+HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL = "BAAI/bge-m3"
+HINDSIGHT_API_RERANKER_LOCAL_MODEL = "BAAI/bge-reranker-v2-m3"
+
+# --- Lingua del canale lessicale BM25 (backend "native") --------------------
+# I contenuti del bank sono in italiano: il dizionario tsvector di Postgres deve fare
+# stemming/stopword italiane. Riguarda SOLO il canale BM25; il semantico è multilingua.
+# ⚠️ Agisce solo sui NUOVI INSERT. Non impostiamo HINDSIGHT_API_LLM_OUTPUT_LANGUAGE:
+# tradurrebbe i nomi entità e frammenterebbe il grafo (path, comandi, identificatori).
+HINDSIGHT_API_TEXT_SEARCH_EXTENSION_NATIVE_LANGUAGE = "italian"
+
+# --- Reranker ZeroEntropy (remoto, via API) ---------------------------------
+# ATTIVATO il 2026-05-26 dopo benchmark: zerank-2 batte bge-reranker-v2-m3 su qualita'
+# (R@1 0.73 vs 0.47) e latenza (3.4s vs 29.5s). Con provider != "local" la validazione
+# config NON importa torch/transformers al boot (~20s in meno). Cambiare reranker NON
+# richiede rebuild del bank (agisce a query-time).
+HINDSIGHT_API_RERANKER_PROVIDER = "zeroentropy"
+HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
+HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2" # flagship; alt: zerank-2-small
+
+# --- Embedding zembed-1 ZeroEntropy (PRODUZIONE, nativo da hindsight-api 0.7.1) -------
+# ⚠️ Cambiare provider IMPONE un REBUILD del bank: zembed-1 usa dim Matryoshka
+#    [2560,1280,640,...], non 1536. Procedura: export (hindsight_export.py) → cambia
+#    provider → riavvia → re-retain (hindsight_import.py). Tool in hooks/hindsight/tools/.
+HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
+HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_MODEL = "zembed-1"
+HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_DIMENSIONS = 1280 # Matryoshka: 2560/1280/640/320/160/80/40
+
+[tasks.install-hindsight]
+description = "Installa/aggiorna hindsight-api (server Python locale, espone MCP) tramite pip del Python mise."
+shell = "/usr/bin/bash -c"
+run = "python -m pip install --upgrade hindsight-api"
+
+[tasks.start-hindsight]
+description = "Avvia hindsight-local-mcp in background (porta 8888). Log in /tmp/hs.log."
+# Mise su Windows usa cmd.exe per default — forziamo bash per via di `& disown` e `/tmp/`.
+# --daemon non funziona su Windows (fork unavailable). setsid + nohup + disown:
+#   - setsid: nuova sessione → child non riceve SIGHUP quando il terminale chiude
+#   - nohup: extra sicurezza; < /dev/null: chiude stdin; & disown: fuori dal job control
+# Senza setsid+nohup, su MSYS/Windows il child viene reaped quando il bash dell'hook esce.
+shell = "/usr/bin/bash -c"
+run = "setsid nohup hindsight-local-mcp --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown"
+
+[tasks.stop-hindsight]
+description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"
+# Forziamo bash: lo script usa taskkill //T (path assoluto) e pg_ctl.
+# Path relativo: mise esegue il task con cwd = config_root (= root del plugin).
+# {{config_root}} darebbe backslash Windows che la bash spezzerebbe.
+shell = "/usr/bin/bash -c"
+run = "bash hooks/hindsight/ops/hindsight-stop-services.sh"
+
+# --- Control Plane (Web UI Hindsight) --------------------------------------
+[tasks.control-plane]
+description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:9999, collegato all'API :8888. Foreground: Ctrl-C per fermarlo."
+# HOSTNAME=127.0.0.1: Next.js eredita la env HOSTNAME (sotto MSYS2 = nome macchina) e
+# vi si legherebbe; forzata a localhost per non esporre la UI in LAN.
+# VERSIONE PINNATA a 0.6.2: 0.7.0/0.7.1/0.7.2 hanno un bug i18n → loop di redirect
+# infinito su ogni route (verificato 2026-05-27/29 e 2026-06-05 con cp-redirect-test).
+# Quando esce una versione sana (>0.7.2), togliere/aggiornare il pin.
+shell = "/usr/bin/bash -c"
+run = "HOSTNAME=127.0.0.1 npx --yes @vectorize-io/hindsight-control-plane@0.6.2 --hostname 127.0.0.1 --api-url http://localhost:8888"
+
+[tasks.stop-control-plane]
+description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
+shell = "/usr/bin/bash -c"
+run = "bash hooks/hindsight/ops/kill-port.sh 9999 control-plane"
