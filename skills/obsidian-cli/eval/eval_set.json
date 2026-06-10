@@ -1,0 +1,142 @@
+[
+  {
+    "query": "aggiungi questo alla mia daily note: 'ho revisionato la Q1 roadmap con sarah, vuole i mockups entro venerdì'",
+    "should_trigger": true
+  },
+  {
+    "query": "cerca nel mio vault tutto quello che ho scritto sull'Henderson project, devo prepararmi per una call",
+    "should_trigger": true
+  },
+  {
+    "query": "quali open tasks ho in Obsidian? solo quelle incomplete",
+    "should_trigger": true
+  },
+  {
+    "query": "crea una nuova note dal mio meeting-notes template e chiamala 'Standup 2026-03-04'",
+    "should_trigger": true
+  },
+  {
+    "query": "append '- [ ] follow up con il design team sulla nav bar' a projects/mobile-redesign.md",
+    "should_trigger": true
+  },
+  {
+    "query": "quante note ci sono nel mio vault adesso? e quali non hanno link in ingresso?",
+    "should_trigger": true
+  },
+  {
+    "query": "leggimi la daily note di oggi",
+    "should_trigger": true
+  },
+  {
+    "query": "imposta la status property in projects/q2-launch.md su 'in-review'",
+    "should_trigger": true
+  },
+  {
+    "query": "voglio scrivere uno script che prenda tutte le note taggate #meeting dell'ultima settimana e le sintetizzi",
+    "should_trigger": true
+  },
+  {
+    "query": "sposta tutto nella mia cartella Inbox/ in Archive/2026/ e aggiorna la daily note con una voce di log",
+    "should_trigger": true
+  },
+  {
+    "query": "controlla la sync history di important.md e ripristina la versione di due giorni fa",
+    "should_trigger": true
+  },
+  {
+    "query": "lista tutti i miei bookmarks in Obsidian",
+    "should_trigger": true
+  },
+  {
+    "query": "esegui obsidian eval per contare quanti file markdown hanno una 'status' property impostata su 'done'",
+    "should_trigger": true
+  },
+  {
+    "query": "trova tutte le note nel mio vault che linkano a projects/q1-review.md",
+    "should_trigger": true
+  },
+  {
+    "query": "fai uno screenshot della mia vista corrente di Obsidian e salvalo in screenshots/",
+    "should_trigger": true
+  },
+  {
+    "query": "mostrami tutti i tags nel mio vault ordinati per frequenza d'uso",
+    "should_trigger": true
+  },
+  {
+    "query": "interroga la view 'Tasks' di Obsidian Bases e mostra tutte le entries dove priority è high",
+    "should_trigger": true
+  },
+  {
+    "query": "quali note ho aperto di recente in Obsidian?",
+    "should_trigger": true
+  },
+  {
+    "query": "elimina definitivamente la mia note scratch/temp-ideas.md",
+    "should_trigger": true
+  },
+  {
+    "query": "rinomina la mia note 'Meeting 2026-02-28.md' in 'Sprint Retro 2026-02-28.md'",
+    "should_trigger": true
+  },
+  {
+    "query": "come cambio l'accent color in Obsidian? voglio qualcosa di più muted rispetto al purple di default",
+    "should_trigger": false
+  },
+  {
+    "query": "non riesco a capire come abilitare i community plugins in Obsidian — il toggle è disattivato in safe mode",
+    "should_trigger": false
+  },
+  {
+    "query": "Obsidian ha una kanban view integrata o mi serve un plugin?",
+    "should_trigger": false
+  },
+  {
+    "query": "il mio iCloud sync per Obsidian continua a creare conflitti con i file sul mio iPad — come li risolvo senza perdere dati?",
+    "should_trigger": false
+  },
+  {
+    "query": "come configuro l'Obsidian Git plugin per fare auto-commit del mio vault ogni ora?",
+    "should_trigger": false
+  },
+  {
+    "query": "uso Notion per le mie note ma sto pensando di passare a Obsidian — qual è il modo migliore per esportare da Notion e importare in Obsidian?",
+    "should_trigger": false
+  },
+  {
+    "query": "nel Dataview plugin, come scrivo una query che mostra tutte le note con una due-date property prima di oggi?",
+    "should_trigger": false
+  },
+  {
+    "query": "voglio personalizzare il tema di Obsidian con CSS — come targetto specificamente il background color della sidebar?",
+    "should_trigger": false
+  },
+  {
+    "query": "qual è la keyboard shortcut per aprire la command palette in Obsidian su Mac?",
+    "should_trigger": false
+  },
+  {
+    "query": "sto scrivendo uno script Python per parsare file markdown dalla mia notes folder ed estrarre tutti gli headings in un CSV — qual è la libreria migliore per farlo?",
+    "should_trigger": false
+  },
+  {
+    "query": "come funziona la graph view di Obsidian? voglio capire cosa rappresentano i clusters",
+    "should_trigger": false
+  },
+  {
+    "query": "c'è un modo per pubblicare pubblicamente il mio Obsidian vault? quali sono le opzioni?",
+    "should_trigger": false
+  },
+  {
+    "query": "come configuro una hotkey in Obsidian per eseguire un comando specifico dalla command palette?",
+    "should_trigger": false
+  },
+  {
+    "query": "spiegami cosa significa la sezione 'unresolved links' nella graph view di Obsidian",
+    "should_trigger": false
+  },
+  {
+    "query": "come uso le variabili del Templater plugin tipo {{date}} in Obsidian?",
+    "should_trigger": false
+  }
+]
