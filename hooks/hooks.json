@@ -1,0 +1,99 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pretool-notify.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? commit([[:space:]]|$)' && ! echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? push([[:space:]]|$)'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-ensure-up.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-mm-inject.sh",
+            "timeout": 6
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/bash -c \"ffplay -nodisp -autoexit -loglevel quiet \\\"$(cygpath -u \\\"${CLAUDE_PLUGIN_ROOT}\\\")/sound/Windows_Proximity_Notification.wav\\\" 2>/dev/null\""
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-retain.sh",
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-shutdown.sh",
+            "timeout": 40
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/bash -c \"ffplay -nodisp -autoexit -loglevel quiet \\\"$(cygpath -u \\\"${CLAUDE_PLUGIN_ROOT}\\\")/sound/Windows_Exclamation.wav\\\" 2>/dev/null\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/usr/bin/bash -c \"/c/Appl/PowerShell/pwsh.exe -NoProfile -ExecutionPolicy Bypass -File \\\"$(cygpath -w \\\"${CLAUDE_PLUGIN_ROOT}/hooks/windows-toast.ps1\\\")\\\"\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

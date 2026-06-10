@@ -1,0 +1,529 @@
+{
+  "$schema": "./skill-rules.schema.json",
+  "version": "2.0",
+  "config": {
+    "minConfidenceScore": 3,
+    "showMatchReasons": true,
+    "maxSkillsToShow": 3
+  },
+  "scoring": {
+    "keyword": 2,
+    "keywordPattern": 3,
+    "pathPattern": 4,
+    "directoryMatch": 5,
+    "intentPattern": 4,
+    "contentPattern": 3,
+    "contextPattern": 2
+  },
+  "directoryMappings": {
+    ".claude/skills/excalidraw-skill": "excalidraw-skill",
+    ".claude/skills/obsidian": "obsidian",
+    ".claude/skills/excel-data-analyst": "excel-data-analyst",
+    ".claude/skills/double-commander-docs": "double-commander-docs",
+    "data": "excel-data-analyst",
+    ".claude/skills/nushell": "nushell",
+    ".claude/skills/mise": "mise",
+    ".claude/skills/hindsight": "hindsight",
+    ".claude/skills/ruby": "ruby",
+    ".claude/skills/book-to-skill": "book-to-skill"
+  },
+  "skills": {
+    "excalidraw-skill": {
+      "description": "Excalidraw canvas diagramming via MCP tools",
+      "priority": 8,
+      "triggers": {
+        "keywords": [
+          "disegno",
+          "diagramma",
+          "schema",
+          "flowchart",
+          "mindmap",
+          "architettura",
+          "schizzo",
+          "canvas",
+          "excalidraw",
+          "mermaid",
+          "draw",
+          "diagram",
+          "sketch"
+        ],
+        "keywordPatterns": [
+          "\\bcanvas\\b",
+          "\\bdisegn[oia]\\b",
+          "\\bdiagramm[oia]\\b",
+          "\\bflusso\\b",
+          "\\bflow\\s?chart\\b",
+          "\\bmind\\s?map\\b"
+        ],
+        "pathPatterns": ["**/*.excalidraw", "**/*.excalidraw.md"],
+        "intentPatterns": [
+          "(?:crea|disegna|fai|modifica|aggiorna|rifai).*(?:diagramma|schema|disegno|flowchart|architettura|schizzo)",
+          "(?:draw|create|make|update).*(?:diagram|chart|flow|sketch|architecture)",
+          "(?:aggiungi|sposta|ridimensiona|colora).*(?:box|rettangolo|freccia|elemento|nodo)"
+        ],
+        "contentPatterns": [
+          "mcp__excalidraw",
+          "batch_create_elements",
+          "create_from_mermaid",
+          "describe_scene"
+        ]
+      },
+      "relatedSkills": ["obsidian"]
+    },
+    "obsidian": {
+      "description": "Obsidian vault PKM integration and note management",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "vault",
+          "nota",
+          "note",
+          "obsidian",
+          "frontmatter",
+          "wikilink",
+          "backlink",
+          "dataview",
+          "templater",
+          "quickadd",
+          "pkm",
+          "zettelkasten",
+          "daily note",
+          "second brain"
+        ],
+        "keywordPatterns": [
+          "\\bvault\\b",
+          "\\bnot[ae]\\b",
+          "\\bbacklink\\b",
+          "\\bdataview\\b",
+          "\\btemplater\\b",
+          "\\bfrontmatter\\b",
+          "\\.excalidraw\\.md\\b"
+        ],
+        "pathPatterns": [
+          "E:/Obsidian/**",
+          "/e/Obsidian/**",
+          "**/*.excalidraw.md"
+        ],
+        "intentPatterns": [
+          "(?:salva|crea|scrivi|embed|inserisci).*(?:nota|vault|obsidian)",
+          "(?:save|create|write).*(?:note|vault)",
+          "(?:salva|esporta).*(?:nel vault|in obsidian)"
+        ],
+        "contextPatterns": [
+          "nel vault",
+          "in obsidian",
+          "nella nota",
+          "nel sinapsi",
+          "obsidian vault"
+        ]
+      },
+      "relatedSkills": ["excalidraw-skill"]
+    },
+    "excel-data-analyst": {
+      "description": "Excel data analysis with pandas, matplotlib, and openpyxl",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "excel",
+          "xlsx",
+          "analisi",
+          "grafico",
+          "trend",
+          "distribuzione",
+          "correlazione",
+          "pivot",
+          "dashboard",
+          "pandas",
+          "dataset",
+          "statistiche",
+          "matplotlib",
+          "openpyxl",
+          "scipy"
+        ],
+        "keywordPatterns": [
+          "\\bexcel\\b",
+          "\\bxlsx?\\b",
+          "\\bcsv\\b",
+          "\\bpandas\\b",
+          "\\bpivot\\b",
+          "\\bdashboard\\b",
+          "\\bdat[io]\\b",
+          "\\bchart\\b"
+        ],
+        "pathPatterns": ["**/*.xlsx", "**/*.xls", "**/*.csv", "data/**"],
+        "intentPatterns": [
+          "(?:analizza|apri|carica|leggi|elabora|esplora).*(?:dati|excel|file|tabella|dataset|foglio)",
+          "(?:crea|fai|genera|costruisci).*(?:grafico|\\bchart\\b|dashboard|report|pivot|istogramma)",
+          "(?:analyze|plot|\\bchart\\b).*(?:data|excel|csv)"
+        ],
+        "contentPatterns": [
+          "import pandas",
+          "import matplotlib",
+          "import openpyxl",
+          "pd\\.read_excel",
+          "pd\\.read_csv",
+          "import scipy"
+        ]
+      }
+    },
+    "double-commander-docs": {
+      "description": "Double Commander file manager documentation and configuration",
+      "priority": 6,
+      "triggers": {
+        "keywords": [
+          "double commander",
+          "doublecmd",
+          "file manager",
+          "toolbar",
+          "doppio pannello",
+          "twin panel",
+          "wcx",
+          "wdx",
+          "wfx",
+          "wlx"
+        ],
+        "keywordPatterns": [
+          "double.?commander",
+          "\\bdoublecmd\\b",
+          "\\btoolbar\\b.*(?:button|icon|command|pulsant)",
+          "\\bplugin\\b.*(?:wcx|wdx|wfx|wlx)",
+          "\\bcomand[io]\\s+intern[io]\\b"
+        ],
+        "pathPatterns": [
+          "**/doublecmd.xml",
+          "**/doublecmd/**",
+          "**/*.wcx",
+          "**/*.wdx",
+          "**/*.wfx",
+          "**/*.wlx"
+        ],
+        "intentPatterns": [
+          "(?:configura|personalizza|modifica|imposta).*(?:double commander|toolbar|pannello|doublecmd)",
+          "(?:cerca|trova|come).*(?:comando|opzione|shortcut|scorciatoia).*(?:double commander|doublecmd|dc)"
+        ],
+        "contextPatterns": [
+          "in double commander",
+          "di doublecmd",
+          "nel file manager",
+          "pannello sinistro",
+          "pannello destro"
+        ]
+      },
+      "excludePatterns": ["docker", "docker-compose", "dockerfile"]
+    },
+    "nushell": {
+      "description": "Nushell structured shell scripting, data pipelines, and cross-platform automation",
+      "priority": 6,
+      "triggers": {
+        "keywords": [
+          "nushell",
+          "nushell script",
+          "nu script",
+          "nu shell",
+          "structured shell",
+          "pipeline strutturata",
+          "config.nu",
+          "env.nu"
+        ],
+        "keywordPatterns": [
+          "\\bnushell\\b",
+          "\\bnu\\s+script\\b",
+          "\\b\\.nu\\b",
+          "\\bconfig\\.nu\\b",
+          "\\benv\\.nu\\b",
+          "\\bnu\\s+pipeline\\b"
+        ],
+        "pathPatterns": [
+          "**/*.nu",
+          "**/config.nu",
+          "**/env.nu",
+          "**/.config/nushell/**"
+        ],
+        "intentPatterns": [
+          "(?:scrivi|crea|converti|migra|fai).*(?:nushell|nu script|script nu)",
+          "(?:write|create|convert|migrate).*(?:nushell|nu script)",
+          "(?:converti|trasforma|riscrivi).*(?:da bash|bash a|in nushell|in nu)",
+          "(?:configura|imposta|personalizza).*(?:nushell|nu shell)"
+        ],
+        "contentPatterns": [
+          "#!/usr/bin/env nu",
+          "\\bdef main\\b.*\\{",
+          "\\| where\\b",
+          "\\| each\\b.*\\{",
+          "\\bopen .+\\.(?:json|csv|yaml|toml)\\b",
+          "\\bto json\\b",
+          "\\bto csv\\b",
+          "\\$env\\."
+        ],
+        "contextPatterns": [
+          "in nushell",
+          "con nushell",
+          "usando nu",
+          "nushell syntax",
+          "sintassi nu"
+        ]
+      }
+    },
+    "hindsight": {
+      "description": "Hindsight persistent memory system for AI agents — retain/recall/reflect, memory banks, local/cloud/self-hosted",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "hindsight",
+          "memory bank",
+          "retain",
+          "recall",
+          "reflect",
+          "persistent memory",
+          "hindsight-embed",
+          "hindsight cloud",
+          "hindsight local",
+          "hindsight server",
+          "self-hosted memory",
+          "memory architecture",
+          "bank config",
+          "tag schema",
+          "biomimetic memory",
+          "hindsight api",
+          "hindsight sdk",
+          "hindsight cli"
+        ],
+        "keywordPatterns": [
+          "\\bhindsight\\b",
+          "\\bretain\\b",
+          "\\brecall\\b",
+          "\\breflect\\b",
+          "\\bmemory\\s+bank\\b",
+          "\\bbank\\s+config\\b",
+          "\\btag\\s+schema\\b",
+          "\\bhindsight[_-]embed\\b",
+          "\\buvx\\s+hindsight\\b"
+        ],
+        "pathPatterns": [
+          "**/.hindsight/**",
+          "**/hindsight.config.*",
+          "**/*.hindsight.json"
+        ],
+        "intentPatterns": [
+          "(?:progetta|crea|configura|imposta|disegna).*(?:memory|memoria|bank|hindsight)",
+          "(?:store|retain|save|memorizza).*(?:context|knowledge|learnings|preferenze)",
+          "(?:recall|recupera|cerca).*(?:context|knowledge|memoria|bank)",
+          "(?:installa|avvia|configura|collega).*(?:hindsight|memory server|memory system)",
+          "(?:design|architect|plan).*(?:memory|bank|hindsight)"
+        ],
+        "contentPatterns": [
+          "hindsight\\.retain",
+          "hindsight\\.recall",
+          "hindsight\\.reflect",
+          "HINDSIGHT_API_URL",
+          "hindsight-embed",
+          "api\\.hindsight\\.vectorize\\.io",
+          "from hindsight",
+          "import hindsight"
+        ],
+        "contextPatterns": [
+          "memoria persistente",
+          "persistent memory",
+          "memory for agents",
+          "agent memory",
+          "con hindsight",
+          "usando hindsight",
+          "via hindsight"
+        ]
+      },
+      "relatedSkills": []
+    },
+    "ruby": {
+      "description": "Gem Ruby per analisi dati: DataFrame (polars-df), ML (rumale), statistiche, Excel/CSV (roo)",
+      "priority": 6,
+      "triggers": {
+        "keywords": [
+          "polars",
+          "polars-df",
+          "rumale",
+          "numo-narray",
+          "enumerable-statistics",
+          "rover-df",
+          "ruby gem",
+          "gemfile"
+        ],
+        "keywordPatterns": [
+          "\\bpolars\\b",
+          "\\brumale\\b",
+          "\\bnumo\\b",
+          "\\bgemfile\\b",
+          "gem\\s+[\"']polars",
+          "gem\\s+[\"']rumale",
+          "gem\\s+[\"']roo[\"']",
+          "require\\s+[\"']polars[\"']",
+          "require\\s+[\"']rumale[\"']",
+          "require\\s+[\"']numo"
+        ],
+        "pathPatterns": [
+          "**/Gemfile",
+          "**/Gemfile.lock",
+          "**/*.rb",
+          ".claude/skills/ruby/**"
+        ],
+        "intentPatterns": [
+          "(?:analisi|analizza|elabora|processa).*(?:dati|data|csv|excel).*ruby",
+          "ruby.*(?:analisi|dataframe|dataframe|statistiche|machine learning)",
+          "(?:dataframe|dataframe|ml|machine learning).*(?:in|con|usando)\\s+ruby",
+          "(?:gem|libreria|library).*(?:ruby|rb).*(?:dati|data|analisi|statistiche)",
+          "(?:polars|rumale|numo|roo).*(?:ruby|rb)"
+        ],
+        "contentPatterns": [
+          "require [\"']polars[\"']",
+          "require [\"']rumale[\"']",
+          "require [\"']numo",
+          "require [\"']roo[\"']",
+          "gem [\"']polars-df[\"']",
+          "gem [\"']rumale[\"']",
+          "gem [\"']roo[\"']",
+          "gem [\"']numo-narray[\"']",
+          "gem [\"']enumerable-statistics[\"']",
+          "Polars\\.read_csv",
+          "Polars\\.col",
+          "Rumale::",
+          "Numo::"
+        ],
+        "contextPatterns": [
+          "in ruby",
+          "con ruby",
+          "usando ruby",
+          "ruby script",
+          "script ruby",
+          "gem ruby",
+          "ruby gem"
+        ]
+      },
+      "relatedSkills": ["excel-data-analyst"]
+    },
+    "book-to-skill": {
+      "description": "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, RTF, MOBI/AZW) into structured agent skills — extracting frameworks, mental models, principles, techniques, and anti-patterns",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "book-to-skill",
+          "book to skill",
+          "converti libro",
+          "converti documento",
+          "converti pdf",
+          "converti epub",
+          "estrai skill",
+          "estrai framework",
+          "documento in skill",
+          "libro in skill",
+          "mental model",
+          "framework extraction",
+          "skill generation",
+          "calibre",
+          "epub",
+          "mobi",
+          "azw"
+        ],
+        "keywordPatterns": [
+          "\\bbook[-\\s]to[-\\s]skill\\b",
+          "\\bconvert.*(?:book|document|pdf|epub|docx)\\b",
+          "\\bconverti.*(?:libro|documento|pdf|epub|docx)\\b",
+          "\\bestrai.*(?:framework|principi|skill|mental model)\\b",
+          "\\b(?:pdf|epub|docx|mobi|azw3?)\\b",
+          "\\bmental\\s+model\\b",
+          "\\bframework\\s+extraction\\b"
+        ],
+        "pathPatterns": [
+          "**/*.pdf",
+          "**/*.epub",
+          "**/*.docx",
+          "**/*.mobi",
+          "**/*.azw",
+          "**/*.azw3",
+          "**/*.rtf",
+          ".claude/skills/book-to-skill/**"
+        ],
+        "intentPatterns": [
+          "(?:converti|trasforma|trasforma|analizza|studia).*(?:libro|documento|pdf|epub|docx|mobi|azw)",
+          "(?:convert|transform|analyze|study).*(?:book|document|pdf|epub|docx|mobi)",
+          "(?:estrai|extract|genera|generate).*(?:skill|framework|principi|mental model).*(?:da|from|libro|book|documento|document)",
+          "(?:crea|genera|build|create).*(?:skill|agent skill).*(?:da|from|libro|book|documento|document)",
+          "(?:voglio|want|studia|study).*(?:libro|book|documento|document).*(?:con claude|tramite agent|through agent|skill)"
+        ],
+        "contentPatterns": [
+          "book-to-skill",
+          "SKILL\\.md",
+          "skill_name",
+          "extract\\.py",
+          "BOOK_PATH"
+        ],
+        "contextPatterns": [
+          "trasforma in skill",
+          "converti in skill",
+          "estrai da documento",
+          "da questo pdf",
+          "da questo libro",
+          "from this book",
+          "from this document"
+        ]
+      }
+    },
+    "mise": {
+      "description": "mise development environment management: tool versions, env vars, and project tasks",
+      "priority": 6,
+      "triggers": {
+        "keywords": [
+          "mise",
+          "mise.toml",
+          ".mise.toml",
+          "mise install",
+          "mise use",
+          "mise run",
+          "mise task",
+          "tool versions",
+          "runtime manager",
+          "version manager",
+          "mise lock",
+          "mise shim"
+        ],
+        "keywordPatterns": [
+          "\\bmise\\b",
+          "\\bmise\\.toml\\b",
+          "\\bmise\\.lock\\b",
+          "\\btool.versions\\b",
+          "\\bmise\\s+(?:use|install|run|task|list|upgrade|registry)\\b"
+        ],
+        "pathPatterns": [
+          "**/.mise.toml",
+          "**/mise.toml",
+          "**/.mise.*.toml",
+          "**/.mise/tasks/**",
+          "**/.tool-versions",
+          "**/.mise.lock"
+        ],
+        "intentPatterns": [
+          "(?:installa|configura|imposta|aggiungi|gestisci|aggiorna).*(?:mise|tool version|runtime|versione)",
+          "(?:install|setup|configure|add|manage|update).*(?:mise|tool version|runtime)",
+          "(?:crea|definisci|aggiungi).*(?:mise task|mise\\.toml|tool-versions)",
+          "(?:mise).*(?:backend|github|cargo|npm|pipx)"
+        ],
+        "contentPatterns": [
+          "\\[tools\\]",
+          "\\[tasks\\.",
+          "\\[env\\]",
+          "mise use",
+          "mise install",
+          "mise run",
+          "mise registry",
+          "mise ls-remote"
+        ],
+        "contextPatterns": [
+          "con mise",
+          "usando mise",
+          "in mise",
+          "via mise",
+          "mise config",
+          "with mise"
+        ]
+      }
+    }
+  }
+}

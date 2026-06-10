@@ -1,3 +1,7 @@
+---
+description: Riflessione strategica sulla memoria persistente Hindsight del progetto
+---
+
 # Reflect
 
 Esegui una riflessione strategica usando la memoria persistente Hindsight MCP del progetto.
