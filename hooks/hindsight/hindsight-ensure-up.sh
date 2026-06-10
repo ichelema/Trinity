@@ -61,6 +61,9 @@ fi
 
 # 2/3. avvia il server SOLO se la porta e' libera (se occupata, e' gia' in boot)
 if ! port_listening; then
+    # Trust idempotente: ogni update del plugin cambia il path della copia installata
+    # (cache versionata ~/.claude/plugins/cache/...) e mise rifiuterebbe il config.
+    "$MISE" trust "$PLUGIN_ROOT/mise.toml" > /dev/null 2>&1 || true
     "$MISE" -C "$PLUGIN_ROOT" run start-hindsight > /dev/null 2>&1 &
     disown 2> /dev/null || true
 fi
