@@ -43,6 +43,11 @@
           },
           {
             "type": "command",
+            "command": "/usr/bin/bash -c \"cat \\\"$(cygpath -u \\\"${CLAUDE_PLUGIN_ROOT}\\\")/core-behavior.md\\\"\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-mm-inject.sh",
             "timeout": 6
           }
