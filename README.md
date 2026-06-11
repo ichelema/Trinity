@@ -193,6 +193,17 @@ La configurazione del servizio (provider LLM/embedding, env TLS, task
 `start/stop-hindsight`, `control-plane`) è in **`mise.toml`**, usato dagli hook via 
 `mise -C <plugin_root> run <task>`. È la fonte di verità del runtime Hindsight.
 
+**Override della config per-progetto.** I parametri runtime degli hook (budget, tag, 
+`recall/retain_enabled`, timeout, …) stanno in **`hindsight.config.json` nella root del plugin**. 
+Un progetto può personalizzarli mettendo un proprio `hindsight.config.json` **nella sua root**: 
+il loader fa un **merge a strati** — DEFAULTS → config del plugin → config del progetto → env — 
+quindi il file del progetto sovrascrive **solo** le chiavi che contiene (anche una sola riga), 
+ereditando il resto dal plugin. Esempio (`<progetto>/hindsight.config.json`):
+
+```json
+{ "retain_enabled": true, "recall_max_results": 5 }
+```
+
 ---
 
 ## 8. Setup per-macchina (valori machine-specific)

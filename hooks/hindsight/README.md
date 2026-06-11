@@ -25,10 +25,11 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 
 | File                      | Ruolo                                                                            |
 | ------------------------- | -------------------------------------------------------------------------------- |
-| `hindsight_config.py`     | loader della config centralizzata (legge `hindsight.config.json` + override env) |
+| `hindsight_config.py`     | loader della config a strati: DEFAULTS → `<plugin_root>/hindsight.config.json` → `<progetto>/hindsight.config.json` (override) → env |
 | `hindsight_debug.py`      | logging strutturato JSONL su `logs/hindsight-debug.log`                          |
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
-| `hindsight.config.json`   | **unica fonte** dei parametri (api_url, budget, tag, mental model, …)            |
+
+> `hindsight.config.json` (i parametri: api_url, budget, tag, mental model, …) vive nella **root del plugin**, non più in `lib/`. Un progetto può sovrascrivere singole chiavi con un proprio `hindsight.config.json` nella sua root (merge a strati).
 
 ## 📁 `ops/` — script operativi e utility
 

@@ -12,7 +12,7 @@ in `D:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sos
 
 | File                                                 | Ruolo                                                                                                      |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `hindsight.config.json`                              | Config tunabile (URL bank, parametri recall/retain/reflect). Fonte di verità runtime                       |
+| `hindsight.config.json` (root del plugin)           | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
 | `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV |
 | `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: recupera memorie e le inietta come `additionalContext`. Sincrono                |
 | `hindsight_recall_lib.py`                            | Logica pura testabile del recall (compose query + `build_recall_payload`)                                  |

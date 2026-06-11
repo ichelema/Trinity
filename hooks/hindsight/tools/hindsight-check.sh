@@ -320,14 +320,19 @@ fi
 
 # --- 15. CONFIG CENTRALIZZATA (step F) ---
 sect "15. Config centralizzata (step F)"
-for f in hindsight.config.json hindsight_config.py; do
-	if [ -r "$HOOKS_DIR/lib/$f" ]; then
-		ok "$f presente"
-	else
-		ko "$f mancante in $HOOKS_DIR/lib"
-	fi
-done
-if PYTHONUTF8=1 python -c "import json,sys; json.load(open(sys.argv[1],encoding='utf-8'))" "$(cygpath -w "$HOOKS_DIR/lib/hindsight.config.json")" 2>/dev/null; then
+# hindsight_config.py resta in lib/; hindsight.config.json e' nella root del plugin (2 livelli su).
+PLUGIN_CFG="$HOOKS_DIR/../../hindsight.config.json"
+if [ -r "$HOOKS_DIR/lib/hindsight_config.py" ]; then
+	ok "hindsight_config.py presente"
+else
+	ko "hindsight_config.py mancante in $HOOKS_DIR/lib"
+fi
+if [ -r "$PLUGIN_CFG" ]; then
+	ok "hindsight.config.json presente (root plugin)"
+else
+	ko "hindsight.config.json mancante nella root del plugin"
+fi
+if PYTHONUTF8=1 python -c "import json,sys; json.load(open(sys.argv[1],encoding='utf-8'))" "$(cygpath -w "$PLUGIN_CFG")" 2>/dev/null; then
 	ok "hindsight.config.json e' JSON valido"
 else
 	ko "hindsight.config.json non e' JSON valido"

@@ -3,8 +3,11 @@
 Fonte unica di verita' per i valori tunabili (URL bank, parametri recall/retain/
 reflect). Ordine di caricamento (gli ultimi vincono):
   1. DEFAULTS hardcoded qui sotto
-  2. file hindsight.config.json (stessa cartella; override via HS_CONFIG_FILE)
-  3. override da variabili d'ambiente (retrocompatibilita' coi nomi gia' usati)
+  2. hindsight.config.json del PLUGIN (root del plugin) -- la base
+  3. hindsight.config.json del PROGETTO ($CLAUDE_PROJECT_DIR), se presente --
+     override per-progetto a MERGE: sovrascrive solo le chiavi che contiene
+  4. override da variabili d'ambiente (retrocompatibilita' coi nomi gia' usati)
+HS_CONFIG_FILE forza un singolo file (test/retrocompat), saltando 2 e 3.
 
 Uso da Python:   from hindsight_config import load_config; cfg = load_config()
 Uso da bash:     python hindsight_config.py --get api_url
@@ -141,26 +144,52 @@ def _cast(value: str, sample):
         return sample
 
 
-def _config_path() -> str:
-    return os.environ.get("HS_CONFIG_FILE") or os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "hindsight.config.json"
-    )
+def _plugin_config_path() -> str:
+    """Config di default del plugin: <plugin_root>/hindsight.config.json.
+    Il modulo vive in hooks/hindsight/lib/ -> la root del plugin e' 3 livelli su."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+    return os.path.join(root, "hindsight.config.json")
+
+
+def _project_config_path() -> str | None:
+    """Override per-progetto: <project_root>/hindsight.config.json, se presente.
+    project_root = $CLAUDE_PROJECT_DIR (passato da Claude Code agli hook)."""
+    proj = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not proj:
+        return None
+    path = os.path.join(proj, "hindsight.config.json")
+    return path if os.path.isfile(path) else None
+
+
+def _merge_json(cfg: dict, path: str) -> None:
+    """Sovrascrive in cfg le sole chiavi note (presenti nei DEFAULTS) trovate nel
+    file JSON. File assente o non valido => no-op (best-effort)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return
+    for k, v in data.items():
+        if k in cfg and v is not None:
+            cfg[k] = v
 
 
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
 
-    # 2. file JSON
-    try:
-        with open(_config_path(), encoding="utf-8") as f:
-            data = json.load(f)
-        for k, v in data.items():
-            if k in cfg and v is not None:
-                cfg[k] = v
-    except (OSError, ValueError):
-        pass
+    # 2-3. file JSON a strati (gli ultimi vincono). HS_CONFIG_FILE forza un
+    # singolo file; altrimenti: config del PLUGIN (base) -> PROGETTO (override).
+    forced = os.environ.get("HS_CONFIG_FILE")
+    if forced:
+        _merge_json(cfg, forced)
+    else:
+        _merge_json(cfg, _plugin_config_path())
+        project_cfg = _project_config_path()
+        if project_cfg:
+            _merge_json(cfg, project_cfg)
 
-    # 3. override env (nomi legacy + generico HS_CFG_<CHIAVE>)
+    # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>)
     for env_name, key in ENV_OVERRIDES.items():
         val = os.environ.get(env_name)
         if val:

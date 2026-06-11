@@ -4,7 +4,7 @@
 # sempre con i valori del config. Va lanciato una tantum (e di nuovo se il bank
 # viene ricreato o se si modificano le mission).
 #
-# I TESTI DELLE MISSION sono in lib/hindsight.config.json (chiavi retain_mission,
+# I TESTI DELLE MISSION sono in hindsight.config.json (root del plugin; chiavi retain_mission,
 # reflect_mission, observations_mission) — unica source of truth, configurabili da
 # lì. Questo script li legge e li applica al bank via PATCH /config.
 #
@@ -23,8 +23,8 @@ export HOOKS_DIR API_URL="${HINDSIGHT_API_URL:-http://127.0.0.1:8888/v1/default/
 python <<'PY'
 import json, os, sys, urllib.request, urllib.error
 
-# Mission dal config centralizzato (lib/hindsight.config.json).
-cfg_path = os.path.join(os.environ["HOOKS_DIR"], "..", "lib", "hindsight.config.json")
+# Mission dal config centralizzato del plugin (root del plugin; HOOKS_DIR = ops/).
+cfg_path = os.path.join(os.environ["HOOKS_DIR"], "..", "..", "..", "hindsight.config.json")
 with open(cfg_path, encoding="utf-8") as f:
     cfg = json.load(f)
 
