@@ -58,7 +58,7 @@ mise run dashboard         # → http://localhost:9292
 
 - **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `127.0.0.1` (no LAN; non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi).
 - **Dashboard**: prima volta esegui `mise run install-dashboard` (bundle install). Gira sul **Ruby gestito da mise** (`[tools] ruby = "4.0.1"`), non quello MSYS2 — le gem vanno installate con lo stesso Ruby che le esegue.
-- Stop affidabile via `.claude/hooks/hindsight/ops/kill-port.sh <porta>` (usa `Get-NetTCPConnection`: il netstat MSYS non vede sempre i processi nativi Windows).
+- Stop affidabile via `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh <porta>` (usa `Get-NetTCPConnection`: il netstat MSYS non vede sempre i processi nativi Windows).
 
 > Dettagli e gotcha d'ambiente (npx MSYS2 rotto, doppio-Ruby, hook `mise reshim`, bind `HOSTNAME`): vedi `README.md` §16.
 

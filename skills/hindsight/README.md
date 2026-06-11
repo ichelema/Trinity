@@ -42,9 +42,9 @@ in `D:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sos
 ## 3. Debug log
 
 - **Abilitazione**: `debug_log_enabled: true`. È OFF nei `DEFAULTS` spediti (best-effort, costo ~0 da spento).
-- **Path quando `debug_log_file` è vuoto**: `D:\AI\Claude\Trinity\logs\hindsight-debug.log`.
+- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log` (es. `D:\AI\Claude\Trinity-plugin\logs\`).
   Calcolato in `hindsight_debug.py::_log_path()` relativo al modulo (risale 3 livelli da
-  `.claude/hooks/hindsight/`), quindi è portabile se sposti il progetto.
+  `hooks/hindsight/lib/`), quindi è portabile se sposti il plugin.
 - **Formato**: JSONL, un evento per riga. Rotazione automatica a 5 MB → `.log.1`.
 - **Viewer**: `nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip`.
 
@@ -155,7 +155,7 @@ Altri `retain_skip.reason`: `no_transcript`, `no_content`.
 **Questa è la suite di test** (non ci sono `test_*.py`). Diagnostica completa, 18 sezioni / 45 check.
 
 ```bash
-PYTHONUTF8=1 bash .claude/hooks/hindsight/hindsight-check.sh
+PYTHONUTF8=1 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/tools/hindsight-check.sh"
 # exit 0 = tutto OK, 1 = problemi. Richiede il server up.
 ```
 
@@ -176,13 +176,13 @@ mise run start-hindsight ; mise run stop-hindsight
 curl -fsS -m 3 http://127.0.0.1:8888/ -o /dev/null -w "%{http_code}\n"
 
 # Suite di test
-PYTHONUTF8=1 bash .claude/hooks/hindsight/hindsight-check.sh
+PYTHONUTF8=1 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/tools/hindsight-check.sh"
 
 # Tail del debug log
 nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip
 
 # Leggere un valore di config
-PYTHONUTF8=1 python .claude/hooks/hindsight/hindsight_config.py --get recall_timeout
+PYTHONUTF8=1 python "$TRINITY_PLUGIN_DIR/hooks/hindsight/lib/hindsight_config.py" --get recall_timeout
 
 # Svuotare la cache recall (path Windows-resolved!)
 rm -f /d/tmp/hs-recall-cache/*.json
@@ -364,7 +364,7 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
    `_.path` in `[env]` di `.mise.toml`.
 
 5. **Stop dei processi nativi Windows.** Node e Puma sono processi Windows nativi: il `netstat` MSYS
-   non vede sempre le loro porte. → I task `stop-*` usano `.claude/hooks/hindsight/kill-port.sh
+   non vede sempre le loro porte. → I task `stop-*` usano `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh
 <porta> [label]`, che risolve il PID via `Get-NetTCPConnection` (PowerShell 7,
    `C:/Appl/PowerShell/pwsh.exe`) e fa `Stop-Process -Force`.
 
@@ -381,7 +381,7 @@ mise run dashboard              # foreground; → http://localhost:9292
 mise run stop-dashboard
 
 # Stop manuale di una porta qualsiasi
-bash .claude/hooks/hindsight/kill-port.sh 9999 control-plane
+bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh" 9999 control-plane
 ```
 
 Nota benigna: durante `bundle install` compare `C:/msys64/home/EN27553 is not writable` → bundler
