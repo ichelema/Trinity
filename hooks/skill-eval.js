@@ -48,7 +48,7 @@ function extractFilePaths(prompt) {
 
   // Match paths starting with common directories for this project
   const dirPattern =
-    /(?:^|\s|["'`])((?:data|test|logs|script|sound|\.claude|\.github|E:[/\\]Obsidian)[\\/][\w\-./\\]+)/gi;
+    /(?:^|\s|["'`])((?:data|test|logs|script|sound|\.claude|\.github)[\\/][\w\-./\\]+)/gi;
   while ((match = dirPattern.exec(prompt)) !== null) {
     paths.add(match[1]);
   }

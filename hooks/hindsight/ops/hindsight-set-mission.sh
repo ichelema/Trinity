@@ -14,7 +14,7 @@
 #   separata dall'estrazione). Il prompt di consolidation del server e' in inglese
 #   senza direttiva di lingua → senza questa mission gli observation escono in inglese.
 #
-# Uso: bash .claude/hooks/hindsight/ops/hindsight-set-mission.sh
+# Uso: bash hooks/hindsight/ops/hindsight-set-mission.sh
 set -euo pipefail
 
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

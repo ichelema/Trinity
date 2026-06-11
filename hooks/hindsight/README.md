@@ -1,4 +1,4 @@
-# `.claude/hooks/hindsight/` — mappa della cartella
+# `hooks/hindsight/` — mappa della cartella
 
 Sottosistema di memoria persistente Hindsight per Claude Code. Questa cartella contiene
 **gli hook veri**, le **librerie condivise**, gli **script operativi**, i **tool di
@@ -46,7 +46,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 
 | File                        | Cosa fa                                                                                                                                                            |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `hindsight-check.sh`        | **suite di diagnostica** dell'intero setup (server, endpoint, hook, config, mental model, debug log). Uso: `bash .claude/hooks/hindsight/tools/hindsight-check.sh` |
+| `hindsight-check.sh`        | **suite di diagnostica** dell'intero setup (server, endpoint, hook, config, mental model, debug log). Uso: `bash hooks/hindsight/tools/hindsight-check.sh` |
 | `hindsight_export.py`       | esporta i documenti del bank in JSON (output in `data/exports/`)                                                                                                   |
 | `hindsight_import.py`       | re-importa/re-retain i documenti (es. dopo cambio modello embedding)                                                                                               |
 | `hindsight-recall-bench.sh` | benchmark trasparente di rilevanza del recall                                                                                                                      |
@@ -72,4 +72,4 @@ Ogni script trova i fratelli **relativamente a sé stesso**, mai con path assolu
 
 Spostando un file, aggiornare **solo** la sua riga di risoluzione path e i chiamanti esterni
 (`settings.json`, `.mise.toml`, `scheduler/`, slash-command). Poi verificare con
-`bash .claude/hooks/hindsight/tools/hindsight-check.sh`.
+`bash hooks/hindsight/tools/hindsight-check.sh`.

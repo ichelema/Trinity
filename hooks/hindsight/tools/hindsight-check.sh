@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Diagnostica completa setup Hindsight + hook Claude Code.
-# Uso: bash .claude/hooks/hindsight/tools/hindsight-check.sh
+# Uso: bash hooks/hindsight/tools/hindsight-check.sh
 # Restituisce exit 0 se tutto OK, 1 altrimenti. Output con check ✓/✗ per componente.
 set -uo pipefail
 
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# check.sh vive in tools/: con /.. HOOKS_DIR torna a .claude/hooks/hindsight (root del
+# check.sh vive in tools/: con /.. HOOKS_DIR torna a hooks/hindsight (root del
 # sottosistema). lib/ ops/ tools/ sono sotto di qui; la root di progetto e' tre livelli sopra.
 PROJ="${CLAUDE_PROJECT_DIR:-$(cd "$HOOKS_DIR/../../.." && pwd)}"
 # API_BASE dalla config centralizzata (hindsight.config.json), con fallback.
@@ -211,7 +211,7 @@ for field in retain_mission reflect_mission; do
 	if [ "$LEN" -gt 0 ] 2>/dev/null; then
 		ok "$field impostata sul bank ($LEN char)"
 	else
-		ko "$field NON impostata — esegui: bash .claude/hooks/hindsight/ops/hindsight-set-mission.sh"
+		ko "$field NON impostata — esegui: bash hooks/hindsight/ops/hindsight-set-mission.sh"
 	fi
 done
 
@@ -388,7 +388,7 @@ print('OK' if want<=ids else 'KO')
 if [ "$MM_LIVE" = "OK" ]; then
 	ok "le 3 knowledge page esistono sul bank (seed ok)"
 else
-	ko "knowledge page mancanti — esegui: bash .claude/hooks/hindsight/ops/hindsight-mental-models.sh seed"
+	ko "knowledge page mancanti — esegui: bash hooks/hindsight/ops/hindsight-mental-models.sh seed"
 fi
 
 RESEED=$(bash "$HOOKS_DIR/ops/hindsight-mental-models.sh" seed 2>/dev/null | grep -c "^+ creato" || true)

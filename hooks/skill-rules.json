@@ -16,16 +16,7 @@
     "contextPattern": 2
   },
   "directoryMappings": {
-    ".claude/skills/excalidraw-skill": "excalidraw-skill",
-    ".claude/skills/obsidian": "obsidian",
-    ".claude/skills/excel-data-analyst": "excel-data-analyst",
-    ".claude/skills/double-commander-docs": "double-commander-docs",
-    "data": "excel-data-analyst",
-    ".claude/skills/nushell": "nushell",
-    ".claude/skills/mise": "mise",
-    ".claude/skills/hindsight": "hindsight",
-    ".claude/skills/ruby": "ruby",
-    ".claude/skills/book-to-skill": "book-to-skill"
+    "data": "excel-data-analyst"
   },
   "skills": {
     "excalidraw-skill": {
@@ -100,8 +91,8 @@
           "\\.excalidraw\\.md\\b"
         ],
         "pathPatterns": [
-          "E:/Obsidian/**",
-          "/e/Obsidian/**",
+          "D:/Obsidian/**",
+          "/d/Obsidian/**",
           "**/*.excalidraw.md"
         ],
         "intentPatterns": [

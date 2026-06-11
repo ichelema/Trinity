@@ -517,5 +517,5 @@ cmd.exe /c start "" "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&commandid=ob
 
 ## Skill correlate
 
-- Canvas live: `.claude/skills/excalidraw-skill/SKILL.md`
+- Canvas live: la skill `excalidraw-skill`
 - MCP Excalidraw: `yctimlin/mcp_excalidraw`
