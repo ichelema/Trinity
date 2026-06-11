@@ -60,7 +60,7 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 
 - OS: Windows 11 Enterprise.
 - Shell: bash MSYS2 UCRT64 (`/usr/bin/bash`), `MSYSTEM=UCRT64`.
-- Vault principale Obsidian: `D:\Obsidian\Sinapsi` (nome vault: `Sinapsi`).
+- Vault principale Obsidian: `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`). Versione MSYS del path: ricavala con `cygpath -u "${OBSIDIAN_VAULT}"`.
 
 ## Regole operative
 

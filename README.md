@@ -1,6 +1,8 @@
 # Trinity Plugin
 
-Il **core dell'agente Trinity** come plugin Claude Code: memoria persistente Hindsight, comportamento condiviso, skill, comandi e hook di notifica. Installato a livello utente, è attivo in **ogni** progetto della macchina, che ne eredita comportamento e memoria.
+Il **core dell'agente Trinity** come plugin Claude Code: memoria persistente Hindsight, comportamento 
+condiviso, skill, comandi e hook di notifica. Installato a livello utente, è attivo in **ogni** 
+progetto della macchina, che ne eredita comportamento e memoria.
 
 > Versione: `0.1.1` · Repo prodotto, separato dal laboratorio (`D:\AI\Claude\Trinity`).
 
@@ -18,11 +20,15 @@ D:\AI\Claude\Trinity\          ← LABORATORIO: benchmark, dashboard, scheduler,
 | **Trinity-plugin** | ciò che installi e che gira in produzione: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json`, marketplace |
 | **Trinity** | dove si sviluppa e si testa il plugin (benchmark del recall, check aggiornamenti) |
 
-Il laboratorio raggiunge il plugin tramite la env var **`TRINITY_PLUGIN_DIR`** (default `D:/AI/Claude/Trinity-plugin`), così i due repo restano indipendenti ma comunicanti.
+Il laboratorio raggiunge il plugin tramite la env var **`TRINITY_PLUGIN_DIR`** (default `D:/AI/Claude/Trinity-plugin`), 
+così i due repo restano indipendenti ma comunicanti.
 
 ### Cosa è plugin e cosa è ambiente
 
-I **file** del plugin vivono tutti qui dentro. Le **risorse runtime** restano sulla macchina: il server Hindsight (`localhost:8888`), il Postgres embedded, i binari (`mise`, `node`, `ffplay`, `pwsh`), il CA bundle (`C:/certs/cacert.pem`), le chiavi API (env utente). Il plugin è il *cervello*; server, DB e runtime sono il *corpo* installato sul sistema.
+I **file** del plugin vivono tutti qui dentro. Le **risorse runtime** restano sulla macchina: il 
+server Hindsight (`localhost:8888`), il Postgres embedded, i binari (`mise`, `node`, `ffplay`, `pwsh`), 
+il CA bundle (`C:/certs/cacert.pem`), le chiavi API (env utente). 
+Il plugin è il *cervello*; server, DB e runtime sono il *corpo* installato sul sistema.
 
 ---
 
@@ -57,7 +63,8 @@ claude plugin install trinity@trinity-marketplace
 "enabledPlugins": { "trinity@trinity-marketplace": false }
 ```
 
-**Aggiornare la copia installata** — l'updater confronta la `version` del manifest, non i commit, quindi serve il bump:
+**Aggiornare la copia installata** — l'updater confronta la `version` del manifest, non i commit, 
+quindi serve il bump:
 
 ```bash
 # 1. bump "version" in .claude-plugin/plugin.json
@@ -75,7 +82,10 @@ claude --plugin-dir D:/AI/Claude/Trinity-plugin
 
 ## 3. Hook: come vengono caricati
 
-Gli hook non stanno in `settings.json`: vivono nel file dedicato **`hooks/hooks.json`**, che Claude Code cerca per convenzione in `<plugin>/hooks/hooks.json`. Il formato è identico alla sezione `"hooks"` di `settings.json`; cambia solo la variabile di path: **`${CLAUDE_PLUGIN_ROOT}`** al posto di `${CLAUDE_PROJECT_DIR}`.
+Gli hook non stanno in `settings.json`: vivono nel file dedicato **`hooks/hooks.json`**, che 
+Claude Code cerca per convenzione in `<plugin>/hooks/hooks.json`. 
+Il formato è identico alla sezione `"hooks"` di `settings.json`; cambia solo la variabile 
+di path: **`${CLAUDE_PLUGIN_ROOT}`** al posto di `${CLAUDE_PROJECT_DIR}`.
 
 ```
 All'avvio Claude Code:
@@ -106,19 +116,28 @@ Esempio — un hook del plugin (da `hooks/hooks.json`):
 }
 ```
 
-Gli script `.sh`/`.py` referenziati stanno in `hooks/` e `hooks/hindsight/`; risolvono i propri fratelli relativamente alla loro posizione, quindi il plugin è rilocabile.
+Gli script `.sh`/`.py` referenziati stanno in `hooks/` e `hooks/hindsight/`; risolvono i propri fratelli 
+relativamente alla loro posizione, quindi il plugin è rilocabile.
 
 ---
 
 ## 4. Iniezione di `core-behavior.md`
 
-`core-behavior.md` (root del plugin) contiene il **comportamento universale** dell'agente: principi, "prima la semplicità", modifiche chirurgiche, regole operative shell/path, Nushell, linguaggi. Non è un file di sistema speciale: viene iniettato come **contesto** a ogni sessione da un hook `SessionStart` che lo stampa, e il suo stdout entra nel contesto del modello.
+`core-behavior.md` (root del plugin) contiene il **comportamento universale** dell'agente: principi, 
+"prima la semplicità", modifiche chirurgiche, regole operative shell/path, Nushell, linguaggi. 
+Non è un file di sistema speciale: viene iniettato come **contesto** a ogni sessione da un hook 
+`SessionStart`, e il suo stdout entra nel contesto del modello.
+
+L'hook non fa un semplice `cat`: passa per lo script `hooks/inject-core-behavior.sh`, che **espande 
+solo le variabili machine-specific** (`${OBSIDIAN_VAULT}`, `${OBSIDIAN_VAULT_NAME}`) via `envsubst`, 
+lasciando letterale tutto il resto (inclusi gli esempi Nushell con `$PATH`/`$r`). Così il file 
+versionato non contiene path hardcoded → il plugin è portabile tra macchine.
 
 ```json
 // hooks/hooks.json → SessionStart
 {
   "type": "command",
-  "command": "/usr/bin/bash -c \"cat \\\"$(cygpath -u \\\"${CLAUDE_PLUGIN_ROOT}\\\")/core-behavior.md\\\"\"",
+  "command": "${CLAUDE_PLUGIN_ROOT}/hooks/inject-core-behavior.sh",
   "timeout": 5
 }
 ```
@@ -128,6 +147,7 @@ Conseguenze pratiche:
 - Vale in **ogni** progetto col plugin attivo, senza bisogno di un `CLAUDE.md`.
 - Il `CLAUDE.md` locale di un progetto ha **precedenza** in caso di conflitto (è più specifico).
 - Per modificare il comportamento dell'agente si edita **questo file**, non i singoli progetti.
+- I path che cambiano per macchina **non** sono nel file: vengono da variabili d'ambiente (vedi §8).
 
 ---
 
@@ -151,7 +171,8 @@ In `skills/`, attivate per rilevanza dall'hook skill-eval o a richiesta:
 
 ## 6. Comandi inclusi
 
-In `commands/`, invocabili come slash command **namespaced** (`/trinity:<nome>`), così non collidono con i comandi locali del progetto:
+In `commands/`, invocabili come slash command **namespaced** (`/trinity:<nome>`), così non 
+collidono con i comandi locali del progetto:
 
 | Comando | Funzione |
 |---|---|
@@ -163,9 +184,46 @@ In `commands/`, invocabili come slash command **namespaced** (`/trinity:<nome>`)
 
 ## 7. Memoria Hindsight (multi-progetto)
 
-`.mcp.json` registra il server Hindsight su un **bank unico condiviso** (`trinity-project`); le memorie sono ricondivise tra progetti via tag `claude-code`, e ogni fatto viene marcato col tag `repo:<nome-progetto>` derivato dalla directory. Quindi un fatto utile imparato in un progetto è richiamabile dagli altri.
+`.mcp.json` registra il server Hindsight su un **bank unico condiviso** (`trinity-project`); 
+le memorie sono ricondivise tra progetti via tag `claude-code`, e ogni fatto viene marcato 
+col tag `repo:<nome-progetto>` derivato dalla directory. Quindi un fatto utile imparato in un 
+progetto è richiamabile dagli altri.
 
-La configurazione del servizio (provider LLM/embedding, env TLS, task `start/stop-hindsight`, `control-plane`) è in **`mise.toml`**, usato dagli hook via `mise -C <plugin_root> run <task>`. È la fonte di verità del runtime Hindsight.
+La configurazione del servizio (provider LLM/embedding, env TLS, task 
+`start/stop-hindsight`, `control-plane`) è in **`mise.toml`**, usato dagli hook via 
+`mise -C <plugin_root> run <task>`. È la fonte di verità del runtime Hindsight.
+
+---
+
+## 8. Setup per-macchina (valori machine-specific)
+
+Il plugin non contiene path hardcoded: i valori che cambiano da macchina a macchina vengono 
+da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude/settings.json` 
+(env utente, non versionata col plugin):
+
+```json
+{
+  "env": {
+    "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
+    "OBSIDIAN_VAULT_NAME": "Sinapsi"
+  }
+}
+```
+
+Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
+valore (es. `"/home/sphynx/Obsidian/Sinapsi"`): `core-behavior.md` resta identico, l'iniezione 
+lo espande con i valori locali. La versione MSYS del path si ricava con `cygpath -u`, non serve 
+una variabile separata.
+
+| Cosa | Come è risolto |
+|---|---|
+| root del progetto | `${CLAUDE_PROJECT_DIR}` (gli hook la ricevono da Claude Code) — già automatico |
+| root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
+| vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
+
+> Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
+> Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
+> avviso esplicito anziché un valore vuoto.
 
 ---
 
