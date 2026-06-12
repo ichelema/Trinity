@@ -214,6 +214,21 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   ripristina il comportamento single-bank. I tag (`claude-code`, `repo:`, `branch:`) restano
   invariati.
 
+Per vedere su quali bank si risolve il progetto corrente (debug):
+
+```bash
+python hooks/hindsight/lib/hindsight_config.py --banks   # URL retain + recall risolti
+```
+
+**Ricette rapide** (override nel `hindsight.config.json` del progetto):
+
+| Voglio… | Override |
+|---|---|
+| comportamento di default: scrive sul bank del progetto, legge progetto+core | nessuno (eredita il plugin) |
+| progetto totalmente isolato (non legge nemmeno il core) | `{ "bank": { "recall_banks": ["auto"] } }` |
+| progetto che scrive direttamente sul core (niente bank proprio) | `{ "bank": { "retain_bank": "core" } }` |
+| leggere anche il bank di un altro progetto | `{ "bank": { "recall_banks": ["auto", "NomeAltroBank", "core"] } }` |
+
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (gpt-4.1-nano: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
 move: comando **`/trinity:promote`**, meccanica in `hooks/hindsight/ops/hindsight-promote.py`.
