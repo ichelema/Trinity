@@ -6,8 +6,9 @@
 # l'env qui sotto serve SOLO al processo server al momento del lancio, i progetti
 # parlano con il server già configurato via HTTP.
 #
-# I task di laboratorio (benchmark, dashboard log, check aggiornamenti) restano nel
-# .mise.toml del repo Trinity, che duplica l'[env] per necessità dei benchmark.
+# La dashboard log (Roda/Puma), i benchmark (embed-bench/rerank-bench) e i check
+# aggiornamenti (api-check/cp-check/cp-redirect-test, in scheduler/) sono stati migrati
+# qui dal repo Trinity. I task relativi sono in fondo a questo file.
 
 [tools]
 python = "3.13"
@@ -15,6 +16,10 @@ python = "3.13"
 # via `npx @vectorize-io/hindsight-control-plane`). NB: l'npx del Node MSYS2 UCRT64
 # (/ucrt64/bin) crasha (segfault/bad_weak_ptr) — questo Node mise lo rimpiazza.
 node = "lts"
+# Ruby per la dashboard log (Roda/Puma): `bundle install` e `puma` girano con questo
+# Ruby gestito da mise, NON quello MSYS2 (le gem vanno installate con lo stesso Ruby
+# che le esegue). L'hook reshim richiede `mise` nel PATH — garantito da _.path in [env].
+ruby = "4.0.1"
 
 [env]
 # Espone gli entry-point script di hindsight-api (hindsight-local-mcp, hindsight-api, ecc.)
@@ -134,3 +139,57 @@ run = "HOSTNAME=127.0.0.1 npx --yes @vectorize-io/hindsight-control-plane@0.6.2 
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
 shell = "/usr/bin/bash -c"
 run = "bash hooks/hindsight/ops/kill-port.sh 9999 control-plane"
+
+# --- Dashboard log (Roda/Puma) ---------------------------------------------
+# Web app Ruby per analizzare hindsight-debug.log (JSONL): tail SSE realtime,
+# color-coding, filtri, vista memories[]. Gira sul Ruby mise (4.0.1), non MSYS2.
+# Il default del log in app.rb è portabile (<plugin_root>/logs/hindsight-debug.log),
+# coerente con lib/hindsight_debug.py — quindi il task non passa LOG_FILE.
+[tasks.install-dashboard]
+description = "Installa le gem della dashboard log (bundle install) sotto il Ruby mise (4.0.1). Eseguire una tantum prima di `dashboard`."
+shell = "/usr/bin/bash -c"
+run = "cd hooks/hindsight/hindsight-dashboard && bundle install"
+
+[tasks.dashboard]
+description = "Avvia la dashboard log Hindsight (Roda/Puma) su http://localhost:9292. Foreground: Ctrl-C per fermarla. Richiede prima `mise run install-dashboard`."
+shell = "/usr/bin/bash -c"
+run = "cd hooks/hindsight/hindsight-dashboard && bundle exec puma -p 9292"
+
+[tasks.stop-dashboard]
+description = "Ferma la dashboard log (processo Puma in ascolto su :9292)"
+shell = "/usr/bin/bash -c"
+run = "bash hooks/hindsight/ops/kill-port.sh 9292 dashboard"
+
+# --- Benchmark qualità (embedding / reranker) ------------------------------
+# Ereditano l'[env] del plugin (provider + chiavi) → girano con la config di produzione.
+# Script rilocabili (corpora via __dir__/__file__). hindsight_bench.rb (bench LLM provider)
+# e hindsight_recall_quality_bench.py restano lanciabili a mano da hooks/hindsight/benchmark/.
+[tasks.embed-bench]
+description = "Confronta gli embedding (zembed-1 vs Gemini vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Foreground (~minuti, scarica bge-m3 al primo run)."
+shell = "/usr/bin/bash -c"
+run = "python hooks/hindsight/benchmark/hindsight_embed_bench.py"
+
+[tasks.rerank-bench]
+description = "Confronta i reranker su corpus rank-aware (MRR, recall@k). Ferma/riavvia il server :8888 più volte e lo ripristina alla fine (~5-10 min). Eredita l'[env] di produzione."
+shell = "/usr/bin/bash -c"
+run = "ruby hooks/hindsight/benchmark/hindsight_rerank_bench.rb"
+
+# --- Check aggiornamenti (scheduler) ---------------------------------------
+# Lanciabili a mano o da System Scheduler (Splinterware) via scheduler/*/*-scheduled.cmd
+# (i job vanno registrati con i path di questo repo — vedi i README in scheduler/).
+# cp-check.rb / cp-redirect-test.sh trovano la root del repo via TRINITY_PLUGIN_DIR
+# (env utente) con fallback relativo: scheduler/check_update_*/ -> ../..
+[tasks.api-check]
+description = "Controlla se su PyPI è uscita una versione di hindsight-api/hindsight-api-slim più recente di quella installata. Exit 10 se sì."
+shell = "/usr/bin/bash -c"
+run = "ruby scheduler/check_update_hindsight_api/api-check.rb"
+
+[tasks.cp-check]
+description = "Controlla se è uscita una versione del Control Plane più recente di quella pinnata nel mise.toml. Exit 10 se sì."
+shell = "/usr/bin/bash -c"
+run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
+
+[tasks.cp-redirect-test]
+description = "Testa se una versione del Control Plane ha ancora il bug del redirect-loop. Uso: VERSION=0.7.1 mise run cp-redirect-test (porta usa-e-getta 9998)."
+shell = "/usr/bin/bash -c"
+run = "bash scheduler/check_update_hindsight_control_plane/cp-redirect-test.sh \"${VERSION:?imposta VERSION=X.Y.Z}\" \"${PORT:-9998}\""
