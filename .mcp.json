@@ -1,5 +1,23 @@
 {
   "mcpServers": {
+    "excalidraw": {
+      "disabled": true,
+      "type": "stdio",
+      "command": "C:/msys64/ucrt64/bin/node.exe",
+      "args": [
+        "C:/msys64/home/EN27553/.local/opt/mcp_excalidraw/dist/index.js"
+      ],
+      "env": {
+        "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
+        "ENABLE_CANVAS_SYNC": "true",
+        "LOG_FILE_PATH": "D:/AI/Claude/Trinity/logs/excalidraw.log"
+      }
+    },
+    "obsidian_semantic_notes_vault": {
+      "disabled": true,
+      "type": "http",
+      "url": "http://localhost:3002/mcp"
+    },
     "hindsight": {
       "type": "http",
       "url": "http://localhost:8888/mcp/trinity-project/"
