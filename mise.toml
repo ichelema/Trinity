@@ -49,6 +49,10 @@ HINDSIGHT_API_LLM_MODEL = "gpt-4.1-mini"
 # La chiave viene risolta a runtime dall'env utente (OPENAI_API_KEY), non hardcodata qui.
 # Senza default: se manca la chiave il task abortisce subito — voluto, è il LLM di produzione.
 HINDSIGHT_API_LLM_API_KEY = "{{env.OPENAI_API_KEY}}"
+# Salta la chiamata di verifica LLM al boot (2026-06-12): avvio più rapido per
+# hindsight-ensure-up.sh a inizio sessione, e niente hang se il proxy ENINET fa MITM.
+# Contro accettato: una OPENAI_API_KEY errata emerge al primo retain, non al boot.
+HINDSIGHT_API_SKIP_LLM_VERIFICATION = "true"
 
 # --- LLM dedicato alla CONSOLIDATION (generazione delle observation) ---------
 # A/B 3-vie del 2026-06-02 su seed reale (23 fatti, tag claude-code):
@@ -97,6 +101,14 @@ HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2" # flagship; alt: zerank-2-
 # >= 0.47, il pool 0.33-0.45 non vince mai e consuma budget activation/fusione RRF.
 # NON salire oltre 0.45: margine sul peggior finalista osservato (0.470) troppo sottile.
 HINDSIGHT_API_SEMANTIC_MIN_SIMILARITY = "0.4"
+# Timeout zerank-2 sotto il recall_timeout(10s) dell'hook (2026-06-12, default 60):
+# se ZeroEntropy si appende, il rerank fallisce in fretta e il recall ripiega
+# sull'ordine RRF dentro il budget dell'hook, invece di lavorare per nessuno.
+HINDSIGHT_API_RERANKER_ZEROENTROPY_TIMEOUT = "8"
+# Cap dei candidati passati al reranker per recall (2026-06-12, default 300): meno
+# payload/latenza/costo verso zerank-2. Coi bank attuali (~600-700 memorie) il pool
+# raramente satura 300 — guadagno da validare con `mise run rerank-bench`.
+HINDSIGHT_API_RERANKER_MAX_CANDIDATES = "100"
 
 # --- Embedding zembed-1 ZeroEntropy (PRODUZIONE, nativo da hindsight-api 0.7.1) -------
 # ⚠️ Cambiare provider IMPONE un REBUILD del bank: zembed-1 usa dim Matryoshka
