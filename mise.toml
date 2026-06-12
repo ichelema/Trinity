@@ -157,13 +157,17 @@ run = "bash hooks/hindsight/ops/hindsight-stop-services.sh"
 # --- Control Plane (Web UI Hindsight) --------------------------------------
 [tasks.control-plane]
 description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:9999, collegato all'API :8888. Foreground: Ctrl-C per fermarlo."
-# HOSTNAME=127.0.0.1: Next.js eredita la env HOSTNAME (sotto MSYS2 = nome macchina) e
-# vi si legherebbe; forzata a localhost per non esporre la UI in LAN.
-# VERSIONE PINNATA a 0.6.2: 0.7.0/0.7.1/0.7.2 hanno un bug i18n → loop di redirect
-# infinito su ogni route (verificato 2026-05-27/29 e 2026-06-05 con cp-redirect-test).
-# Quando esce una versione sana (>0.7.2), togliere/aggiornare il pin.
+# HOSTNAME=localhost: Next.js eredita la env HOSTNAME (sotto MSYS2 = nome macchina) e
+# vi si legherebbe; forzata a localhost per non esporre la UI in LAN (bind su ::1).
+# VERSIONE 0.8.2 + workaround hostname (2026-06-12): il redirect-loop delle 0.7.0+
+# non è un bug i18n in sé ma un origin-mismatch di Next standalone
+# (vercel/next.js#91844): NextURL normalizza 127.0.0.1→localhost nel rewrite del
+# middleware next-intl, mentre initUrl del router usa l'hostname di bind → il
+# rewrite interno viene trattato come esterno → proxy su se stesso → loop 307.
+# Bind su "localhost" fa combaciare gli origin. NON tornare a --hostname 127.0.0.1:
+# il loop riappare (e con bind localhost l'URL http://127.0.0.1:9999 non risponde).
 shell = "/usr/bin/bash -c"
-run = "HOSTNAME=127.0.0.1 npx --yes @vectorize-io/hindsight-control-plane@0.6.2 --hostname 127.0.0.1 --api-url http://localhost:8888"
+run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.2 --hostname localhost --api-url http://localhost:8888"
 
 [tasks.stop-control-plane]
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"

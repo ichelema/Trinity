@@ -28,15 +28,14 @@ PLUGIN_DIR = ENV.fetch("TRINITY_PLUGIN_DIR") { File.expand_path("../..", __dir__
 MISE_TOML = File.join(PLUGIN_DIR, "mise.toml")
 
 # Versioni da NON segnalare anche se più recenti del pin: rilasci noti ma scartati.
-# La 0.7.0 ha il bug i18n del redirect-loop (vedi il task control-plane nel .mise.toml):
-# senza questa lista il check segnalerebbe la 0.7.0 come "novità" a ogni giro, in eterno.
-# La 0.7.1 e la 0.7.2 NON sono il fix: loop i18n ancora presente (cp-redirect-test → curl exit 47).
-# 0.7.1 verificata il 2026-05-29, 0.7.2 il 2026-06-05. Aggiunte qui per non segnalarle in eterno.
-# La 0.8.1 (verificata il 2026-06-12) è PEGGIO: il loop 307 colpisce TUTTE le route, non solo "/",
-# anche con cookie NEXT_LOCALE e Accept-Language (le /en/* ora reindirizzano alle route senza prefisso).
-# Quando esce un fix vero lo supera e scatta l'alert. Override a runtime:
-#   CP_IGNORE_VERSIONS="0.7.0,0.7.1,0.7.2,0.7.4"   (lista separata da virgole)
-IGNORED_VERSIONS = (ENV["CP_IGNORE_VERSIONS"] || "0.7.0,0.7.1,0.7.2,0.8.1").split(",").map(&:strip).reject(&:empty?)
+# Vuota dal 2026-06-12: pin alzato a 0.8.2 col workaround hostname (bind su
+# "localhost" anziché 127.0.0.1 — vedi il task control-plane nel mise.toml), che
+# aggira l'origin-mismatch di Next standalone (vercel/next.js#91844) causa del
+# redirect-loop delle 0.7.0+. La soglia ora è il pin stesso; questa lista serve
+# solo se in futuro una versione > pin risultasse rotta ANCHE con bind localhost.
+# Override a runtime:
+#   CP_IGNORE_VERSIONS="0.9.0,0.9.1"   (lista separata da virgole)
+IGNORED_VERSIONS = (ENV["CP_IGNORE_VERSIONS"] || "").split(",").map(&:strip).reject(&:empty?)
 
 def pinned_version
   raise "‹.mise.toml› non trovato in #{MISE_TOML}" unless File.exist?(MISE_TOML)

@@ -1,14 +1,14 @@
 # Reminder aggiornamenti — Hindsight Control Plane
 
-Sistema che **avvisa quando esce una versione del Control Plane di Hindsight che risolve il bug del redirect-loop**, così si può togliere il pin che oggi blocca la versione a `0.6.2`.
+Sistema che **avvisa quando esce una versione nuova del Control Plane di Hindsight**, così si può valutare se alzare il pin nel `.mise.toml`.
 
 ## Perché esiste
 
-Il Control Plane (Web UI di Hindsight, `@vectorize-io/hindsight-control-plane`) è avviato dal task `control-plane` nel `.mise.toml`, **pinnato a `0.6.2`**.
+Il Control Plane (Web UI di Hindsight, `@vectorize-io/hindsight-control-plane`) è avviato dal task `control-plane` nel `.mise.toml`, **pinnato a `0.8.2`** (dal 2026-06-12).
 
-Motivo del pin: la **`0.7.0` ha un bug i18n** → `/` entra in un loop di redirect infinito (`ERR_TOO_MANY_REDIRECTS`). La `0.6.2` invece reindirizza correttamente `/ → /dashboard → 200`.
+Storia del pin: dalle `0.7.0` in poi `/` entrava in un loop di redirect infinito (`ERR_TOO_MANY_REDIRECTS`), per cui il pin è rimasto a lungo bloccato a `0.6.2`. Il 2026-06-12 è emersa la root cause: non un bug i18n in sé ma un **origin-mismatch di Next.js standalone** ([vercel/next.js#91844](https://github.com/vercel/next.js/issues/91844)) — `NextURL` normalizza `127.0.0.1` in `localhost` nel rewrite del middleware next-intl, mentre il router usa l'hostname di bind, quindi il rewrite interno viene trattato come esterno e va in loop. **Workaround**: bind su `localhost` invece di `127.0.0.1` (task `control-plane` e `cp-redirect-test.sh`). Con quello la `0.8.2` funziona.
 
-Vogliamo accorgerci **quando upstream pubblica un fix** (una versione `> 0.7.0`) per poter aggiornare il pin. Questo sistema controlla npm periodicamente e avvisa solo quando vale la pena.
+Vogliamo comunque accorgerci **quando upstream pubblica una versione nuova** per valutarla (e, quando il bug Next sarà fixato upstream, poter eventualmente togliere il workaround). Questo sistema controlla npm periodicamente e avvisa solo quando vale la pena.
 
 ## File in questa cartella
 
@@ -68,7 +68,7 @@ VERSION=0.7.1 mise run cp-redirect-test    # quella versione ha ancora il bug? (
 
 ## Cosa succede quando esce una versione nuova
 
-Quando `cp-check` trova una versione **> 0.7.0**, lo `.sh` schedulato:
+Quando `cp-check` trova una versione **> pin** (al netto delle ignorate), lo `.sh` schedulato:
 
 1. scrive `logs\cp-update-ALERT.txt` con versione pinnata, ultima su npm e il comando per testarla;
 2. apre quel file in primo piano (Notepad), così te ne accorgi.
@@ -84,7 +84,7 @@ File prodotti (nella cartella `logs\` del progetto):
 
 `cp-check` **non** confronta col solo pin, ma con `max(pin, versioni-ignorate)`.
 
-La `0.7.0` è in `IGNORED_VERSIONS` (è già stata valutata e bocciata), quindi **non** viene segnalata a ogni giro. L'alert scatta solo per qualcosa che supera davvero la `0.7.0`.
+`IGNORED_VERSIONS` è **vuota** dal 2026-06-12 (pin alzato a `0.8.2`, le vecchie bocciate sono sotto soglia da sole): torna utile se una futura versione `> pin` risultasse rotta anche col workaround — la si aggiunge lì e non viene più segnalata a ogni giro.
 
 Override della lista a runtime:
 
@@ -92,13 +92,13 @@ Override della lista a runtime:
 CP_IGNORE_VERSIONS="0.7.0,0.7.2" mise run cp-check
 ```
 
-## Quando arriva il fix — cosa fare
+## Quando esce una versione nuova — cosa fare
 
-1. Ricevi l'alert (es. `0.7.1`).
-2. Testa: `VERSION=0.7.1 mise run cp-redirect-test`.
+1. Ricevi l'alert (es. `0.9.0`).
+2. Testa: `VERSION=0.9.0 mise run cp-redirect-test` (il test usa già il bind `localhost` come la produzione).
    - `VERDETTO: OK` → procedi.
    - `VERDETTO: ANCORA ROTTO` → aggiungi quella versione a `IGNORED_VERSIONS` in `cp-check.rb` e aspetta la prossima.
-3. Se OK, aggiorna il pin nel `.mise.toml`, task `control-plane`: la riga `... hindsight-control-plane@0.7.1 ...` e il commento sopra.
+3. Se OK, aggiorna il pin nel `.mise.toml`, task `control-plane`: la riga `... hindsight-control-plane@0.9.0 ...` e il commento sopra.
 4. Una volta alzato il pin, puoi **svuotare** `IGNORED_VERSIONS` (la soglia si alza da sola col nuovo pin).
 
 ## Note tecniche / gotcha

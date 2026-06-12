@@ -5,8 +5,13 @@
 # Avvia il Control Plane Hindsight della <versione> indicata su una porta
 # usa-e-getta (default 9998, NON 9999 → non tocca l'istanza in produzione) e
 # verifica come si comporta "/":
-#   - 0.7.0 (rotto):  / → 307 → / → 307 → …  loop infinito (ERR_TOO_MANY_REDIRECTS)
-#   - 0.6.2 (ok):     / → 307 → /dashboard → 200
+#   - rotto:  / → 307 → / → 307 → …  loop infinito (ERR_TOO_MANY_REDIRECTS)
+#   - ok:     / → 307 → /dashboard → 200
+#
+# Bind su "localhost" (NON 127.0.0.1), come il task control-plane di produzione:
+# è il workaround dell'origin-mismatch di Next standalone (vercel/next.js#91844)
+# che causa il loop — vedi il commento del task nel mise.toml. Testare con
+# --hostname 127.0.0.1 darebbe "ANCORA ROTTO" anche su versioni usabili.
 #
 # curl segue i redirect con un tetto (--max-redirs 10): il loop lo esaurisce e
 # curl esce con codice 47 → è il nostro segnale di "ancora rotto".
@@ -25,12 +30,12 @@ API_URL="http://localhost:8888"
 LOG="/tmp/cp-test-${PORT}.log"
 ERRF="/tmp/cp-test-${PORT}.err"
 
-echo "=== Test redirect ${PKG}@${VERSION} su 127.0.0.1:${PORT} ==="
+echo "=== Test redirect ${PKG}@${VERSION} su localhost:${PORT} ==="
 
 # Avvio in background. PORT (env) anziché --port: Next.js standalone la rispetta
 # in modo affidabile su tutte le versioni. npx risolve al Node mise (vedi [tools]).
-PORT="${PORT}" HOSTNAME=127.0.0.1 \
-	npx --yes "${PKG}@${VERSION}" --hostname 127.0.0.1 --api-url "${API_URL}" \
+PORT="${PORT}" HOSTNAME=localhost \
+	npx --yes "${PKG}@${VERSION}" --hostname localhost --api-url "${API_URL}" \
 	>"${LOG}" 2>&1 &
 CP_PID=$!
 
@@ -47,7 +52,7 @@ trap cleanup EXIT
 # Attendo che il server risponda (max ~45s: il primo avvio scarica il pacchetto via npx)
 up=0
 for _ in $(seq 1 45); do
-	code=$(curl -sS -o /dev/null -w "%{http_code}" -m 2 "http://127.0.0.1:${PORT}/api/health" 2>/dev/null || true)
+	code=$(curl -sS -o /dev/null -w "%{http_code}" -m 2 "http://localhost:${PORT}/api/health" 2>/dev/null || true)
 	if [[ "${code}" =~ ^(200|204|404)$ ]]; then
 		up=1
 		break
@@ -64,13 +69,13 @@ fi
 
 # Seguo "/" con tetto ai redirect; catturo codice finale e URL di approdo.
 out=$(curl -sS -L --max-redirs 10 -o /dev/null \
-	-w "%{http_code} %{url_effective}" "http://127.0.0.1:${PORT}/" 2>"${ERRF}")
+	-w "%{http_code} %{url_effective}" "http://localhost:${PORT}/" 2>"${ERRF}")
 rc=$?
 err=$(cat "${ERRF}" 2>/dev/null)
 
 if [[ ${rc} -eq 47 ]] || grep -qi "maximum.*redirect" <<<"${err}"; then
 	echo "VERDETTO: ANCORA ROTTO — loop di redirect su / (${err:-curl exit 47})."
-	echo "          La ${VERSION} ha ancora il bug i18n della 0.7.0: tieni il pin com'è."
+	echo "          La ${VERSION} va in loop anche con bind localhost: tieni il pin com'è."
 	exit 1
 fi
 
