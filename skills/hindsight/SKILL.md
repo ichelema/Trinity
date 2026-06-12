@@ -306,11 +306,11 @@ Conseguenza: una categoria secca ("tooling", "preferences") è il valore meno
 utile possibile — non descrive nulla. Usa una **descrizione del dominio del
 task**, come fa il retain worker automatico (context extraction via LLM):
 
-| ❌ Categoria secca | ✅ Dominio descrittivo |
-|---|---|
-| `tooling` | `git/github del progetto Trinity: hosting, autenticazione SSH, convenzioni di push` |
-| `learnings` | `compilazione gemme native Ruby su Windows UCRT64 con GCC 16` |
-| `preferences` | `preferenze di scripting dell'utente: linguaggi e shell su MSYS2` |
+| ❌ Categoria secca | ✅ Dominio descrittivo                                                               |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `tooling`         | `git/github del progetto Trinity: hosting, autenticazione SSH, convenzioni di push` |
+| `learnings`       | `compilazione gemme native Ruby su Windows UCRT64 con GCC 16`                       |
+| `preferences`     | `preferenze di scripting dell'utente: linguaggi e shell su MSYS2`                   |
 
 Regola pratica: il context deve rispondere a "*in quale dominio l'estrattore
 deve interpretare questo testo?*" — max 1 riga, specifica, coi nomi propri.

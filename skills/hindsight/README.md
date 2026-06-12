@@ -10,17 +10,17 @@ in `D:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sos
 
 ## 1. Mappa dei file
 
-| File                                                 | Ruolo                                                                                                      |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `hindsight.config.json` (root del plugin)           | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
-| `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV |
-| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: recupera memorie e le inietta come `additionalContext`. Sincrono                |
-| `hindsight_recall_lib.py`                            | Logica pura testabile del recall (compose query + `build_recall_payload`)                                  |
-| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (async): salva un riassunto del turno nel bank                                               |
-| `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                    |
-| `hindsight-check.sh`                                 | **Suite di test/diagnostica** (vedi §9)                                                                    |
-| `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                               |
-| `benchmark/hindsight_bench.rb`                       | **Benchmark velocità/qualità provider LLM** (retain+recall su corpus dedicato). Vedi §13                   |
+| File                                                 | Ruolo                                                                                                                                              |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hindsight.config.json` (root del plugin)            | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
+| `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV                                         |
+| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: recupera memorie e le inietta come `additionalContext`. Sincrono                                                        |
+| `hindsight_recall_lib.py`                            | Logica pura testabile del recall (compose query + `build_recall_payload`)                                                                          |
+| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (async): salva un riassunto del turno nel bank                                                                                       |
+| `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
+| `hindsight-check.sh`                                 | **Suite di test/diagnostica** (vedi §9)                                                                                                            |
+| `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                                                                       |
+| `benchmark/hindsight_bench.rb`                       | **Benchmark velocità/qualità provider LLM** (retain+recall su corpus dedicato). Vedi §13                                                           |
 
 ---
 
@@ -257,8 +257,8 @@ Gemini (1536d, cloud, multilingue) evita il modello di embedding pesante in loca
 
 I fatti escono in inglese anche con input italiano? È colpa delle **mission**, non dell'embedding. Il retain ha **due pipeline distinte** che generano testo, ciascuna con la sua mission (config del bank, impostate da `hindsight-set-mission.sh` via PATCH `/config`):
 
-| Pipeline      | File del pacchetto                 | Genera                 | Mission che la guida   | Direttiva lingua nel prompt?                         |
-| ------------- | ---------------------------------- | ---------------------- | ---------------------- | ---------------------------------------------------- |
+| Pipeline      | File del pacchetto                 | Genera                 | Mission che la guida   | Direttiva lingua nel prompt?                        |
+| ------------- | ---------------------------------- | ---------------------- | ---------------------- | --------------------------------------------------- |
 | Extraction    | `engine/retain/fact_extraction.py` | `world` / `experience` | `retain_mission`       | ✅ sì, `LANGUAGE: MANDATORY` (mantieni lingua input) |
 | Consolidation | `engine/consolidation/prompts.py`  | `observation`          | `observations_mission` | ❌ **no**                                            |
 
@@ -299,7 +299,7 @@ i tool `agent_knowledge_*` nei tool locali `mcp__hindsight__*`.
 | Aspetto              | Scelta                                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------ |
 | Server MCP           | Ereditato dalla sessione (`hindsight` in `.mcp.json`). Frontmatter usa `tools:`, **non** `mcpServers:` |
-| Bank                 | Inchiodato nell'URL MCP (`/mcp/trinity-project/`) → non passare `bank_id` ai tool                         |
+| Bank                 | Inchiodato nell'URL MCP (`/mcp/trinity-project/`) → non passare `bank_id` ai tool                      |
 | Isolamento per-agent | Tag-namespace **`agent:<nome>`** su ogni `recall`/`retain`/`create_mental_model`                       |
 | Knowledge page       | = mental model. Id prefissato `<nome>-<argomento>`, taggato `agent:<nome>`                             |
 | Startup dell'agent   | `list_mental_models(tags=[agent:<nome>])` → `get_mental_model` → `recall(tags=[agent:<nome>])`         |
@@ -365,7 +365,7 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
 
 5. **Stop dei processi nativi Windows.** Node e Puma sono processi Windows nativi: il `netstat` MSYS
    non vede sempre le loro porte. → I task `stop-*` usano `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh
-<porta> [label]`, che risolve il PID via `Get-NetTCPConnection` (PowerShell 7,
+   <porta> [label]`, che risolve il PID via `Get-NetTCPConnection` (PowerShell 7,
    `C:/Appl/PowerShell/pwsh.exe`) e fa `Stop-Process -Force`.
 
 ### Comandi
