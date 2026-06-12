@@ -119,6 +119,18 @@ HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | def
 HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_MODEL = "zembed-1"
 HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_DIMENSIONS = 1280 # Matryoshka: 2560/1280/640/320/160/80/40
 
+# --- Audit log (2026-06-12) --------------------------------------------------
+# Traccia ogni operazione (recall/retain/reflect/consolidation/…) nella tabella
+# audit_log con duration_ms lato server, transport (http/mcp/system) e payload —
+# copre TUTTI i client, anche quelli invisibili a hindsight-debug.log (tool MCP,
+# promote script, Control Plane). Scrittura fire-and-forget (task asyncio fuori
+# dal percorso richiesta): impatto performance trascurabile. Query: endpoint
+# /audit-logs e /audit-logs/stats per bank.
+HINDSIGHT_API_AUDIT_LOG_ENABLED = "true"
+# Senza retention la tabella cresce per sempre (default -1): 30 giorni bastano
+# per l'analisi dei timing; la pulizia la fa il MaintenanceLoop in background.
+HINDSIGHT_API_AUDIT_LOG_RETENTION_DAYS = "30"
+
 [tasks.install-hindsight]
 description = "Installa/aggiorna hindsight-api (server Python locale, espone MCP) tramite pip del Python mise."
 shell = "/usr/bin/bash -c"
