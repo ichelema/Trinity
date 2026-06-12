@@ -4,3 +4,4 @@ __pycache__/
 .ruff_cache/
 hooks/hindsight/data/
 *.bak
+hooks/hindsight/benchmark/bench_results/
