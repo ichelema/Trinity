@@ -103,8 +103,8 @@ Argomenti:
 ```json
 {
   "content": "L'utente preferisce TypeScript con strict mode",
-  "context": "preferenze",
-  "tags": ["progetto", "typescript", "preferenze"]
+  "context": "preferenze di linguaggio e stile TypeScript del progetto",
+  "tags": ["claude-code", "repo:<nome-repo>"]
 }
 ```
 
@@ -113,16 +113,16 @@ Altri esempi:
 ```json
 {
   "content": "Eseguire i test in questo progetto richiede NODE_ENV=test",
-  "context": "procedure",
-  "tags": ["progetto", "test", "procedura"]
+  "context": "esecuzione test e configurazione d'ambiente del progetto",
+  "tags": ["claude-code", "repo:<nome-repo>"]
 }
 ```
 
 ```json
 {
   "content": "La build è fallita usando Node 18, ma funziona con Node 20",
-  "context": "apprendimenti",
-  "tags": ["progetto", "node", "build", "apprendimento"]
+  "context": "build del progetto e compatibilità versioni Node",
+  "tags": ["claude-code", "repo:<nome-repo>"]
 }
 ```
 
@@ -163,7 +163,7 @@ Argomenti:
 {
   "query": "preferenze dell'utente e procedure di progetto pertinenti a questo compito",
   "budget": "high",
-  "tags": ["project"]
+  "tags": ["claude-code"]
 }
 ```
 
@@ -173,7 +173,7 @@ Altri esempi:
 {
   "query": "preferenze dell'utente per questo progetto",
   "budget": "high",
-  "tags": ["preferences"]
+  "tags": ["claude-code"]
 }
 ```
 
@@ -181,10 +181,12 @@ Altri esempi:
 {
   "query": "problemi precedenti, soluzioni alternative e procedure per questo repository",
   "budget": "high",
-  "tags": ["project", "procedure", "learning"],
+  "tags": ["claude-code", "repo:<nome-repo>"],
   "tags_match": "any"
 }
 ```
+
+> I tag nel bank reale sono SOLO quelli universali (`claude-code`, `repo:<nome>`, `branch:<nome>`): filtrare per tag semantici come `project` o `preferences` non matcherebbe nulla. La selettività la fa la **query semantica**, non il filtro tag.
 
 Usa recall per recuperare:
 
@@ -208,7 +210,7 @@ Argomenti:
   "query": "Come dovrei approcciare questo compito basandomi sulle esperienze dei progetti passati?",
   "context": "Prima di prendere decisioni implementative, sintetizza le preferenze pertinenti, le procedure e i fallimenti precedenti.",
   "budget": "mid",
-  "tags": ["project"]
+  "tags": ["claude-code"]
 }
 ```
 
@@ -225,7 +227,7 @@ Impostazioni consigliate per reflect:
 ```text
 budget: mid
 max_tokens: 2000
-tags: claude-code, project:trinity-project
+tags: claude-code (eventualmente + repo:<nome> per scoping di progetto)
 tags_match: any
 ```
 
@@ -269,33 +271,45 @@ Richiamale sempre prima di:
 - Effettuare il refactoring di codice esistente
 - Modificare test, CI, build, deploy o configurazione delle dipendenze
 
-## Context Categories
+## Il campo `context`: descrittivo, non strutturale
 
-Use the `context` argument to organize memories:
+Il `context` del retain entra SOLO nel prompt dell'LLM estrattore come cornice
+interpretativa: non partecipa al recall filtering, alle relazioni (= entità) né
+allo scope di consolidation (= tag). Verificato sul sorgente di hindsight-api
+(`entity_processing.py`, `consolidator.py`) il 2026-05-31.
 
-- `preferences` - User and project preferences
-- `procedures` - How-to steps and successful workflows
-- `learnings` - Lessons learned, bugs, failures, and solutions
-- `architecture` - Design decisions and system structure
-- `tooling` - Development tools, package managers, linters, CI, deploy
-- `general` - General information that does not fit elsewhere
+Conseguenza: una categoria secca ("tooling", "preferences") è il valore meno
+utile possibile — non descrive nulla. Usa una **descrizione del dominio del
+task**, come fa il retain worker automatico (context extraction via LLM):
+
+| ❌ Categoria secca | ✅ Dominio descrittivo |
+|---|---|
+| `tooling` | `git/github del progetto Trinity: hosting, autenticazione SSH, convenzioni di push` |
+| `learnings` | `compilazione gemme native Ruby su Windows UCRT64 con GCC 16` |
+| `preferences` | `preferenze di scripting dell'utente: linguaggi e shell su MSYS2` |
+
+Regola pratica: il context deve rispondere a "*in quale dominio l'estrattore
+deve interpretare questo testo?*" — max 1 riga, specifica, coi nomi propri.
 
 ## Regole di Tagging
 
-Usa i tag per rendere il richiamo preciso.
+I tag hanno DUE lavori: filtro di recall E recinto di consolidation — le
+observation si fondono SOLO tra memorie con lo stesso identico set di tag
+(`tags_match: all_strict` nel consolidator). Un tag in più non arricchisce:
+**frammenta** (esperimento 2026-05-31: tag semantici liberi → 71 partizioni su
+72 documenti, consolidation morta).
 
-Tag consigliati:
+Usa SOLO i tag universali, identici a quelli del retain worker automatico
+(`build_tags()` in `hindsight-retain-worker.py`):
 
-- `project`
-- `preferences`
-- `procedure`
-- `learning`
-- `architecture`
-- `tooling`
-- tag relativi ai linguaggi come `ruby, python, typescript`, `python`, `rust`, `go`
-- tag relativi ai sottosistemi come `obsidian, frontend`, `backend`, `database`, `ci`, `deploy`
+- `claude-code` — sempre (ancora di recall del bank)
+- `repo:<nome>` — scoping di progetto (nome dal remote origin, stabile)
+- `branch:<nome>` — solo se il fatto è davvero specifico del branch
 
-Quando memorizzi informazioni specifiche di un progetto, includi il tag `project` a meno che la memoria non sia intenzionalmente globale.
+NON aggiungere tag semantici (`project`, `preferences`, `learning`, linguaggi,
+sottosistemi…): la selettività del recall la fa la query semantica; il dominio
+lo porta il `context`; le connessioni le fanno le entità estratte. Per un fatto
+intenzionalmente globale (valido su tutti i progetti), usa solo `claude-code`.
 
 ## Migliori Pratiche
 
@@ -314,8 +328,8 @@ Dopo che l'utente corregge una preferenza, chiama `mcp__hindsight__retain`:
 ```json
 {
   "content": "L'utente preferisce pnpm rispetto a npm per la gestione dei pacchetti",
-  "context": "preferences",
-  "tags": ["project", "preferences", "pnpm", "package-manager"]
+  "context": "preferenze dell'utente per la gestione pacchetti JavaScript",
+  "tags": ["claude-code"]
 }
 ```
 
@@ -324,8 +338,8 @@ Dopo aver risolto un bug, chiama `mcp__hindsight__retain`:
 ```json
 {
   "content": "L'errore di idratazione di React è stato risolto spostando l'accesso a localStorage all'interno di useEffect",
-  "context": "learnings",
-  "tags": ["project", "react", "hydration", "learning"]
+  "context": "debugging dell'idratazione React lato client nel progetto frontend",
+  "tags": ["claude-code", "repo:<nome-repo>"]
 }
 ```
 
@@ -334,8 +348,8 @@ Dopo aver trovato un comando o una procedura funzionante, chiama `mcp__hindsight
 ```json
 {
   "content": "Esegui i test con: pnpm test -- --runInBand per la compatibilità CI",
-  "context": "procedures",
-  "tags": ["project", "tests", "ci", "procedure"]
+  "context": "esecuzione test del progetto in CI: comandi e flag funzionanti",
+  "tags": ["claude-code", "repo:<nome-repo>"]
 }
 ```
 
@@ -345,7 +359,7 @@ Prima di iniziare il lavoro, chiama `mcp__hindsight__recall`:
 {
   "query": "preferenze, procedure, fallimenti precedenti e vincoli noti per questo progetto",
   "budget": "high",
-  "tags": ["project"],
+  "tags": ["claude-code", "repo:<nome-repo>"],
   "tags_match": "any"
 }
 ```
@@ -357,7 +371,7 @@ Quando devi decidere tra diversi approcci, chiama `mcp__hindsight__reflect`:
   "query": "Quale approccio di implementazione corrisponde meglio alle preferenze passate dell'utente e ai vincoli di questo progetto?",
   "context": "Usa i ricordi relativi a preferenze, decisioni precedenti, fallimenti, strumenti e architettura.",
   "budget": "mid",
-  "tags": ["project", "preferences", "architecture"],
+  "tags": ["claude-code"],
   "tags_match": "any"
 }
 ```
