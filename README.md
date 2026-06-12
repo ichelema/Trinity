@@ -182,12 +182,46 @@ collidono con i comandi locali del progetto:
 
 ---
 
-## 7. Memoria Hindsight (multi-progetto)
+## 7. Memoria Hindsight (multi-bank: core + bank per progetto)
 
-`.mcp.json` registra il server Hindsight su un **bank unico condiviso** (`trinity-project`); 
-le memorie sono ricondivise tra progetti via tag `claude-code`, e ogni fatto viene marcato 
-col tag `repo:<nome-progetto>` derivato dalla directory. Quindi un fatto utile imparato in un 
-progetto è richiamabile dagli altri.
+La memoria è organizzata a **due livelli** (dal 2026-06-12): un bank **CORE** condiviso
+(`trinity-project`, le informazioni trasversali — preferenze utente, vincoli d'ambiente,
+procedure di toolchain) e un **bank per progetto** isolato (le informazioni che hanno senso
+solo lì e non devono inquinare gli altri progetti). Hindsight non ha ereditarietà nativa tra
+bank: l'aggregazione la fanno gli hook client-side.
+
+Il blocco `bank` di `hindsight.config.json` governa tutto:
+
+```json
+"bank": {
+  "api_base": "http://127.0.0.1:8888/v1/default",
+  "core_bank": "trinity-project",
+  "retain_bank": "auto",
+  "recall_banks": ["auto", "core"]
+}
+```
+
+- **`retain_bank`** (scalare, la scrittura ha un bersaglio): `auto` = slug del repo corrente
+  (nome dal remote `origin`, fallback basename; fuori da git — o dentro il repo del plugin
+  stesso — ricade sul core); `core` = il core; altro valore = nome bank letterale. Il bank si
+  **auto-crea al primo retain**, zero provisioning.
+- **`recall_banks`** (array, la lettura aggrega): fan-out **parallelo** sui bank risolti,
+  unione dei candidati e **rerank globale zerank-2** via REST ZeroEntropy (gli score di bank
+  diversi non sono confrontabili tra loro; se ZeroEntropy non risponde, fallback a
+  interleaving senza rerank). Il core entra **solo se listato**: `["auto"]` da solo = progetto
+  totalmente isolato. Con un solo bank risolto il percorso è identico al single-bank storico.
+- **Retrocompat**: un `api_url` esplicito in un override (file o env) vince sul blocco bank e
+  ripristina il comportamento single-bank. I tag (`claude-code`, `repo:`, `branch:`) restano
+  invariati.
+
+**Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
+(gpt-4.1-nano: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
+move: comando **`/trinity:promote`**, meccanica in `hooks/hindsight/ops/hindsight-promote.py`.
+Il move ritiene l'`original_text` sul core (con strip dei tag `repo:`/`branch:`, che nello
+scope all_strict impedirebbero la fusione cross-repo) e cancella il documento dal bank
+progetto. Lo stato (revisionati, anche respinti, + cache dei verdetti triage) è in
+`logs/promote-state.json`. Il job settimanale `scheduler/promote_scan/` esegue solo
+scan+triage e apre un alert se ci sono candidati (vedi il suo README).
 
 La configurazione del servizio (provider LLM/embedding, env TLS, task 
 `start/stop-hindsight`, `control-plane`) è in **`mise.toml`**, usato dagli hook via 
@@ -198,10 +232,11 @@ La configurazione del servizio (provider LLM/embedding, env TLS, task
 Un progetto può personalizzarli mettendo un proprio `hindsight.config.json` **nella sua root**: 
 il loader fa un **merge a strati** — DEFAULTS → config del plugin → config del progetto → env — 
 quindi il file del progetto sovrascrive **solo** le chiavi che contiene (anche una sola riga), 
-ereditando il resto dal plugin. Esempio (`<progetto>/hindsight.config.json`):
+ereditando il resto dal plugin. I valori **dict** (come `bank`) fanno merge a un livello: un 
+override parziale non cancella le chiavi non menzionate. Esempio (`<progetto>/hindsight.config.json`):
 
 ```json
-{ "retain_enabled": true, "recall_max_results": 5 }
+{ "retain_enabled": true, "bank": { "recall_banks": ["auto"] } }
 ```
 
 ---

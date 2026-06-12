@@ -11,17 +11,45 @@ HS_CONFIG_FILE forza un singolo file (test/retrocompat), saltando 2 e 3.
 
 Uso da Python:   from hindsight_config import load_config; cfg = load_config()
 Uso da bash:     python hindsight_config.py --get api_url
+                 python hindsight_config.py --banks    # URL retain/recall risolti
                  python hindsight_config.py            # dump completo (debug)
+
+Multi-bank: il blocco "bank" (api_base, core_bank, retain_bank, recall_banks)
+sostituisce il vecchio api_url come fonte di verita'. Le keyword "auto"/"core"
+sono risolte da resolve_bank(); retain_bank_url() e recall_bank_urls() danno
+gli URL pronti per worker e recall hook. Un api_url esplicito in un override
+(file o env) vince sul blocco bank (retrocompat single-bank).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 import sys
 
 DEFAULTS = {
     "api_url": "http://127.0.0.1:8888/v1/default/banks/trinity-project",
+    # Multi-bank: bank per progetto isolati che ereditano un bank CORE condiviso.
+    # Hindsight non ha ereditarieta' nativa tra bank (endpoint scoped per-bank
+    # nell'URL): l'aggregazione la fanno gli hook client-side.
+    #   api_base     base dell'API senza il segmento /banks/<nome>
+    #   core_bank    il bank condiviso (l'attuale trinity-project, nessun rebuild)
+    #   retain_bank  SCALARE: la scrittura ha 1 bersaglio. Keyword: "auto" = slug
+    #                del repo corrente (remote origin -> fallback basename; fuori
+    #                da git, o nel repo del plugin stesso, ricade sul core);
+    #                "core" o vuoto = core_bank; altro = nome bank letterale.
+    #   recall_banks ARRAY: la lettura aggrega (fan-out + rerank). Il core entra
+    #                SOLO se listato -> ["auto"] da solo = progetto isolato.
+    # Retrocompat: un api_url esplicito (file di config o env) VINCE sul blocco
+    # bank e ripristina il comportamento single-bank odierno (vedi load_config).
+    "bank": {
+        "api_base": "http://127.0.0.1:8888/v1/default",
+        "core_bank": "trinity-project",
+        "retain_bank": "auto",
+        "recall_banks": ["auto", "core"],
+    },
     # Interruttori master dell'automazione hook. False => l'hook esce subito,
     # senza chiamate di rete ne' estrazione LLM. Default: attivi (comportamento
     # storico invariato). Override anche via HS_CFG_RECALL_ENABLED / HS_CFG_RETAIN_ENABLED.
@@ -30,6 +58,9 @@ DEFAULTS = {
     "recall_budget": "low",
     "recall_max_tokens": 800,
     "recall_max_results": 8,
+    # Multi-bank: candidati massimi presi da OGNI bank nel fan-out, PRIMA della
+    # fusione (rerank globale / interleave) e del taglio a recall_max_results.
+    "recall_per_bank_candidates": 5,
     # Filtra i tipi di fatto cercati dal server. Vuoto => tutti (world+experience+
     # observation), default API. Valori validi: "world", "experience", "observation".
     "recall_types": [],
@@ -128,7 +159,8 @@ ENV_OVERRIDES = {
 
 
 def _cast(value: str, sample):
-    """Converte la stringa env al tipo del default. Liste accettano JSON o CSV."""
+    """Converte la stringa env al tipo del default. Liste accettano JSON o CSV;
+    dict (es. HS_CFG_BANK) accettano solo JSON."""
     try:
         if isinstance(sample, bool):
             return value.lower() in ("1", "true", "yes")
@@ -139,6 +171,8 @@ def _cast(value: str, sample):
             if value.startswith("["):
                 return json.loads(value)
             return [v.strip() for v in value.split(",") if v.strip()]
+        if isinstance(sample, dict):
+            return json.loads(value)
         return value
     except (ValueError, json.JSONDecodeError):
         return sample
@@ -162,17 +196,132 @@ def _project_config_path() -> str | None:
     return path if os.path.isfile(path) else None
 
 
-def _merge_json(cfg: dict, path: str) -> None:
+def _merge_json(cfg: dict, path: str) -> set[str]:
     """Sovrascrive in cfg le sole chiavi note (presenti nei DEFAULTS) trovate nel
-    file JSON. File assente o non valido => no-op (best-effort)."""
+    file JSON. I valori dict (es. "bank") fanno MERGE a un livello invece di
+    sostituire: un override parziale {"bank": {"retain_bank": "x"}} non deve
+    cancellare api_base/core_bank della base. File assente o non valido => no-op
+    (best-effort). Ritorna le chiavi applicate (per il tracking retrocompat di
+    api_url in load_config)."""
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError):
-        return
+        return set()
+    applied: set[str] = set()
     for k, v in data.items():
         if k in cfg and v is not None:
-            cfg[k] = v
+            if isinstance(cfg[k], dict) and isinstance(v, dict):
+                cfg[k] = {**cfg[k], **v}
+            else:
+                cfg[k] = v
+            applied.add(k)
+    return applied
+
+
+# ---------------------------------------------------------------------------
+# Resolver multi-bank: keyword ("auto"/"core"/letterale) -> nome bank -> URL.
+# Usati dal recall hook (fan-out sui recall_banks) e dal retain worker
+# (bersaglio di scrittura da retain_bank).
+# ---------------------------------------------------------------------------
+
+# Cache per-processo dello slug git: evita subprocess ripetuti quando "auto"
+# compare piu' volte (es. retain + recall nello stesso processo di test).
+_REPO_CACHE: dict[str, tuple[str, str]] = {}
+
+
+def _norm_path(p: str) -> str:
+    """Normalizza per il confronto, convertendo anche i path MSYS (/d/x -> d:/x):
+    il git di MSYS2 restituisce la toplevel in formato POSIX."""
+    m = re.match(r"^/([a-zA-Z])/(.*)$", p)
+    if m:
+        p = f"{m.group(1)}:/{m.group(2)}"
+    return os.path.normcase(os.path.normpath(p))
+
+
+def _git_root_and_slug(cwd: str) -> tuple[str, str]:
+    """(toplevel, slug) del repo che contiene cwd. Slug: nome dal remote 'origin'
+    (identificativo STABILE, invariante a spostamenti della cartella — stessa
+    logica di git_info nel retain worker), fallback basename della toplevel.
+    ("", "") fuori da un repo git o senza git disponibile."""
+    if cwd in _REPO_CACHE:
+        return _REPO_CACHE[cwd]
+
+    def _run(args: list[str]) -> str:
+        try:
+            return subprocess.check_output(
+                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=2, text=True
+            ).strip()
+        except Exception:
+            return ""
+
+    root = _run(["rev-parse", "--show-toplevel"])
+    slug = ""
+    if root:
+        remote = _run(["config", "--get", "remote.origin.url"])
+        if remote:
+            base = re.split(r"[/:]", remote.rstrip("/"))[-1]
+            slug = base[:-4] if base.endswith(".git") else base
+        if not slug:
+            slug = os.path.basename(root)
+    _REPO_CACHE[cwd] = (root, slug)
+    return root, slug
+
+
+def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
+    """Risolve una keyword del blocco bank nel nome reale del bank.
+    "core" (o vuoto) -> core_bank; "auto" -> slug del repo corrente; qualsiasi
+    altro valore -> nome bank letterale. "auto" ricade sul core in due casi:
+      - fuori da un repo git (nessuno slug derivabile)
+      - nel repo del plugin stesso (il progetto Trinity E' il progetto core:
+        un bank "Trinity" separato spaccherebbe le sue memorie dal core)."""
+    name = (name or "").strip()
+    core = (cfg.get("bank") or {}).get("core_bank", "")
+    if not name or name == "core":
+        return core
+    if name != "auto":
+        return name
+    cwd = cwd or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    root, slug = _git_root_and_slug(cwd)
+    if not slug:
+        return core
+    here = os.path.dirname(os.path.abspath(__file__))
+    plugin_root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+    if _norm_path(root) == _norm_path(plugin_root):
+        return core
+    return slug
+
+
+def bank_url(cfg: dict, bank_name: str) -> str:
+    """URL scoped del bank: <api_base>/banks/<nome>."""
+    base = (cfg.get("bank") or {}).get("api_base", "").rstrip("/")
+    return f"{base}/banks/{bank_name}"
+
+
+def retain_bank_url(cfg: dict, cwd: str | None = None) -> str:
+    """URL del bank di SCRITTURA (da bank.retain_bank). Con api_url esplicito
+    (retrocompat) restituisce quello."""
+    if cfg.get("_api_url_explicit"):
+        return cfg["api_url"]
+    name = (cfg.get("bank") or {}).get("retain_bank", "core")
+    return bank_url(cfg, resolve_bank(name, cfg, cwd))
+
+
+def recall_bank_urls(cfg: dict, cwd: str | None = None) -> list[str]:
+    """URL dei bank di LETTURA (da bank.recall_banks), risolti e deduplicati
+    preservando l'ordine ("auto" puo' coincidere con un nome esplicito o col
+    core). Con api_url esplicito (retrocompat) restituisce solo quello."""
+    if cfg.get("_api_url_explicit"):
+        return [cfg["api_url"]]
+    names = (cfg.get("bank") or {}).get("recall_banks") or ["core"]
+    out: list[str] = []
+    seen: set[str] = set()
+    for n in names:
+        b = resolve_bank(n, cfg, cwd)
+        if b and b not in seen:
+            seen.add(b)
+            out.append(bank_url(cfg, b))
+    return out or [cfg["api_url"]]
 
 
 def load_config() -> dict:
@@ -180,24 +329,40 @@ def load_config() -> dict:
 
     # 2-3. file JSON a strati (gli ultimi vincono). HS_CONFIG_FILE forza un
     # singolo file; altrimenti: config del PLUGIN (base) -> PROGETTO (override).
+    applied: set[str] = set()
     forced = os.environ.get("HS_CONFIG_FILE")
     if forced:
-        _merge_json(cfg, forced)
+        applied |= _merge_json(cfg, forced)
     else:
-        _merge_json(cfg, _plugin_config_path())
+        applied |= _merge_json(cfg, _plugin_config_path())
         project_cfg = _project_config_path()
         if project_cfg:
-            _merge_json(cfg, project_cfg)
+            applied |= _merge_json(cfg, project_cfg)
 
     # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>)
     for env_name, key in ENV_OVERRIDES.items():
         val = os.environ.get(env_name)
         if val:
             cfg[key] = _cast(val, DEFAULTS[key])
+            applied.add(key)
     for key in DEFAULTS:
         val = os.environ.get("HS_CFG_" + key.upper())
         if val:
-            cfg[key] = _cast(val, DEFAULTS[key])
+            new = _cast(val, DEFAULTS[key])
+            if isinstance(cfg.get(key), dict) and isinstance(new, dict):
+                cfg[key] = {**cfg[key], **new}
+            else:
+                cfg[key] = new
+            applied.add(key)
+
+    # Retrocompat api_url: se NESSUNA fonte (file o env) lo ha impostato
+    # esplicitamente, derivalo dal blocco bank (= URL del CORE): mm-inject,
+    # reflect, export e check continuano a leggerlo e devono puntare al core.
+    # Se invece e' esplicito, vince su tutto il blocco bank: retain_bank_url e
+    # recall_bank_urls lo rispettano e ripristinano il single-bank odierno.
+    cfg["_api_url_explicit"] = "api_url" in applied
+    if not cfg["_api_url_explicit"]:
+        cfg["api_url"] = bank_url(cfg, (cfg.get("bank") or {}).get("core_bank", ""))
 
     return cfg
 
@@ -207,5 +372,11 @@ if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--get":
         v = cfg.get(sys.argv[2], "")
         print(json.dumps(v) if isinstance(v, (list, dict)) else v)
+    elif len(sys.argv) >= 2 and sys.argv[1] == "--banks":
+        # Debug/bash: bank risolti per il cwd corrente (o CLAUDE_PROJECT_DIR).
+        print(json.dumps({
+            "retain": retain_bank_url(cfg),
+            "recall": recall_bank_urls(cfg),
+        }, indent=2))
     else:
         print(json.dumps(cfg, indent=2, ensure_ascii=False))

@@ -193,3 +193,8 @@ run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
 description = "Testa se una versione del Control Plane ha ancora il bug del redirect-loop. Uso: VERSION=0.7.1 mise run cp-redirect-test (porta usa-e-getta 9998)."
 shell = "/usr/bin/bash -c"
 run = "bash scheduler/check_update_hindsight_control_plane/cp-redirect-test.sh \"${VERSION:?imposta VERSION=X.Y.Z}\" \"${PORT:-9998}\""
+
+[tasks.promote-scan]
+description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
+shell = "/usr/bin/bash -c"
+run = "python hooks/hindsight/ops/hindsight-promote.py --triage"

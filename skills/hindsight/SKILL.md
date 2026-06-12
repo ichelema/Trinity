@@ -42,6 +42,30 @@ Verifica veloce che il server risponda:
 curl -fsS -m 3 http://localhost:8888/ -o /dev/null -w "%{http_code}\n"  # 404 = up
 ```
 
+### Multi-bank: core + bank per progetto
+
+Dal 2026-06-12 la memoria è a due livelli: il bank **CORE** `trinity-project`
+(informazioni trasversali) + un **bank per progetto** isolato, governati dal
+blocco `bank` di `hindsight.config.json`:
+
+- `retain_bank: "auto"` → il retain automatico scrive sul bank del progetto
+  corrente (slug dal remote `origin`, fallback basename; fuori da git o nel
+  repo Trinity stesso → core). Il bank si auto-crea al primo retain.
+- `recall_banks: ["auto", "core"]` → il recall fa fan-out parallelo su
+  progetto+core e fonde i risultati con un rerank globale zerank-2 (fallback
+  interleaving se ZeroEntropy non risponde). Il core entra solo se listato.
+- URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
+
+**ATTENZIONE — i tool MCP `hindsight/*` parlano SOLO col core** (l'endpoint MCP
+è scoped su `trinity-project`): per leggere/scrivere un bank di progetto usa
+l'API REST (`http://127.0.0.1:8888/v1/default/banks/<nome>/...`).
+
+**Promozione progetto → core**: comando `/trinity:promote` (curata, mai
+automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei tag
+`repo:`/`branch:`). Meccanica in `hooks/hindsight/ops/hindsight-promote.py`
+(`--scan/--triage/--move/--reject/--status`); job settimanale
+`scheduler/promote_scan/` che genera `logs/promote-candidates.json`.
+
 ### Interfacce web: Control Plane e dashboard log
 
 Due UI **opzionali**, indipendenti dal server MCP, entrambe via task mise e **in foreground** (Ctrl-C per fermarle, a differenza di `start-hindsight` che è daemon):

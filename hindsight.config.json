@@ -1,5 +1,10 @@
 {
-  "api_url": "http://127.0.0.1:8888/v1/default/banks/trinity-project",
+  "bank": {
+    "api_base": "http://127.0.0.1:8888/v1/default",
+    "core_bank": "trinity-project",
+    "retain_bank": "auto",
+    "recall_banks": ["auto", "core"]
+  },
 
   "recall_enabled": true,
   "retain_enabled": false,
@@ -7,6 +12,7 @@
   "recall_budget": "mid",
   "recall_max_tokens": 2048,
   "recall_max_results": 3,
+  "recall_per_bank_candidates": 5,
   "recall_types": ["observation", "world", "experience"],
   "recall_include_entities": false,
   "recall_min_prompt_chars": 20,

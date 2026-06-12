@@ -586,6 +586,113 @@ else
 	ko "build_recall_payload logica errata ($RT_PAYLOAD)"
 fi
 
+# --- 19. MULTI-BANK (blocco bank, resolver, fan-out/merge, promote) ---
+sect "19. Multi-bank (bank per progetto + core)"
+
+MB_CFG=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import json, os, sys, tempfile
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+
+b = hc.DEFAULTS.get("bank") or {}
+defaults_ok = {"api_base", "core_bank", "retain_bank", "recall_banks"} <= set(b)
+
+# deep-merge: override parziale non cancella le altre chiavi del blocco
+with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+    json.dump({"bank": {"retain_bank": "x-proj"}}, f)
+    forced = f.name
+os.environ["HS_CONFIG_FILE"] = forced
+cfg = hc.load_config()
+merge_ok = cfg["bank"]["retain_bank"] == "x-proj" and cfg["bank"]["core_bank"] == b["core_bank"]
+os.environ.pop("HS_CONFIG_FILE")
+os.unlink(forced)
+
+# resolver: "core" -> core_bank; "auto" nel repo del plugin -> core; letterale passa
+cfg2 = hc.load_config()
+core = cfg2["bank"]["core_bank"]
+plugin_root = os.path.abspath(os.path.join(sys.argv[1], "..", "..", ".."))
+res_ok = (
+    hc.resolve_bank("core", cfg2) == core
+    and hc.resolve_bank("auto", cfg2, plugin_root) == core
+    and hc.resolve_bank("nome-libero", cfg2) == "nome-libero"
+)
+
+# api_url derivato dal core + retrocompat esplicito
+derived_ok = cfg2["api_url"] == hc.bank_url(cfg2, core)
+os.environ["HINDSIGHT_API_URL"] = "http://x:1/v1/d/banks/legacy"
+cfg3 = hc.load_config()
+legacy_ok = hc.retain_bank_url(cfg3) == cfg3["api_url"] and hc.recall_bank_urls(cfg3) == [cfg3["api_url"]]
+os.environ.pop("HINDSIGHT_API_URL")
+
+print("OK" if all([defaults_ok, merge_ok, res_ok, derived_ok, legacy_ok])
+      else f"KO def={defaults_ok} merge={merge_ok} res={res_ok} der={derived_ok} leg={legacy_ok}")
+PY
+)
+if [ "$MB_CFG" = "OK" ]; then
+	ok "config: blocco bank, deep-merge, resolver auto/core, api_url derivato, retrocompat"
+else
+	ko "config multi-bank errata ($MB_CFG)"
+fi
+
+MB_LIB=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_multibank as mb
+
+a = [{"text": "a0"}, {"text": "a1"}]
+b = [{"text": "b0"}]
+il_ok = [r["text"] for r in mb.interleave([a, b], 3)] == ["a0", "b0", "a1"]
+d = mb.dedup_results([[{"text": "Stesso  fatto"}], [{"text": "stesso fatto"}, {"text": "altro"}]])
+dd_ok = [len(x) for x in d] == [1, 1]
+
+# fallback: rerank che fallisce non deve sollevare
+mb.fetch_bank_results = lambda u, p, t: [{"text": f"da-{u}"}]
+def boom(*args, **kw): raise RuntimeError("no api")
+mb.zerank_rerank = boom
+res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4}, ["u1", "u2"], {})
+fb_ok = meta["merge"] == "interleave-fallback" and len(res) == 2
+print("OK" if il_ok and dd_ok and fb_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok}")
+PY
+)
+if [ "$MB_LIB" = "OK" ]; then
+	ok "multibank lib: interleave, dedup cross-bank, fallback senza rerank"
+else
+	ko "hindsight_multibank logica errata ($MB_LIB)"
+fi
+
+# recall hook usa il fan-out e la cache key tiene conto dei bank
+if grep -q "recall_bank_urls" "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'bank_urls)' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "recall hook risolve i bank e li include nella cache key"
+else
+	ko "recall hook non integra recall_bank_urls/cache key multi-bank"
+fi
+
+# retain worker scrive sul bank risolto da retain_bank
+if grep -q "retain_bank_url" "$HOOKS_DIR/hindsight-retain-worker.py"; then
+	ok "retain worker usa retain_bank_url (bank di progetto)"
+else
+	ko "retain worker non usa retain_bank_url"
+fi
+
+# tooling promozione: ops script + comando + scheduler settimanale
+if [ -r "$HOOKS_DIR/ops/hindsight-promote.py" ] && PYTHONUTF8=1 python "$HOOKS_DIR/ops/hindsight-promote.py" --status >/dev/null 2>&1; then
+	ok "hindsight-promote.py presente e --status funziona"
+else
+	ko "hindsight-promote.py mancante o --status fallisce"
+fi
+if [ -r "$PROJ/commands/promote.md" ]; then
+	ok "comando /trinity:promote presente (commands/promote.md)"
+else
+	ko "commands/promote.md mancante"
+fi
+if [ -x "$PROJ/scheduler/promote_scan/promote-scan-scheduled.sh" ] && [ -r "$PROJ/scheduler/promote_scan/promote-scan-scheduled.cmd" ]; then
+	ok "scheduler promote_scan presente (.sh eseguibile + .cmd)"
+else
+	ko "scheduler promote_scan mancante o .sh non eseguibile"
+fi
+
 # --- SUMMARY ---
 sect "Riepilogo"
 TOT=$((PASS + FAIL))

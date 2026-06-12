@@ -16,9 +16,10 @@ import hashlib, json, os, sys, time, urllib.request, urllib.error
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
-from hindsight_config import load_config
+from hindsight_config import load_config, recall_bank_urls
 from hindsight_debug import debug_log
 from hindsight_recall_lib import build_recall_payload
+from hindsight_multibank import multi_recall
 
 cfg = load_config()
 
@@ -47,12 +48,20 @@ if len(prompt) > _max_chars:
     debug_log(cfg, "recall_truncate", orig_len=len(prompt), max_chars=_max_chars)
     prompt = prompt[:_max_chars]
 
+# --- Bank di lettura (multi-bank) ---
+# Risolti da bank.recall_banks ("auto" = slug del repo del cwd della sessione).
+# Con un solo bank il percorso resta la singola POST di sempre; con piu' bank
+# si fa fan-out parallelo + fusione (vedi hindsight_multibank.py).
+bank_urls = recall_bank_urls(cfg, hook.get("cwd") or None)
+
 # --- Cache lookup ---
 cache_dir = cfg["recall_cache_dir"]
 cache_ttl = int(cfg["recall_cache_ttl"])
 os.makedirs(cache_dir, exist_ok=True)
-# Key: hash del prompt normalizzato (case-insensitive, whitespace collassato).
-key_src = " ".join(prompt.lower().split())
+# Key: hash del prompt normalizzato (case-insensitive, whitespace collassato)
+# + set dei bank risolti: lo stesso prompt da progetti diversi legge bank
+# diversi e NON deve condividere la entry di cache.
+key_src = " ".join(prompt.lower().split()) + "|" + ",".join(bank_urls)
 cache_key = hashlib.sha256(key_src.encode("utf-8")).hexdigest()[:32]
 cache_file = os.path.join(cache_dir, cache_key + ".json")
 
@@ -81,18 +90,26 @@ if cached is None:
     payload = build_recall_payload(
         prompt, cfg, datetime.now(timezone.utc).isoformat()
     )
-    req = urllib.request.Request(
-        cfg["api_url"] + "/memories/recall",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=cfg["recall_timeout"]) as res:
-            data = json.loads(res.read().decode("utf-8", errors="replace"))
-    except Exception as e:
-        debug_log(cfg, "recall_error", query=prompt, error=str(e)[:200])
-        sys.exit(0)
+    merge_meta = {}
+    if len(bank_urls) == 1:
+        # Bank singolo: stessa singola POST di sempre, zero overhead multi-bank.
+        req = urllib.request.Request(
+            bank_urls[0] + "/memories/recall",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=cfg["recall_timeout"]) as res:
+                data = json.loads(res.read().decode("utf-8", errors="replace"))
+        except Exception as e:
+            debug_log(cfg, "recall_error", query=prompt, error=str(e)[:200])
+            sys.exit(0)
+    else:
+        # Multi-bank: fan-out parallelo -> dedup -> rerank globale zerank-2
+        # (fallback interleave). multi_recall non solleva mai.
+        merged, merge_meta = multi_recall(prompt, cfg, bank_urls, payload)
+        data = {"results": merged}
     # Salva in cache (best-effort, ignora errori).
     try:
         with open(cache_file, "w", encoding="utf-8") as f:
@@ -109,6 +126,8 @@ debug_log(
     "recall",
     query=prompt,
     cache=source,
+    banks=[u.rsplit("/", 1)[-1] for u in bank_urls],
+    **{k: v for k, v in merge_meta.items() if k in ("merge", "rerank_error") and v},
     n_results=len(results),
     memories=[
         {

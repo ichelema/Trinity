@@ -28,14 +28,12 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from hindsight_config import load_config
+from hindsight_config import load_config, retain_bank_url
 from hindsight_debug import debug_log
 
 CFG = load_config()
 
 HOOK_INPUT = os.environ.get("HOOK_INPUT", "")
-# API_URL: env esplicita (se passata dal hook) ha precedenza, poi la config.
-API_URL = os.environ.get("API_URL") or CFG["api_url"]
 
 NOISY_BASH_PREFIXES = ("ls", "cat", "head", "tail", "echo", "pwd", "which", "type ")
 INTERESTING_BASH_PATTERNS = (
@@ -761,10 +759,16 @@ def main() -> int:
         (t for r, t in reversed(_turns) if r == "assistant"), ""
     )
 
+    # Bank di scrittura: env API_URL esplicita (test/override) ha precedenza,
+    # poi bank.retain_bank risolto sul cwd della sessione ("auto" = slug repo;
+    # il bank si auto-crea al primo retain, nessun provisioning).
+    api_url = os.environ.get("API_URL") or retain_bank_url(CFG, hook.get("cwd") or None)
+
     debug_log(
         CFG,
         "retain",
         doc_id=doc_id,
+        bank=api_url.rsplit("/", 1)[-1],
         context=context,
         tags=tags,
         content_chars=len(content),
@@ -777,7 +781,7 @@ def main() -> int:
     )
 
     req = urllib.request.Request(
-        API_URL + "/memories",
+        api_url + "/memories",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
