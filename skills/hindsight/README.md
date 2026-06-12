@@ -42,7 +42,7 @@ in `D:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sos
 ## 3. Debug log
 
 - **Abilitazione**: `debug_log_enabled: true`. È OFF nei `DEFAULTS` spediti (best-effort, costo ~0 da spento).
-- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log` (es. `D:\AI\Claude\Trinity-plugin\logs\`).
+- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log` (es. `D:\AI\Claude\Trinity\logs\`).
   Calcolato in `hindsight_debug.py::_log_path()` relativo al modulo (risale 3 livelli da
   `hooks/hindsight/lib/`), quindi è portabile se sposti il plugin.
 - **Formato**: JSONL, un evento per riga. Rotazione automatica a 5 MB → `.log.1`.

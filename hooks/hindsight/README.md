@@ -7,7 +7,7 @@ manutenzione** e i **dati/artefatti**. Sotto, cosa è cosa e chi lo invoca.
 ## 🪝 Hook veri (entry-point, in cima a questa cartella)
 
 Sono gli unici file invocati direttamente da Claude Code. Registrati in
-`.claude/settings.json` (NON spostarli senza aggiornare le settings).
+`hooks/hooks.json` del plugin (NON spostarli senza aggiornare hooks.json).
 
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
@@ -54,12 +54,10 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 
 ## 📁 `data/` — artefatti
 
-| Contenuto                             | Note                                             |
-| ------------------------------------- | ------------------------------------------------ |
-| `bank-backup-pre-bge-m3-20260525.sql` | dump del bank prima del rebuild bge-m3 (storico) |
-| `exports/`                            | output di `tools/hindsight_export.py`            |
+Vuota di default (non versionata): accoglie gli `exports/` di `tools/hindsight_export.py`.
+I vecchi dump SQL del lab non sono stati migrati (dismessi nella fusione del 2026-06-12).
 
-## 📁 altre sottocartelle (invariate)
+## 📁 altre sottocartelle
 
 - `benchmark/` — corpora e script di benchmark embedding/reranker (task `mise embed-bench`, `rerank-bench`).
 - `hindsight-dashboard/` — web app Ruby/Roda per analizzare `hindsight-debug.log` (task `mise dashboard`).
@@ -72,5 +70,5 @@ Ogni script trova i fratelli **relativamente a sé stesso**, mai con path assolu
 - `.py`: `sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))` (o `"..","lib"` dalle sottocartelle).
 
 Spostando un file, aggiornare **solo** la sua riga di risoluzione path e i chiamanti esterni
-(`settings.json`, `.mise.toml`, `scheduler/`, slash-command). Poi verificare con
+(`hooks/hooks.json`, `mise.toml`, `scheduler/`, slash-command). Poi verificare con
 `bash hooks/hindsight/tools/hindsight-check.sh`.

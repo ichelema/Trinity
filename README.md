@@ -4,24 +4,24 @@ Il **core dell'agente Trinity** come plugin Claude Code: memoria persistente Hin
 condiviso, skill, comandi e hook di notifica. Installato a livello utente, è attivo in **ogni** 
 progetto della macchina, che ne eredita comportamento e memoria.
 
-> Versione: `0.1.1` · Repo prodotto, separato dal laboratorio (`D:\AI\Claude\Trinity`).
+> Repo unico: `D:\AI\Claude\Trinity` (dal 2026-06-12 include anche gli ex strumenti di laboratorio).
 
 ---
 
-## 1. Architettura: due repo sorelle
+## 1. Architettura: repo unico
 
 ```
-D:\AI\Claude\Trinity-plugin\   ← PRODOTTO (questo repo): il plugin distribuibile
-D:\AI\Claude\Trinity\          ← LABORATORIO: benchmark, dashboard, scheduler, memoria
+D:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strumenti di sviluppo
 ```
 
-| Repo | Ruolo |
+| Parte | Ruolo |
 |---|---|
-| **Trinity-plugin** | ciò che installi e che gira in produzione: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json`, marketplace |
-| **Trinity** | dove si sviluppa e si testa il plugin (benchmark del recall, check aggiornamenti) |
+| **Runtime del plugin** | ciò che i progetti ereditano: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json`, marketplace |
+| **Strumenti di sviluppo** | servono alla manutenzione di Trinity, non ai progetti: benchmark (`hooks/hindsight/benchmark/`), dashboard log (`hooks/hindsight/hindsight-dashboard/`), check aggiornamenti (`scheduler/`) |
 
-Il laboratorio raggiunge il plugin tramite la env var **`TRINITY_PLUGIN_DIR`** (default `D:/AI/Claude/Trinity-plugin`), 
-così i due repo restano indipendenti ma comunicanti.
+La env var **`TRINITY_PLUGIN_DIR`** (definita nell'env utente, vedi §8) punta alla root di 
+questo repo: la usano i comandi documentati nelle skill e, come override opzionale, gli script — 
+che altrimenti risolvono i path relativamente a sé stessi.
 
 ### Cosa è plugin e cosa è ambiente
 
@@ -45,14 +45,14 @@ Sequenza all'avvio, in qualsiasi cartella:
 ```
 1. ~/.claude/settings.json      → enabledPlugins: trinity = true   → "caricalo"
 2. ~/.claude/plugins/installed_plugins.json → appartiene a trinity-marketplace
-3. ~/.claude/plugins/known_marketplaces.json → directory D:\AI\Claude\Trinity-plugin
+3. ~/.claude/plugins/known_marketplaces.json → directory D:\AI\Claude\Trinity
 4. Carica da lì: hooks/, skills/, commands/, .mcp.json, core-behavior.md
 ```
 
 **Distribuzione** (marketplace locale, già configurato):
 
 ```bash
-claude plugin marketplace add D:/AI/Claude/Trinity-plugin
+claude plugin marketplace add D:/AI/Claude/Trinity
 claude plugin install trinity@trinity-marketplace
 ```
 
@@ -75,7 +75,7 @@ claude plugin update trinity@trinity-marketplace
 **Sviluppo senza installare:**
 
 ```bash
-claude --plugin-dir D:/AI/Claude/Trinity-plugin
+claude --plugin-dir D:/AI/Claude/Trinity
 ```
 
 ---
@@ -216,7 +216,8 @@ da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude
 {
   "env": {
     "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
-    "OBSIDIAN_VAULT_NAME": "Sinapsi"
+    "OBSIDIAN_VAULT_NAME": "Sinapsi",
+    "TRINITY_PLUGIN_DIR": "D:/AI/Claude/Trinity"
   }
 }
 ```
@@ -231,6 +232,7 @@ una variabile separata.
 | root del progetto | `${CLAUDE_PROJECT_DIR}` (gli hook la ricevono da Claude Code) — già automatico |
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
+| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **da definire per-macchina** |
 
 > Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
 > Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
@@ -241,13 +243,13 @@ una variabile separata.
 ## Struttura del repo
 
 ```
-Trinity-plugin/
+Trinity/
 ├── .claude-plugin/
 │   ├── plugin.json          manifest (name, version)
 │   └── marketplace.json     marketplace (source ".")
 ├── core-behavior.md         comportamento iniettato al SessionStart
 ├── .mcp.json                server MCP Hindsight
-├── mise.toml                env + task di servizio Hindsight
+├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
 ├── skills/                  10 skill
 ├── hooks/
@@ -256,5 +258,8 @@ Trinity-plugin/
 │   ├── pretool-notify.sh    notifica permessi
 │   ├── windows-toast.ps1    toast Windows
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, ops, tools
+│       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
+│       └── hindsight-dashboard/  dashboard log Roda/Puma :9292 (sviluppo)
+├── scheduler/               check aggiornamenti via Task Scheduler (api-check, cp-check)
 └── sound/                   notifiche audio
 ```
