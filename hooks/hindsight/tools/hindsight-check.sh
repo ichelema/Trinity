@@ -105,29 +105,31 @@ else
 	note "cache dir non ancora creata (verra' creata al primo recall)"
 fi
 
-# --- 7. SETTINGS.JSON CONFIG ---
-sect "7. Config settings.json"
-SETT="$PROJ/.claude/settings.json"
-if [ -r "$SETT" ]; then
-	if python -c "import json; json.load(open(r'$(cygpath -w $SETT)'))" 2>/dev/null; then
-		ok "settings.json valido"
+# --- 7. HOOKS.JSON DEL PLUGIN ---
+# Gli hook sono registrati in hooks/hooks.json del plugin (stesso formato della
+# sezione "hooks" di settings.json), risolto relativo a questo script.
+sect "7. Config hooks/hooks.json (plugin)"
+HOOKSJSON="$HOOKS_DIR/../hooks.json"
+if [ -r "$HOOKSJSON" ]; then
+	if python -c "import json; json.load(open(r'$(cygpath -w $HOOKSJSON)'))" 2>/dev/null; then
+		ok "hooks.json valido"
 		for hook in "hindsight-recall.sh" "hindsight-retain.sh"; do
-			if grep -q "$hook" "$SETT"; then
-				ok "$hook registrato in settings.json"
+			if grep -q "$hook" "$HOOKSJSON"; then
+				ok "$hook registrato in hooks.json"
 			else
-				ko "$hook NON registrato in settings.json"
+				ko "$hook NON registrato in hooks.json"
 			fi
 		done
-		if grep -q '"async": true' "$SETT"; then
+		if grep -q '"async": true' "$HOOKSJSON"; then
 			ok "retain hook ha 'async: true'"
 		else
 			ko "retain hook senza 'async: true'"
 		fi
 	else
-		ko "settings.json non e' JSON valido"
+		ko "hooks.json non e' JSON valido"
 	fi
 else
-	ko "settings.json non leggibile"
+	ko "hooks.json non leggibile"
 fi
 
 # --- 8. END-TO-END RECALL HOOK ---
@@ -303,19 +305,19 @@ rm -rf "$TSTATE"
 # SessionEnd registra hindsight-shutdown.sh, che fa il force-retain finale (cattura la
 # coda) PRIMA di fermare i servizi. Il retain finale passa per il wrapper, non diretto:
 # percio' verifichiamo (1) shutdown.sh in SessionEnd e (2) che shutdown.sh chiami retain.
-if grep -q '"SessionEnd"' "$PROJ/.claude/settings.json" && python -c "
+if grep -q '"SessionEnd"' "$HOOKSJSON" && python -c "
 import json,sys
 h=json.load(open(sys.argv[1]))['hooks'].get('SessionEnd',[])
 cmds=[c.get('command','') for g in h for c in g.get('hooks',[])]
 sys.exit(0 if any('hindsight-shutdown.sh' in c for c in cmds) else 1)
-" "$(cygpath -w "$PROJ/.claude/settings.json")" 2>/dev/null; then
+" "$(cygpath -w "$HOOKSJSON")" 2>/dev/null; then
 	if grep -q 'hindsight-retain.sh' "$HOOKS_DIR/hindsight-shutdown.sh"; then
 		ok "SessionEnd → hindsight-shutdown.sh, che invoca il force-retain finale"
 	else
 		ko "hindsight-shutdown.sh non chiama piu' hindsight-retain.sh (retain finale perso)"
 	fi
 else
-	ko "hook SessionEnd con hindsight-shutdown.sh assente in settings.json"
+	ko "hook SessionEnd con hindsight-shutdown.sh assente in hooks.json"
 fi
 
 # --- 15. CONFIG CENTRALIZZATA (step F) ---
@@ -460,10 +462,10 @@ import json,sys
 h=json.load(open(sys.argv[1]))['hooks'].get('SessionStart',[])
 cmds=[c.get('command','') for g in h for c in g.get('hooks',[])]
 sys.exit(0 if any('hindsight-mm-inject.sh' in c for c in cmds) else 1)
-" "$(cygpath -w "$PROJ/.claude/settings.json")" 2>/dev/null; then
+" "$(cygpath -w "$HOOKSJSON")" 2>/dev/null; then
 	ok "SessionStart registra hindsight-mm-inject.sh"
 else
-	ko "hindsight-mm-inject.sh assente da SessionStart in settings.json"
+	ko "hindsight-mm-inject.sh assente da SessionStart in hooks.json"
 fi
 
 # --- 17. DEBUG LOG (modalita debug opzionale) ---
