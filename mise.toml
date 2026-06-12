@@ -92,6 +92,11 @@ HINDSIGHT_API_TEXT_SEARCH_EXTENSION_NATIVE_LANGUAGE = "italian"
 HINDSIGHT_API_RERANKER_PROVIDER = "zeroentropy"
 HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
 HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2" # flagship; alt: zerank-2-small
+# Gate del braccio semantico (default fabbrica 0.3). Alzato a 0.4 il 2026-06-12 dopo
+# misura sul bank reale (8 query, trace 0.8.1): i risultati che vincono hanno similarity
+# >= 0.47, il pool 0.33-0.45 non vince mai e consuma budget activation/fusione RRF.
+# NON salire oltre 0.45: margine sul peggior finalista osservato (0.470) troppo sottile.
+HINDSIGHT_API_SEMANTIC_MIN_SIMILARITY = "0.4"
 
 # --- Embedding zembed-1 ZeroEntropy (PRODUZIONE, nativo da hindsight-api 0.7.1) -------
 # ⚠️ Cambiare provider IMPONE un REBUILD del bank: zembed-1 usa dim Matryoshka
