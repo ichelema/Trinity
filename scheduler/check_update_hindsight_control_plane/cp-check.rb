@@ -32,9 +32,11 @@ MISE_TOML = File.join(PLUGIN_DIR, "mise.toml")
 # senza questa lista il check segnalerebbe la 0.7.0 come "novità" a ogni giro, in eterno.
 # La 0.7.1 e la 0.7.2 NON sono il fix: loop i18n ancora presente (cp-redirect-test → curl exit 47).
 # 0.7.1 verificata il 2026-05-29, 0.7.2 il 2026-06-05. Aggiunte qui per non segnalarle in eterno.
-# Quando esce un fix vero (es. 0.7.3) lo supera e scatta l'alert. Override a runtime:
+# La 0.8.1 (verificata il 2026-06-12) è PEGGIO: il loop 307 colpisce TUTTE le route, non solo "/",
+# anche con cookie NEXT_LOCALE e Accept-Language (le /en/* ora reindirizzano alle route senza prefisso).
+# Quando esce un fix vero lo supera e scatta l'alert. Override a runtime:
 #   CP_IGNORE_VERSIONS="0.7.0,0.7.1,0.7.2,0.7.4"   (lista separata da virgole)
-IGNORED_VERSIONS = (ENV["CP_IGNORE_VERSIONS"] || "0.7.0,0.7.1,0.7.2").split(",").map(&:strip).reject(&:empty?)
+IGNORED_VERSIONS = (ENV["CP_IGNORE_VERSIONS"] || "0.7.0,0.7.1,0.7.2,0.8.1").split(",").map(&:strip).reject(&:empty?)
 
 def pinned_version
   raise "‹.mise.toml› non trovato in #{MISE_TOML}" unless File.exist?(MISE_TOML)
