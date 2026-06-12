@@ -106,8 +106,9 @@ HINDSIGHT_API_SEMANTIC_MIN_SIMILARITY = "0.4"
 # sull'ordine RRF dentro il budget dell'hook, invece di lavorare per nessuno.
 HINDSIGHT_API_RERANKER_ZEROENTROPY_TIMEOUT = "8"
 # Cap dei candidati passati al reranker per recall (2026-06-12, default 300): meno
-# payload/latenza/costo verso zerank-2. Coi bank attuali (~600-700 memorie) il pool
-# raramente satura 300 — guadagno da validare con `mise run rerank-bench`.
+# payload/latenza/costo verso zerank-2. VALIDATO col benchmark gold (18 query, k=3):
+# top-3 identici rank per rank a 300; unico costo un fatto gold che era in posizione
+# 17 e sparisce dalla coda (found_any 15→14/18). Rivalutare se recall_max_results >= 10.
 HINDSIGHT_API_RERANKER_MAX_CANDIDATES = "100"
 
 # --- Embedding zembed-1 ZeroEntropy (PRODUZIONE, nativo da hindsight-api 0.7.1) -------
