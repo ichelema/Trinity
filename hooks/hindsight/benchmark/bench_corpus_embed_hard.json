@@ -1,0 +1,490 @@
+{
+  "meta": {
+    "name": "bench_corpus_embed_hard",
+    "purpose": "Corpus OSTICO per valutare la qualita' di un EMBEDDING model (non il reranker). Difficolta' progettata su: (1) mismatch lessicale query↔doc (poche/zero parole in comune → serve comprensione semantica, non keyword overlap); (2) hard negatives che condividono parole con la query ma sono sbagliati; (3) cross-lingua IT↔EN; (4) negazioni e contrasti; (5) near-duplicate che differiscono per un solo attributo; (6) gergo tecnico vs linguaggio comune. Ground truth a livello document id. Scoring: MRR + recall@k.",
+    "domain": "Progetto fittizio 'Atlas' — isolato dai dati reali.",
+    "language": "it+en",
+    "created": "2026-05-27"
+  },
+  "documents": [
+    {
+      "id": "a1",
+      "cluster": "linguaggi",
+      "content": "Per trasformare e ripulire i dataset prima dell'addestramento dei modelli, il team usa Python con pandas e Polars."
+    },
+    {
+      "id": "a2",
+      "cluster": "linguaggi",
+      "content": "I microservizi che devono reggere picchi di traffico molto elevati sono scritti in Go."
+    },
+    {
+      "id": "a3",
+      "cluster": "linguaggi",
+      "content": "Gli script di manutenzione notturna e i job pianificati sono scritti in Ruby con Rake."
+    },
+    {
+      "id": "a4",
+      "cluster": "linguaggi",
+      "content": "Il codice che gira nel browser lato utente e' TypeScript compilato in bundle."
+    },
+    {
+      "id": "a5",
+      "cluster": "linguaggi",
+      "content": "I calcoli numerici pesanti con vincoli stretti di latenza sono implementati in Rust."
+    },
+    {
+      "id": "a6",
+      "cluster": "linguaggi",
+      "content": "L'incollaggio tra le utility da terminale e' gestito con script Bash POSIX."
+    },
+
+    {
+      "id": "b1",
+      "cluster": "storage",
+      "content": "PostgreSQL custodisce i dati che devono restare integri anche dopo un riavvio del nodo."
+    },
+    {
+      "id": "b2",
+      "cluster": "storage",
+      "content": "Redis tiene in RAM le sessioni utente per accessi fulminei, ma il contenuto e' volatile."
+    },
+    {
+      "id": "b3",
+      "cluster": "storage",
+      "content": "SQLite viene usato solo per le fixture nei test locali, mai in produzione."
+    },
+    {
+      "id": "b4",
+      "cluster": "storage",
+      "content": "Su S3 vengono archiviati i file di grandi dimensioni acceduti raramente."
+    },
+    {
+      "id": "b5",
+      "cluster": "storage",
+      "content": "ClickHouse aggrega miliardi di righe per alimentare i cruscotti analitici."
+    },
+
+    {
+      "id": "c1",
+      "cluster": "crosslingua",
+      "content": "The payment service retries failed charges with exponential backoff before alerting an operator."
+    },
+    {
+      "id": "c2",
+      "cluster": "crosslingua",
+      "content": "Replicas are spread across three availability zones so the system survives a full datacenter outage."
+    },
+    {
+      "id": "c3",
+      "cluster": "crosslingua",
+      "content": "Feature flags let us roll out a change to one percent of users before the full release."
+    },
+    {
+      "id": "c4",
+      "cluster": "crosslingua",
+      "content": "Le password degli utenti sono salvate con hashing Argon2, mai in chiaro."
+    },
+    {
+      "id": "c5",
+      "cluster": "crosslingua",
+      "content": "Il rate limiter blocca chi supera cento richieste al minuto per singolo indirizzo IP."
+    },
+
+    {
+      "id": "d1",
+      "cluster": "backup",
+      "content": "Il backup completo dell'intero database viene eseguito ogni domenica alle due di notte."
+    },
+    {
+      "id": "d2",
+      "cluster": "backup",
+      "content": "Il backup incrementale, che salva solo le modifiche, gira ogni notte nei giorni feriali."
+    },
+    {
+      "id": "d3",
+      "cluster": "backup",
+      "content": "Lo snapshot dei volumi disco e' orario ma viene conservato soltanto per ventiquattro ore."
+    },
+    {
+      "id": "d4",
+      "cluster": "backup",
+      "content": "La replica in standby e' sincrona e a caldo, pronta al failover immediato."
+    },
+
+    {
+      "id": "e1",
+      "cluster": "gergo",
+      "content": "L'azienda ammortizza i macchinari su cinque anni a quote costanti."
+    },
+    {
+      "id": "e2",
+      "cluster": "gergo",
+      "content": "La clausola di recesso consente di sciogliere il contratto con trenta giorni di preavviso."
+    },
+    {
+      "id": "e3",
+      "cluster": "gergo",
+      "content": "Il paziente presenta ipertensione resistente al trattamento con tre farmaci."
+    },
+    {
+      "id": "e4",
+      "cluster": "gergo",
+      "content": "Le plusvalenze sulla cessione di partecipazioni societarie sono tassate al ventisei percento."
+    },
+    {
+      "id": "e5",
+      "cluster": "gergo",
+      "content": "Il dividendo viene staccato il terzo lunedi' di ogni trimestre."
+    },
+
+    {
+      "id": "f1",
+      "cluster": "abbandonati",
+      "content": "Gli IDE di JetBrains sono stati abbandonati per l'eccessivo consumo di memoria RAM."
+    },
+    {
+      "id": "f2",
+      "cluster": "abbandonati",
+      "content": "Abbiamo smesso di usare i webhook sincroni perche' bloccavano il thread principale."
+    },
+    {
+      "id": "f3",
+      "cluster": "abbandonati",
+      "content": "Il vecchio scheduler basato su cron e' stato sostituito da una coda a eventi."
+    },
+
+    {
+      "id": "g1",
+      "cluster": "filler",
+      "content": "La documentazione interna del progetto Atlas e' scritta in Markdown e ospitata su un wiki."
+    },
+    {
+      "id": "g2",
+      "cluster": "filler",
+      "content": "Le riunioni di allineamento del team si tengono il martedi' mattina."
+    },
+    {
+      "id": "g3",
+      "cluster": "filler",
+      "content": "Il logo aziendale usa una palette di blu e grigio."
+    },
+    {
+      "id": "g4",
+      "cluster": "filler",
+      "content": "Le immagini Docker vengono costruite con build multi-stage per ridurne il peso."
+    },
+    {
+      "id": "g5",
+      "cluster": "filler",
+      "content": "Il monitoraggio delle metriche passa per Prometheus e Grafana."
+    },
+    {
+      "id": "g6",
+      "cluster": "filler",
+      "content": "I log applicativi sono in formato JSON strutturato e finiscono in un indice ricercabile."
+    },
+    {
+      "id": "g7",
+      "cluster": "filler",
+      "content": "Il certificato TLS viene rinnovato automaticamente ogni novanta giorni."
+    },
+    {
+      "id": "g8",
+      "cluster": "filler",
+      "content": "Le code di lavoro asincrone girano su un broker di messaggi dedicato."
+    },
+    {
+      "id": "g9",
+      "cluster": "filler",
+      "content": "Il team adotta trunk-based development con feature flag al posto dei branch lunghi."
+    },
+    {
+      "id": "g10",
+      "cluster": "filler",
+      "content": "I segreti applicativi sono custoditi in un vault cifrato, non nel codice sorgente."
+    },
+    {
+      "id": "g11",
+      "cluster": "filler",
+      "content": "Le pipeline di integrazione continua eseguono test, linting e scansione di sicurezza."
+    },
+    {
+      "id": "g12",
+      "cluster": "filler",
+      "content": "Il frontend e' servito da una CDN per ridurre la latenza geografica."
+    },
+    {
+      "id": "g13",
+      "cluster": "filler",
+      "content": "Gli ambienti di staging replicano la produzione con dati anonimizzati."
+    },
+    {
+      "id": "g14",
+      "cluster": "filler",
+      "content": "La autenticazione degli utenti avviene tramite token JWT a breve scadenza."
+    },
+    {
+      "id": "g15",
+      "cluster": "filler",
+      "content": "Le migrazioni dello schema del database sono versionate e applicate in modo incrementale."
+    },
+    {
+      "id": "g16",
+      "cluster": "filler",
+      "content": "Il team usa Kanban con un limite al lavoro in corso per evitare colli di bottiglia."
+    },
+    {
+      "id": "g17",
+      "cluster": "filler",
+      "content": "Le revisioni del codice richiedono almeno due approvazioni prima del merge."
+    },
+    {
+      "id": "g18",
+      "cluster": "filler",
+      "content": "Le notifiche di incidente arrivano su un canale di chat dedicato e via cercapersone."
+    },
+    {
+      "id": "g19",
+      "cluster": "filler",
+      "content": "Il consumo energetico dei server e' monitorato per ridurre l'impronta di carbonio."
+    },
+    {
+      "id": "g20",
+      "cluster": "filler",
+      "content": "Le dipendenze di terze parti sono aggiornate settimanalmente da un bot automatico."
+    },
+    {
+      "id": "g21",
+      "cluster": "filler",
+      "content": "Il design system condiviso definisce componenti riutilizzabili dell'interfaccia."
+    },
+    {
+      "id": "g22",
+      "cluster": "filler",
+      "content": "Le chiavi API dei clienti hanno scadenza e possono essere revocate singolarmente."
+    },
+    {
+      "id": "g23",
+      "cluster": "filler",
+      "content": "L'onboarding di un nuovo assunto prevede una settimana di affiancamento."
+    },
+    {
+      "id": "g24",
+      "cluster": "filler",
+      "content": "I test di carico simulano diecimila utenti concorrenti prima di ogni rilascio maggiore."
+    },
+    {
+      "id": "g25",
+      "cluster": "filler",
+      "content": "Il sistema invia un riepilogo giornaliero delle metriche chiave via email."
+    },
+    {
+      "id": "g26",
+      "cluster": "filler",
+      "content": "Le immagini caricate dagli utenti vengono ridimensionate e compresse al volo."
+    },
+    {
+      "id": "g27",
+      "cluster": "filler",
+      "content": "La rotazione delle credenziali del database avviene ogni trimestre."
+    },
+    {
+      "id": "g28",
+      "cluster": "filler",
+      "content": "Il team mantiene un registro delle decisioni architetturali in file versionati."
+    },
+    {
+      "id": "g29",
+      "cluster": "filler",
+      "content": "Le richieste lente oltre un secondo vengono tracciate per l'analisi delle prestazioni."
+    },
+    {
+      "id": "g30",
+      "cluster": "filler",
+      "content": "Il piano di disaster recovery prevede un ripristino entro quattro ore."
+    },
+    {
+      "id": "g31",
+      "cluster": "filler",
+      "content": "Gli endpoint pubblici espongono uno schema OpenAPI sempre aggiornato."
+    },
+    {
+      "id": "g32",
+      "cluster": "filler",
+      "content": "La cache delle query piu' frequenti riduce il carico sul database primario."
+    },
+    {
+      "id": "g33",
+      "cluster": "filler",
+      "content": "Il team lavora su quattro fusi orari con consegne asincrone."
+    }
+  ],
+  "queries": [
+    {
+      "id": "qa1",
+      "cluster": "linguaggi",
+      "query": "Con cosa massaggiano i dati grezzi per renderli digeribili a un modello?",
+      "relevant_ids": ["a1"],
+      "hard_negative_ids": ["a3", "a4", "a5"]
+    },
+    {
+      "id": "qa2",
+      "cluster": "linguaggi",
+      "query": "Quale linguaggio scelgono quando arrivano ondate di richieste simultanee?",
+      "relevant_ids": ["a2"],
+      "hard_negative_ids": ["a5", "a1"]
+    },
+    {
+      "id": "qa3",
+      "cluster": "linguaggi",
+      "query": "Cosa fa girare le procedure ricorrenti mentre l'ufficio dorme?",
+      "relevant_ids": ["a3"],
+      "hard_negative_ids": ["a6", "a2"]
+    },
+    {
+      "id": "qa4",
+      "cluster": "linguaggi",
+      "query": "Cosa gira dentro la finestra del navigatore, dal lato di chi naviga?",
+      "relevant_ids": ["a4"],
+      "hard_negative_ids": ["a1", "a6"]
+    },
+
+    {
+      "id": "qb1",
+      "cluster": "storage",
+      "query": "Dove finiscono le informazioni che non devono sparire quando la macchina si spegne?",
+      "relevant_ids": ["b1"],
+      "hard_negative_ids": ["b2", "b4"]
+    },
+    {
+      "id": "qb2",
+      "cluster": "storage",
+      "query": "Cosa garantisce risposte istantanee ma perde tutto allo spegnimento?",
+      "relevant_ids": ["b2"],
+      "hard_negative_ids": ["b1", "b3"]
+    },
+    {
+      "id": "qb3",
+      "cluster": "storage",
+      "query": "Quale strumento e' vietato in produzione e serve soltanto per le prove?",
+      "relevant_ids": ["b3"],
+      "hard_negative_ids": ["b1", "b5"]
+    },
+    {
+      "id": "qb4",
+      "cluster": "storage",
+      "query": "Dove parcheggiamo i file enormi che quasi nessuno va mai ad aprire?",
+      "relevant_ids": ["b4"],
+      "hard_negative_ids": ["b1", "b5"]
+    },
+
+    {
+      "id": "qc1",
+      "cluster": "crosslingua",
+      "query": "Come fa il sistema a sopravvivere se un intero centro dati va giu'?",
+      "relevant_ids": ["c2"],
+      "hard_negative_ids": ["c3", "c1"]
+    },
+    {
+      "id": "qc2",
+      "cluster": "crosslingua",
+      "query": "In che modo proviamo una modifica su pochi utenti prima di darla a tutti?",
+      "relevant_ids": ["c3"],
+      "hard_negative_ids": ["c2", "c1"]
+    },
+    {
+      "id": "qc3",
+      "cluster": "crosslingua",
+      "query": "Cosa succede quando un addebito non va a buon fine?",
+      "relevant_ids": ["c1"],
+      "hard_negative_ids": ["c5", "c3"]
+    },
+    {
+      "id": "qc4",
+      "cluster": "crosslingua",
+      "query": "How are the users' login credentials kept safe when stored?",
+      "relevant_ids": ["c4"],
+      "hard_negative_ids": ["c5"]
+    },
+    {
+      "id": "qc5",
+      "cluster": "crosslingua",
+      "query": "What prevents one single client from flooding the service with calls?",
+      "relevant_ids": ["c5"],
+      "hard_negative_ids": ["c4", "c1"]
+    },
+
+    {
+      "id": "qd1",
+      "cluster": "backup",
+      "query": "Ogni quanto facciamo la copia totale, quella che prende tutto e non solo le differenze?",
+      "relevant_ids": ["d1"],
+      "hard_negative_ids": ["d2", "d3"]
+    },
+    {
+      "id": "qd2",
+      "cluster": "backup",
+      "query": "Con che cadenza salviamo soltanto cio' che e' cambiato rispetto al giorno prima?",
+      "relevant_ids": ["d2"],
+      "hard_negative_ids": ["d1", "d3"]
+    },
+    {
+      "id": "qd3",
+      "cluster": "backup",
+      "query": "Quale fotografia dei dischi dura appena un giorno prima di essere buttata?",
+      "relevant_ids": ["d3"],
+      "hard_negative_ids": ["d1", "d4"]
+    },
+
+    {
+      "id": "qe1",
+      "cluster": "gergo",
+      "query": "Come spalmano nel tempo, nei conti, il costo di un macchinario?",
+      "relevant_ids": ["e1"],
+      "hard_negative_ids": ["e4", "e5"]
+    },
+    {
+      "id": "qe2",
+      "cluster": "gergo",
+      "query": "Cosa permette di uscire da un accordo avvisando con un mese di anticipo?",
+      "relevant_ids": ["e2"],
+      "hard_negative_ids": ["e1"]
+    },
+    {
+      "id": "qe3",
+      "cluster": "gergo",
+      "query": "Quanto si paga al fisco vendendo in guadagno una quota di una societa'?",
+      "relevant_ids": ["e4"],
+      "hard_negative_ids": ["e1", "e5"]
+    },
+    {
+      "id": "qe4",
+      "cluster": "gergo",
+      "query": "Quando arrivano in tasca i soldi che la societa' distribuisce agli azionisti?",
+      "relevant_ids": ["e5"],
+      "hard_negative_ids": ["e4", "e1"]
+    },
+
+    {
+      "id": "qf1",
+      "cluster": "abbandonati",
+      "query": "Quale ambiente di sviluppo hanno mollato perche' divorava troppa memoria?",
+      "relevant_ids": ["f1"],
+      "hard_negative_ids": ["f2", "f3"]
+    },
+    {
+      "id": "qf2",
+      "cluster": "abbandonati",
+      "query": "Cosa hanno dismesso perche' inchiodava il filo di esecuzione principale?",
+      "relevant_ids": ["f2"],
+      "hard_negative_ids": ["f1", "f3"]
+    },
+    {
+      "id": "qf3",
+      "cluster": "abbandonati",
+      "query": "Cosa ha preso il posto del vecchio temporizzatore a orari fissi?",
+      "relevant_ids": ["f3"],
+      "hard_negative_ids": ["f2", "f1"]
+    }
+  ]
+}

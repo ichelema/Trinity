@@ -1,0 +1,83 @@
+{
+  "_comment": "Corpus + ground truth per il benchmark provider Hindsight. I documenti contengono fatti verificabili (bilingue IT/EN). Le query hanno expected: array di regex case-insensitive che devono comparire nei risultati di recall perche' la query sia considerata 'hit completo'. min_hits = quante delle regex devono matchare per contare come successo parziale.",
+  "documents": [
+    {
+      "id": "doc-identity",
+      "content": "L'utente si chiama Sphynx e preferisce essere chiamato con questo nome. Lavora principalmente su Windows 11 Enterprise usando la shell bash di MSYS2 UCRT64."
+    },
+    {
+      "id": "doc-lang",
+      "content": "Nel progetto Trinity il linguaggio di scripting predefinito e' Ruby 3.4, mentre la shell di riferimento e' bash MSYS2. Per gli script si preferisce curl rispetto a wget."
+    },
+    {
+      "id": "doc-hindsight",
+      "content": "Hindsight e' configurato come server MCP locale in ascolto sulla porta 8888, con storage PostgreSQL embedded nella home dell'utente."
+    },
+    {
+      "id": "doc-pypath",
+      "content": "Negli script Python su Windows i path devono usare lo stile Windows con forward slash, ad esempio C:/Appl/doublecmd, e mai i path MSYS come /c/Appl perche' Python gira nativamente su Windows."
+    },
+    {
+      "id": "doc-obsidian",
+      "content": "Sphynx usa Obsidian con il vault chiamato Sinapsi e il plugin Excalidraw per creare e salvare diagrammi all'interno delle note."
+    },
+    {
+      "id": "doc-keys",
+      "content": "Le API key di Groq e OpenRouter sono state salvate nelle variabili d'ambiente utente di Windows il 24 maggio 2026, per consentire il benchmark dei provider LLM."
+    },
+    {
+      "id": "doc-pwsh",
+      "content": "PowerShell 7 e' installato in un percorso non standard, C:/Appl/PowerShell/pwsh.exe, e non e' presente nel PATH della shell MSYS2, quindi va invocato col path assoluto."
+    },
+    {
+      "id": "doc-nushell",
+      "content": "Nushell viene usato come strumento di data processing per output tabulare, aggregazioni e conversioni di formato. Essendo un binario Windows nativo richiede sempre path in stile Windows."
+    },
+    {
+      "id": "doc-bench",
+      "content": "Il benchmark confronta quattro provider di inferenza LLM per la memoria: OpenAI gpt-4.1-nano come baseline, Groq con Llama 3.3 70B Versatile, Groq con gpt-oss-20b, e OpenRouter con DeepSeek V4 Flash."
+    },
+    {
+      "id": "doc-git",
+      "content": "Sphynx non vuole che vengano fatti push git automatici e chiede sempre conferma prima del push. Il formato dei messaggi di commit preferito e' 'tipo: descrizione breve', ad esempio 'fix: corregge parsing CSV'."
+    }
+  ],
+  "queries": [
+    {
+      "id": "q-identity",
+      "query": "Come si chiama l'utente e su quale sistema operativo lavora?",
+      "expected": ["sphynx", "windows"],
+      "min_hits": 2
+    },
+    {
+      "id": "q-lang",
+      "query": "Quale linguaggio di scripting si usa di default nel progetto?",
+      "expected": ["ruby"],
+      "min_hits": 1
+    },
+    {
+      "id": "q-port",
+      "query": "Su quale porta di rete e' in ascolto Hindsight?",
+      "expected": ["8888"],
+      "min_hits": 1
+    },
+    {
+      "id": "q-pwsh",
+      "query": "Dove si trova l'eseguibile di PowerShell?",
+      "expected": ["pwsh|powershell", "appl"],
+      "min_hits": 2
+    },
+    {
+      "id": "q-bench",
+      "query": "Quali provider di inferenza LLM vengono confrontati nel benchmark?",
+      "expected": ["groq", "openrouter|deepseek"],
+      "min_hits": 2
+    },
+    {
+      "id": "q-git",
+      "query": "Che preferenze ha l'utente riguardo a git e ai commit?",
+      "expected": ["push|commit"],
+      "min_hits": 1
+    }
+  ]
+}

@@ -1,0 +1,368 @@
+{
+  "meta": {
+    "name": "bench_corpus_rerank",
+    "purpose": "Corpus sintetico rank-aware per valutare il RERANKER (local bge vs zeroentropy zerank-2). Progettato con hard negatives intra-cluster: ogni query ha 1 documento rilevante e piu' distrattori semanticamente vicini dello stesso tema. La ground truth e' a livello document_id (propagato dal retain). Lo scoring deve essere MRR + recall@k sulla POSIZIONE in lista, non hit-rate binario su regex.",
+    "domain": "Progetto fittizio 'Atlas' e team inventato — isolato dai dati reali per evitare contaminazione.",
+    "language": "it",
+    "created": "2026-05-26"
+  },
+  "documents": [
+    {
+      "id": "d01",
+      "cluster": "languages",
+      "content": "Per gli script di automazione e i task ricorrenti, il team Atlas usa Ruby con Rake."
+    },
+    {
+      "id": "d02",
+      "cluster": "languages",
+      "content": "L'analisi dei dati e i notebook nel progetto Atlas sono scritti in Python con pandas e polars."
+    },
+    {
+      "id": "d03",
+      "cluster": "languages",
+      "content": "I microservizi ad alto throughput di Atlas sono implementati in Go."
+    },
+    {
+      "id": "d04",
+      "cluster": "languages",
+      "content": "Il collante tra i tool da riga di comando di Atlas e' gestito con script Bash POSIX."
+    },
+    {
+      "id": "d05",
+      "cluster": "editor",
+      "content": "Per il debugging interattivo con breakpoint, gli sviluppatori di Atlas usano Visual Studio Code."
+    },
+    {
+      "id": "d06",
+      "cluster": "editor",
+      "content": "L'editing veloce di file di configurazione sui server remoti in Atlas si fa con Neovim."
+    },
+    {
+      "id": "d07",
+      "cluster": "editor",
+      "content": "Gli IDE JetBrains sono stati abbandonati in Atlas per via dell'elevato consumo di memoria."
+    },
+    {
+      "id": "d08",
+      "cluster": "database",
+      "content": "Atlas usa Redis come layer di cache in memoria per le sessioni utente."
+    },
+    {
+      "id": "d09",
+      "cluster": "database",
+      "content": "Il database primario di produzione di Atlas e' PostgreSQL 16."
+    },
+    {
+      "id": "d10",
+      "cluster": "database",
+      "content": "Per i test locali e le fixture, Atlas usa SQLite."
+    },
+    {
+      "id": "d11",
+      "cluster": "database",
+      "content": "I dati time-series delle metriche di Atlas sono salvati in ClickHouse."
+    },
+    {
+      "id": "d12",
+      "cluster": "deploy",
+      "content": "Il deploy in produzione di Atlas avviene su Kubernetes orchestrato con Helm."
+    },
+    {
+      "id": "d13",
+      "cluster": "deploy",
+      "content": "In sviluppo locale Atlas viene avviato con Docker Compose."
+    },
+    {
+      "id": "d14",
+      "cluster": "deploy",
+      "content": "Atlas ha scartato le architetture serverless per evitare i cold-start delle funzioni."
+    },
+    {
+      "id": "d15",
+      "cluster": "team",
+      "content": "Giulia Ferri e' la responsabile DevOps e dell'infrastruttura del team Atlas."
+    },
+    {
+      "id": "d16",
+      "cluster": "team",
+      "content": "Anna Conti guida lo sviluppo backend di Atlas."
+    },
+    {
+      "id": "d17",
+      "cluster": "team",
+      "content": "Luca Bianchi e' il lead frontend di Atlas."
+    },
+    {
+      "id": "d18",
+      "cluster": "team",
+      "content": "Marco Renzi si occupa della pipeline dati di Atlas."
+    },
+    {
+      "id": "d19",
+      "cluster": "milestones",
+      "content": "La general availability di Atlas e' prevista per il 15 giugno 2026."
+    },
+    {
+      "id": "d20",
+      "cluster": "milestones",
+      "content": "La beta pubblica di Atlas e' stata rilasciata a marzo 2026."
+    },
+    {
+      "id": "d21",
+      "cluster": "milestones",
+      "content": "L'audit di sicurezza esterno di Atlas e' schedulato per maggio 2026."
+    },
+    {
+      "id": "d22",
+      "cluster": "milestones",
+      "content": "Il code freeze prima della GA di Atlas scatta il 1 giugno 2026."
+    },
+    {
+      "id": "d23",
+      "cluster": "codestyle",
+      "content": "Lo standard di Atlas impone l'indentazione a 2 spazi, mai con i tab."
+    },
+    {
+      "id": "d24",
+      "cluster": "codestyle",
+      "content": "I nomi delle funzioni in Atlas seguono la convenzione snake_case."
+    },
+    {
+      "id": "d25",
+      "cluster": "codestyle",
+      "content": "La lunghezza massima di riga nel codice di Atlas e' fissata a 100 caratteri."
+    },
+    {
+      "id": "d26",
+      "cluster": "cicd",
+      "content": "In Atlas nessuna pull request puo' essere unita senza almeno due approvazioni in review."
+    },
+    {
+      "id": "d27",
+      "cluster": "cicd",
+      "content": "La CI di Atlas gira su GitHub Actions con i test distribuiti in parallelo su quattro runner."
+    },
+    {
+      "id": "d28",
+      "cluster": "cicd",
+      "content": "Il deploy automatico di Atlas parte solo dal branch main dopo il merge."
+    },
+    {
+      "id": "d29",
+      "cluster": "auth",
+      "content": "In Atlas i token JWT di accesso scadono dopo 15 minuti."
+    },
+    {
+      "id": "d30",
+      "cluster": "auth",
+      "content": "L'autenticazione di Atlas e' gestita via OAuth2 con Keycloak come identity provider."
+    },
+    {
+      "id": "d31",
+      "cluster": "auth",
+      "content": "Atlas non implementa una gestione password custom, delega tutto all'identity provider."
+    },
+    {
+      "id": "d32",
+      "cluster": "monitoring",
+      "content": "Gli errori applicativi di Atlas sono tracciati e aggregati su Sentry."
+    },
+    {
+      "id": "d33",
+      "cluster": "monitoring",
+      "content": "Le metriche di sistema di Atlas sono visualizzate su dashboard Grafana."
+    },
+    {
+      "id": "d34",
+      "cluster": "monitoring",
+      "content": "I log di Atlas sono strutturati in formato JSON e raccolti da Loki."
+    },
+    {
+      "id": "d35",
+      "cluster": "comms",
+      "content": "Lo standup giornaliero del team Atlas e' fissato alle 9:30 del mattino."
+    },
+    {
+      "id": "d36",
+      "cluster": "comms",
+      "content": "La comunicazione in Atlas e' prevalentemente asincrona su Slack."
+    },
+    {
+      "id": "d37",
+      "cluster": "comms",
+      "content": "Il venerdi' in Atlas e' dichiarato no-meeting day per favorire il lavoro profondo."
+    },
+    {
+      "id": "d38",
+      "cluster": "cloud",
+      "content": "L'infrastruttura di Atlas e' ospitata su AWS nella regione eu-west-1 in Irlanda."
+    },
+    {
+      "id": "d39",
+      "cluster": "cloud",
+      "content": "Lo storage degli oggetti di Atlas usa Amazon S3 con il versioning attivo."
+    },
+    {
+      "id": "d40",
+      "cluster": "cloud",
+      "content": "Atlas evita deliberatamente le strategie multi-cloud per ridurre la complessita' operativa."
+    },
+    {
+      "id": "d41",
+      "cluster": "testing",
+      "content": "Atlas richiede una copertura dei test minima dell'80 percento per autorizzare il merge."
+    },
+    {
+      "id": "d42",
+      "cluster": "testing",
+      "content": "I test unitari di Atlas sono scritti con RSpec."
+    },
+    {
+      "id": "d43",
+      "cluster": "testing",
+      "content": "I test end-to-end di Atlas usano Capybara con un browser headless."
+    },
+    {
+      "id": "d44",
+      "cluster": "noise",
+      "content": "Gli sviluppatori di Atlas lavorano su Fedora Linux come ambiente principale."
+    },
+    {
+      "id": "d45",
+      "cluster": "noise",
+      "content": "Le postazioni del team Atlas sono configurate con due monitor."
+    },
+    {
+      "id": "d46",
+      "cluster": "noise",
+      "content": "Atlas ha standardizzato l'uso del terminale con la shell zsh."
+    },
+    {
+      "id": "d47",
+      "cluster": "noise",
+      "content": "Il logo di Atlas e' stato ridisegnato con una palette di blu e grigio nel 2026."
+    },
+    {
+      "id": "d48",
+      "cluster": "noise",
+      "content": "Il nome in codice del progetto Atlas deriva dall'omonimo titano della mitologia greca."
+    },
+    {
+      "id": "d49",
+      "cluster": "noise",
+      "content": "La documentazione interna di Atlas e' scritta in Markdown e pubblicata con MkDocs."
+    },
+    {
+      "id": "d50",
+      "cluster": "noise",
+      "content": "Il canale di supporto clienti di Atlas opera dalle 9 alle 18 nei giorni feriali."
+    }
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "cluster": "languages",
+      "query": "Con quale linguaggio il team Atlas scrive gli script di automazione?",
+      "relevant_ids": ["d01"],
+      "hard_negative_ids": ["d02", "d03", "d04"]
+    },
+    {
+      "id": "q02",
+      "cluster": "editor",
+      "query": "Quale editor usano in Atlas per il debugging con i breakpoint?",
+      "relevant_ids": ["d05"],
+      "hard_negative_ids": ["d06", "d07"]
+    },
+    {
+      "id": "q03",
+      "cluster": "database",
+      "query": "Quale tecnologia usa Atlas per la cache delle sessioni?",
+      "relevant_ids": ["d08"],
+      "hard_negative_ids": ["d09", "d10", "d11"]
+    },
+    {
+      "id": "q04",
+      "cluster": "database",
+      "query": "Qual e' il database primario di produzione di Atlas?",
+      "relevant_ids": ["d09"],
+      "hard_negative_ids": ["d08", "d10", "d11"]
+    },
+    {
+      "id": "q05",
+      "cluster": "deploy",
+      "query": "Come viene fatto il deploy in produzione di Atlas?",
+      "relevant_ids": ["d12"],
+      "hard_negative_ids": ["d13", "d14"]
+    },
+    {
+      "id": "q06",
+      "cluster": "team",
+      "query": "Chi e' responsabile dell'infrastruttura e del DevOps in Atlas?",
+      "relevant_ids": ["d15"],
+      "hard_negative_ids": ["d16", "d17", "d18"]
+    },
+    {
+      "id": "q07",
+      "cluster": "team",
+      "query": "Chi guida lo sviluppo backend del team Atlas?",
+      "relevant_ids": ["d16"],
+      "hard_negative_ids": ["d15", "d17", "d18"]
+    },
+    {
+      "id": "q08",
+      "cluster": "milestones",
+      "query": "Quando e' prevista la general availability di Atlas?",
+      "relevant_ids": ["d19"],
+      "hard_negative_ids": ["d20", "d21", "d22"]
+    },
+    {
+      "id": "q09",
+      "cluster": "codestyle",
+      "query": "Qual e' la convenzione di indentazione del codice in Atlas?",
+      "relevant_ids": ["d23"],
+      "hard_negative_ids": ["d24", "d25"]
+    },
+    {
+      "id": "q10",
+      "cluster": "cicd",
+      "query": "Qual e' la regola per poter unire una pull request in Atlas?",
+      "relevant_ids": ["d26"],
+      "hard_negative_ids": ["d27", "d28"]
+    },
+    {
+      "id": "q11",
+      "cluster": "auth",
+      "query": "Quanto durano i token di accesso in Atlas?",
+      "relevant_ids": ["d29"],
+      "hard_negative_ids": ["d30", "d31"]
+    },
+    {
+      "id": "q12",
+      "cluster": "monitoring",
+      "query": "Dove vengono tracciati gli errori applicativi di Atlas?",
+      "relevant_ids": ["d32"],
+      "hard_negative_ids": ["d33", "d34"]
+    },
+    {
+      "id": "q13",
+      "cluster": "comms",
+      "query": "A che ora si tiene lo standup giornaliero in Atlas?",
+      "relevant_ids": ["d35"],
+      "hard_negative_ids": ["d36", "d37"]
+    },
+    {
+      "id": "q14",
+      "cluster": "cloud",
+      "query": "In quale regione cloud e' ospitata l'infrastruttura di Atlas?",
+      "relevant_ids": ["d38"],
+      "hard_negative_ids": ["d39", "d40"]
+    },
+    {
+      "id": "q15",
+      "cluster": "testing",
+      "query": "Qual e' la soglia minima di copertura dei test in Atlas?",
+      "relevant_ids": ["d41"],
+      "hard_negative_ids": ["d42", "d43"]
+    }
+  ]
+}

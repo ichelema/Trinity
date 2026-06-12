@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "name": "gold_questions_trinity_hard",
+    "purpose": "Gold set OSTICO per misurare la qualita' del recall (MRR/R@1/R@3) sul bank reale trinity-project e sulle due repliche con tag LLM. Difficolta': parafrasi e mismatch lessicale (la query NON condivide quasi parole col fatto memorizzato), negazioni/contrasti, distrattori cross-topic, mix IT/EN. Relevance a keyword answer-specific (substring/regex, case-insensitive) per evitare falsi positivi su token generici (es. 'mise','groq' compaiono ovunque -> si usa il dettaglio identificante). Un risultato e' rilevante se il suo testo matcha >= min_hits pattern di expected.",
+    "scoring": "Per query: rank = posizione (1-based) del primo risultato rilevante nei top-K (K=recall_max_results). MRR=mean(1/rank|0), R@1=rank==1, R@3=rank<=3.",
+    "created": "2026-05-31",
+    "language": "it+en"
+  },
+  "queries": [
+    {
+      "id": "q01",
+      "query": "Dovendo riordinare i candidati del retrieval, quale modello ha surclassato quello locale per qualita' e velocita'?",
+      "expected": ["zerank"],
+      "min_hits": 1,
+      "note": "reranker zerank-2 batte bge-reranker-v2-m3"
+    },
+    {
+      "id": "q02",
+      "query": "Dopo aver abbandonato Google per la vettorizzazione, su quale servizio query-aware ci appoggiamo ora in produzione?",
+      "expected": ["zembed", "zeroentropy"],
+      "min_hits": 1,
+      "note": "embedder di produzione = zembed-1 (ZeroEntropy)"
+    },
+    {
+      "id": "q03",
+      "query": "Come abbiamo rimosso gli identificatori opachi ad alta cardinalita' dalle etichette senza ri-generare gli embedding?",
+      "expected": ["array_remove", "unnest"],
+      "min_hits": 1,
+      "note": "bonifica tag session:* via SQL array_remove + unnest"
+    },
+    {
+      "id": "q04",
+      "query": "Perche' due affermazioni quasi identiche ma marcate diversamente non confluiscono mai in un'unica sintesi?",
+      "expected": ["all_strict", "recinto"],
+      "min_hits": 1,
+      "note": "i tag sono recinto AND (all_strict) della consolidation"
+    },
+    {
+      "id": "q05",
+      "query": "Quale ritocco ai tipi di fatto e al numero di risultati ha portato l'indice di reciproco rango da 0.35 a 0.525?",
+      "expected": ["0.525", "experience"],
+      "min_hits": 1,
+      "note": "recall tuning: +experience, max_results 3->5"
+    },
+    {
+      "id": "q06",
+      "query": "Cosa e' stato tolto dalla funzione che costruisce le etichette, perche' ogni conversazione finiva isolata in un compartimento suo?",
+      "expected": ["session:", "build_tags"],
+      "min_hits": 1,
+      "note": "rimozione session:<id> da build_tags (commit 7dbbc5f)"
+    },
+    {
+      "id": "q07",
+      "query": "Perche' la fascia gratuita di quel provider d'inferenza fulmineo non regge la nostra memoria, e quali opzioni invece tengono?",
+      "expected": ["tpm", "dev tier", "openrouter"],
+      "min_hits": 1,
+      "note": "Groq free tier TPM insufficiente; serve Dev Tier; nano/openrouter ok"
+    },
+    {
+      "id": "q08",
+      "query": "Dove risiede l'archivio dati incorporato e come se ne preleva una copia che resta valida anche se il servizio va in crash?",
+      "expected": ["pg0", "pg_dump", "pg_ctl"],
+      "min_hits": 1,
+      "note": "Postgres embedded in ~/.pg0; backup pg_dump; sopravvive al crash API"
+    },
+    {
+      "id": "q09",
+      "query": "Il campo che annota il dominio di un salvataggio entra nella costruzione dei legami tra le sintesi?",
+      "expected": ["entit", "clustering", "relazion"],
+      "min_hits": 1,
+      "note": "context NON struttura le relazioni: dipendono da entita'/embedding"
+    },
+    {
+      "id": "q10",
+      "query": "Perche' sovrascrivere lo stesso documento a ogni salvataggio automatico ci faceva perdere informazione?",
+      "expected": ["upsert", "sostitu", "perde"],
+      "min_hits": 1,
+      "note": "upsert sullo stesso document_id sostituisce anziche' fondere -> perdita"
+    },
+    {
+      "id": "q11",
+      "query": "Qual e' il percorso completo dell'eseguibile che gestisce i runtime, visto che non e' raggiungibile dalla shell?",
+      "expected": ["mise.exe", ".local/bin"],
+      "min_hits": 1,
+      "note": "mise.exe in /c/msys64/home/EN27553/.local/bin, non nel PATH MSYS"
+    },
+    {
+      "id": "q12",
+      "query": "Su quali porte rispondono il pannello di controllo ufficiale e il cruscotto dei log?",
+      "expected": ["9999", "9292"],
+      "min_hits": 1,
+      "note": "Control Plane :9999 (Node), dashboard log :9292 (Ruby)"
+    },
+    {
+      "id": "q13",
+      "query": "Per incastonare uno schizzo dentro un appunto, in quale formato nativo va trasformato il file appena esportato?",
+      "expected": ["excalidraw.md", "convert"],
+      "min_hits": 1,
+      "note": "export .excalidraw -> convert a .excalidraw.md per embed inline"
+    },
+    {
+      "id": "q14",
+      "query": "Quale modello di vettorizzazione poliglotta a 1536 dimensioni usavamo prima del cambio?",
+      "expected": ["gemini-embedding-001", "1536"],
+      "min_hits": 1,
+      "note": "gemini-embedding-001 1536d, provider google, pre-zembed"
+    },
+    {
+      "id": "q15",
+      "query": "Quale modulo di ri-ordinamento eseguito in locale era lentissimo (decine di secondi) e l'abbiamo accantonato?",
+      "expected": ["bge-reranker", "bge-m3", "bge"],
+      "min_hits": 1,
+      "note": "bge-reranker-v2-m3 ~29.5s, battuto da zerank-2"
+    },
+    {
+      "id": "q16",
+      "query": "Cosa bisogna attivare perche' l'interprete non si schianti sui caratteri accentati su questo OS?",
+      "expected": ["pythonutf8", "charmap"],
+      "min_hits": 1,
+      "note": "PYTHONUTF8=1 contro UnicodeEncodeError charmap su Windows"
+    },
+    {
+      "id": "q17",
+      "query": "Perche' le pagine di conoscenza sintetica si inventavano i contenuti, ed era davvero una questione di budget?",
+      "expected": ["all_strict", "0 fonti", "tag impossibil", "fonti"],
+      "min_hits": 1,
+      "note": "mental model allucinavano per filtro tag all_strict impossibile (0 fonti), non budget"
+    },
+    {
+      "id": "q18",
+      "query": "Per eliminare in modo mirato un singolo insieme di ricordi senza svuotare l'intero archivio, quale operazione si usa?",
+      "expected": ["delete_document"],
+      "min_hits": 1,
+      "note": "delete_document chirurgico vs clear_memories azzera tutto"
+    }
+  ]
+}
