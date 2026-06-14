@@ -157,51 +157,6 @@
         ]
       }
     },
-    "double-commander-docs": {
-      "description": "Double Commander file manager documentation and configuration",
-      "priority": 6,
-      "triggers": {
-        "keywords": [
-          "double commander",
-          "doublecmd",
-          "file manager",
-          "toolbar",
-          "doppio pannello",
-          "twin panel",
-          "wcx",
-          "wdx",
-          "wfx",
-          "wlx"
-        ],
-        "keywordPatterns": [
-          "double.?commander",
-          "\\bdoublecmd\\b",
-          "\\btoolbar\\b.*(?:button|icon|command|pulsant)",
-          "\\bplugin\\b.*(?:wcx|wdx|wfx|wlx)",
-          "\\bcomand[io]\\s+intern[io]\\b"
-        ],
-        "pathPatterns": [
-          "**/doublecmd.xml",
-          "**/doublecmd/**",
-          "**/*.wcx",
-          "**/*.wdx",
-          "**/*.wfx",
-          "**/*.wlx"
-        ],
-        "intentPatterns": [
-          "(?:configura|personalizza|modifica|imposta).*(?:double commander|toolbar|pannello|doublecmd)",
-          "(?:cerca|trova|come).*(?:comando|opzione|shortcut|scorciatoia).*(?:double commander|doublecmd|dc)"
-        ],
-        "contextPatterns": [
-          "in double commander",
-          "di doublecmd",
-          "nel file manager",
-          "pannello sinistro",
-          "pannello destro"
-        ]
-      },
-      "excludePatterns": ["docker", "docker-compose", "dockerfile"]
-    },
     "nushell": {
       "description": "Nushell structured shell scripting, data pipelines, and cross-platform automation",
       "priority": 6,
