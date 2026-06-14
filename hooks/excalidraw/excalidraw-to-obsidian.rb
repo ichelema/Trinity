@@ -45,12 +45,10 @@ def convert(input_path, output_path)
       text = label_text(el)
 
       # Popola boundElements con frecce
-      unless arrow_refs[el["id"]].empty?
-        el["boundElements"] ||= []
-        arrow_refs[el["id"]].each do |aid|
-          unless el["boundElements"].any? { |be| be["id"] == aid }
-            el["boundElements"] << { "id" => aid, "type" => "arrow" }
-          end
+      el["boundElements"] ||= []
+      arrow_refs[el["id"]].each do |aid|
+        unless el["boundElements"].any? { |be| be["id"] == aid }
+          el["boundElements"] << { "id" => aid, "type" => "arrow" }
         end
       end
 
@@ -135,12 +133,25 @@ end
 # ── Main ────────────────────────────────────────────────────────────────────
 # L'hook riceve l'input JSON via stdin con i dettagli del tool call.
 # Estrae il filePath dai parametri e converte.
-hook_input = JSON.parse($stdin.read) rescue {}
+raw_input = $stdin.read
+hook_input = JSON.parse(raw_input) rescue {}
 tool_input = hook_input.dig("tool_input") || {}
 
 input = tool_input["filePath"]
-unless input && File.exist?(input) && input.end_with?(".excalidraw")
+unless input && input.end_with?(".excalidraw")
   puts "excalidraw-to-obsidian: nessun filePath .excalidraw, skip"
+  exit 0
+end
+
+# Il filePath può essere relativo al cwd del progetto: risolvilo se necessario.
+unless File.exist?(input)
+  cwd = hook_input["cwd"] || Dir.pwd
+  candidate = File.join(cwd, input)
+  input = candidate if File.exist?(candidate)
+end
+
+unless File.exist?(input)
+  puts "excalidraw-to-obsidian: file non trovato: #{input}"
   exit 0
 end
 
