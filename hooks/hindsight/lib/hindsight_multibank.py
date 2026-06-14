@@ -110,19 +110,21 @@ def zerank_rerank(
     model: str = "zerank-2",
     timeout: float = 6,
     api_key: str | None = None,
+    min_score: float | None = None,
 ) -> list[dict]:
     """Rerank globale via ZeroEntropy REST. Riordina `results` per rilevanza
-    rispetto a `query` usando gli indici del response. Solleva su errore: il
-    chiamante decide il fallback (interleave)."""
+    rispetto a `query`, attaccando a ogni result il campo _rerank_score. Se
+    min_score è settato, scarta i risultati sotto soglia. Solleva su errore:
+    il chiamante decide il fallback (interleave)."""
     api_key = api_key or os.environ.get("ZEROENTROPY_API_KEY")
     if not api_key:
         raise RuntimeError("ZEROENTROPY_API_KEY non impostata")
     documents = [(r.get("text") or "") for r in results]
     req = urllib.request.Request(
         ZEROENTROPY_RERANK_URL,
-        data=json.dumps(
-            {"model": model, "query": query, "documents": documents}
-        ).encode("utf-8"),
+        data=json.dumps({
+            "model": model, "query": query, "documents": documents
+        }).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -132,10 +134,21 @@ def zerank_rerank(
     with urllib.request.urlopen(req, timeout=timeout) as res:
         data = json.loads(res.read().decode("utf-8", errors="replace"))
     ranked = data.get("results") or []
-    # results: [{index, relevance_score}, ...] gia' ordinati per score desc;
-    # riordina difensivamente e scarta indici fuori range.
+    # results: [{index, relevance_score}, ...] già ordinati per score desc;
+    # riordina difensivamente, attacca _rerank_score, scarta indici fuori range.
     ranked.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
-    return [results[x["index"]] for x in ranked if 0 <= x.get("index", -1) < len(results)]
+    out = []
+    for x in ranked:
+        idx = x.get("index", -1)
+        if not (0 <= idx < len(results)):
+            continue
+        score = x.get("relevance_score", 0)
+        if min_score is not None and score < min_score:
+            continue
+        r = dict(results[idx])  # shallow copy per non mutare l'originale
+        r["_rerank_score"] = score
+        out.append(r)
+    return out
 
 
 def multi_recall(
@@ -146,6 +159,7 @@ def multi_recall(
     timeout = float(cfg.get("recall_timeout", 6))
     per_bank_cap = int(cfg.get("recall_per_bank_candidates", 5))
     max_n = int(cfg.get("recall_max_results", 8))
+    min_score = cfg.get("recall_min_rerank_score")
 
     per_bank = fan_out_recall(urls, payload, timeout, per_bank_cap)
     per_bank = dedup_results(per_bank)
@@ -154,16 +168,28 @@ def multi_recall(
         "banks": [u.rsplit("/", 1)[-1] for u in urls],
         "per_bank_counts": [len(r) for r in per_bank],
         "merge": "none",
+        "min_score": min_score,
     }
     if not candidates:
         return [], meta
-    if len(candidates) <= 1 or len([r for r in per_bank if r]) <= 1:
-        # tutto da un bank solo: l'ordine del server e' gia' buono
+
+    # Se la soglia è attiva, passa SEMPRE da zerank-2 (anche single-bank)
+    # per avere score confrontabili su cui filtrare.
+    # Se disattiva e single-bank, l'ordine del server è già buono.
+    single_source = len(candidates) <= 1 or len([r for r in per_bank if r]) <= 1
+    need_rerank = not single_source or min_score is not None
+
+    if not need_rerank:
         meta["merge"] = "single-source"
         return candidates[:max_n], meta
+
     try:
-        merged = zerank_rerank(prompt, candidates, timeout=timeout)
+        merged = zerank_rerank(
+            prompt, candidates, timeout=timeout, min_score=min_score
+        )
         meta["merge"] = "zerank"
+        if min_score is not None:
+            meta["min_score_filtered"] = len(candidates) - len(merged)
         return merged[:max_n], meta
     except Exception as e:  # noqa: BLE001 — fallback, mai rompere il recall
         meta["merge"] = "interleave-fallback"

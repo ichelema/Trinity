@@ -134,6 +134,8 @@ debug_log(
             "type": r.get("type", "?"),
             "text": (r.get("text") or "").strip()[:300],
             "entities": r.get("entities") or [],
+            **({"score": round(r["_rerank_score"], 3)}
+               if r.get("_rerank_score") is not None else {}),
         }
         for r in results[: cfg["recall_max_results"]]
     ],

@@ -61,6 +61,10 @@ DEFAULTS = {
     # Multi-bank: candidati massimi presi da OGNI bank nel fan-out, PRIMA della
     # fusione (rerank globale / interleave) e del taglio a recall_max_results.
     "recall_per_bank_candidates": 5,
+    # Soglia minima relevance_score del reranker globale zerank-2. Null = disattivo
+    # (nessun filtro). Un valore >=0 filtra i risultati che non lo raggiungono,
+    # sia in multi-bank che single-bank (che passa da zerank-2 se soglia attiva).
+    "recall_min_rerank_score": None,
     # Filtra i tipi di fatto cercati dal server. Vuoto => tutti (world+experience+
     # observation), default API. Valori validi: "world", "experience", "observation".
     "recall_types": [],

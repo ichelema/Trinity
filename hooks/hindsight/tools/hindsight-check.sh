@@ -653,7 +653,19 @@ def boom(*args, **kw): raise RuntimeError("no api")
 mb.zerank_rerank = boom
 res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4}, ["u1", "u2"], {})
 fb_ok = meta["merge"] == "interleave-fallback" and len(res) == 2
-print("OK" if il_ok and dd_ok and fb_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok}")
+
+# filtro soglia: min_score=0.9 lascia solo i punteggi alti
+scores = [0.9, 0.5, 0.95]
+mb.fetch_bank_results = lambda u, p, t: [{"text": f"t{1+i}"} for i in range(3)]
+mb.zerank_rerank = lambda query, results, model="zerank-2", timeout=6, api_key=None, min_score=None: [
+    {**r, "_rerank_score": s} for r, s in zip(results, scores) if min_score is None or s >= min_score
+]
+res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.9}, ["u1", "u2"], {})
+th_ok = len(res) == 2 and res[0]["_rerank_score"] >= 0.9
+# soglia superata da tutti: 0.2
+res2, _ = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.2}, ["u1", "u2"], {})
+th_all_ok = len(res2) == 3
+print("OK" if il_ok and dd_ok and fb_ok and th_ok and th_all_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok} th={th_ok} thall={th_all_ok}")
 PY
 )
 if [ "$MB_LIB" = "OK" ]; then
