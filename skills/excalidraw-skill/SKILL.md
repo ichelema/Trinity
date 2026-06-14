@@ -5,7 +5,7 @@ description: Programmatic canvas toolkit for creating, editing, and refining Exc
 
 # Excalidraw Skill
 
-## Step -1: Verifica che il server sia in esecuzione
+## Step -1: Verifica che il server canvas sia in esecuzione
 
 Prima di qualsiasi operazione sul canvas, controlla se il server è attivo:
 
@@ -13,22 +13,22 @@ Prima di qualsiasi operazione sul canvas, controlla se il server è attivo:
 curl -s --connect-timeout 1 http://localhost:3000 > /dev/null 2>&1 && echo "running" || echo "stopped"
 ```
 
-Se il risultato è `stopped`, avvialo automaticamente senza chiedere conferma.
-
-> ⚠️ **NON usare `npm run canvas`.** Quel comando esegue prima `build:server` (`npx tsc`), e su questa macchina il **node di MSYS2** (`/ucrt64/bin/node`, attualmente 24.14.1) fa **crashare `tsc`** con `std::bad_weak_ptr` (exit 127) → la build fallisce e per via del `&&` il server non viene mai lanciato. Il problema è **solo** lo step di build: `node dist/server.js` gira benissimo, e `dist/` è già compilato.
-
-**Avvio robusto** — bypassa la build e lancia direttamente il server compilato:
+Se il risultato è `stopped`, avvialo con:
 
 ```bash
-REPO=/c/msys64/home/EN27553/.local/opt/mcp_excalidraw
-PORT=3000 HOST=127.0.0.1 setsid nohup node "$REPO/dist/server.js" \
-  >> /d/AI/Claude/Trinity/logs/excalidraw-server.log 2>&1 &
-# attendi il bind senza sleep in foreground
+mise -C "${TRINITY_PLUGIN_DIR}" run start-excalidraw
+```
+
+Attendi il bind (max 20 secondi):
+
+```bash
 curl -s --retry 10 --retry-connrefused --retry-delay 1 --connect-timeout 2 \
   http://127.0.0.1:3000/api/elements -o /dev/null -w "HTTP %{http_code}\n"
 ```
 
 Atteso: `HTTP 200`.
+
+> ⚠️ **NON usare `npm run canvas`.** Quel comando esegue prima `build:server` (`npx tsc`), e su questa macchina il **node di MSYS2** (`/ucrt64/bin/node`, attualmente 24.14.1) fa **crashare `tsc`** con `std::bad_weak_ptr` (exit 127) → la build fallisce e per via del `&&` il server non viene mai lanciato. Il problema è **solo** lo step di build: `node dist/server.js` gira benissimo, e `dist/` è già compilato.
 
 **Rebuild dei sorgenti `.ts`** (solo se hai modificato `src/`, raramente) — usa il **node di mise** (Windows nativo), che compila `tsc` senza crashare; mai `npx tsc` con il node MSYS2:
 

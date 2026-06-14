@@ -13,6 +13,14 @@
         }
       ]
     }],
+    "PostToolUse": [{
+      "matcher": "export_scene",
+      "hooks": [{
+        "type": "command",
+        "command": "ruby ${CLAUDE_PLUGIN_ROOT}/hooks/excalidraw/excalidraw-to-obsidian.rb",
+        "timeout": 10
+      }]
+    }],
     "PreToolUse": [{
       "matcher": "Bash",
       "hooks": [{

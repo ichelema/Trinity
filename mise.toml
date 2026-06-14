@@ -228,6 +228,17 @@ description = "Testa se una versione del Control Plane ha ancora il bug del redi
 shell = "/usr/bin/bash -c"
 run = "bash scheduler/check_update_hindsight_control_plane/cp-redirect-test.sh \"${VERSION:?imposta VERSION=X.Y.Z}\" \"${PORT:-9998}\""
 
+# --- Excalidraw Canvas (frontend MCP) -------------------------------------
+[tasks.start-excalidraw]
+description = "Avvia il frontend canvas Excalidraw (porta 3000). Log in logs/excalidraw-server.log."
+shell = "/usr/bin/bash -c"
+run = "setsid nohup node C:/msys64/home/EN27553/.local/opt/mcp_excalidraw/dist/server.js > /tmp/excalidraw-server.log 2>&1 < /dev/null & disown"
+
+[tasks.stop-excalidraw]
+description = "Ferma il frontend canvas Excalidraw (porta 3000), solo se il server su :3000 è effettivamente Excalidraw."
+shell = "/usr/bin/bash -c"
+run = "ruby script/stop-excalidraw.rb"
+
 [tasks.promote-scan]
 description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
 shell = "/usr/bin/bash -c"
