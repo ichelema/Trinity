@@ -20,7 +20,15 @@
     },
     "hindsight": {
       "type": "http",
-      "url": "http://localhost:8888/mcp/trinity-project/"
+      "url": "http://127.0.0.1:8888/mcp/trinity-project/"
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "C:/msys64/home/EN27553/.local/share/mise/installs/node/24.16.0/node.exe",
+      "args": [
+        "C:/msys64/home/EN27553/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
+        "--browser", "chrome"
+      ]
     }
   }
 }

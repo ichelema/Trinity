@@ -5,3 +5,4 @@ __pycache__/
 hooks/hindsight/data/
 *.bak
 hooks/hindsight/benchmark/bench_results/
+.playwright-mcp/
