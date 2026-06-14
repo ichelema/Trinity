@@ -13,8 +13,10 @@ Questo documento distingue in modo esplicito:
 
 ## Regole operative essenziali
 
+- **Conversione automatica**: `export_scene` genera già il `.excalidraw.md` nativo via hook (plugin Trinity ≥ 0.5.7). Non convertire a mano né con Advanced URI.
 - **Formato target nel vault**: usare sempre `.excalidraw.md` Obsidian-native.
 - **Embed Excalidraw**: usare sempre `![[<DRAWING_NAME>.excalidraw.md]]` con estensione completa.
+- **Aprire nel vault**: usare il tool MCP `view open_in_obsidian` (path relativo), non Advanced URI con cartelle emoji.
 - **Canvas Obsidian**: il canvas nativo Obsidian usa file `.canvas` in JSON ed è distinto da Excalidraw.
 - **File `.excalidraw` puro**: considerarlo solo temporaneo o compatibility mode, mai formato finale per embed inline.
 - **Creazione file nel vault**: note `.md`, disegni `.excalidraw` e file convertiti `.excalidraw.md` vanno creati automaticamente senza chiedere conferma, salvo indicazione esplicita dell'utente.
@@ -226,11 +228,24 @@ dv.paragraph(`![[<DRAWING_NAME>.excalidraw.md|400]]`);
 
 ## Workflow: canvas MCP → vault Obsidian
 
-`export_scene` salva un file `.excalidraw` grezzo in compatibility mode. Per poterlo embeddare inline nelle note, va convertito al formato nativo `.excalidraw.md` tramite Obsidian Excalidraw.
+> ⚡ **Conversione automatica via hook.** Dal plugin Trinity v0.5.7, l'hook `PreToolUse`
+> `hooks/excalidraw/excalidraw-to-obsidian.rb` intercetta ogni chiamata a `export_scene` e
+> genera automaticamente, accanto al `.excalidraw`, anche il `.excalidraw.md` già in formato
+> nativo Obsidian. **NON** serve più Advanced URI (`convert-excalidraw`), **NON** serve aggiungere
+> il `%%` a mano, **NON** serve modificare il JSON. Il file `.excalidraw.md` è pronto all'uso.
+
+Trasformazioni che l'hook applica automaticamente:
+
+- `shape.label.text` → elemento `text` separato con `containerId` + `boundElements`;
+- `arrow.start`/`arrow.end` → `arrow.startBinding`/`arrow.endBinding`;
+- `arrow.label.text` → `arrow.text`;
+- genera la sezione `## Text Elements` con gli `^id` allineati al JSON;
+- aggiunge i `%%` attorno al blocco `## Drawing`.
 
 ### 1. Esporta nella directory di progetto locale
 
-Il server MCP blocca path esterni: esportare sempre dentro `{PROJECT_DIR}`.
+Il server MCP blocca path esterni: esportare sempre dentro `{PROJECT_DIR}`. L'hook scrive il
+`.excalidraw.md` nella stessa directory dell'export.
 
 Forma concettuale:
 
@@ -246,96 +261,38 @@ Forma JSON/tool argument con backslash escapati:
 }
 ```
 
-### 2. Sposta il file temporaneo nel vault
+Risultato in `{PROJECT_DIR}` dopo l'export (l'hook ha già convertito):
 
-Usare Bash/MSYS. Il file locale in `{PROJECT_DIR}` è solo temporaneo.
+```text
+<DRAWING_NAME>.excalidraw       (formato MCP grezzo, temporaneo)
+<DRAWING_NAME>.excalidraw.md    (formato nativo Obsidian, pronto)
+```
+
+### 2. Sposta il `.excalidraw.md` nel vault
+
+Spostare nel vault **solo** il `.excalidraw.md` (il `.excalidraw` grezzo è temporaneo, si può scartare).
 
 ```bash
-mv "{PROJECT_DIR_MSYS}/<DRAWING_NAME>.excalidraw" "{OBSIDIAN_VAULT_MSYS}/<DRAWING_NAME>.excalidraw"
+mv "{PROJECT_DIR_MSYS}/<DRAWING_NAME>.excalidraw.md" "{OBSIDIAN_VAULT_MSYS}/<RELATIVE_FOLDER>/<DRAWING_NAME>.excalidraw.md"
 ```
 
-Se il disegno deve stare in una sottocartella del vault, creare prima la directory e poi spostare:
+Se la sottocartella non esiste, crearla prima con `mkdir -p`.
 
-```bash
-mkdir -p "{OBSIDIAN_VAULT_MSYS}/<RELATIVE_FOLDER>"
-mv "{PROJECT_DIR_MSYS}/<DRAWING_NAME>.excalidraw" "{OBSIDIAN_VAULT_MSYS}/<RELATIVE_FOLDER>/<DRAWING_NAME>.excalidraw"
-```
+### 3. Apri il file in Obsidian con il MCP Obsidian (NON Advanced URI)
 
-### 3. Apri il file in Obsidian e converti al formato nativo
-
-Usare Advanced URI con:
-
-- `{OBSIDIAN_VAULT_NAME}` per il vault;
-- `<VAULT_RELATIVE_EXCALIDRAW_PATH_ENCODED>` per il path del `.excalidraw` dentro il vault.
-
-Comando consigliato da Bash/MSYS su Windows:
-
-```bash
-cmd.exe /c start "" "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&filepath=<VAULT_RELATIVE_EXCALIDRAW_PATH_ENCODED>"
-sleep 2
-cmd.exe /c start "" "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&commandid=obsidian-excalidraw-plugin%3Aconvert-excalidraw"
-```
-
-Alternativa PowerShell:
-
-```powershell
-Start-Process "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&filepath=<VAULT_RELATIVE_EXCALIDRAW_PATH_ENCODED>"
-Start-Sleep -Seconds 2
-Start-Process "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&commandid=obsidian-excalidraw-plugin%3Aconvert-excalidraw"
-```
-
-Risultato atteso nel vault:
+Usare il tool MCP Obsidian, che opera direttamente sul vault attivo:
 
 ```text
-<DRAWING_NAME>.excalidraw.md
+view(action: "open_in_obsidian", path: "<RELATIVE_FOLDER>/<DRAWING_NAME>.excalidraw.md")
 ```
 
-oppure, se in sottocartella:
+> ⚠️ **NON usare Advanced URI per aprire file in cartelle con emoji nel nome** (es. `📂Files`).
+> L'encoding dell'emoji (`%F0%9F%93%82`) fallisce silenziosamente e il file non si apre. Il
+> tool MCP `view open_in_obsidian` usa path relativi al vault e non ha questo problema.
 
-```text
-<RELATIVE_FOLDER>/<DRAWING_NAME>.excalidraw.md
-```
-
-### 4. Aggiungi sempre il `%%` mancante con `Edit`
-
-La conversione automatica omette sempre il `%%` dopo `## Text Elements`. Applicare sempre questa modifica, senza leggere prima il file e senza verifiche preliminari.
-
-Target `Edit`:
-
-```text
-{OBSIDIAN_VAULT}\<DRAWING_NAME>.excalidraw.md
-```
-
-oppure, se in sottocartella:
-
-```text
-{OBSIDIAN_VAULT}\<RELATIVE_FOLDER>\<DRAWING_NAME>.excalidraw.md
-```
-
-Edit da applicare:
-
-```text
-old_string: "\n## Drawing"
-new_string: "\n%%\n## Drawing"
-```
-
-Questo inserisce il `%%` obbligatorio tra `## Text Elements` e `## Drawing`.
-
-### 5. Non controllare se un hook ha modificato il file
-
-Se un hook formatta il file dopo l'`Edit`, considerarlo parte del flusso normale. Non fare controlli aggiuntivi. Procedere direttamente alla creazione della nota `.md`.
-
-### 6. Crea automaticamente la nota `.md` nel vault
+### 4. Crea la nota `.md` che incorpora il disegno
 
 Usare il tool `Write`, senza chiedere conferma.
-
-Path root vault:
-
-```text
-{OBSIDIAN_VAULT}\<NOTE_NAME>.md
-```
-
-Path in sottocartella:
 
 ```text
 {OBSIDIAN_VAULT}\<RELATIVE_FOLDER>\<NOTE_NAME>.md
@@ -349,12 +306,21 @@ Contenuto minimo:
 ![[<DRAWING_NAME>.excalidraw.md]]
 ```
 
-Se nota e disegno sono in cartelle diverse, usare un wikilink Obsidian valido rispetto al vault, ad esempio:
+Se nota e disegno sono in cartelle diverse, usare un wikilink valido rispetto al vault:
 
 ```markdown
 # <NOTE_NAME>
 
 ![[<RELATIVE_FOLDER>/<DRAWING_NAME>.excalidraw.md]]
+```
+
+### Fallback manuale (solo se l'hook non è attivo)
+
+Se per qualche motivo l'hook non gira (plugin non ricaricato, versione < 0.5.7), il file
+`.excalidraw.md` non viene generato. In quel caso, convertire manualmente lanciando lo script:
+
+```bash
+ruby "${TRINITY_PLUGIN_DIR}/hooks/excalidraw/excalidraw-to-obsidian.rb" "{PROJECT_DIR}/<DRAWING_NAME>.excalidraw"
 ```
 
 ---
@@ -476,27 +442,20 @@ Non fare queste operazioni:
 
 ---
 
-## Advanced URI utili
+## Aprire un file nel vault
 
-Aprire un file Excalidraw nel vault:
-
-```text
-obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&filepath=<VAULT_RELATIVE_EXCALIDRAW_PATH_ENCODED>
-```
-
-Convertire il file Excalidraw corrente al formato nativo:
+Metodo consigliato — tool MCP Obsidian (path relativo al vault, gestisce le cartelle con emoji):
 
 ```text
-obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&commandid=obsidian-excalidraw-plugin%3Aconvert-excalidraw
+view(action: "open_in_obsidian", path: "<RELATIVE_FOLDER>/<DRAWING_NAME>.excalidraw.md")
 ```
 
-Esecuzione consigliata da Bash/MSYS su Windows:
+> ⚠️ **Advanced URI sconsigliato per path con emoji.** `obsidian://adv-uri?...&filepath=...` fallisce
+> silenziosamente quando il path contiene cartelle con emoji nel nome (es. `📂Files` →
+> `%F0%9F%93%82Files`). Preferire sempre il tool MCP `view open_in_obsidian`.
 
-```bash
-cmd.exe /c start "" "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&filepath=<VAULT_RELATIVE_EXCALIDRAW_PATH_ENCODED>"
-sleep 2
-cmd.exe /c start "" "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&commandid=obsidian-excalidraw-plugin%3Aconvert-excalidraw"
-```
+La conversione `convert-excalidraw` via Advanced URI **non serve più**: l'hook genera già il
+`.excalidraw.md` nativo all'export (vedi "Workflow: canvas MCP → vault Obsidian").
 
 ---
 
@@ -505,13 +464,13 @@ cmd.exe /c start "" "obsidian://adv-uri?vault={OBSIDIAN_VAULT_NAME}&commandid=ob
 | Sintomo | Causa probabile | Fix |
 |---|---|---|
 | File si apre come Markdown invece del disegno | Manca `excalidraw-plugin: parsed` | Aggiungi frontmatter o usa `Open as Excalidraw`. |
-| Warning `compatibility mode` | File `.excalidraw` legacy | Apri con Advanced URI e converti con `obsidian-excalidraw-plugin:convert-excalidraw`. |
+| Etichette dei box non visibili nel disegno | `.excalidraw` MCP con `label` non convertito | L'hook converte all'export; se manca, lanciare `ruby ${TRINITY_PLUGIN_DIR}/hooks/excalidraw/excalidraw-to-obsidian.rb <file>.excalidraw`. |
+| Testi Markdown finiscono dentro il disegno | `^id` di `## Text Elements` non allineati al JSON | Rigenerare con l'hook/script di conversione (allinea gli ID automaticamente). |
 | Embed mostra immagine rotta | Path errato o file spostato | Controlla il wikilink e usa il path vault-relative corretto. |
-| Embed non si renderizza inline dopo conversione | Manca `%%` dopo `## Text Elements` | Applicare `Edit`: `old_string: "\n## Drawing"`, `new_string: "\n%%\n## Drawing"`. |
 | File corrotto o compresso | Compressione/corruzione JSON | Command palette: `Decompress current Excalidraw file`. |
 | Troppi token durante verifica | Uso improprio di screenshot o `Read` | Usare `describe_scene` o response dei tool. |
 | Tante modifiche lente o fragili | Chiamate MCP una per una | Usare file-edit: export, backup, edit JSON, import replace. |
-| Advanced URI non apre il file | Path non encoded o vault hardcoded | Usare `{OBSIDIAN_VAULT_NAME}` e `<VAULT_RELATIVE_EXCALIDRAW_PATH_ENCODED>`. |
+| Advanced URI non apre il file (cartella con emoji) | Encoding emoji nel path fallisce | Usare il tool MCP `view open_in_obsidian` con path relativo. |
 
 ---
 
