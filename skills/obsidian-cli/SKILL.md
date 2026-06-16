@@ -62,8 +62,9 @@ The official Obsidian CLI (released in v1.12, February 2026) lets you control ev
 
 - **macOS / Linux**: The `obsidian` binary is registered in PATH automatically when you enable CLI in settings.
 - **Windows**: Requires an `Obsidian.com` redirector file placed alongside `Obsidian.exe`. **Must run with normal user privileges** — admin terminals produce silent failures.
-  - If colon subcommands (`property:set`, `daily:append`, etc.) with parameters return exit 127, check that `Obsidian.com` exists alongside `Obsidian.exe`. If missing, you have an outdated installer — download the latest from [obsidian.md/download](https://obsidian.md/download) and reinstall.
-  - **Git Bash / MSYS2 users**: Bash resolves `obsidian` to `Obsidian.exe` (GUI) instead of `Obsidian.com` (CLI), causing colon+params to fail with exit 127 even when `Obsidian.com` is present. Create a wrapper script — see Troubleshooting.
+  - **Path corretto su questa macchina**: `/c/Users/EN27553/AppData/Local/Programs/Obsidian/Obsidian.com` (Windows: `C:\Users\EN27553\AppData\Local\Programs\Obsidian\Obsidian.com`). NON cercare in `AppData\Local\Obsidian\` — quella cartella contiene solo `Obsidian.exe`.
+  - **Usa SEMPRE il path completo**, mai il comando `obsidian` senza path: bash MSYS2 risolve `obsidian` a `Obsidian.exe` (GUI) invece di `Obsidian.com` (CLI), causando fallimento dei subcomandi con exit 127.
+  - **Git Bash / MSYS2 users**: Bash resolves `obsidian` to `Obsidian.exe` (GUI) instead of `Obsidian.com` (CLI), causing colon+params to fail with exit 127 even when `Obsidian.com` is present. Use full path directly: `/c/Users/EN27553/AppData/Local/Programs/Obsidian/Obsidian.com <command>`.
 - **Headless Linux**: Use the `.deb` package (not snap). Run under `xvfb`. Prefix commands with `DISPLAY=:5` (or your xvfb display number). Ensure `PrivateTmp=false` if running as a service.
 
 ## Syntax
@@ -286,4 +287,4 @@ obsidian command id="dataview:dataview-force-refresh-views"
 | Multi-vault `"Name" command` fails | Vault name matching issue | Omit vault name; target most recent vault |
 | `property:set` list value is a string | CLI stores value as-is | Edit frontmatter directly or use `eval` |
 | Colon+params exit 127 (missing `.com`) | Outdated installer — `Obsidian.com` absent | Reinstall from [obsidian.md/download](https://obsidian.md/download) |
-| Colon+params exit 127 (Git Bash / MSYS2) | Bash resolves `obsidian` to `.exe` not `.com` | Create `~/bin/obsidian` wrapper: `#!/bin/bash` / `/c/path/to/Obsidian.com "$@"` and add `export PATH="$HOME/bin:$PATH"` to `~/.bashrc` |
+| Colon+params exit 127 (Git Bash / MSYS2) | Bash resolves `obsidian` to `.exe` not `.com` | Usa il path completo direttamente: `/c/Users/EN27553/AppData/Local/Programs/Obsidian/Obsidian.com <command>` |
