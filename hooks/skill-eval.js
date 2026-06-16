@@ -258,43 +258,41 @@ function evaluate(prompt) {
   const topMatches = matches.slice(0, config.maxSkillsToShow);
   const relatedSkills = getRelatedSkills(topMatches, skills);
 
-  let output = "<user-prompt-submit-hook>\n";
-  output += "SKILL ACTIVATION REQUIRED\n\n";
+  let context = "SKILL ACTIVATION REQUIRED\n\n";
 
   if (filePaths.length > 0) {
-    output += `Detected file paths: ${filePaths.join(", ")}\n\n`;
+    context += `Detected file paths: ${filePaths.join(", ")}\n\n`;
   }
 
-  output += "Matched skills (ranked by relevance):\n";
+  context += "Matched skills (ranked by relevance):\n";
 
   for (let i = 0; i < topMatches.length; i++) {
     const match = topMatches[i];
     const confidence = formatConfidence(match.score, config.minConfidenceScore);
 
-    output += `${i + 1}. ${match.name} (${confidence} confidence)\n`;
+    context += `${i + 1}. ${match.name} (${confidence} confidence)\n`;
 
     if (config.showMatchReasons && match.reasons.length > 0) {
-      output += `   Matched: ${match.reasons.slice(0, 3).join(", ")}\n`;
+      context += `   Matched: ${match.reasons.slice(0, 3).join(", ")}\n`;
     }
   }
 
   if (relatedSkills.length > 0) {
-    output += `\nRelated skills to consider: ${relatedSkills.join(", ")}\n`;
+    context += `\nRelated skills to consider: ${relatedSkills.join(", ")}\n`;
   }
 
-  output += "\nBefore implementing, you MUST:\n";
-  output += "1. EVALUATE: State YES/NO for each skill with brief reasoning\n";
-  output += "2. ACTIVATE: Invoke the Skill tool for each YES skill\n";
-  output += "3. IMPLEMENT: Only proceed after skill activation\n";
-  output += "\nExample evaluation:\n";
-  output += `- ${topMatches[0].name}: YES - [your reasoning]\n`;
+  context += "\nBefore implementing, you MUST:\n";
+  context += "1. EVALUATE: State YES/NO for each skill with brief reasoning\n";
+  context += "2. ACTIVATE: Invoke the Skill tool for each YES skill\n";
+  context += "3. IMPLEMENT: Only proceed after skill activation\n";
+  context += "\nExample evaluation:\n";
+  context += `- ${topMatches[0].name}: YES - [your reasoning]\n`;
   if (topMatches.length > 1) {
-    output += `- ${topMatches[1].name}: NO - [your reasoning]\n`;
+    context += `- ${topMatches[1].name}: NO - [your reasoning]\n`;
   }
-  output += "\nDO NOT skip this step. Invoke relevant skills NOW.\n";
-  output += "</user-prompt-submit-hook>";
+  context += "\nDO NOT skip this step. Invoke relevant skills NOW.";
 
-  return output;
+  return context;
 }
 
 function main() {
@@ -323,7 +321,13 @@ function main() {
     try {
       const output = evaluate(prompt);
       if (output) {
-        console.log(output);
+        const hookOutput = JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: output,
+          },
+        });
+        process.stdout.write(hookOutput);
       }
     } catch (error) {
       console.error(`Skill evaluation failed: ${error.message}`);

@@ -7,3 +7,4 @@ hooks/hindsight/data/
 hooks/hindsight/benchmark/bench_results/
 .playwright-mcp/
 /excalidraw.log
+/scratchpad.md

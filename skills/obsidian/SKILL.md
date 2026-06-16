@@ -363,93 +363,27 @@ Rispondere in modo pragmatico, sintetico e tecnico.
 - Per modifiche: leggere prima, modificare con precisione, verificare dopo.
 
 
-## Formato file `.excalidraw.md` (Obsidian-native)
+## Generazioni grafici e disegni con excalidraw
+Per la generezaione di grafici e disegni vedi la skill `references/excalidraw-obsidian-format.md`
 
-Il plugin `obsidian-excalidraw-plugin` salva i disegni come file Markdown strutturati.
-Usare **sempre** questo formato nel vault — mai `.excalidraw` puro o compressed-json.
+## Salvataggio note con Excalidraw
 
-````markdown
----
-excalidraw-plugin: parsed
-tags: [excalidraw]
----
+  Le note `.md` che incorporano un disegno Excalidraw vanno salvate
+  nella cartella `Excalidraw/` del vault, accanto al file `.excalidraw.md`:
 
-# Excalidraw Data
-## Text Elements
-<!-- testo degli elementi, indicizzato dalla ricerca Obsidian -->
+  | Cosa                         | Path vault                                  |
+  |------------------------------|---------------------------------------------|
+  | Disegno (gestito dall'hook)  | `Excalidraw/<nome>.excalidraw.md`           |
+  | Nota che incorpora il disegno| `Excalidraw/<nome-nota>.md`                 |
 
-%%
-## Drawing
-```json
-{
-  "type": "excalidraw",
-  "version": 2,
-  "source": "https://excalidraw.com",
-  "elements": [...],
-  "appState": { "gridSize": null, "viewBackgroundColor": "#ffffff" },
-  "files": {}
-}
-```
-
-%%
-
-````
-
-**Frontmatter chiave:**
-
-| Chiave                                | Effetto                                              |
-| ------------------------------------- | ---------------------------------------------------- |
-| `excalidraw-plugin: parsed`           | Marca il file come disegno Excalidraw (obbligatorio) |
-| `excalidraw-export-transparent: true` | Background trasparente in export                     |
-| `excalidraw-export-dark: true`        | Forza tema scuro in export                           |
-| `excalidraw-export-pngscale: 2`       | Scala export PNG (0.5–5)                             |
-| `excalidraw-default-mode: view`       | Apre in view mode                                    |
-
-
-
-1. **Sezione `%%`** — il blocco Drawing va dentro `%%` per nasconderlo nella preview Markdown. Il `%%` deve stare **sia dopo `## Text Elements` che dopo il blocco json finale**. La conversione automatica di Obsidian **omette sempre** il `%%` dopo `## Text Elements` — va aggiunto proattivamente con Edit subito dopo ogni conversione, senza verifiche preliminari.
-
-2. **JSON non compresso** — leggibile, non la versione base64/compressed.
-
----
-
-## Canvas live → vault: flusso completo
-
-Quando un disegno viene creato sul canvas live (excalidraw-skill / MCP):
-
-1. Esporta nella directory di progetto locale (il server MCP blocca path esterni):
-```bash
-export_scene(filePath: "C:\Desktop\Claude\Main\nome.excalidraw")
-```
-   Poi spostalo nel vault con Bash (il file locale è solo temporaneo):
-   ```bash
-   mv "/d/AI/Claude/Trinity/nome.excalidraw" "/d/Obsidian/Sinapsi/nome.excalidraw"
-   ```
-2. Apri in Obsidian e converti al formato nativo (necessario per embed inline):
-
-   ```bash
-   start "obsidian://adv-uri?vault=Sinapsi&filepath=<cartella>%2Fnome.excalidraw"
-   sleep 2
-   start "obsidian://adv-uri?vault=Sinapsi&commandid=obsidian-excalidraw-plugin%3Aconvert-excalidraw"
-   ```
-
-   → crea automaticamente `nome.excalidraw.md`
-
-3. **Aggiungi il `%%` con Edit — sempre, senza verificare** (la conversione lo omette sempre):
-
-```
-old_string: "\n## Drawing"
-new_string: "\n%%\n## Drawing"
-```
-   Questo inserisce il `%%` obbligatorio tra `## Text Elements` e `## Drawing`.
-
-4. Aggiungi `![[nome.excalidraw.md]]` nella nota rilevante
-- **NON** usare `![[nome.excalidraw]]` prima della conversione — rimane in compatibility mode e non si renderizza inline.
+  Regola: se la nota contiene `![[Excalidraw/...]]`, salvala in `Excalidraw/`.
+  Non usare `Reference/`, `Evergreen/` o altre cartelle per queste note.
 
 ---
 
 ## Skill correlate
 - Canvas live: la skill `excalidraw-skill`
 - Per il canvas work usa: la skill `excalidraw-skill`
+- Per il generare excalidraw : la skill `references/excalidraw-obsidian-format.md`
 
 
