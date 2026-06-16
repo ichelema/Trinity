@@ -10,6 +10,11 @@
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
           "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh",
+          "timeout": 5
         }
       ]
     }],

@@ -55,6 +55,13 @@ DEFAULTS = {
     # storico invariato). Override anche via HS_CFG_RECALL_ENABLED / HS_CFG_RETAIN_ENABLED.
     "recall_enabled": True,
     "retain_enabled": True,
+    # Guard dei retain falliti silenziosamente (hindsight-failcheck.sh): controlla
+    # le async operation in stato "failed" e avvisa via additionalContext. False =>
+    # l'hook esce subito. failcheck_window_hours: finestra temporale delle failed
+    # da segnalare (evita di ripescare storia vecchia al primo avvio).
+    "failcheck_enabled": True,
+    "failcheck_window_hours": 24,
+    "failcheck_timeout": 3,
     "recall_budget": "low",
     "recall_max_tokens": 800,
     "recall_max_results": 8,
