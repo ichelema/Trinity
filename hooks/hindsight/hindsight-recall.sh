@@ -78,6 +78,7 @@ if os.path.exists(cache_file):
             cached = None
 
 # --- Network call (solo se cache miss) ---
+merge_meta = {}  # sempre definito: il debug_log lo usa anche sul ramo cache-hit
 if cached is None:
     # Cleanup laziness al miss: rimuovi file scaduti per evitare crescita illimitata.
     # Costa pochi ms (listdir + stat), si paga solo sui miss.
@@ -92,7 +93,6 @@ if cached is None:
     payload = build_recall_payload(
         prompt, cfg, datetime.now(timezone.utc).isoformat()
     )
-    merge_meta = {}
     if len(bank_urls) == 1:
         # Bank singolo: stessa singola POST di sempre, zero overhead multi-bank.
         req = urllib.request.Request(
