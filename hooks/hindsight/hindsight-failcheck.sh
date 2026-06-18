@@ -16,7 +16,9 @@ HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_INPUT="$(cat)"
 export HOOK_INPUT HOOKS_DIR
 
-python <<'PY' 2>/dev/null
+. "$HOOKS_DIR/lib/hs-python.sh"
+
+"$HS_PY" <<'PY' 2>/dev/null
 import json, os, sys, tempfile, urllib.request
 from datetime import datetime, timezone, timedelta
 

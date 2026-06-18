@@ -11,5 +11,6 @@ export HOOK_INPUT="$(cat)"
 
 # Path del worker relativo a questo script (robusto a spostamenti della cartella).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python "$SCRIPT_DIR/hindsight-retain-worker.py" >/tmp/hs-retain.log 2>&1
+. "$SCRIPT_DIR/lib/hs-python.sh"
+"$HS_PY" "$SCRIPT_DIR/hindsight-retain-worker.py" >/tmp/hs-retain.log 2>&1
 exit 0

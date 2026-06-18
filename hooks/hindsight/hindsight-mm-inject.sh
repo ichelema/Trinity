@@ -12,7 +12,9 @@ set -uo pipefail
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export HOOKS_DIR
 
-PYTHONUTF8=1 python <<'PY' 2>/dev/null
+. "$HOOKS_DIR/lib/hs-python.sh"
+
+PYTHONUTF8=1 "$HS_PY" <<'PY' 2>/dev/null
 import json, os, sys, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
