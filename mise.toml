@@ -25,7 +25,7 @@ ruby = "4.0.1"
 # Espone gli entry-point script di hindsight-api (hindsight-local-mcp, hindsight-api, ecc.)
 # La Scripts dir del Python mise non e' nel PATH per default sotto MSYS2.
 _.path = [
-  "C:/msys64/home/EN27553/.local/share/mise/installs/python/3.13.13/Scripts",
+  "C:/msys64/home/{{env.USERNAME}}/.local/share/mise/installs/python/3.13.13/Scripts",
 ]
 
 # Forza Python a usare UTF-8 per stdin/stdout/stderr. Hindsight stampa un banner

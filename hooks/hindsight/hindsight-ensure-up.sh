@@ -19,7 +19,9 @@ ROOT_URL="http://localhost:8888/"
 # Root del plugin derivata dalla posizione dello script (hooks/hindsight/ -> 2 livelli su):
 # e' il punto -C per mise, che li' trova il mise.toml con env e task del servizio.
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MISE="/c/msys64/home/EN27553/.local/bin/mise.exe"
+# mise non è nel PATH della bash MSYS → cercalo nel PATH, poi ricadi sul launcher
+# sotto la home MSYS dell'utente corrente (il plugin è pensato per Windows+MSYS2).
+MISE="$(command -v mise 2>/dev/null || echo "/c/msys64/home/${USERNAME:-}/.local/bin/mise.exe")"
 DEADLINE_SECS=25 # budget readiness; l'hook ha timeout 30 in settings.json
 POLL_INTERVAL=1
 

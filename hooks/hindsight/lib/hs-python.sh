@@ -10,7 +10,10 @@
 # python MSYS2 UCRT64 -> "python" come ultimo tentativo.
 HS_PY="$(command -v python 2>/dev/null || command -v python3 2>/dev/null || true)"
 if [ -z "$HS_PY" ]; then
-  HS_PY="$(/c/msys64/home/EN27553/.local/bin/mise.exe which python 2>/dev/null || true)"
+  # mise non è nel PATH della bash MSYS → cercalo nel PATH, poi ricadi sul launcher
+  # sotto la home MSYS dell'utente corrente (il plugin è pensato per Windows+MSYS2).
+  HS_MISE="$(command -v mise 2>/dev/null || echo "/c/msys64/home/${USERNAME:-}/.local/bin/mise.exe")"
+  HS_PY="$("$HS_MISE" which python 2>/dev/null || true)"
 fi
 if [ -z "$HS_PY" ] && [ -x /ucrt64/bin/python ]; then
   HS_PY="/ucrt64/bin/python"

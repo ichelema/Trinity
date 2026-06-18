@@ -10,8 +10,10 @@
 set -uo pipefail
 
 TASKKILL="/c/Windows/System32/taskkill.exe"
-PG_CTL="/c/Users/EN27553/.pg0/installation/18.1.0/bin/pg_ctl.exe"
-PGDATA="C:/Users/EN27553/.pg0/instances/hindsight-mcp/data"
+# Postgres embedded sotto la home Windows (.pg0) dell'utente corrente; la versione
+# è risolta via glob (sopravvive agli upgrade del Postgres embedded).
+PG_CTL="$(ls /c/Users/"${USERNAME:-}"/.pg0/installation/*/bin/pg_ctl.exe 2>/dev/null | sort -V | tail -1)"
+PGDATA="C:/Users/${USERNAME:-}/.pg0/instances/hindsight-mcp/data"
 
 # Server MCP: //T per portare giù anche il python figlio (senza //T resterebbe orfano).
 # Path ASSOLUTO perché nella bash MSYS `taskkill` non è nel PATH.
