@@ -1,44 +1,5 @@
 {
   "hooks": {
-    "UserPromptSubmit": [{
-      "hooks": [{
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval.sh",
-          "timeout": 5
-        },
-        {
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
-          "timeout": 10
-        },
-        {
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh",
-          "timeout": 5
-        }
-      ]
-    }],
-    "PostToolUse": [{
-      "matcher": "mcp__plugin_trinity_excalidraw__export_scene",
-      "hooks": [{
-        "type": "command",
-        "command": "ruby ${CLAUDE_PLUGIN_ROOT}/hooks/excalidraw/excalidraw-to-obsidian.rb",
-        "timeout": 10
-      }]
-    }],
-    "PreToolUse": [{
-      "matcher": "Bash",
-      "hooks": [{
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pretool-notify.sh",
-          "timeout": 5
-        },
-        {
-          "type": "command",
-          "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? commit([[:space:]]|$)' && ! echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? push([[:space:]]|$)'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
-        }
-      ]
-    }],
     "SessionStart": [{
       "matcher": "",
       "hooks": [{
@@ -57,6 +18,45 @@
           "timeout": 6
         }
       ]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval.sh",
+          "timeout": 5
+        },
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
+          "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh",
+          "timeout": 5
+        }
+      ]
+    }],
+    "PreToolUse": [{
+      "matcher": "Bash",
+      "hooks": [{
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pretool-notify.sh",
+          "timeout": 5
+        },
+        {
+          "type": "command",
+          "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? commit([[:space:]]|$)' && ! echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? push([[:space:]]|$)'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
+        }
+      ]
+    }],
+    "PostToolUse": [{
+      "matcher": "mcp__plugin_trinity_excalidraw__export_scene",
+      "hooks": [{
+        "type": "command",
+        "command": "ruby ${CLAUDE_PLUGIN_ROOT}/hooks/excalidraw/excalidraw-to-obsidian.rb",
+        "timeout": 10
+      }]
     }],
     "Stop": [{
       "matcher": "",
