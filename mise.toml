@@ -167,7 +167,7 @@ description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:999
 # Bind su "localhost" fa combaciare gli origin. NON tornare a --hostname 127.0.0.1:
 # il loop riappare (e con bind localhost l'URL http://127.0.0.1:9999 non risponde).
 shell = "bash -c"
-run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.2 --hostname localhost --api-url http://localhost:8888"
+run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.3 --hostname localhost --api-url http://localhost:8888"
 
 [tasks.stop-control-plane]
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
@@ -243,12 +243,3 @@ run = "ruby script/stop-excalidraw.rb"
 description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
 shell = "bash -c"
 run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
-
-# --- Manutenzione plugin ---------------------------------------------------
-# `claude plugin update` lascia in cache uno snapshot per ogni versione passata
-# (~/.claude/plugins/cache/<marketplace>/<plugin>/<ver>/) senza ripulire le
-# vecchie. Lanciare questo task DOPO ogni update per rimuovere le orfane.
-[tasks.clean-plugin-cache]
-description = "Rimuove dalla cache dei plugin Claude Code le versioni orfane (tiene solo quella attiva in installed_plugins.json). Lanciare dopo `claude plugin update`."
-shell = "bash -c"
-run = "ruby script/clean-plugin-cache.rb"
