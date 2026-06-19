@@ -40,13 +40,15 @@ end
 def find_pid
   if Gem.win_platform?
     # Windows: netstat da System32 (MSYS2 non lo ha nel PATH).
-    # Regex: cerca la riga LISTENING sulla porta target ed estrae il PID.
+    # Cerca la riga LISTENING sulla porta target (match ESATTO sulla colonna
+    # Local Address) ed estrae il PID.
     output = `C:/Windows/System32/NETSTAT.EXE -ano 2>NUL`
     addr = "#{HOST}:#{PORT}"
     output.each_line do |line|
-      if line.include?("LISTENING") && line.include?(addr)
-        return line.split(/\s+/).last.to_i
-      end
+      # netstat -ano TCP: [Proto, LocalAddr, ForeignAddr, State, PID].
+      # `include?(addr)` matchava anche le porte 3000X (":3000" è prefisso di ":30001").
+      fields = line.split(/\s+/).reject(&:empty?)
+      return fields[4].to_i if fields[3] == "LISTENING" && fields[1] == addr
     end
     nil
   else
