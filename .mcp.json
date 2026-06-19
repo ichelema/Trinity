@@ -5,12 +5,12 @@
       "type": "stdio",
       "command": "C:/msys64/ucrt64/bin/node.exe",
       "args": [
-        "C:/msys64/home/EN27553/.local/opt/mcp_excalidraw/dist/index.js"
+        "C:/msys64/home/${USERNAME}/.local/opt/mcp_excalidraw/dist/index.js"
       ],
       "env": {
         "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
         "ENABLE_CANVAS_SYNC": "true",
-        "LOG_FILE_PATH": "D:/AI/Claude/Trinity/logs/excalidraw.log"
+        "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR:-D:/AI/Claude/Trinity}/logs/excalidraw.log"
       }
     },
     "obsidian_semantic_notes_vault": {
@@ -24,9 +24,9 @@
     },
     "playwright": {
       "type": "stdio",
-      "command": "C:/msys64/home/EN27553/.local/share/mise/installs/node/24.16.0/node.exe",
+      "command": "C:/msys64/home/${USERNAME}/.local/share/mise/installs/node/24.16.0/node.exe",
       "args": [
-        "C:/msys64/home/EN27553/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
+        "C:/msys64/home/${USERNAME}/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
         "--browser", "chrome"
       ]
     }
