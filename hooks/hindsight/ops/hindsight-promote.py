@@ -244,14 +244,20 @@ def cmd_move(cfg: dict, args) -> int:
         "timestamp": rp.get("event_date"),
         "metadata": {**(rp.get("metadata") or {}), "promoted_from": bank},
         "tags": tags,
+        # document_id deterministico: un retry del move fa upsert sul core invece di
+        # creare un doppione (l'item altrimenti prenderebbe un UUID casuale a ogni POST).
+        "document_id": f"promoted:{bank}:{doc_id}",
     }
     core_url = bank_url(cfg, (cfg.get("bank") or {}).get("core_bank", ""))
+    # SINCRONO: attende estrazione+embedding PRIMA del delete. Con async il "success"
+    # significa solo "accodato"; un fallimento successivo del worker cancellerebbe il
+    # doc dal progetto senza averlo consolidato sul core (perdita irrecuperabile).
     res = _request(f"{core_url}/memories", method="POST",
-                   payload={"items": [item], "async": True}, timeout=args.timeout)
+                   payload={"items": [item], "async": False}, timeout=max(args.timeout, 90))
     if not res.get("success"):
         print(f"[move] ERRORE: retain sul core fallito: {res}", file=sys.stderr)
         return 1
-    print(f"[move] retain sul core OK (operation {res.get('operation_id')})")
+    print(f"[move] retain sul core OK (sync, {res.get('items_count')} item)")
     safe = urllib.parse.quote(doc_id, safe="")
     _request(f"{bank_url(cfg, bank)}/documents/{safe}", method="DELETE",
              timeout=args.timeout)
