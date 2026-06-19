@@ -102,7 +102,7 @@ def main() -> int:
     parser.add_argument(
         "--out",
         default=None,
-        help="File JSON di output (default: ./exports/hindsight-export-<UTC>.json)",
+        help="File JSON di output (default: ../data/exports/hindsight-export-<UTC>.json)",
     )
     parser.add_argument(
         "--page",

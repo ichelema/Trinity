@@ -13,7 +13,7 @@ Idempotente: ogni item porta il suo `document_id` → il server fa upsert, quind
 ri-eseguire l'import non duplica.
 
 Uso:
-  python hindsight_import.py                      # usa l'export piu' recente in ./exports/
+  python hindsight_import.py                      # usa l'export piu' recente in ../data/exports/
   python hindsight_import.py --in C:/path/dump.json
   python hindsight_import.py --dry-run            # valida il file, non invia nulla
   python hindsight_import.py --async              # accoda lato server (non attende l'estrazione)
@@ -40,7 +40,8 @@ from hindsight_config import load_config
 
 def latest_export() -> str | None:
     here = os.path.dirname(os.path.abspath(__file__))
-    files = sorted(glob.glob(os.path.join(here, "exports", "hindsight-export-*.json")))
+    # tools/ → la cartella export canonica e' ../data/exports (coerente con hindsight_export.py)
+    files = sorted(glob.glob(os.path.join(here, "..", "data", "exports", "hindsight-export-*.json")))
     return files[-1] if files else None
 
 
@@ -78,7 +79,7 @@ def main() -> int:
         "--in",
         dest="infile",
         default=None,
-        help="File JSON di export (default: il piu' recente in ./exports/)",
+        help="File JSON di export (default: il piu' recente in ../data/exports/)",
     )
     parser.add_argument(
         "--api-url",
