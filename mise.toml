@@ -243,3 +243,12 @@ run = "ruby script/stop-excalidraw.rb"
 description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
 shell = "bash -c"
 run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
+
+# --- Manutenzione plugin ---------------------------------------------------
+# `claude plugin update` lascia in cache uno snapshot per ogni versione passata
+# (~/.claude/plugins/cache/<marketplace>/<plugin>/<ver>/) senza ripulire le
+# vecchie. Lanciare questo task DOPO ogni update per rimuovere le orfane.
+[tasks.clean-plugin-cache]
+description = "Rimuove dalla cache dei plugin Claude Code le versioni orfane (tiene solo quella attiva in installed_plugins.json). Lanciare dopo `claude plugin update`."
+shell = "bash -c"
+run = "ruby script/clean-plugin-cache.rb"
