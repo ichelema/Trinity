@@ -23,11 +23,14 @@ gli URL pronti per worker e recall hook. Un api_url esplicito in un override
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
 
 DEFAULTS = {
     "api_url": "http://127.0.0.1:8888/v1/default/banks/trinity-project",
@@ -250,6 +253,18 @@ def _norm_path(p: str) -> str:
     return os.path.normcase(os.path.normpath(p))
 
 
+# Cache su FILE del git-resolve. I due subprocess git (rev-parse + config) costano
+# ~360ms su MSYS (fork lento) e _REPO_CACHE vive solo nel processo: ma ogni hook
+# recall e' un processo nuovo, quindi senza questa cache il git si ripaga a OGNI
+# prompt. TTL lungo: il remote origin (da cui deriva lo slug) cambia praticamente mai.
+_REPO_CACHE_TTL = 3600
+
+
+def _repo_cache_file(cwd: str) -> str:
+    h = hashlib.sha256(cwd.encode("utf-8")).hexdigest()[:16]
+    return os.path.join(tempfile.gettempdir(), "hs-repo-cache", h + ".json")
+
+
 def _git_root_and_slug(cwd: str) -> tuple[str, str]:
     """(toplevel, slug) del repo che contiene cwd. Slug: nome dal remote 'origin'
     (identificativo STABILE, invariante a spostamenti della cartella — stessa
@@ -257,6 +272,18 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str]:
     ("", "") fuori da un repo git o senza git disponibile."""
     if cwd in _REPO_CACHE:
         return _REPO_CACHE[cwd]
+
+    # Cache su file persistente tra invocazioni. Vale anche il risultato "vuoto"
+    # (cwd fuori da git): evita di ri-tentare il git ogni volta.
+    cache_f = _repo_cache_file(cwd)
+    try:
+        if time.time() - os.path.getmtime(cache_f) < _REPO_CACHE_TTL:
+            with open(cache_f, encoding="utf-8") as f:
+                root, slug = json.load(f)
+            _REPO_CACHE[cwd] = (root, slug)
+            return root, slug
+    except Exception:
+        pass
 
     def _run(args: list[str]) -> str:
         try:
@@ -276,6 +303,15 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str]:
         if not slug:
             slug = os.path.basename(root)
     _REPO_CACHE[cwd] = (root, slug)
+    # Persisti su file (best-effort, atomico tmp+rename).
+    try:
+        os.makedirs(os.path.dirname(cache_f), exist_ok=True)
+        tmp = cache_f + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump([root, slug], f)
+        os.replace(tmp, cache_f)
+    except Exception:
+        pass
     return root, slug
 
 
