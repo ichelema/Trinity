@@ -15,9 +15,11 @@ LABEL="${2:-porta $PORT}"
 PWSH="$(command -v pwsh 2>/dev/null || echo "/c/Program Files/PowerShell/7/pwsh.exe")"
 
 # Lista dei PID in ascolto (LISTEN) sulla porta, deduplicati. tr -d '\r' per il CRLF di pwsh.
+# || true: Get-NetTCPConnection esce 1 quando la porta è libera (nessuna connessione),
+# e con set -euo pipefail abortirebbe prima del guard "porta vuota" qui sotto.
 PIDS=$("$PWSH" -NoProfile -Command \
 	"Get-NetTCPConnection -LocalPort $PORT -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique" \
-	2>/dev/null | tr -d '\r' | tr -d ' ')
+	2>/dev/null | tr -d '\r' | tr -d ' ' || true)
 
 if [ -z "$PIDS" ]; then
 	echo "[$LABEL] nessun processo in ascolto su :$PORT"
