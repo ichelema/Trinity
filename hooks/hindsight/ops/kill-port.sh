@@ -11,7 +11,8 @@ set -euo pipefail
 
 PORT="${1:?Uso: kill-port.sh <porta> [etichetta]}"
 LABEL="${2:-porta $PORT}"
-PWSH="/c/Appl/PowerShell/pwsh.exe"
+# pwsh non è nel PATH MSYS: cercalo, poi ricadi sull'install standard di PowerShell 7.
+PWSH="$(command -v pwsh 2>/dev/null || echo "/c/Program Files/PowerShell/7/pwsh.exe")"
 
 # Lista dei PID in ascolto (LISTEN) sulla porta, deduplicati. tr -d '\r' per il CRLF di pwsh.
 PIDS=$("$PWSH" -NoProfile -Command \

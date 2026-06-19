@@ -16,7 +16,7 @@ Import-Module BurntToast
 
 New-BurntToastNotification `
     -Text 'Claude Code', $message `
-    -AppLogo 'C:\msys64\home\EN27553\claude.png' `
+    -AppLogo "C:\msys64\home\$env:USERNAME\claude.png" `
     -ExpirationTime (Get-Date).AddSeconds(3)
 
 exit 0

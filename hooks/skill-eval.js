@@ -75,12 +75,14 @@ function matchesGlob(filePath, globPattern) {
   const normalized = filePath.replace(/\\/g, "/");
   const regexPattern = globPattern
     .replace(/\./g, "\\.")
+    // Converti il glob `?` PRIMA di introdurre i token regex: altrimenti questo
+    // replace corromperebbe anche il `?` del gruppo `(.*\/)?` generato da `**/`.
+    .replace(/\?/g, ".")
     .replace(/\*\*\//g, "<<<DOUBLESTARSLASH>>>")
     .replace(/\*\*/g, "<<<DOUBLESTAR>>>")
     .replace(/\*/g, "[^/]*")
     .replace(/<<<DOUBLESTARSLASH>>>/g, "(.*\\/)?")
-    .replace(/<<<DOUBLESTAR>>>/g, ".*")
-    .replace(/\?/g, ".");
+    .replace(/<<<DOUBLESTAR>>>/g, ".*");
 
   try {
     const regex = new RegExp(`^${regexPattern}$`, "i");
