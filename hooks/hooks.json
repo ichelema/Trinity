@@ -89,7 +89,7 @@
         },
         {
           "type": "command",
-          "command": "/usr/bin/bash -c \"/c/Appl/PowerShell/pwsh.exe -NoProfile -ExecutionPolicy Bypass -File \\\"$(cygpath -w \\\"${CLAUDE_PLUGIN_ROOT}/hooks/windows-toast.ps1\\\")\\\"\"",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/windows-toast.sh",
           "timeout": 10
         }
       ]

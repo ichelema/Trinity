@@ -45,16 +45,12 @@ fi
 # Fire toast + sound (background, non-blocking)
 # Path derivati dalla posizione dello script: il plugin e' rilocabile.
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# pwsh non è nel PATH MSYS: cercalo, poi ricadi sull'install standard di PowerShell 7.
-PWSH="$(command -v pwsh 2>/dev/null || echo "/c/Program Files/PowerShell/7/pwsh.exe")"
 ffplay -nodisp -autoexit -loglevel quiet \
 	"$PLUGIN_ROOT/sound/Windows_Exclamation.wav" >/dev/null 2>&1 &
 
 # Toast with snippet of the command for context
 snippet=$(printf '%s' "$command" | head -c 80 | tr -d '\n')
 echo "{\"message\":\"Permission richiesta per: ${snippet}\"}" |
-	"$PWSH" -NoProfile -ExecutionPolicy Bypass \
-		-File "$(cygpath -w "$PLUGIN_ROOT/hooks/windows-toast.ps1")" \
-		>/dev/null 2>&1 &
+	"$PLUGIN_ROOT/hooks/windows-toast.sh" >/dev/null 2>&1 &
 
 exit 0
