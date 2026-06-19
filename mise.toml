@@ -133,7 +133,7 @@ HINDSIGHT_API_AUDIT_LOG_RETENTION_DAYS = "30"
 
 [tasks.install-hindsight]
 description = "Installa/aggiorna hindsight-api (server Python locale, espone MCP) tramite pip del Python mise."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "python -m pip install --upgrade hindsight-api"
 
 [tasks.start-hindsight]
@@ -143,7 +143,7 @@ description = "Avvia hindsight-local-mcp in background (porta 8888). Log in /tmp
 #   - setsid: nuova sessione → child non riceve SIGHUP quando il terminale chiude
 #   - nohup: extra sicurezza; < /dev/null: chiude stdin; & disown: fuori dal job control
 # Senza setsid+nohup, su MSYS/Windows il child viene reaped quando il bash dell'hook esce.
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "setsid nohup hindsight-local-mcp --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown"
 
 [tasks.stop-hindsight]
@@ -151,7 +151,7 @@ description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgr
 # Forziamo bash: lo script usa taskkill //T (path assoluto) e pg_ctl.
 # Path relativo: mise esegue il task con cwd = config_root (= root del plugin).
 # {{config_root}} darebbe backslash Windows che la bash spezzerebbe.
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "bash hooks/hindsight/ops/hindsight-stop-services.sh"
 
 # --- Control Plane (Web UI Hindsight) --------------------------------------
@@ -166,12 +166,12 @@ description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:999
 # rewrite interno viene trattato come esterno → proxy su se stesso → loop 307.
 # Bind su "localhost" fa combaciare gli origin. NON tornare a --hostname 127.0.0.1:
 # il loop riappare (e con bind localhost l'URL http://127.0.0.1:9999 non risponde).
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.2 --hostname localhost --api-url http://localhost:8888"
 
 [tasks.stop-control-plane]
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "bash hooks/hindsight/ops/kill-port.sh 9999 control-plane"
 
 # --- Dashboard log (Roda/Puma) ---------------------------------------------
@@ -181,17 +181,17 @@ run = "bash hooks/hindsight/ops/kill-port.sh 9999 control-plane"
 # coerente con lib/hindsight_debug.py — quindi il task non passa LOG_FILE.
 [tasks.install-dashboard]
 description = "Installa le gem della dashboard log (bundle install) sotto il Ruby mise (4.0.1). Eseguire una tantum prima di `dashboard`."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "cd hooks/hindsight/hindsight-dashboard && bundle install"
 
 [tasks.dashboard]
 description = "Avvia la dashboard log Hindsight (Roda/Puma) su http://localhost:9292. Foreground: Ctrl-C per fermarla. Richiede prima `mise run install-dashboard`."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "cd hooks/hindsight/hindsight-dashboard && bundle exec puma -p 9292"
 
 [tasks.stop-dashboard]
 description = "Ferma la dashboard log (processo Puma in ascolto su :9292)"
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "bash hooks/hindsight/ops/kill-port.sh 9292 dashboard"
 
 # --- Benchmark qualità (embedding / reranker) ------------------------------
@@ -200,12 +200,12 @@ run = "bash hooks/hindsight/ops/kill-port.sh 9292 dashboard"
 # e hindsight_recall_quality_bench.py restano lanciabili a mano da hooks/hindsight/benchmark/.
 [tasks.embed-bench]
 description = "Confronta gli embedding (zembed-1 vs Gemini vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Foreground (~minuti, scarica bge-m3 al primo run)."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "python hooks/hindsight/benchmark/hindsight_embed_bench.py"
 
 [tasks.rerank-bench]
 description = "Confronta i reranker su corpus rank-aware (MRR, recall@k). Ferma/riavvia il server :8888 più volte e lo ripristina alla fine (~5-10 min). Eredita l'[env] di produzione."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "ruby hooks/hindsight/benchmark/hindsight_rerank_bench.rb"
 
 # --- Check aggiornamenti (scheduler) ---------------------------------------
@@ -215,31 +215,31 @@ run = "ruby hooks/hindsight/benchmark/hindsight_rerank_bench.rb"
 # (env utente) con fallback relativo: scheduler/check_update_*/ -> ../..
 [tasks.api-check]
 description = "Controlla se su PyPI è uscita una versione di hindsight-api/hindsight-api-slim più recente di quella installata. Exit 10 se sì."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "ruby scheduler/check_update_hindsight_api/api-check.rb"
 
 [tasks.cp-check]
 description = "Controlla se è uscita una versione del Control Plane più recente di quella pinnata nel mise.toml. Exit 10 se sì."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
 
 [tasks.cp-redirect-test]
 description = "Testa se una versione del Control Plane ha ancora il bug del redirect-loop. Uso: VERSION=0.7.1 mise run cp-redirect-test (porta usa-e-getta 9998)."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "bash scheduler/check_update_hindsight_control_plane/cp-redirect-test.sh \"${VERSION:?imposta VERSION=X.Y.Z}\" \"${PORT:-9998}\""
 
 # --- Excalidraw Canvas (frontend MCP) -------------------------------------
 [tasks.start-excalidraw]
 description = "Avvia il frontend canvas Excalidraw (porta 3000). Log in logs/excalidraw-server.log."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "setsid nohup node C:/msys64/home/EN27553/.local/opt/mcp_excalidraw/dist/server.js > /tmp/excalidraw-server.log 2>&1 < /dev/null & disown"
 
 [tasks.stop-excalidraw]
 description = "Ferma il frontend canvas Excalidraw (porta 3000), solo se il server su :3000 è effettivamente Excalidraw."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "ruby script/stop-excalidraw.rb"
 
 [tasks.promote-scan]
 description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
-shell = "/usr/bin/bash -c"
+shell = "bash -c"
 run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
