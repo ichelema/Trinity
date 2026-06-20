@@ -16,11 +16,11 @@
 
 set -uo pipefail
 
-# Root del repo: fissa per il job di System Scheduler; fallback relativo a
-# questo script per portabilità (scheduler/promote_scan/ → 2 livelli su).
-PROJ="/d/AI/Claude/Trinity"
-[ -d "$PROJ" ] || PROJ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MISE="/c/msys64/home/EN27553/.local/bin/mise.exe"
+# Root del repo: TRINITY_PLUGIN_DIR se presente (sessioni Claude Code), altrimenti
+# fallback relativo allo script (scheduler/promote_scan/ → 2 livelli su). Da System
+# Scheduler la var non c'è → vince il relativo, sempre valido.
+PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+MISE="$(command -v mise 2>/dev/null || echo "/c/msys64/home/${USERNAME:-}/.local/bin/mise.exe")"
 
 cd "$PROJ" || {
 	echo "promote-scan-scheduled: cd $PROJ fallito" >&2

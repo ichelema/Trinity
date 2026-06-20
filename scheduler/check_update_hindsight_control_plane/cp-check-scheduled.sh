@@ -11,8 +11,8 @@
 
 set -uo pipefail
 
-PROJ="/d/AI/Claude/Trinity"
-MISE="/c/msys64/home/EN27553/.local/bin/mise.exe"
+PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+MISE="$(command -v mise 2>/dev/null || echo "/c/msys64/home/${USERNAME:-}/.local/bin/mise.exe")"
 
 cd "$PROJ" || {
 	echo "cp-check-scheduled: cd $PROJ fallito" >&2
