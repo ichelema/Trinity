@@ -15,9 +15,11 @@ tool_name=$(printf '%s' "$payload" | jq -r '.tool_name // ""')
 command=$(printf '%s' "$payload" | jq -r '.tool_input.command // ""')
 [[ -z "$command" ]] && exit 0
 
-# Strip leading whitespace, get first token
-first=$(printf '%s' "$command" | awk '{print $1}')
-second=$(printf '%s' "$command" | awk '{print $2}')
+# Primi due token via read + here-string (builtin bash, zero fork). Sostituisce
+# due awk: su MSYS ogni fork di awk.exe costa e questo hook gira a OGNI comando
+# Bash. read legge la prima riga: per i command single-line (il caso normale) il
+# risultato è identico ad awk '{print $1}' / '{print $2}'.
+read -r first second _ <<< "$command"
 
 # Safe single-word commands (read-only / no side effects)
 safe_single=(ls cat echo pwd date head tail grep find wc sleep true false
