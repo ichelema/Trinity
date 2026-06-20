@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Dopo un commit: se script/litellm-callbacks.py è tra i file appena committati,
+# ridistribuisce la callback in $HOME/.litellm/. Vedi .githooks/lib/.
+set -uo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$DIR/lib/litellm-deploy-common.sh"
+
+mapfile -t files < <(git diff-tree --no-commit-id --name-only -r HEAD)
+deploy_if_changed "${files[@]}"

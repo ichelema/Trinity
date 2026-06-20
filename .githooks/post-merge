@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Dopo un merge/pull: se script/litellm-callbacks.py è cambiato rispetto a prima
+# del merge, ridistribuisce la callback in $HOME/.litellm/. Vedi .githooks/lib/.
+set -uo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$DIR/lib/litellm-deploy-common.sh"
+
+mapfile -t files < <(git diff-tree -r --name-only ORIG_HEAD HEAD)
+deploy_if_changed "${files[@]}"

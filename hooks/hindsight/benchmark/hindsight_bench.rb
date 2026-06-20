@@ -24,6 +24,7 @@ MISE_BIN      = "#{ENV['MSYS2_ROOT'].tr("\\", "/")}/home/#{ENV['USERNAME']}/.loc
 SCRIPTS_DIR   = "#{`"#{MISE_BIN}" where python 2>NUL`.strip.tr("\\", "/")}/Scripts"
 HINDSIGHT_EXE = "#{SCRIPTS_DIR}/hindsight-local-mcp.exe"
 PWSH          = `which pwsh.exe 2>NUL`.lines.first.to_s.strip.tr("\\", "/")
+PWSH          = PWSH.sub(%r{\A/([a-z])/}i) { "#{$1.upcase}:/" }   # /c/... -> C:/... (which MSYS -> path nativo)
 PWSH          = "pwsh.exe" if PWSH.empty?
 PORT          = 8888
 RUN_ID        = Time.now.strftime("%Y%m%d-%H%M%S")
