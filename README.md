@@ -16,7 +16,7 @@ D:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strument
 
 | Parte | Ruolo |
 |---|---|
-| **Runtime del plugin** | ciò che i progetti ereditano: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json`, marketplace |
+| **Runtime del plugin** | ciò che i progetti ereditano: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json` |
 | **Strumenti di sviluppo** | servono alla manutenzione di Trinity, non ai progetti: benchmark (`hooks/hindsight/benchmark/`), dashboard log (`hooks/hindsight/hindsight-dashboard/`), check aggiornamenti (`scheduler/`) |
 
 La env var **`TRINITY_PLUGIN_DIR`** (definita nell'env utente, vedi §8) punta alla root di 
@@ -33,6 +33,11 @@ Il plugin è il *cervello*; server, DB e runtime sono il *corpo* installato sul 
 ---
 
 ## 2. Come viene caricato il plugin
+
+> ⚠️ **Datato (modello marketplace).** Dal 2026-06-19 il plugin è caricato come **skills-dir**
+> (junction `~/.claude/skills/trinity` → repo): live al riavvio, niente `plugin install`/`update`,
+> niente bump, niente `marketplace.json`. Le istruzioni di questa sezione descrivono il **vecchio**
+> modello e non sono più operative.
 
 Il plugin **non è legato a un progetto**: è abilitato a livello utente, quindi si carica in automatico ovunque apri Claude Code. L'interruttore è in `~/.claude/settings.json`:
 
@@ -295,8 +300,7 @@ una variabile separata.
 ```
 Trinity/
 ├── .claude-plugin/
-│   ├── plugin.json          manifest (name, version)
-│   └── marketplace.json     marketplace (source ".")
+│   └── plugin.json          manifest (legacy: il caricamento ora è skills-dir)
 ├── core-behavior.md         comportamento iniettato al SessionStart
 ├── .mcp.json                server MCP Hindsight
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
