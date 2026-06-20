@@ -6,8 +6,8 @@ set -uo pipefail
 
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # check.sh vive in tools/: con /.. HOOKS_DIR torna a hooks/hindsight (root del
-# sottosistema). lib/ ops/ tools/ sono sotto di qui; la root di progetto e' tre livelli sopra.
-PROJ="${CLAUDE_PROJECT_DIR:-$(cd "$HOOKS_DIR/../../.." && pwd)}"
+# sottosistema). lib/ ops/ tools/ sono sotto di qui; la root di progetto e' due livelli sopra.
+PROJ="${CLAUDE_PROJECT_DIR:-$(cd "$HOOKS_DIR/../.." && pwd)}"
 # API_BASE dalla config centralizzata (hindsight.config.json), con fallback.
 API_BASE="$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get api_url 2>/dev/null)"
 API_BASE="${API_BASE:-http://127.0.0.1:8888/v1/default/banks/trinity-project}"
