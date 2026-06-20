@@ -17,9 +17,14 @@ require "time"
 require "fileutils"
 
 BASE          = "http://localhost:8888"
-SCRIPTS_DIR   = "C:/msys64/home/EN27553/.local/share/mise/installs/python/3.13.13/Scripts"
+# Path derivati a runtime (niente C:/msys64, versione o drive cablati): MSYS2_ROOT
+# per la home MSYS, `mise where python` per la Scripts dir, `which` per pwsh.
+# Il Ruby di mise è nativo Windows -> backtick via cmd.
+MISE_BIN      = "#{ENV['MSYS2_ROOT'].tr("\\", "/")}/home/#{ENV['USERNAME']}/.local/bin/mise.exe"
+SCRIPTS_DIR   = "#{`"#{MISE_BIN}" where python 2>NUL`.strip.tr("\\", "/")}/Scripts"
 HINDSIGHT_EXE = "#{SCRIPTS_DIR}/hindsight-local-mcp.exe"
-PWSH          = "C:/Appl/PowerShell/pwsh.exe"
+PWSH          = `which pwsh.exe 2>NUL`.lines.first.to_s.strip.tr("\\", "/")
+PWSH          = "pwsh.exe" if PWSH.empty?
 PORT          = 8888
 RUN_ID        = Time.now.strftime("%Y%m%d-%H%M%S")
 # Path relativi alla cartella dello script (__dir__): il benchmark e' rilocabile senza
