@@ -123,6 +123,8 @@ else:
 
 results = data.get("results") or []
 source = "cache" if cached is not None else "fresh"
+# Cap sui risultati iniettati: il multi-bank puo' mostrarne di piu' (piu' fonti).
+_max_results = int(cfg.get("recall_max_results_multibank") or cfg["recall_max_results"]) if len(bank_urls) > 1 else cfg["recall_max_results"]
 debug_log(
     cfg,
     "recall",
@@ -139,14 +141,14 @@ debug_log(
             **({"score": round(r["_rerank_score"], 3)}
                if r.get("_rerank_score") is not None else {}),
         }
-        for r in results[: cfg["recall_max_results"]]
+        for r in results[:_max_results]
     ],
 )
 if not results:
     sys.exit(0)
 
 lines = []
-for r in results[: cfg["recall_max_results"]]:
+for r in results[:_max_results]:
     text = (r.get("text") or "").strip()
     if not text:
         continue

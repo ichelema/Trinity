@@ -68,6 +68,9 @@ DEFAULTS = {
     "recall_budget": "low",
     "recall_max_tokens": 800,
     "recall_max_results": 8,
+    # Multi-bank: cap separato sui risultati finali iniettati (None = usa
+    # recall_max_results). Piu' bank = piu' fonti -> puo' valere alzarlo.
+    "recall_max_results_multibank": None,
     # Multi-bank: candidati massimi presi da OGNI bank nel fan-out, PRIMA della
     # fusione (rerank globale / interleave) e del taglio a recall_max_results.
     "recall_per_bank_candidates": 5,

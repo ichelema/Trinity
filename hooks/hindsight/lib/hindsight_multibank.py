@@ -158,7 +158,7 @@ def multi_recall(
     interleave). Ritorna (results fusi, meta per il debug log). Mai solleva."""
     timeout = float(cfg.get("recall_timeout", 6))
     per_bank_cap = int(cfg.get("recall_per_bank_candidates", 5))
-    max_n = int(cfg.get("recall_max_results", 8))
+    max_n = int(cfg.get("recall_max_results_multibank") or cfg.get("recall_max_results", 8))
     min_score = cfg.get("recall_min_rerank_score")
 
     per_bank = fan_out_recall(urls, payload, timeout, per_bank_cap)
