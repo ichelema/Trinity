@@ -8,3 +8,7 @@ hooks/hindsight/benchmark/bench_results/
 .playwright-mcp/
 /excalidraw.log
 /scratchpad.md
+
+# Guide di replica: tenute solo in locale, non versionate (scelta 2026-06-20)
+/docs/REPLICA-SETUP.md
+/docs/REPLICA-BANK.md
