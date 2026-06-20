@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -231,8 +232,6 @@ def should_retain_now(
     _write_retain_state(path, state)
     return cnt % every_n == 0
 
-
-import re
 
 # Anti-feedback-loop: rimuove blocchi-memoria iniettati dal recall hook prima di
 # ritenere il testo. Senza strip, una memoria citata nel turno verrebbe ri-ritenuta
