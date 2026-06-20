@@ -1,6 +1,6 @@
-set COLORTERM=truecolor
-set LANG=en_US.UTF-8
-set LC_ALL=en_US.UTF-8
+export COLORTERM=truecolor
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
 export MSYSTEM=UCRT64
 export CHERE_INVOKING=1
