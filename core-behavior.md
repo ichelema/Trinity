@@ -96,7 +96,7 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 Usa Nushell quando l'output beneficia di formattazione tabulare, aggregazione o filtraggio:
 
 ```bash
-/c/msys64/home/EN27553/.local/bin/nu -c "..."
+$HOME/.local/bin/nu -c "..."
 ```
 
 Nushell è un binario Windows nativo, non MSYS2: usa path Windows, non `/c/...` o `/e/...`.
