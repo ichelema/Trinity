@@ -14,10 +14,10 @@ Plugin da auditare: **`$ARGUMENTS`**
 
 | Cosa | Path |
 |---|---|
-| Config del plugin (modificabile) | `/c/Users/EN27553/AppData/Local/nvim/lua/sphynx/plugins/<plugin>.lua` |
+| Config del plugin (modificabile) | `/c/Users/$USERNAME/AppData/Local/nvim/lua/sphynx/plugins/<plugin>.lua` |
 | Documentazione | `/c/Download/<nome-plugin>.txt` — oppure una cartella `/c/Download/<nome-plugin>-doc/` con più `.txt`. Verifica quale dei due esiste. |
-| Sorgente originale (SOLO lettura) | `/c/Users/EN27553/AppData/Local/nvim-data/lazy/<plugin>` |
-| Elenco moduli / commenti | `/c/Users/EN27553/AppData/Local/nvim/lua/sphynx/core/3-plugins.lua` |
+| Sorgente originale (SOLO lettura) | `/c/Users/$USERNAME/AppData/Local/nvim-data/lazy/<plugin>` |
+| Elenco moduli / commenti | `/c/Users/$USERNAME/AppData/Local/nvim/lua/sphynx/core/3-plugins.lua` |
 
 > I path MSYS (`/c/...`) valgono nella shell bash. Negli script Python/Ruby usa path Windows (`C:/Users/...`).
 

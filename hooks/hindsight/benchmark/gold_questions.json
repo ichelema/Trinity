@@ -82,7 +82,7 @@
       "query": "Qual e' il percorso completo dell'eseguibile che gestisce i runtime, visto che non e' raggiungibile dalla shell?",
       "expected": ["mise.exe", ".local/bin"],
       "min_hits": 1,
-      "note": "mise.exe in /c/msys64/home/EN27553/.local/bin, non nel PATH MSYS"
+      "note": "mise.exe in /c/msys64/home/$USERNAME/.local/bin, non nel PATH MSYS"
     },
     {
       "id": "q12",

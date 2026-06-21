@@ -98,7 +98,7 @@ La lista è globale (applicata a entrambi i pacchetti). Nello scheduler la impos
 - **Baseline = versione installata**: `api-check.rb` interroga il Python di mise via `importlib.metadata` (istantaneo, non avvia il server). È lo stesso Python che `install-hindsight` aggiorna, perché `mise run` lo mette nel PATH.
 - **Pacchetto non installato**: viene riportato con `"not_installed": true` e **non** conta come update (manca una baseline). Utile se in futuro togli `hindsight-api-slim`.
 - **TLS dietro proxy ENINET**: `api-check.rb` usa `Net::HTTP`, che rispetta `SSL_CERT_FILE` (impostato nell'`[env]` del `.mise.toml` a `C:/certs/cacert.pem`). È ciò che fa passare la chiamata a PyPI attraverso il MITM del proxy.
-- **`mise` non è nel PATH MSYS**: gli script lo invocano col path assoluto `C:\msys64\home\EN27553\.local\bin\mise.exe`.
+- **`mise` non è nel PATH MSYS**: gli script lo invocano col path assoluto `C:\msys64\home\$USERNAME\.local\bin\mise.exe`.
 - **Trust di mise**: `api-check-scheduled.sh` esegue `mise trust` prima di ogni `mise run` — idempotente, ri-fida dopo ogni modifica del `.mise.toml`. Non serve fare `mise trust` a mano.
 - **`API_NO_OPEN=1`**: variabile per testare lo `.sh` senza far comparire Notepad.
 - **Verifica nel contesto reale**: dopo aver creato l'evento, premi **▶ (Run)** in System Scheduler e controlla che compaia una riga fresca in `logs\api-check-scheduled.log`.

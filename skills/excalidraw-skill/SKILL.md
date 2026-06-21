@@ -33,7 +33,7 @@ Atteso: `HTTP 200`.
 **Rebuild dei sorgenti `.ts`** (solo se hai modificato `src/`, raramente) — usa il **node di mise** (Windows nativo), che compila `tsc` senza crashare; mai `npx tsc` con il node MSYS2:
 
 ```bash
-"C:/msys64/home/EN27553/.local/share/mise/installs/node/24.16.0/node.exe" \
+"C:/msys64/home/$USERNAME/.local/share/mise/installs/node/24.16.0/node.exe" \
   "$REPO/node_modules/typescript/bin/tsc" -p "$REPO/tsconfig.json"
 ```
 

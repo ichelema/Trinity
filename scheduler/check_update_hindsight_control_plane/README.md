@@ -104,7 +104,7 @@ CP_IGNORE_VERSIONS="0.7.0,0.7.2" mise run cp-check
 ## Note tecniche / gotcha
 
 - **Ponte Windows→MSYS**: System Scheduler è un'app Windows e non conosce MSYS2. Il `.cmd` imposta `MSYSTEM=UCRT64` + `CHERE_INVOKING=1` e invoca `bash -lc`; il flag `-l` (login shell) ricostruisce il `PATH` UCRT64 da `/etc/profile`. Senza questo, Ruby/mise non sarebbero nel path.
-- **`mise` non è nel PATH MSYS**: gli script lo invocano col path assoluto `C:\msys64\home\EN27553\.local\bin\mise.exe`.
+- **`mise` non è nel PATH MSYS**: gli script lo invocano col path assoluto `C:\msys64\home\$USERNAME\.local\bin\mise.exe`.
 - **Trust di mise**: mise rifiuta di parsare un `.mise.toml` non "trusted" (errore `not trusted` / `error parsing config file`, `rc=1`). Il trust è legato al contesto utente: da un terminale/scheduler Windows "nudo" il config risulta non fidato anche se lo è in una sessione interattiva. Per questo `cp-check-scheduled.sh` esegue `mise trust "$PROJ/.mise.toml"` prima di ogni `mise run` — idempotente, e ri-fida automaticamente dopo ogni modifica del `.mise.toml` (che altrimenti invaliderebbe il trust). Non serve quindi fare `mise trust` a mano.
 - **TLS dietro proxy ENINET**: `cp-check.rb` usa `Net::HTTP`, che rispetta `SSL_CERT_FILE` (impostato nell'`[env]` del `.mise.toml` a `C:/certs/cacert.pem`). È ciò che fa passare la chiamata a npm attraverso il MITM del proxy.
 - **`CP_NO_OPEN=1`**: variabile per testare lo `.sh` senza far comparire Notepad.
