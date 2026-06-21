@@ -13,7 +13,7 @@
   "recall_max_tokens": 2048,
   "recall_max_results": 3,
   "recall_max_results_multibank": 5,
-  "recall_per_bank_candidates": 15,
+  "recall_per_bank_candidates": 6,
   "recall_min_rerank_score": 0.5,
   "recall_types": ["observation", "world", "experience"],
   "recall_include_entities": false,
