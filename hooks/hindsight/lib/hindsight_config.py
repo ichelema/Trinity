@@ -247,15 +247,6 @@ def _merge_json(cfg: dict, path: str) -> set[str]:
 _REPO_CACHE: dict[str, tuple[str, str]] = {}
 
 
-def _norm_path(p: str) -> str:
-    """Normalizza per il confronto, convertendo anche i path MSYS (/d/x -> d:/x):
-    il git di MSYS2 restituisce la toplevel in formato POSIX."""
-    m = re.match(r"^/([a-zA-Z])/(.*)$", p)
-    if m:
-        p = f"{m.group(1)}:/{m.group(2)}"
-    return os.path.normcase(os.path.normpath(p))
-
-
 # Cache su FILE del git-resolve. I due subprocess git (rev-parse + config) costano
 # ~360ms su MSYS (fork lento) e _REPO_CACHE vive solo nel processo: ma ogni hook
 # recall e' un processo nuovo, quindi senza questa cache il git si ripaga a OGNI
@@ -332,12 +323,20 @@ def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
     if name != "auto":
         return name
     cwd = cwd or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    root, slug = _git_root_and_slug(cwd)
+    _, slug = _git_root_and_slug(cwd)
     if not slug:
         return core
+    # Il plugin gira come skills-dir via junction/symlink (~/.claude/skills/trinity
+    # -> repo): __file__ e' il path del symlink. Confrontare i git toplevel non e'
+    # affidabile (git li risolve in modo inconsistente attraverso i symlink MSYS, e
+    # realpath di Python su Windows non li segue affatto). Confrontiamo invece lo
+    # SLUG del remote origin, invariante a junction/symlink: se il repo del cwd e
+    # quello che ospita il modulo sono lo stesso repo, siamo nel repo del plugin ->
+    # core (un bank "Trinity" separato spaccherebbe le sue memorie dal core).
     here = os.path.dirname(os.path.abspath(__file__))
-    plugin_root = os.path.abspath(os.path.join(here, "..", "..", ".."))
-    if _norm_path(root) == _norm_path(plugin_root):
+    plugin_dir = os.path.abspath(os.path.join(here, "..", "..", ".."))
+    _, plugin_slug = _git_root_and_slug(plugin_dir)
+    if plugin_slug and slug == plugin_slug:
         return core
     return slug
 
