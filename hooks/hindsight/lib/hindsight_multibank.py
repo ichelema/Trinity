@@ -173,9 +173,11 @@ def multi_recall(
     if not candidates:
         return [], meta
 
-    # Se la soglia è attiva, passa SEMPRE da zerank-2 (anche single-bank)
-    # per avere score confrontabili su cui filtrare.
-    # Se disattiva e single-bank, l'ordine del server è già buono.
+    # Se la soglia è attiva, passa SEMPRE da zerank-2 (anche quando i bank risolti
+    # si riducono a una sola fonte dopo il dedup) per avere score confrontabili su
+    # cui filtrare. NB: vale solo DENTRO multi_recall, cioè con >=2 bank risolti;
+    # il caso single-bank dell'hook non arriva mai qui (fa la POST diretta).
+    # Se disattiva e single-source, l'ordine del server è già buono.
     single_source = len(candidates) <= 1 or len([r for r in per_bank if r]) <= 1
     need_rerank = not single_source or min_score is not None
 
