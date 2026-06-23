@@ -9,7 +9,8 @@
       ".jsx": "javascriptreact",
       ".mts": "typescript",
       ".cts": "typescript"
-    }
+    },
+    "maxRestarts": 3
   },
   "python": {
     "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/pyright-langserver.exe",
@@ -17,7 +18,8 @@
     "extensionToLanguage": {
       ".py": "python",
       ".pyi": "python"
-    }
+    },
+    "maxRestarts": 3
   },
   "ruby": {
     "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/ruby-lsp.exe",
@@ -26,12 +28,14 @@
       ".rbw": "ruby",
       ".rake": "ruby",
       ".gemspec": "ruby"
-    }
+    },
+    "maxRestarts": 3
   },
   "lua": {
     "command": "C:/Users/EN27553/AppData/Local/nvim-data/lsp/lua-language-server/bin/lua-language-server.exe",
     "extensionToLanguage": {
       ".lua": "lua"
-    }
+    },
+    "maxRestarts": 3
   }
 }
