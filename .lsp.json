@@ -1,0 +1,31 @@
+{
+  "typescript": {
+    "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/typescript-language-server.exe",
+    "args": ["--stdio"],
+    "extensionToLanguage": {
+      ".ts": "typescript",
+      ".tsx": "typescriptreact",
+      ".js": "javascript",
+      ".jsx": "javascriptreact",
+      ".mts": "typescript",
+      ".cts": "typescript"
+    }
+  },
+  "python": {
+    "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/pyright-langserver.exe",
+    "args": ["--stdio"],
+    "extensionToLanguage": {
+      ".py": "python",
+      ".pyi": "python"
+    }
+  },
+  "ruby": {
+    "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/solargraph.exe",
+    "args": ["stdio"],
+    "extensionToLanguage": {
+      ".rb": "ruby",
+      ".rake": "ruby",
+      ".gemspec": "ruby"
+    }
+  }
+}

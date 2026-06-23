@@ -84,6 +84,17 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 - Per Git non fare push automatici: chiedi sempre conferma.
 - Per Python, Node e Ruby usa sempre `mise` per installare pacchetti/runtime.
 
+## Navigazione del codice
+
+Quando esplori codice in un linguaggio con LSP attivo (oggi Python, TypeScript, Ruby), preferisci il tool `LSP` agli strumenti testuali:
+
+- Trovare dove un simbolo è definito o usato → `LSP goToDefinition` / `findReferences`, non `grep` del nome.
+- Tipi, firme, documentazione → `LSP hover`; struttura di un file → `LSP documentSymbol`.
+- `grep`/`Grep` resta giusto per ricerca testuale (TODO, stringhe, config); `glob`/`Glob` per trovare file per nome.
+- Se per il linguaggio non c'è un server LSP, usa `grep`/`glob`.
+
+Per il workflow completo (analisi d'impatto prima di un refactor, diagnostica dopo gli edit) vedi la skill `lsp-enable`.
+
 ## Regole path
 
 - I path MSYS2 (`/c/...`, `/e/...`) funzionano solo in bash.
