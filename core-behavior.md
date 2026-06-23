@@ -86,7 +86,7 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 
 ## Navigazione del codice
 
-Quando esplori codice in un linguaggio con LSP attivo (oggi Python, TypeScript, Ruby), preferisci il tool `LSP` agli strumenti testuali:
+Quando esplori codice in un linguaggio con LSP attivo (oggi Python, TypeScript, Ruby, Lua), preferisci il tool `LSP` agli strumenti testuali:
 
 - Trovare dove un simbolo è definito o usato → `LSP goToDefinition` / `findReferences`, non `grep` del nome.
 - Tipi, firme, documentazione → `LSP hover`; struttura di un file → `LSP documentSymbol`.

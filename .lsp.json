@@ -20,12 +20,18 @@
     }
   },
   "ruby": {
-    "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/solargraph.exe",
-    "args": ["stdio"],
+    "command": "D:/msys64/home/Sphynx/.local/share/mise/shims/ruby-lsp.exe",
     "extensionToLanguage": {
       ".rb": "ruby",
+      ".rbw": "ruby",
       ".rake": "ruby",
       ".gemspec": "ruby"
+    }
+  },
+  "lua": {
+    "command": "C:/Users/EN27553/AppData/Local/nvim-data/lsp/lua-language-server/bin/lua-language-server.exe",
+    "extensionToLanguage": {
+      ".lua": "lua"
     }
   }
 }
