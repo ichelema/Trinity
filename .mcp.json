@@ -10,7 +10,7 @@
       "env": {
         "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
         "ENABLE_CANVAS_SYNC": "true",
-        "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR:-D:/AI/Claude/Trinity}/logs/excalidraw.log"
+        "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/logs/excalidraw.log"
       }
     },
     "obsidian_semantic_notes_vault": {

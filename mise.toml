@@ -25,31 +25,20 @@ ruby = "4.0.1"
 # Espone gli entry-point script di hindsight-api (hindsight-local-mcp, hindsight-api, ecc.)
 # La Scripts dir del Python mise non e' nel PATH per default sotto MSYS2.
 _.path = [
-  "C:/msys64/home/{{env.USERNAME}}/.local/share/mise/installs/python/3.13.13/Scripts",
-  "E:/msys64/home/{{env.USERNAME}}/.local/share/mise/installs/python/3.13.13/Scripts",
+  "E:/msys64/home/Sphynx/.local/share/mise/installs/python/3.13.13/Scripts",
 ]
 
 # Forza Python a usare UTF-8 per stdin/stdout/stderr. Hindsight stampa un banner
 # ANSI con caratteri Unicode che crasha sotto cp1252 (default Windows non-EN).
 PYTHONUTF8 = "1"
 
-# Bundle CA di DEFAULT (casa / senza proxy): Mozilla completo sulla chiavetta.
-# Serve perche' alcuni PC hanno un SSL_CERT_FILE globale Windows che punta a un bundle
-# incompleto → CERTIFICATE_VERIFY_FAILED su ZeroEntropy/LiteLLM. Qui lo forziamo al bundle
-# completo. ORDINE IMPORTANTE: queste chiavi stanno PRIMA di _.file, che (venendo dopo)
-# le sovrascrive al lavoro col bundle aziendale. In mise vince l'ultima definizione.
-SSL_CERT_FILE = "E:/msys64/home/{{env.USERNAME}}/certs/cacert.pem"
-REQUESTS_CA_BUNDLE = "E:/msys64/home/{{env.USERNAME}}/certs/cacert.pem"
-NODE_EXTRA_CA_CERTS = "E:/msys64/home/{{env.USERNAME}}/certs/cacert.pem"
-
-# CA bundle aziendale, caricato SOLO sui PC dietro il proxy MITM ENINET (lavoro).
-# Il proxy fa MITM TLS con un cert self-signed che certifi non ha → CERTIFICATE_VERIFY_FAILED
-# intermittenti su httpx (embedding/reranker) e sui download npm di Node. Il file dotenv
-# C:\certs\proxy.env esiste solo su quei PC e imposta SSL_CERT_FILE/REQUESTS_CA_BUNDLE/
-# NODE_EXTRA_CA_CERTS al bundle (Mozilla + CA aziendale). A casa il file non esiste e mise
-# ignora _.file mancante senza errori, quindi nessun cert spurio. Venendo DOPO le chiavi
-# di default qui sopra, al lavoro le sovrascrive.
-_.file = "C:/certs/proxy.env"
+# Bundle CA via DUE dotenv in ordine (le chiavi [env] inline batterebbero _.file, quindi
+# NON si usano per i cert): default.env sulla chiavetta (bundle Mozilla completo, sempre
+# presente) + proxy.env aziendale (solo sui PC dietro il proxy MITM ENINET, lo sovrascrive
+# perche' viene DOPO). mise ignora un _.file mancante senza errori, quindi a casa (niente
+# proxy.env) resta il default. Serve perche' alcuni PC hanno un SSL_CERT_FILE globale Windows
+# a un bundle incompleto → CERTIFICATE_VERIFY_FAILED su ZeroEntropy/LiteLLM/Node.
+_.file = ["E:/msys64/home/Sphynx/certs/default.env", "C:/certs/proxy.env"]
 
 # Provider LLM per le operazioni retain/recall/reflect di hindsight.
 HINDSIGHT_API_LLM_PROVIDER = "openai"
