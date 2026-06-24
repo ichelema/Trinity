@@ -1,7 +1,7 @@
 # Hindsight hooks — note di sessione
 
 Riepilogo di quanto appreso/modificato lavorando sugli hook Hindsight di Claude Code
-in `D:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sostituisce
+in `E:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sostituisce
 `SKILL.md` (che resta la guida alle operazioni MCP retain/recall/reflect).
 
 > Sessione del 2026-05-25.
@@ -42,7 +42,7 @@ in `D:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sos
 ## 3. Debug log
 
 - **Abilitazione**: `debug_log_enabled: true`. È OFF nei `DEFAULTS` spediti (best-effort, costo ~0 da spento).
-- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log` (es. `D:\AI\Claude\Trinity\logs\`).
+- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log` (es. `E:\AI\Claude\Trinity\logs\`).
   Calcolato in `hindsight_debug.py::_log_path()` relativo al modulo (risale 3 livelli da
   `hooks/hindsight/lib/`), quindi è portabile se sposti il plugin.
 - **Formato**: JSONL, un evento per riga. Rotazione automatica a 5 MB → `.log.1`.
@@ -126,13 +126,13 @@ silenziosamente (no 400 dal server).
 
 ## 8. Cache del recall — GOTCHA path
 
-- **Posizione reale**: `D:\tmp\hs-recall-cache` (MSYS: `/d/tmp/hs-recall-cache`), **non** il
-  `/tmp` di MSYS (`C:\msys64\tmp`).
+- **Posizione reale**: `E:\tmp\hs-recall-cache` (MSYS: `/e/tmp/hs-recall-cache`), **non** il
+  `/tmp` di MSYS (`E:\msys64\tmp`).
 - **Perché**: la config dice `recall_cache_dir: "/tmp/hs-recall-cache"`, ma il Python del hook è
-  nativo Windows (ucrt64): `os.path.abspath("/tmp/...")` risolve sul **drive corrente** → `D:`.
+  nativo Windows (ucrt64): `os.path.abspath("/tmp/...")` risolve sul **drive corrente** → `E:`.
   È drive-dependent.
 - **Conseguenza pratica**: per svuotarla da bash, `rm /tmp/hs-recall-cache/*` NON funziona;
-  usare `rm -f /d/tmp/hs-recall-cache/*.json`.
+  usare `rm -f /e/tmp/hs-recall-cache/*.json`.
 - **Chiave**: SHA-256 (primi 32 char) del prompt normalizzato (lowercase, whitespace collassato).
   **Non** include `budget`/`max_tokens`/`tags`/`types` → dopo un cambio di questi parametri la
   cache può servire risultati stale fino a `cache_ttl` (300s).
@@ -185,7 +185,7 @@ nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip
 PYTHONUTF8=1 python "$TRINITY_PLUGIN_DIR/hooks/hindsight/lib/hindsight_config.py" --get recall_timeout
 
 # Svuotare la cache recall (path Windows-resolved!)
-rm -f /d/tmp/hs-recall-cache/*.json
+rm -f /e/tmp/hs-recall-cache/*.json
 
 # Benchmark provider LLM (retain+recall su corpus dedicato) — vedi §13
 ruby .claude/hooks/hindsight/benchmark/hindsight_bench.rb
@@ -199,14 +199,14 @@ BENCH_ONLY=openai-nano,groq-gptoss20b ruby .claude/hooks/hindsight/benchmark/hin
 Nel bank `trinity-project`:
 
 - **(procedures)** Il file di test è `hindsight-check.sh`, non un `test_*.py`.
-- **(learnings)** La cache recall è in `D:\tmp\hs-recall-cache`, non nel `/tmp` di MSYS.
+- **(learnings)** La cache recall è in `E:\tmp\hs-recall-cache`, non nel `/tmp` di MSYS.
 - **(procedures)** Il benchmark provider è in `.claude/hooks/hindsight/benchmark/` (spostato da `test/` il 2026-05-25).
 
 ---
 
 ## 13. Benchmark provider LLM (velocità/qualità)
 
-**Posizione**: `D:\AI\Claude\Trinity\.claude\hooks\hindsight\benchmark\` — spostato da `test/` il 2026-05-25. I path interni sono relativi a `__dir__`, quindi lo script è rilocabile (corpus e risultati vivono accanto al `.rb`).
+**Posizione**: `E:\AI\Claude\Trinity\.claude\hooks\hindsight\benchmark\` — spostato da `test/` il 2026-05-25. I path interni sono relativi a `__dir__`, quindi lo script è rilocabile (corpus e risultati vivono accanto al `.rb`).
 
 | File                     | Ruolo                                                                                                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -360,7 +360,7 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
 
 4. **Hook `mise reshim`.** Il Ruby mise, dopo `bundle install`, chiama `mise reshim` per gli shim
    degli eseguibili gem (puma); ma `mise` non è nel PATH MSYS2 → bundler aborta con
-   `No such file or directory - mise reshim`. → Aggiunto `C:/msys64/home/$USERNAME/.local/bin` a
+   `No such file or directory - mise reshim`. → Aggiunto `E:/msys64/home/$USERNAME/.local/bin` a
    `_.path` in `[env]` di `.mise.toml`.
 
 5. **Stop dei processi nativi Windows.** Node e Puma sono processi Windows nativi: il `netstat` MSYS
@@ -384,5 +384,5 @@ mise run stop-dashboard
 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh" 9999 control-plane
 ```
 
-Nota benigna: durante `bundle install` compare `C:/msys64/home/$USERNAME is not writable` → bundler
+Nota benigna: durante `bundle install` compare `E:/msys64/home/$USERNAME is not writable` → bundler
 ripiega su una temp dir e completa comunque.

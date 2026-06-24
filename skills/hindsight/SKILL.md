@@ -19,7 +19,7 @@ http://localhost:8888/mcp/trinity-project/
 
 ## Setup attivo in questo progetto
 
-In `D:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
+In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 
 **Stack:**
 

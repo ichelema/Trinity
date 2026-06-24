@@ -32,7 +32,7 @@
     "maxRestarts": 3
   },
   "lua": {
-    "command": "C:/Users/EN27553/AppData/Local/nvim-data/lsp/lua-language-server/bin/lua-language-server.exe",
+    "command": "E:/msys64/home/Sphynx/.local/bin/lua-language-server/bin/lua-language-server.exe",
     "extensionToLanguage": {
       ".lua": "lua"
     },

@@ -5,6 +5,7 @@ __pycache__/
 hooks/hindsight/data/
 *.bak
 hooks/hindsight/benchmark/bench_results/
+hooks/hindsight/benchmark/bench_results_rerank/
 .playwright-mcp/
 /excalidraw.log
 /scratchpad.md
