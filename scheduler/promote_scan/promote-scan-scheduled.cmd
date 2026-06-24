@@ -8,14 +8,14 @@ REM (il move resta a /trinity:promote con review umana): genera solo il report
 REM logs/promote-candidates.json e, se ci sono candidati, apre un alert.
 REM
 REM Da mettere nel campo "Application" di System Scheduler (Parameters vuoto,
-REM Working Dir = D:\AI\Claude\Trinity, State = Minimized o Hidden).
+REM Working Dir = E:\AI\Claude\Trinity, State = Minimized o Hidden).
 REM ===========================================================================
 
 set "MSYSTEM=UCRT64"
 set "CHERE_INVOKING=1"
 set "MSYS2_PATH_TYPE=strict"
 
-set "HOME=C:\msys64\home\%USERNAME%"
-set "MISE_DATA_DIR=C:\msys64\home\%USERNAME%\.local\share\mise"
-set "MISE_CACHE_DIR=C:\msys64\home\%USERNAME%\.cache\mise"
-C:\msys64\usr\bin\zsh.exe --login -c "exec zsh /d/AI/Claude/Trinity/scheduler/promote_scan/promote-scan-scheduled.sh"
+set "HOME=E:\msys64\home\Sphynx"
+set "MISE_DATA_DIR=E:\msys64\home\Sphynx\.local\share\mise"
+set "MISE_CACHE_DIR=E:\msys64\home\Sphynx\.cache\mise"
+E:\msys64\usr\bin\zsh.exe --login -c "exec zsh /e/AI/Claude/Trinity/scheduler/promote_scan/promote-scan-scheduled.sh"
