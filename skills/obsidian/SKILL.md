@@ -43,8 +43,11 @@ La skill può usare file di supporto nella cartella `references/`. Non caricare 
 | Reference | Quando usarla | Scopo |
 |---|---|---|
 | `references/excalidraw-obsidian-format.md` | quando bisogna creare, salvare, convertire, correggere o incorporare disegni Excalidraw nel Vault | regole sul formato `.excalidraw.md`, frontmatter, blocco `%%`, JSON Drawing, conversione da canvas live e embed Obsidian |
+| `references/nota-del-giorno.md` | quando viene richiesto di creare la nota del giorno per salvare e tenere traccia del lavoro svolto, o salvare un evento | avere uno storico di ogni giorno il lavoro svolto e come è stato svolto |
 
-Regola: prima di generare o modificare file Excalidraw, leggere `references/excalidraw-obsidian-format.md` e applicarla come fonte operativa. La skill deve mantenere qui solo il puntatore alla reference, non duplicarne il contenuto.
+Regole: 
+- prima di generare o modificare file Excalidraw, leggere `references/excalidraw-obsidian-format.md` e applicarla come fonte operativa. La skill deve mantenere qui solo il puntatore alla reference, non duplicarne il contenuto.
+- prima di generare o modificare la nota del giorno, leggere `references/nota-del-giorno.md` e applicarla come fonte operativa. La skill deve mantenere qui solo il puntatore alla reference, non duplicarne il contenuto.
 
 ---
 
@@ -74,6 +77,7 @@ Prima di creare o modificare file, verificare sempre path e note reali tramite M
 | Area | Scopo | Uso operativo |
 |---|---|---|
 | `Inbox/` | cattura grezza | note temporanee, idee non processate, appunti rapidi |
+| `🌅Daily/` | diario giornaliero | nota del giorno `YYYY-MM-DD.md`: storico del lavoro svolto, obiettivi, apprendimenti, riassunto sessione AI |
 | `Topic/` | argomenti/MOC/Hub | note indice, mappe tematiche, hub concettuali |
 | `Evergreen/` | conoscenza stabile | note sintetiche, mature, riusabili nel tempo |
 | `Atomic/` | idee atomiche | singole idee Zettelkasten, concetti isolati e linkabili |
@@ -107,7 +111,8 @@ Regole di destinazione:
 - nota da fonte esterna → `Literature/` o `Progetti/Progress/<progetto>/03_Literature/`;
 - documentazione/reference → `Reference/` o `Progetti/Progress/<progetto>/04_Reference/`;
 - file, immagini, canvas o Excalidraw di progetto → `Progetti/Progress/<progetto>/05_Files/`;
-- nuova MOC o tema → `Topic/`.
+- nuova MOC o tema → `Topic/`;
+- nota del giorno / log giornaliero → `🌅Daily/YYYY-MM-DD.md`.
 
 
 Se non ti e chiara la struttura guarda immagine in `references/struttura directory del Vault.png`
@@ -384,6 +389,7 @@ Per la generezaione di grafici e disegni vedi la skill `references/excalidraw-ob
 ## Skill correlate
 - Canvas live: la skill `excalidraw-skill`
 - Per il canvas work usa: la skill `excalidraw-skill`
-- Per il generare excalidraw : la skill `references/excalidraw-obsidian-format.md`
+- Per il generare excalidraw: la skill `references/excalidraw-obsidian-format.md`
+- Per modifica e creazione nota del giorno: la skill `references/nota-del-giorno.md`
 
 
