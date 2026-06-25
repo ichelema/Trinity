@@ -41,11 +41,6 @@
       "matcher": "Bash",
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pretool-notify.sh",
-          "timeout": 5
-        },
-        {
-          "type": "command",
           "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? commit([[:space:]]|$)' && ! echo \"$CMD\" | grep -qE '(^|[;&|()[:space:]])git( -C [^ ]+)? push([[:space:]]|$)'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
         }
       ]
