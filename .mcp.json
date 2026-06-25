@@ -3,9 +3,9 @@
     "excalidraw": {
       "disabled": true,
       "type": "stdio",
-      "command": "C:/msys64/ucrt64/bin/node.exe",
+      "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node.exe",
       "args": [
-        "C:/msys64/home/${USERNAME}/.local/opt/mcp_excalidraw/dist/index.js"
+        "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw/dist/index.js"
       ],
       "env": {
         "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
@@ -24,9 +24,9 @@
     },
     "playwright": {
       "type": "stdio",
-      "command": "C:/msys64/home/${USERNAME}/.local/share/mise/installs/node/24.16.0/node.exe",
+      "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node.exe",
       "args": [
-        "C:/msys64/home/${USERNAME}/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
+        "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
         "--browser", "chrome"
       ]
     }
