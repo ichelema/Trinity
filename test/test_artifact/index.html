@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<title>File browser — Trinity</title>
+<link rel="stylesheet" href="/assets/github-dark.min.css">
+<script src="/assets/highlight.min.js"></script>
+<style>
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,sans-serif;height:100vh;display:flex;flex-direction:column;background:#0d1117;color:#c9d1d9}
+  header{padding:10px 14px;background:#161b22;color:#e6edf3;border-bottom:2px solid #58a6ff} header h1{margin:0;font-size:1rem;font-weight:600}
+  #crumb{padding:8px 14px;background:#0d1117;font-size:.85rem;border-bottom:1px solid #30363d}
+  #crumb a{color:#58a6ff;cursor:pointer} #crumb a:hover{text-decoration:underline}
+  main{flex:1;display:flex;min-height:0}
+  #list{width:300px;border-right:1px solid #30363d;overflow:auto;background:#0d1117}
+  #view{flex:1;overflow:auto;padding:14px;background:#0d1117}
+  .row{padding:6px 14px;cursor:pointer;display:flex;gap:8px;align-items:center;font-size:.9rem;color:#c9d1d9}
+  .row:hover{background:#161b22} .row.sel{background:#1f6feb33}
+  .ic{width:1.2em;text-align:center}
+  .ic.dir{font-family:"Segoe Fluent Icons","Segoe MDL2 Assets",sans-serif;color:#1f6feb}
+  pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:"JetBrains Mono",monospace;font-size:.85rem;color:#c9d1d9}
+  img.preview{max-width:100%;height:auto} .muted{color:#8b949e}
+</style></head><body>
+  <header><h1>📁 File browser — <span id="rootname"></span></h1></header>
+  <div id="crumb"></div>
+  <main><div id="list"></div><div id="view"><p class="muted">Seleziona un file per visualizzarlo.</p></div></main>
+<script>
+const listEl=document.getElementById('list'),viewEl=document.getElementById('view'),
+      crumbEl=document.getElementById('crumb'),rootEl=document.getElementById('rootname');
+let cur='';
+async function load(path){
+  const data=await(await fetch('/api/list?path='+encodeURIComponent(path))).json();
+  if(data.error){listEl.innerHTML='<p class="muted" style="padding:14px">'+data.error+'</p>';return;}
+  cur=data.path; rootEl.textContent=data.root; renderCrumb(data.path); renderList(data.entries);
+}
+function renderCrumb(path){
+  const parts=path?path.split('/'):[]; let acc='';
+  const root=document.createElement('a'); root.textContent='🏠 root'; root.onclick=()=>load('');
+  crumbEl.innerHTML=''; crumbEl.appendChild(root);
+  for(const p of parts){acc=acc?acc+'/'+p:p; const sep=document.createTextNode(' / ');
+    const a=document.createElement('a'); a.textContent=p; const t=acc; a.onclick=()=>load(t);
+    crumbEl.append(sep,a);}
+}
+function renderList(entries){
+  listEl.innerHTML='';
+  if(cur){const up=cur.split('/').slice(0,-1).join('/'); listEl.appendChild(rowEl('⬆️','..',()=>load(up)));}
+  for(const e of entries){
+    const dir=e.type==='dir';
+    const ic=dir?String.fromCharCode(0xE8B7):e.type==='image'?'🖼️':'📄';
+    const path=cur?cur+'/'+e.name:e.name;
+    const row=rowEl(ic,e.name,()=>{ dir?load(path):openFile(path,e.type,row); }, dir?'dir':'');
+    listEl.appendChild(row);
+  }
+}
+function rowEl(ic,name,onclick,cls){
+  const d=document.createElement('div'); d.className='row'+(cls?' '+cls:'');
+  const i=document.createElement('span'); i.className='ic'+(cls?' '+cls:''); i.textContent=ic;
+  const n=document.createElement('span'); n.textContent=name;
+  d.append(i,n); d.onclick=onclick; return d;
+}
+const EXT2LANG={rb:'ruby',ru:'ruby',rake:'ruby',js:'javascript',mjs:'javascript',cjs:'javascript',ts:'typescript',json:'json',py:'python',sh:'bash',bash:'bash',zsh:'bash',html:'xml',xml:'xml',svg:'xml',css:'css',scss:'scss',md:'markdown',markdown:'markdown',yml:'yaml',yaml:'yaml',toml:'ini',ini:'ini',lua:'lua',rs:'rust',go:'go',c:'c',h:'c',cpp:'cpp',java:'java',sql:'sql'};
+async function openFile(path,type,row){
+  document.querySelectorAll('.row.sel').forEach(r=>r.classList.remove('sel')); row&&row.classList.add('sel');
+  if(type==='image'){viewEl.innerHTML=''; const img=document.createElement('img');
+    img.className='preview'; img.src='/api/file?path='+encodeURIComponent(path); viewEl.appendChild(img); return;}
+  const r=await fetch('/api/file?path='+encodeURIComponent(path));
+  if((r.headers.get('content-type')||'').includes('application/json')){
+    const d=await r.json(); viewEl.innerHTML='<p class="muted">File binario, '+(d.size||'?')+' byte. Anteprima non disponibile.</p>';
+  }else{
+    const text=await r.text(); viewEl.innerHTML='';
+    const pre=document.createElement('pre'), code=document.createElement('code'); code.className='hljs';
+    const ext=(path.split('/').pop().split('.').pop()||'').toLowerCase(), lang=EXT2LANG[ext];
+    let val=null;
+    if(typeof hljs!=='undefined'){try{val=((lang&&hljs.getLanguage(lang))?hljs.highlight(text,{language:lang,ignoreIllegals:true}):hljs.highlightAuto(text)).value;}catch(e){}}
+    if(val!=null) code.innerHTML=val; else code.textContent=text;
+    pre.appendChild(code); viewEl.appendChild(pre);
+  }
+}
+load('');
+
+// Live-reload: confronta l'mtime di index.html ogni secondo e ricarica se cambia.
+let _v=null;
+setInterval(async()=>{
+  try{const {v}=await(await fetch('/api/version')).json();
+    if(_v===null) _v=v; else if(v!==_v) location.reload();
+  }catch(e){}
+},1000);
+</script></body></html>
