@@ -43,19 +43,6 @@ port_listening() {
     [ -n "$code" ] && [ "$code" != "000" ]
 }
 
-# Reference counting sessioni: registra un "lease" (file vuoto col nome del
-# session_id) in una dir condivisa. Lo SessionEnd (hindsight-shutdown.sh) conta i
-# lease rimasti e spegne il server SOLO quando e' l'ultima sessione attiva —
-# altrimenti chiudere una sessione spegnerebbe il server condiviso da altre
-# sessioni Claude Code ancora aperte. Idempotente: stesso session_id -> stesso file.
-SESS_DIR="/tmp/hs-sessions"
-SESSION_ID="$(cat | jq -r '.session_id // empty' 2> /dev/null | tr -d '\r')"
-SESSION_ID="${SESSION_ID//\//_}"
-if [ -n "$SESSION_ID" ]; then
-    mkdir -p "$SESS_DIR" 2> /dev/null || true
-    : > "$SESS_DIR/$SESSION_ID" 2> /dev/null || true
-fi
-
 # 1. gia' pronto: esci subito (nessun costo di avvio)
 if mcp_ready; then
     exit 0
