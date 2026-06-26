@@ -469,6 +469,79 @@
           "with mise"
         ]
       }
+    },
+    "lsp-enable": {
+      "description": "LSP-first semantic code intelligence: goToDefinition, findReferences, call hierarchy, impact analysis pre-refactor, post-edit diagnostics",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "lsp",
+          "definizione",
+          "go to definition",
+          "goto definition",
+          "find references",
+          "trova riferimenti",
+          "chi usa",
+          "chi chiama",
+          "call hierarchy",
+          "gerarchia chiamate",
+          "incoming calls",
+          "outgoing calls",
+          "impact analysis",
+          "analisi impatto",
+          "rinomina",
+          "rename",
+          "refactor",
+          "refactoring",
+          "diagnostica",
+          "diagnostics",
+          "navigazione codice",
+          "document symbol",
+          "hover"
+        ],
+        "keywordPatterns": [
+          "\\blsp\\b",
+          "\\bgo\\s?to\\s?definition\\b",
+          "\\bfind\\s?references\\b",
+          "\\bgoToDefinition\\b",
+          "\\bfindReferences\\b",
+          "\\bcall\\s?hierarchy\\b",
+          "\\b(?:incoming|outgoing)\\s?calls\\b",
+          "\\brefactor(?:ing)?\\b",
+          "\\bdiagnost(?:ic|ica|ics)\\b"
+        ],
+        "pathPatterns": [
+          "**/.lsp.json",
+          ".claude/skills/lsp-enable/**"
+        ],
+        "intentPatterns": [
+          "(?:vai|salta|spostati|portami|mostrami|apri|fammi vedere|fammi un salto|rinomina|rinominare|rename|sposta|spostare).{0,30}?(?:definizione|class[ei]|metod[oi]|funzion[ei]|variabil[ei]|costant[ei]|interfacc[ia]|attribut[oi]|propriet[aà]|simbol[oi]|tip[oi]|modul[oi])",
+          "(?:cerca|trova|individua|cercami|trovami|dov['’]|dove\\s+(?:si trova|sta|è|son?o)).{0,30}?(?:definizione|class[ei]|metod[oi]|funzion[ei]|variabil[ei]|costant[ei]|interfacc[ia]|attribut[oi]|propriet[aà]|simbol[oi])",
+          "(?:chi|cosa|quali)\\s+(?:usa|usano|chiama|chiamano|richiama|invoca).{0,30}?(?:funzione|metodo|classe|variabile|costante|simbolo)",
+          "(?:prima di|before)\\s+(?:un\\s+)?(?:refactor|rinominare|rename|modificare|cambiare|toccare|spostare)",
+          "(?:where|find|go\\s?to|rename|refactor|move).{0,30}?(?:definition|class|method|function|variable|references|symbol)",
+          "(?:who|what)\\s+(?:uses|calls)\\s+(?:this\\s+)?(?:function|method|class|symbol)",
+          "(?:analizza|analyze)\\s+.*(?:impatto|impact|dipendenze|dependencies|call hierarchy|gerarchia)",
+          "(?:naviga|esplora|traccia|navigate|explore|trace)\\s+.*(?:codice|code|funzione|simbolo|chiamate)"
+        ],
+        "contentPatterns": [
+          "goToDefinition",
+          "goToImplementation",
+          "findReferences",
+          "documentSymbol",
+          "incomingCalls",
+          "outgoingCalls",
+          "\\.lsp\\.json"
+        ],
+        "contextPatterns": [
+          "con lsp",
+          "usando lsp",
+          "via lsp",
+          "prima del refactor",
+          "before refactoring"
+        ]
+      },
+      "relatedSkills": []
     }
   }
 }
