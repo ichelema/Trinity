@@ -16,6 +16,19 @@ const fs = require("fs");
 const path = require("path");
 
 const RULES_PATH = path.join(__dirname, "skill-rules.json");
+const SKILLS_DIR = path.join(__dirname, "..", "skills");
+
+/**
+ * Una skill è disabilitata se la sua cartella esiste in skills/ ma non contiene
+ * più un file SKILL.md (es. rinominato in SKILL.md.disabled). In quel caso
+ * l'harness non la carica, quindi non va nemmeno proposta.
+ * Se la cartella non esiste (skill definita altrove), non la consideriamo
+ * disabilitata e manteniamo il comportamento precedente.
+ */
+function isSkillDisabled(skillName) {
+  const dir = path.join(SKILLS_DIR, skillName);
+  return fs.existsSync(dir) && !fs.existsSync(path.join(dir, "SKILL.md"));
+}
 
 /**
  * @typedef {Object} SkillMatch
@@ -112,6 +125,10 @@ function evaluateSkill(
 ) {
   const { triggers = {}, excludePatterns = [], priority = 5 } = skill;
   const scoring = rules.scoring;
+
+  if (isSkillDisabled(skillName)) {
+    return null;
+  }
 
   let score = 0;
   const reasons = [];
