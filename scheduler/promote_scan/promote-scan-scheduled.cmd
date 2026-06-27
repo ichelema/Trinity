@@ -18,4 +18,10 @@ set "MSYS2_PATH_TYPE=strict"
 set "HOME=E:\msys64\home\Sphynx"
 set "MISE_DATA_DIR=E:\msys64\home\Sphynx\.local\share\mise"
 set "MISE_CACHE_DIR=E:\msys64\home\Sphynx\.cache\mise"
-E:\msys64\usr\bin\zsh.exe --login -c "exec zsh /e/AI/Claude/Trinity/scheduler/promote_scan/promote-scan-scheduled.sh"
+REM Cartella del progetto: esplicita, cosi' lo script non dipende da BASH_SOURCE
+REM (vuoto in zsh) ne' dall'ambiente Windows.
+set "TRINITY_PLUGIN_DIR=E:\AI\Claude\Trinity"
+REM PATH di MSYS per i comandi di sistema (date, tr, cygpath, find, curl...),
+REM dato che bash gira --noprofile --norc e non eredita /etc/profile.
+set "PATH=E:\msys64\ucrt64\bin;E:\msys64\usr\bin;%PATH%"
+E:\msys64\usr\bin\bash.exe --noprofile --norc "/e/AI/Claude/Trinity/scheduler/promote_scan/promote-scan-scheduled.sh"

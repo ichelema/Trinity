@@ -12,3 +12,14 @@ hooks/hindsight/benchmark/bench_results_rerank/
 
 # Guida di setup/replica: tenuta solo in locale, non versionata (scelta 2026-06-20)
 /docs/SETUP-NUOVO-PC.md
+
+# File di runtime degli scheduler (log/stato/alert accanto agli script)
+/scheduler/notebooklm/nb-auth-refresh-scheduled.log
+/scheduler/notebooklm/nb-auth-refresh-fails.count
+/scheduler/notebooklm/nb-auth-ALERT.txt
+/scheduler/check_update_hindsight_control_plane/cp-check-scheduled.log
+/scheduler/check_update_hindsight_control_plane/cp-update-ALERT.txt
+/scheduler/check_update_hindsight_api/api-check-scheduled.log
+/scheduler/check_update_hindsight_api/api-update-ALERT.txt
+/scheduler/promote_scan/promote-scan-scheduled.log
+/scheduler/promote_scan/promote-candidates-ALERT.txt

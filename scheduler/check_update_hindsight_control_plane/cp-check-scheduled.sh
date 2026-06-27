@@ -11,7 +11,7 @@
 
 set -uo pipefail
 
-PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 MISE="$(command -v mise 2>/dev/null || echo "/e/msys64/home/Sphynx/.local/bin/mise.exe")"
 
 cd "$PROJ" || {
@@ -19,9 +19,11 @@ cd "$PROJ" || {
 	exit 1
 }
 
-mkdir -p logs
-LOG="logs/cp-check-scheduled.log"
-ALERT="logs/cp-update-ALERT.txt"
+# Log/alert accanto allo script, in scheduler/check_update_hindsight_control_plane/
+LOGDIR="$PROJ/scheduler/check_update_hindsight_control_plane"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/cp-check-scheduled.log"
+ALERT="$LOGDIR/cp-update-ALERT.txt"
 TS="$(date '+%Y-%m-%d %H:%M:%S')"
 CMD_EXE="/c/Windows/System32/cmd.exe"
 NOTEPAD_EXE="/c/Windows/System32/notepad.exe"
@@ -50,11 +52,8 @@ if [[ "$RC" -eq 10 ]]; then
 		echo "  ultima su npm:           ${latest:-?}"
 		echo "  rilevato il:             $TS"
 		echo
-		echo "Prossimo passo — verifica se ha ancora il bug del redirect-loop:"
-		echo "    VERSION=${latest:-X.Y.Z} mise run cp-redirect-test"
-		echo
-		echo "Se il verdetto è OK, aggiorna il pin nel task control-plane di .mise.toml"
-		echo "(riga con hindsight-control-plane@... e il commento sopra)."
+		echo "Prossimo passo — se vuoi aggiornare, alza il pin nel task control-plane"
+		echo "del mise.toml (riga con hindsight-control-plane@...)."
 	} >"$ALERT"
 
     WIN_ALERT="$(cygpath -aw "$ALERT")"

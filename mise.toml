@@ -7,7 +7,7 @@
 # parlano con il server già configurato via HTTP.
 #
 # La dashboard log (Roda/Puma), i benchmark (embed-bench/rerank-bench) e i check
-# aggiornamenti (api-check/cp-check/cp-redirect-test, in scheduler/) sono stati migrati
+# aggiornamenti (api-check/cp-check, in scheduler/) sono stati migrati
 # qui dal repo Trinity. I task relativi sono in fondo a questo file.
 
 [tools]
@@ -208,7 +208,7 @@ run = "ruby hooks/hindsight/benchmark/hindsight_rerank_bench.rb"
 # --- Check aggiornamenti (scheduler) ---------------------------------------
 # Lanciabili a mano o da System Scheduler (Splinterware) via scheduler/*/*-scheduled.cmd
 # (i job vanno registrati con i path di questo repo — vedi i README in scheduler/).
-# cp-check.rb / cp-redirect-test.sh trovano la root del repo via TRINITY_PLUGIN_DIR
+# cp-check.rb trova la root del repo via TRINITY_PLUGIN_DIR
 # (env utente) con fallback relativo: scheduler/check_update_*/ -> ../..
 [tasks.api-check]
 description = "Controlla se su PyPI è uscita una versione di hindsight-api/hindsight-api-slim più recente di quella installata. Exit 10 se sì."
@@ -219,11 +219,6 @@ run = "ruby scheduler/check_update_hindsight_api/api-check.rb"
 description = "Controlla se è uscita una versione del Control Plane più recente di quella pinnata nel mise.toml. Exit 10 se sì."
 shell = "bash -c"
 run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
-
-[tasks.cp-redirect-test]
-description = "Testa se una versione del Control Plane ha ancora il bug del redirect-loop. Uso: VERSION=0.7.1 mise run cp-redirect-test (porta usa-e-getta 9998)."
-shell = "bash -c"
-run = "bash scheduler/check_update_hindsight_control_plane/cp-redirect-test.sh \"${VERSION:?imposta VERSION=X.Y.Z}\" \"${PORT:-9998}\""
 
 # --- Excalidraw Canvas (frontend MCP) -------------------------------------
 [tasks.start-excalidraw]

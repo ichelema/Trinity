@@ -25,13 +25,13 @@ successive interrogano il modello solo sui documenti nuovi.
 | 0 | nessun candidato |
 | 10 | candidati trovati (alert aperto, report in `logs/promote-candidates.json`) |
 | 3 | server Hindsight giù → skip con log (nessun avvio da cron) |
-| altro | errore (vedi `logs/promote-scan-scheduled.log`) |
+| altro | errore (vedi `scheduler/promote_scan/promote-scan-scheduled.log`) |
 
 ## Registrazione in System Scheduler (manuale, GUI)
 
-- **Application**: `D:\AI\Claude\Trinity\scheduler\promote_scan\promote-scan-scheduled.cmd`
+- **Application**: `E:\AI\Claude\Trinity\scheduler\promote_scan\promote-scan-scheduled.cmd`
 - **Parameters**: vuoto
-- **Working Dir**: `D:\AI\Claude\Trinity`
+- **Working Dir**: `E:\AI\Claude\Trinity`
 - **State**: Minimized o Hidden
 - **Schedule**: settimanale
 

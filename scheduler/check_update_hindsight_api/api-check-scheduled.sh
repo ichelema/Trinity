@@ -12,7 +12,7 @@
 
 set -uo pipefail
 
-PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 MISE="$(command -v mise 2>/dev/null || echo "/e/msys64/home/Sphynx/.local/bin/mise.exe")"
 
 cd "$PROJ" || {
@@ -20,9 +20,11 @@ cd "$PROJ" || {
 	exit 1
 }
 
-mkdir -p logs
-LOG="logs/api-check-scheduled.log"
-ALERT="logs/api-update-ALERT.txt"
+# Log/alert accanto allo script, in scheduler/check_update_hindsight_api/
+LOGDIR="$PROJ/scheduler/check_update_hindsight_api"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/api-check-scheduled.log"
+ALERT="$LOGDIR/api-update-ALERT.txt"
 TS="$(date '+%Y-%m-%d %H:%M:%S')"
 NOTEPAD_EXE="/c/Windows/System32/notepad.exe"
 
@@ -39,7 +41,7 @@ RC=$?
 # Log su una riga (tr -d '\r' per il quirk CRLF di MSYS).
 printf '[%s] rc=%s %s\n' "$TS" "$RC" "$OUT" | tr -d '\r' >>"$LOG"
 
-if [[ "$RC" -eq 10 ]]; then
+if [[ "$RC" -eq 10 || "${API_FORCE_ALERT:-0}" == "1" ]]; then
 	{
 		echo "hindsight-api / hindsight-api-slim — NUOVA VERSIONE DISPONIBILE"
 		echo

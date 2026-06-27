@@ -27,16 +27,6 @@ PKG = "@vectorize-io/hindsight-control-plane"
 PLUGIN_DIR = ENV.fetch("TRINITY_PLUGIN_DIR") { File.expand_path("../..", __dir__) }
 MISE_TOML = File.join(PLUGIN_DIR, "mise.toml")
 
-# Versioni da NON segnalare anche se più recenti del pin: rilasci noti ma scartati.
-# Vuota dal 2026-06-12: pin alzato a 0.8.2 col workaround hostname (bind su
-# "localhost" anziché 127.0.0.1 — vedi il task control-plane nel mise.toml), che
-# aggira l'origin-mismatch di Next standalone (vercel/next.js#91844) causa del
-# redirect-loop delle 0.7.0+. La soglia ora è il pin stesso; questa lista serve
-# solo se in futuro una versione > pin risultasse rotta ANCHE con bind localhost.
-# Override a runtime:
-#   CP_IGNORE_VERSIONS="0.9.0,0.9.1"   (lista separata da virgole)
-IGNORED_VERSIONS = (ENV["CP_IGNORE_VERSIONS"] || "").split(",").map(&:strip).reject(&:empty?)
-
 def pinned_version
   raise "‹.mise.toml› non trovato in #{MISE_TOML}" unless File.exist?(MISE_TOML)
 
@@ -64,15 +54,13 @@ begin
   pinned = pinned_version
   latest = latest_version
 
-  # Soglia = la versione più alta già vista e scartata (il pin + le ignorate).
-  # Segnaliamo un update solo per ciò che la supera davvero.
-  baseline = ([pinned] + IGNORED_VERSIONS).map { |v| Gem::Version.new(v) }.max
-  update = Gem::Version.new(latest) > baseline
+  # C'è un update se npm pubblica una versione più recente del pin (la versione
+  # che il task control-plane lancia via npx). Il pin è la "versione in uso".
+  update = Gem::Version.new(latest) > Gem::Version.new(pinned)
 
   puts JSON.pretty_generate(
     "package" => PKG,
     "pinned" => pinned,
-    "ignored" => IGNORED_VERSIONS,
     "latest" => latest,
     "update_available" => update,
     "checked_at" => Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ"),

@@ -19,7 +19,7 @@ set -uo pipefail
 # Root del repo: TRINITY_PLUGIN_DIR se presente (sessioni Claude Code), altrimenti
 # fallback relativo allo script (scheduler/promote_scan/ → 2 livelli su). Da System
 # Scheduler la var non c'è → vince il relativo, sempre valido.
-PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 MISE="$(command -v mise 2>/dev/null || echo "/e/msys64/home/Sphynx/.local/bin/mise.exe")"
 
 cd "$PROJ" || {
@@ -27,9 +27,12 @@ cd "$PROJ" || {
 	exit 1
 }
 
-mkdir -p logs
-LOG="logs/promote-scan-scheduled.log"
-ALERT="logs/promote-candidates-ALERT.txt"
+# Log/alert accanto allo script. Il REPORT resta in logs/ perche' lo scrive
+# hindsight-promote.py (path fisso) ed e' condiviso con /trinity:promote.
+LOGDIR="$PROJ/scheduler/promote_scan"
+mkdir -p "$LOGDIR" logs
+LOG="$LOGDIR/promote-scan-scheduled.log"
+ALERT="$LOGDIR/promote-candidates-ALERT.txt"
 REPORT="logs/promote-candidates.json"
 TS="$(date '+%Y-%m-%d %H:%M:%S')"
 NOTEPAD_EXE="/c/Windows/System32/notepad.exe"

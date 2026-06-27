@@ -38,7 +38,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | File                         | Chi lo chiama                                                     | Cosa fa                                                      |
 | ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
 | `hindsight-stop-services.sh` | `hindsight-shutdown.sh`, `mise run stop-hindsight`                | ferma server MCP + Postgres embedded                         |
-| `kill-port.sh`               | `mise` (control-plane/dashboard), `scheduler/cp-redirect-test.sh` | uccide il processo su una porta (via `Get-NetTCPConnection`) |
+| `kill-port.sh`               | `mise` (control-plane/dashboard)                                  | uccide il processo su una porta (via `Get-NetTCPConnection`) |
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
 | `hindsight-set-mission.sh`   | manuale                                                           | imposta retain/reflect mission sul bank                      |
 | `hindsight-reflect.sh`       | slash-command `/reflect` (fallback)                               | sintesi strategica via `reflect`                             |
