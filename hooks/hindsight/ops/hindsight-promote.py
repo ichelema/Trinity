@@ -111,11 +111,15 @@ def _request(url: str, method: str = "GET", payload: dict | None = None,
 
 
 def list_project_banks(cfg: dict, timeout: int) -> list[str]:
-    """Tutti i bank del server tranne il core."""
-    base = (cfg.get("bank") or {}).get("api_base", "").rstrip("/")
-    core = (cfg.get("bank") or {}).get("core_bank", "")
+    """Tutti i bank del server tranne il core e quelli esclusi dal promote
+    (sottostringhe in bank.promote_exclude_banks, case-insensitive)."""
+    bankcfg = cfg.get("bank") or {}
+    base = bankcfg.get("api_base", "").rstrip("/")
+    core = bankcfg.get("core_bank", "")
+    excludes = [s.lower() for s in bankcfg.get("promote_exclude_banks", [])]
     data = _request(f"{base}/banks", timeout=timeout)
-    return [b["bank_id"] for b in (data.get("banks") or []) if b.get("bank_id") != core]
+    banks = [b["bank_id"] for b in (data.get("banks") or []) if b.get("bank_id") != core]
+    return [b for b in banks if not any(x in b.lower() for x in excludes)]
 
 
 def list_documents(cfg: dict, bank: str, timeout: int, page: int = 100) -> list[dict]:

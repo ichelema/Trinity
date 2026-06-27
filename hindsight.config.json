@@ -3,7 +3,8 @@
     "api_base": "http://127.0.0.1:8888/v1/default",
     "core_bank": "trinity-project",
     "retain_bank": "auto",
-    "recall_banks": ["auto", "core"]
+    "recall_banks": ["auto", "core"],
+    "promote_exclude_banks": ["obsidian"]
   },
 
   "recall_enabled": true,
