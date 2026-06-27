@@ -542,6 +542,57 @@
         ]
       },
       "relatedSkills": []
+    },
+    "notebooklm": {
+      "description": "Google NotebookLM automation via notebooklm-py: create notebooks, add sources (URL/YouTube/PDF), generate artifacts (audio overview/podcast, quiz, flashcards, mind map, infographic, study guide), chat over sources and download",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "notebooklm",
+          "notebook lm",
+          "notebooklm-py",
+          "google notebooklm",
+          "audio overview",
+          "panoramica audio",
+          "podcast",
+          "studio guide",
+          "guida allo studio"
+        ],
+        "keywordPatterns": [
+          "\\bnotebooklm\\b",
+          "\\bnotebook\\s?lm\\b",
+          "\\baudio\\s?overview\\b"
+        ],
+        "pathPatterns": [
+          "**/skills/notebooklm/**",
+          "**/notebooklm-data/**",
+          "**/storage_state.json"
+        ],
+        "intentPatterns": [
+          "(?:crea|genera|fai|trasforma).{0,30}(?:podcast|audio overview|panoramica audio)",
+          "(?:create|generate|make|turn).{0,30}(?:podcast|audio overview)",
+          "(?:crea|genera|fai).{0,30}(?:quiz|flashcard|mappa mentale|infografica|guida allo studio).{0,40}(?:font[ei]|notebook|documenti|url|youtube|sorgent)",
+          "(?:aggiungi|carica|importa).{0,30}(?:font[ei]|source|url|youtube|pdf).{0,30}(?:notebook|notebooklm)",
+          "(?:riassumi|summarize).{0,30}(?:url|documenti|font[ei]|youtube|sorgent)",
+          "(?:chatta|chiedi|domanda|ask).{0,30}(?:notebook|notebooklm|font[ei])"
+        ],
+        "contentPatterns": [
+          "notebooklm\\s+(?:create|add|ask|list|source|artifact|generate|login|auth)",
+          "/notebooklm-data/notebooklm",
+          "notebooklm-py",
+          "NOTEBOOKLM_HOME",
+          "NOTEBOOKLM_AUTH_JSON"
+        ],
+        "contextPatterns": [
+          "su notebooklm",
+          "in notebooklm",
+          "con notebooklm",
+          "google notebooklm"
+        ]
+      },
+      "relatedSkills": [
+        "obsidian"
+      ]
     }
   }
 }
