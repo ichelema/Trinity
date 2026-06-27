@@ -62,12 +62,18 @@ nome file).
 
 ### `## 🎯 Obiettivi`
 
-I task principali della giornata come checkbox **linkati** all'header della loro
-sessione nel riassunto:
+I task principali della giornata come checkbox **linkati con alias** all'header della
+loro sessione nel riassunto. Forma obbligatoria: `[[#<header esatto>|<alias>]]`, dove:
+
+- l'**ancora** (prima di `|`) è **identica** all'header `###` della sessione — è ciò
+  che fa risolvere il link;
+- l'**alias** (dopo `|`) è il testo mostrato, nel formato `<Stato> - <descrizione>`, con
+  `<Stato>` che riflette l'esito del task (es. `Fixed`, `Commited`, `Aggiunto`, `Risolto`).
 
 ```markdown
-- [x] [[#Migrazione configurazione portatile su drive E]]
-- [x] [[#Bonifica del bank Hindsight]]
+- [x] [[#Fix hook SessionEnd di Hindsight|Fixed - hook SessionEnd di Hindsight]]
+- [x] [[#Commit di pulizia del repository Trinity|Commited - di pulizia del repository Trinity]]
+- [x] [[#Comando nota del giorno per il plugin Trinity|Aggiunto - Comando nota del giorno per il plugin Trinity]]
 ```
 
 ### `## 🤖 Riassunto sessione Agente AI`
@@ -75,13 +81,32 @@ sessione nel riassunto:
 Cuore della nota. Struttura:
 
 - Un **paragrafo introduttivo** che riassume la giornata in 1-3 frasi.
-- **Un blocco `###` per ogni task**, dove il testo dell'header è **identico** al
-  testo linkato in 🎯 Obiettivi (è ciò che fa funzionare il link `[[#header]]`).
+- **Un blocco `###` per ogni task**, dove il testo dell'header è **identico** all'ancora
+  linkata in 🎯 Obiettivi (la parte prima di `|`): è ciò che fa funzionare il link
+  `[[#header|alias]]`.
+- **Separa un blocco `###` dal successivo con un `---`** su riga propria (thematic
+  break), una riga vuota prima e una dopo.
 - Ogni blocco `###` contiene i quattro sotto-heading `####` del template:
   - `#### Obiettivo` — cosa volevamo ottenere e perché
   - `#### Cosa è stato fatto` — i passaggi in modo umano, incl. difficoltà
   - `#### Risultato ottenuto` — pieno/parziale e cosa abbiamo, sintetico
   - `#### Dettagli tecnici` — commit, file, comandi, numeri esatti (per audit)
+
+Esempio di due sessioni separate dal `---`:
+
+```markdown
+### Primo task
+#### Obiettivo
+...
+#### Dettagli tecnici
+...
+
+---
+
+### Secondo task
+#### Obiettivo
+...
+```
 
 ### Altre sezioni
 
@@ -130,9 +155,11 @@ prettier --write "<nota_del_giorno>.md" --print-width 130 --prose-wrap always
 
 Dopo aver creato/aggiornato la nota, controlla che:
 
-- ogni task in 🎯 Obiettivi abbia un header `###` corrispondente (link risolto);
+- ogni task in 🎯 Obiettivi abbia un header `###` corrispondente (link risolto) e usi
+  la forma aliasata `[[#header|alias]]` con l'ancora identica all'header;
 - ogni sessione `###` abbia i quattro `####` (Obiettivo, Cosa è stato fatto,
   Risultato, Dettagli tecnici);
+- tra un blocco `###` e il successivo ci sia un `---` su riga propria;
 - i dettagli tecnici (commit, path, numeri) combacino con quanto realmente fatto
   nella sessione;
 - frontmatter e titolo rispettino i formati sopra;
