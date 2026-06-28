@@ -9,32 +9,49 @@ Crea una nuova release del plugin Trinity: aggiorna `version` in
 `.claude-plugin/plugin.json`, committa, crea il tag e — SOLO dopo conferma
 esplicita — fa il push. MAI pushare in automatico.
 
+Prima del bump, se ci sono modifiche pendenti, le organizza in **commit atomici**
+(uno per intervento), ne propone i messaggi e li crea SOLO dopo tua validazione.
 La parte meccanica (bump + commit + tag locale) è delegata alla task mise
-`release`; questo comando aggiunge il giudizio sulla versione e il gate di
-conferma sul push.
+`release`; questo comando aggiunge il triage dei commit, il giudizio sulla
+versione e il gate di conferma sul push.
 
 ## Flusso operativo
 
-1. **Stato pulito**: esegui `git status`. Se ci sono modifiche non committate
-   NON correlate alla release, fermati e segnalalo: non includere file estranei
-   nel commit di bump.
+1. **Triage delle modifiche pendenti → commit atomici**:
+   - Esamina TUTTO il pendente: `git status --short`, `git diff`,
+     `git diff --staged`; per i file non tracciati ispeziona il contenuto nuovo.
+   - Raggruppa in **commit atomici**: un singolo intervento logico per commit
+     (Sphynx vuole commit granulari). Per ogni gruppo prepara un messaggio
+     **conventional commit** (`feat`/`fix`/`chore`/`docs`/`refactor`…), coerente
+     con lo storico del repo.
+   - **Mostra il piano e FERMATI per la validazione**: una tabella
+     `# | messaggio | file`. L'utente può cambiare raggruppamenti, riscrivere i
+     messaggi o escludere file. Non procedere senza OK esplicito.
+   - Dopo l'OK, crea i commit **uno alla volta** con **staging selettivo**:
+     - stage dei soli file del gruppo con `git add <paths>` (le eliminazioni si
+       stageano con `git add <path-eliminato>`, oppure `git rm --cached <path>`
+       per sola de-indicizzazione);
+     - poi `git commit -m "<messaggio>"` **senza pathspec** (committa l'index
+       così com'è).
+     - ⚠️ NON usare `git commit -- <paths>`: con file untracked presenti rischia
+       ri-tracciamenti involontari e rompe l'atomicità.
+   - Se il working tree è già pulito, salta questa fase.
 2. **Versione attuale**: leggi `version` da `.claude-plugin/plugin.json` e
-   l'ultimo tag con `git describe --tags --abbrev=0` (il repo parte da 0 tag:
-   il primo tag nasce da questa release in poi — non si retro-tagga lo storico).
+   l'ultimo tag con `git describe --tags --abbrev=0`.
 3. **Nuova versione** (semver `MAJOR.MINOR.PATCH`):
    - Se l'utente ha passato `X.Y.Z`, usala.
    - Se ha passato `major|minor|patch`, calcola il bump dalla versione attuale.
    - Altrimenti proponi un bump guardando i commit dall'ultimo tag/bump
      (`git log <ref>..HEAD --oneline`) e CHIEDI conferma prima di procedere.
-4. **Esegui la parte meccanica** (bump + commit `chore(plugin): bump X.Y.Z` +
-   tag `vX.Y.Z`, tutto locale):
+4. **Bump (commit atomico a sé)** — bump + commit `chore(plugin): bump X.Y.Z` +
+   tag annotato `vX.Y.Z`, tutto locale e separato dai commit della feature:
 
    ```bash
    mise run release <NUOVA_VERSIONE>
    ```
 
-5. **Push (gate di conferma)**: mostra cosa verrebbe pushato (commit + tag) e
-   CHIEDI conferma esplicita. Solo dopo l'OK:
+5. **Push finale (gate di conferma)**: un SOLO push per tutti i commit + il tag.
+   Mostra cosa verrebbe pushato e CHIEDI conferma esplicita. Solo dopo l'OK:
 
    ```bash
    git push --follow-tags origin master
@@ -68,10 +85,15 @@ In caso di dubbio tra due livelli, proponi quello più alto e CHIEDI conferma.
 ## Regole
 
 - Mai fare push senza conferma esplicita dell'utente (vale anche la regola core
-  "Per Git non fare push automatici").
+  "Per Git non fare push automatici"). Un solo push finale, dopo tutti i commit.
+- Commit **granulari e atomici**: un intervento logico per commit, mai mischiare
+  modifiche scollegate nello stesso commit.
+- Crea i commit sempre con staging selettivo + `git commit` senza pathspec; non
+  usare `git commit -- <paths>` (rompe l'atomicità con untracked presenti).
+- Non committare mai senza aver prima mostrato e fatto validare il piano dei
+  commit (file + messaggi).
 - Il numero di versione deve combaciare tra `plugin.json` e il tag (`vX.Y.Z`).
 - Mantieni la convenzione di commit esistente: `chore(plugin): bump X.Y.Z`.
-- Se `git status` non è pulito su file non correlati, fermati prima del commit.
 - Non inventare un changelog: se serve, ricavalo dai commit reali tra le due
   versioni.
 - Dopo un bump il manifest cambia: ricorda che il plugin viene riletto solo al
