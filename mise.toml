@@ -265,6 +265,6 @@ with open(p, "w", encoding="utf-8", newline="\\n") as f:
 PY
 git add .claude-plugin/plugin.json
 git commit -m "chore(plugin): bump $V"
-git tag "v$V"
+git tag -a "v$V" -m "release v$V"
 echo "OK: version=$V, commit e tag v$V creati (locali). Push con /trinity:release o: git push --follow-tags origin master"
 """
