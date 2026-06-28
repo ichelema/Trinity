@@ -250,9 +250,10 @@ run = "git config core.hooksPath .githooks && echo 'core.hooksPath = .githooks'"
 [tasks.release]
 description = "Aggiorna version in .claude-plugin/plugin.json, fa il commit (chore(plugin): bump) e crea il tag vX.Y.Z locale. NON fa push. Uso: mise run release 0.6.12"
 shell = "bash -c"
+usage = 'arg "<version>" help="Nuova versione SemVer, es. 0.7.0"'
 run = """
 set -euo pipefail
-V="{{arg(name='version')}}"
+V="${usage_version:?Uso: mise run release X.Y.Z}"
 python - "$V" <<'PY'
 import json, sys
 p = ".claude-plugin/plugin.json"
