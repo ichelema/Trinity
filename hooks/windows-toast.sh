@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Wrapper toast: trova pwsh e lancia windows-toast.ps1 (BurntToast).
-# Usato dal Notification hook (hooks.json) e da pretool-notify.sh. Lo stdin
+# Usato dal Notification hook (hooks.json). Lo stdin
 # (eventuale {"message":...}) fluisce al .ps1, che senza message usa un default.
 #
 # pwsh non è nel PATH MSYS: cercalo, poi ricadi sull'install standard di PowerShell 7.
