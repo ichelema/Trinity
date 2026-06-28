@@ -243,3 +243,27 @@ run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
 description = "Configura git per usare .githooks/ (post-commit/post-merge: ridistribuiscono la callback LiteLLM se script/litellm-callbacks.py cambia)."
 shell = "bash -c"
 run = "git config core.hooksPath .githooks && echo 'core.hooksPath = .githooks'"
+
+# --- Release plugin --------------------------------------------------------
+# Parte meccanica della release: bump version + commit + tag LOCALE.
+# NON fa push (lo gestisce /trinity:release con conferma). Uso: mise run release 0.6.12
+[tasks.release]
+description = "Aggiorna version in .claude-plugin/plugin.json, fa il commit (chore(plugin): bump) e crea il tag vX.Y.Z locale. NON fa push. Uso: mise run release 0.6.12"
+shell = "bash -c"
+run = """
+set -euo pipefail
+V="{{arg(name='version')}}"
+python - "$V" <<'PY'
+import json, sys
+p = ".claude-plugin/plugin.json"
+d = json.load(open(p, encoding="utf-8"))
+d["version"] = sys.argv[1]
+with open(p, "w", encoding="utf-8") as f:
+    json.dump(d, f, ensure_ascii=False, indent=2)
+    f.write("\\n")
+PY
+git add .claude-plugin/plugin.json
+git commit -m "chore(plugin): bump $V"
+git tag "v$V"
+echo "OK: version=$V, commit e tag v$V creati (locali). Push con /trinity:release o: git push --follow-tags origin master"
+"""
