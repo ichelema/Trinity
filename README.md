@@ -19,7 +19,7 @@ E:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strument
 | **Runtime del plugin** | ciò che i progetti ereditano: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json` |
 | **Strumenti di sviluppo** | servono alla manutenzione di Trinity, non ai progetti: benchmark (`hooks/hindsight/benchmark/`), dashboard log (`hooks/hindsight/hindsight-dashboard/`), check aggiornamenti (`scheduler/`) |
 
-La env var **`TRINITY_PLUGIN_DIR`** (definita nell'env utente, vedi §8) punta alla root di 
+La env var **`TRINITY_PLUGIN_DIR`** (definita nell'env utente, vedi §10) punta alla root di 
 questo repo: la usano i comandi documentati nelle skill e, come override opzionale, gli script — 
 che altrimenti risolvono i path relativamente a sé stessi.
 
@@ -124,24 +124,25 @@ Conseguenze pratiche:
 - Vale in **ogni** progetto col plugin attivo, senza bisogno di un `CLAUDE.md`.
 - Il `CLAUDE.md` locale di un progetto ha **precedenza** in caso di conflitto (è più specifico).
 - Per modificare il comportamento dell'agente si edita **questo file**, non i singoli progetti.
-- I path che cambiano per macchina **non** sono nel file: vengono da variabili d'ambiente (vedi §8).
+- I path che cambiano per macchina **non** sono nel file: vengono da variabili d'ambiente (vedi §10).
 
 ---
 
 ## 5. Skill incluse
 
-In `skills/`, attivate per rilevanza dall'hook skill-eval o a richiesta:
+In `skills/` (11), attivate per rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |
 |---|---|
 | `hindsight` | memoria persistente (retain/recall/reflect), banchi |
 | `obsidian` / `obsidian-cli` | vault Obsidian: note, Dataview, canvas / operazioni via CLI |
+| `notebooklm` | NotebookLM via MCP exe-free: notebook, sources, chat, deep research |
 | `mise` | gestione runtime, env e task |
 | `nushell` | pipeline su dati strutturati |
 | `ruby` | gem per analisi dati in Ruby |
 | `excel-data-analyst` | analisi e grafici da file Excel (Python) |
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
-| `double-commander-docs` | ricerca nella doc locale di Double Commander |
+| `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `book-to-skill` | converte libri/documenti in skill strutturate |
 
 ---
@@ -154,12 +155,49 @@ collidono con i comandi locali del progetto:
 | Comando | Funzione |
 |---|---|
 | `/trinity:reflect` | riflessione strategica sulla memoria Hindsight del progetto |
+| `/trinity:promote` | promozione curata dei fatti dai bank di progetto al bank core |
 | `/trinity:hindsight-create-agent` | crea un subagent con memoria Hindsight isolata per namespace tag |
-| `/trinity:audit-plugin-nvim` | audit di un plugin Neovim (report, fix guidati, commit) |
+| `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
+| `/trinity:ccr_model` | elenca i modelli configurati in ccr e le route attuali |
+| `/trinity:release` | versiona il plugin (bump, commit, tag) e push dopo conferma |
 
 ---
 
-## 7. Memoria Hindsight (multi-bank: core + bank per progetto)
+## 7. Server MCP del plugin
+
+Il `.mcp.json` nella root del plugin registra i server MCP che Trinity porta in **ogni**
+progetto (sono file del plugin, non del singolo progetto):
+
+| Server | Tipo | Cosa fornisce |
+|---|---|---|
+| `hindsight` | http (`127.0.0.1:8888`) | memoria persistente Hindsight (retain/recall/reflect) — vedi §9 |
+| `playwright` | stdio (node) | automazione browser headless (Playwright) |
+| `notebooklm` | stdio (python, exe-free) | Google NotebookLM: notebook, sources, chat, artifact, deep research |
+| `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
+| `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — `disabled: true` nel file |
+
+Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
+`E:/AI/tools/notebooklm`, launcher con `truststore` per il proxy Eni): i file del plugin
+restano il *cervello*, il runtime sta sul sistema (vedi §1). I due server `disabled: true`
+non si avviano salvo riabilitazione (`enabledMcpjsonServers`). Oltre a questi, Claude Code
+espone i propri MCP **built-in** (es. `claude-in-chrome`), non gestiti da Trinity.
+
+---
+
+## 8. Plugin esterni usati con Trinity
+
+Plugin Claude Code di **terze parti**, abilitati a livello **utente**
+(`~/.claude/settings.json` → `enabledPlugins`), quindi attivi in ogni progetto accanto a
+Trinity. Non sono codice di questo repo: il loro sorgente vive fuori e va installato
+per-macchina.
+
+| Plugin | Versione | Cosa fa | Sorgente | Note |
+|---|---|---|---|---|
+| `yt-extract` | 1.8.2 | transcript, summary, screenshot e metadati da video YouTube | `E:/AI/tools/claude-code-youtube-extract` | install exe-free; la patch `run_ytdlp` (`python -m yt_dlp`) va riapplicata dopo ogni update; richiede yt-dlp + ffmpeg |
+
+---
+
+## 9. Memoria Hindsight (multi-bank: core + bank per progetto)
 
 La memoria è organizzata a **due livelli** (dal 2026-06-12): un bank **CORE** condiviso
 (`trinity-project`, le informazioni trasversali — preferenze utente, vincoli d'ambiente,
@@ -233,7 +271,7 @@ override parziale non cancella le chiavi non menzionate. Esempio (`<progetto>/hi
 
 ---
 
-## 8. Setup per-macchina (valori machine-specific)
+## 10. Setup per-macchina (valori machine-specific)
 
 Il plugin non contiene path hardcoded: i valori che cambiano da macchina a macchina vengono 
 da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude/settings.json` 
@@ -272,10 +310,10 @@ una variabile separata.
 ```
 Trinity/
 ├── core-behavior.md         comportamento iniettato al SessionStart
-├── .mcp.json                server MCP Hindsight
+├── .mcp.json                server MCP (hindsight, playwright, notebooklm; excalidraw/obsidian off)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── skills/                  10 skill
+├── skills/                  11 skill
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval.*         suggerimento skill
