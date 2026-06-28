@@ -258,7 +258,7 @@ import json, sys
 p = ".claude-plugin/plugin.json"
 d = json.load(open(p, encoding="utf-8"))
 d["version"] = sys.argv[1]
-with open(p, "w", encoding="utf-8") as f:
+with open(p, "w", encoding="utf-8", newline="\\n") as f:
     json.dump(d, f, ensure_ascii=False, indent=2)
     f.write("\\n")
 PY
