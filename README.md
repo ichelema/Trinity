@@ -4,14 +4,14 @@ Il **core dell'agente Trinity** come plugin Claude Code: memoria persistente Hin
 condiviso, skill, comandi e hook di notifica. Installato a livello utente, è attivo in **ogni** 
 progetto della macchina, che ne eredita comportamento e memoria.
 
-> Repo unico: `D:\AI\Claude\Trinity` (dal 2026-06-12 include anche gli ex strumenti di laboratorio).
+> Repo unico: `E:\AI\Claude\Trinity` (dal 2026-06-12 include anche gli ex strumenti di laboratorio).
 
 ---
 
 ## 1. Architettura: repo unico
 
 ```
-D:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strumenti di sviluppo
+E:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strumenti di sviluppo
 ```
 
 | Parte | Ruolo |
@@ -34,53 +34,25 @@ Il plugin è il *cervello*; server, DB e runtime sono il *corpo* installato sul 
 
 ## 2. Come viene caricato il plugin
 
-> ⚠️ **Datato (modello marketplace).** Dal 2026-06-19 il plugin è caricato come **skills-dir**
-> (junction `~/.claude/skills/trinity` → repo): live al riavvio, niente `plugin install`/`update`,
-> niente bump, niente `marketplace.json`. Le istruzioni di questa sezione descrivono il **vecchio**
-> modello e non sono più operative.
+Il plugin **non è legato a un progetto**: è abilitato a livello utente tramite **skills-dir** e si
+carica in automatico ovunque apri Claude Code.
 
-Il plugin **non è legato a un progetto**: è abilitato a livello utente, quindi si carica in automatico ovunque apri Claude Code. L'interruttore è in `~/.claude/settings.json`:
-
-```json
-"enabledPlugins": { "trinity@trinity-marketplace": true }
-```
-
-Sequenza all'avvio, in qualsiasi cartella:
+**Meccanismo (dal 2026-06-19):** junction NTFS che punta la directory skills di Claude Code al repo:
 
 ```
-1. ~/.claude/settings.json      → enabledPlugins: trinity = true   → "caricalo"
-2. ~/.claude/plugins/installed_plugins.json → appartiene a trinity-marketplace
-3. ~/.claude/plugins/known_marketplaces.json → directory D:\AI\Claude\Trinity
-4. Carica da lì: hooks/, skills/, commands/, .mcp.json, core-behavior.md
+~/.claude/skills/trinity  →  E:\AI\Claude\Trinity
 ```
 
-**Distribuzione** (marketplace locale, già configurato):
+Claude Code scopre il plugin al SessionStart scansionando `~/.claude/skills/`. Non servono
+`plugin install`, `plugin update`, bump di versione o `marketplace.json`: è sufficiente riavviare
+Claude Code dopo ogni modifica al repo.
+
+**Ricreare la junction** (su un nuovo PC o dopo averla rimossa):
 
 ```bash
-claude plugin marketplace add D:/AI/Claude/Trinity
-claude plugin install trinity@trinity-marketplace
-```
-
-**Disattivarlo in un singolo progetto** (i settings di progetto vincono su quelli utente):
-
-```json
-// .claude/settings.json del progetto
-"enabledPlugins": { "trinity@trinity-marketplace": false }
-```
-
-**Aggiornare la copia installata** — l'updater confronta la `version` del manifest, non i commit, 
-quindi serve il bump:
-
-```bash
-# 1. bump "version" in .claude-plugin/plugin.json
-# 2.
-claude plugin update trinity@trinity-marketplace
-```
-
-**Sviluppo senza installare:**
-
-```bash
-claude --plugin-dir D:/AI/Claude/Trinity
+MSYS_NO_PATHCONV=1 cmd /c mklink /J \
+  "%USERPROFILE%\.claude\skills\trinity" \
+  "E:\AI\Claude\Trinity"
 ```
 
 ---
@@ -272,7 +244,7 @@ da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude
   "env": {
     "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
     "OBSIDIAN_VAULT_NAME": "Sinapsi",
-    "TRINITY_PLUGIN_DIR": "D:/AI/Claude/Trinity"
+    "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity"
   }
 }
 ```
@@ -299,8 +271,6 @@ una variabile separata.
 
 ```
 Trinity/
-├── .claude-plugin/
-│   └── plugin.json          manifest (legacy: il caricamento ora è skills-dir)
 ├── core-behavior.md         comportamento iniettato al SessionStart
 ├── .mcp.json                server MCP Hindsight
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
@@ -309,7 +279,6 @@ Trinity/
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval.*         suggerimento skill
-│   ├── pretool-notify.sh    notifica permessi
 │   ├── windows-toast.ps1    toast Windows
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, ops, tools
 │       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
