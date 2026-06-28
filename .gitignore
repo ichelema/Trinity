@@ -1,4 +1,5 @@
 logs/
+.ruby-lsp/
 __pycache__/
 *.pyc
 .ruff_cache/
@@ -6,7 +7,7 @@ hooks/hindsight/data/
 *.bak
 hooks/hindsight/benchmark/bench_results/
 hooks/hindsight/benchmark/bench_results_rerank/
-.playwright-mcp/
+data/playwright-mcp/
 /excalidraw.log
 /scratchpad.md
 

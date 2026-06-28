@@ -27,8 +27,20 @@
       "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node.exe",
       "args": [
         "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
-        "--browser", "chrome"
+        "--browser", "chrome",
+        "--output-dir", "E:/AI/Claude/Trinity/data/playwright-mcp"
       ]
+    },
+    "notebooklm": {
+      "type": "stdio",
+      "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/python/3.13.13/python.exe",
+      "args": [
+        "E:/AI/tools/notebooklm-data/run_notebooklm_mcp.py"
+      ],
+      "env": {
+        "PYTHONPATH": "E:/AI/tools/notebooklm",
+        "NOTEBOOKLM_HOME": "E:/AI/tools/notebooklm-data/nbhome"
+      }
     }
   }
 }
