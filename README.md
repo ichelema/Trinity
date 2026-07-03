@@ -285,7 +285,21 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   ZeroEntropy non risponde, fallback a interleaving senza rerank (la soglia non viene
   applicata). Il core entra **solo se listato**: `["auto"]` da solo = progetto totalmente
   isolato. Con un solo bank risolto il percorso è la singola POST di sempre, zero overhead
-  multi-bank e soglia non applicata.
+  multi-bank; la soglia client non si applica, ma i floor `min_scores` server-side sì
+  (bullet successivo).
+- **Floor per-stadio `min_scores`** (hindsight-api ≥ 0.8.4): le chiavi
+  `recall_min_semantic` / `recall_min_keyword` (cutoff retrieval-level, dentro i bracci SQL:
+  un risultato tagliato da un braccio può rientrare dall'altro) e `recall_min_reranker` /
+  `recall_min_final` (filtri post-rerank applicati dal server) viaggiano nel payload di
+  recall e valgono per **entrambi** i percorsi, single- e multi-bank. Tutte `null` = nessun
+  filtro; il plugin attiva `recall_min_reranker: 0.15`, tarato su dati reali del bank core
+  (rumore fuori dominio < 0.08, risultati legittimi ≥ 0.27). Il debug log riporta per ogni
+  memoria i punteggi per-stadio del server (`scores.{final,reranker,semantic,keyword}`)
+  accanto allo `score` del rerank client multi-bank.
+- **Freshness del ranking**: il server applica una curva di recency exponential con emivita
+  60 giorni (`HINDSIGHT_API_RECENCY_DECAY_*` in `mise.toml`, config server-globale): boost
+  cappato a ±10%, fatti a 60 giorni neutri — i near-duplicate superati perdono contro la
+  versione fresca a parità di rilevanza.
 - **Retrocompat**: un `api_url` esplicito in un override (file o env) vince sul blocco bank e
   ripristina il comportamento single-bank. I tag (`claude-code`, `repo:`, `branch:`) restano
   invariati.
