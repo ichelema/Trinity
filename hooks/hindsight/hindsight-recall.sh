@@ -131,15 +131,23 @@ debug_log(
     query=prompt,
     cache=source,
     banks=[u.rsplit("/", 1)[-1] for u in bank_urls],
-    **{k: v for k, v in merge_meta.items() if k in ("merge", "rerank_error") and v},
+    **{k: v for k, v in merge_meta.items()
+       if k in ("merge", "rerank_error", "min_score", "min_score_filtered", "per_bank_counts")
+       and v not in (None, "")},
     n_results=len(results),
     memories=[
         {
             "type": r.get("type", "?"),
             "text": (r.get("text") or "").strip()[:300],
             "entities": r.get("entities") or [],
+            # punteggio del rerank GLOBALE client-side (solo ramo multi-bank)
             **({"score": round(r["_rerank_score"], 3)}
                if r.get("_rerank_score") is not None else {}),
+            # punteggi per-stadio del server (hindsight-api >=0.8.4); presenti
+            # in entrambi i rami perche' arrivano dalla response del bank
+            **({"scores": {k: (round(v, 3) if isinstance(v, (int, float)) else v)
+                           for k, v in r["scores"].items()}}
+               if isinstance(r.get("scores"), dict) else {}),
         }
         for r in results[:_max_results]
     ],
