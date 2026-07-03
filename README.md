@@ -47,6 +47,11 @@ Claude Code scopre il plugin al SessionStart scansionando `~/.claude/skills/`. N
 `plugin install`, `plugin update`, bump di versione o `marketplace.json`: è sufficiente riavviare
 Claude Code dopo ogni modifica al repo.
 
+> **Requisito:** Claude Code riconosce un plugin da una cosa sola: la presenza di
+> `.claude-plugin/plugin.json` nella root del repo. Senza questo file, la junction
+> `~/.claude/skills/trinity` punta a una directory che Claude Code ignora
+> silenziosamente — il plugin non si carica in nessun progetto.
+
 **Ricreare la junction** (su un nuovo PC o dopo averla rimossa):
 
 ```bash
@@ -74,14 +79,15 @@ All'avvio Claude Code:
 
 Eventi registrati dal plugin:
 
-| Evento | Comandi |
-|---|---|
-| `UserPromptSubmit` | skill-eval (suggerisce skill) · Hindsight **recall** |
-| `PreToolUse` | notifica permessi · auto-allow di `git commit` |
-| `SessionStart` | avvia server Hindsight · **inietta `core-behavior.md`** · inietta mental model |
-| `Stop` | suono di fine · Hindsight **retain** (async) |
-| `SessionEnd` | shutdown servizi Hindsight |
-| `Notification` | suono + toast Windows sul prompt permessi |
+| Evento | Matcher | Comandi |
+|---|---|---|
+| `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · inietta mental model |
+| `UserPromptSubmit` | — | skill-eval · Hindsight **recall** · failcheck |
+| `PreToolUse` | `Bash` | auto-allow `git commit` (solo se senza push nella stessa riga) |
+| `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
+| `Stop` | — | suono di fine · Hindsight **retain** (async) |
+| `SessionEnd` | — | shutdown servizi Hindsight |
+| `Notification` | `permission_prompt` | suono + toast Windows |
 
 Esempio — un hook del plugin (da `hooks/hooks.json`):
 
@@ -93,15 +99,60 @@ Esempio — un hook del plugin (da `hooks/hooks.json`):
 }
 ```
 
-Gli script `.sh`/`.py` referenziati stanno in `hooks/` e `hooks/hindsight/`; risolvono i propri fratelli 
-relativamente alla loro posizione, quindi il plugin è rilocabile.
+Gli script `.sh`/`.py`/`.rb` referenziati stanno in `hooks/` e `hooks/hindsight/`; risolvono i propri 
+fratelli relativamente alla loro posizione, quindi il plugin è rilocabile.
+
+### Caricamento skill via skill-eval
+
+A ogni prompt l'hook `UserPromptSubmit` esegue **`hooks/skill-eval.sh`**, che delega a un motore 
+Node.js (`skill-eval.js`). Il motore analizza il testo del prompt e, se trova corrispondenze 
+sufficienti, inietta nel contesto del modello un blocco `SKILL ACTIVATION REQUIRED` con le skill 
+più rilevanti — così Claude sa quali skill caricare senza che l'utente debba invocarle a mano.
+
+**Come funziona il punteggio**
+
+Le regole stanno in `hooks/skill-rules.json`. Ogni skill ha una lista di trigger; ogni tipo di 
+trigger vale un certo numero di punti:
+
+| Tipo trigger | Punti | Esempio |
+|---|---|---|
+| `keywords` | 2 | la parola "hindsight" nel prompt |
+| `keywordPatterns` | 3 | regex sul prompt (es. `"retain\|recall"`) |
+| `intentPatterns` | 4 | pattern che esprimono un'azione (es. `"voglio ricordare"`) |
+| `pathPatterns` | 4 | path con estensione riconosciuta menzionato nel prompt |
+| `directoryMatch` | 5 | file in una cartella mappata (es. `data/` → skill `excel-data-analyst`) |
+| `contentPatterns` | 3 | pattern nel corpo del prompt (case-sensitive) |
+| `contextPatterns` | 2 | sottostringa di contesto generica |
+
+Una skill viene proposta solo se raggiunge **almeno 3 punti** (`minConfidenceScore`). Vengono 
+mostrate al massimo le **3 skill più rilevanti** (`maxSkillsToShow`), ordinate per score e poi 
+per `priority`. Se una skill ha la sua cartella in `skills/` ma non contiene `SKILL.md` (es. 
+rinominato in `SKILL.md.disabled`), viene ignorata anche se avrebbe raggiunto il punteggio.
+
+**Output**
+
+Se almeno una skill supera la soglia, `skill-eval.js` scrive su stdout un blocco come:
+
+```
+SKILL ACTIVATION REQUIRED
+
+Matched skills (ranked by relevance):
+1. hindsight (HIGH confidence)
+   Matched: keyword "retain", intent detected
+2. obsidian (LOW confidence)
+   Matched: keyword "vault"
+```
+
+Questo testo arriva al modello come `additionalContext` dell'hook `UserPromptSubmit`, 
+visibile nel contesto della sessione prima che il modello risponda.
 
 ---
 
 ## 4. Iniezione di `core-behavior.md`
 
 `core-behavior.md` (root del plugin) contiene il **comportamento universale** dell'agente: principi, 
-"prima la semplicità", modifiche chirurgiche, regole operative shell/path, Nushell, linguaggi. 
+"prima la semplicità", modifiche chirurgiche, esecuzione guidata dagli obiettivi, ambiente di lavoro, 
+regole operative shell/path, navigazione codice via LSP, Nushell, struttura directory dei progetti, linguaggi. 
 Non è un file di sistema speciale: viene iniettato come **contesto** a ogni sessione da un hook 
 `SessionStart`, e il suo stdout entra nel contesto del modello.
 
@@ -182,6 +233,11 @@ restano il *cervello*, il runtime sta sul sistema (vedi §1). I due server `disa
 non si avviano salvo riabilitazione (`enabledMcpjsonServers`). Oltre a questi, Claude Code
 espone i propri MCP **built-in** (es. `claude-in-chrome`), non gestiti da Trinity.
 
+**Per esempio di utilizzo vedere il videp youtube**
+https://youtu.be/cEPzAwb1ldU?si=YX44a7rfZnbnXM7q
+
+
+
 ---
 
 ## 8. Plugin esterni usati con Trinity
@@ -212,7 +268,8 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   "api_base": "http://127.0.0.1:8888/v1/default",
   "core_bank": "trinity-project",
   "retain_bank": "auto",
-  "recall_banks": ["auto", "core"]
+  "recall_banks": ["auto", "core"],
+  "promote_exclude_banks": ["obsidian"]
 }
 ```
 
@@ -220,11 +277,15 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   (nome dal remote `origin`, fallback basename; fuori da git — o dentro il repo del plugin
   stesso — ricade sul core); `core` = il core; altro valore = nome bank letterale. Il bank si
   **auto-crea al primo retain**, zero provisioning.
-- **`recall_banks`** (array, la lettura aggrega): fan-out **parallelo** sui bank risolti,
-  unione dei candidati e **rerank globale zerank-2** via REST ZeroEntropy (gli score di bank
-  diversi non sono confrontabili tra loro; se ZeroEntropy non risponde, fallback a
-  interleaving senza rerank). Il core entra **solo se listato**: `["auto"]` da solo = progetto
-  totalmente isolato. Con un solo bank risolto il percorso è identico al single-bank storico.
+- **`recall_banks`** (array, la lettura aggrega): fan-out **parallelo** sui bank risolti, fino
+  a `recall_per_bank_candidates` candidati per bank (plugin: 6), poi dedup, rerank globale
+  **zerank-2** via ZeroEntropy (gli score di bank diversi non sono confrontabili tra loro),
+  filtro sotto la soglia `recall_min_rerank_score` (0.5 nel plugin, solo percorso multi-bank),
+  taglio finale a `recall_max_results_multibank` risultati iniettati (5 nel plugin). Se
+  ZeroEntropy non risponde, fallback a interleaving senza rerank (la soglia non viene
+  applicata). Il core entra **solo se listato**: `["auto"]` da solo = progetto totalmente
+  isolato. Con un solo bank risolto il percorso è la singola POST di sempre, zero overhead
+  multi-bank e soglia non applicata.
 - **Retrocompat**: un `api_url` esplicito in un override (file o env) vince sul blocco bank e
   ripristina il comportamento single-bank. I tag (`claude-code`, `repo:`, `branch:`) restano
   invariati.
@@ -237,9 +298,14 @@ python hooks/hindsight/lib/hindsight_config.py --banks   # URL retain + recall r
 
 **Ricette rapide** (override nel `hindsight.config.json` del progetto):
 
+> **Nota:** la config del plugin ha `retain_enabled: false` — il retain automatico è
+> **opt-in per progetto**: ogni progetto che vuole la memoria automatica deve abilitarlo
+> esplicitamente con `{ "retain_enabled": true }`.
+
 | Voglio… | Override |
 |---|---|
-| comportamento di default: scrive sul bank del progetto, legge progetto+core | nessuno (eredita il plugin) |
+| default (solo recall): legge progetto+core, retain disabilitato | nessuno (eredita il plugin) |
+| abilitare il retain automatico (scrive sul bank del progetto) | `{ "retain_enabled": true }` |
 | progetto totalmente isolato (non legge nemmeno il core) | `{ "bank": { "recall_banks": ["auto"] } }` |
 | progetto che scrive direttamente sul core (niente bank proprio) | `{ "bank": { "retain_bank": "core" } }` |
 | leggere anche il bank di un altro progetto | `{ "bank": { "recall_banks": ["auto", "NomeAltroBank", "core"] } }` |
@@ -268,6 +334,32 @@ override parziale non cancella le chiavi non menzionate. Esempio (`<progetto>/hi
 ```json
 { "retain_enabled": true, "bank": { "recall_banks": ["auto"] } }
 ```
+
+**Failcheck dei retain falliti.** Il retain è asincrono: Claude Code lo lancia in background
+e non aspetta il risultato. Se l'estrazione LLM fallisce (es. credito OpenAI esaurito), la
+memoria **non viene salvata** senza che nessuno se ne accorga. L'hook `hindsight-failcheck.sh`
+(terzo hook di `UserPromptSubmit`) interroga l'endpoint `/operations?status=failed` su tutti
+i bank (retain + recall) a ogni prompt, deduplicando le notifiche via state file in `%TEMP%`
+con finestra di 24h. Le failed vengono classificate in due categorie: **retain falliti**
+(perdita di memoria — critici) e **task di mantenimento falliti** (consolidation,
+refresh_mental_model — si auto-recuperano al ciclo successivo). L'avviso arriva come
+`additionalContext` nel contesto del modello. Controllato dal flag `failcheck_enabled` (di
+default `true`, indipendente da `recall_enabled`/`retain_enabled`).
+
+**Mental model — iniezione a SessionStart.** Oltre al recall real-time per prompt, Hindsight
+inietta a ogni `SessionStart` tre **mental model** sintetici via `hindsight-mm-inject.sh`:
+riassunti tematici generati interrogando il bank con query predefinite, che danno al modello
+un profilo costante dell'utente e del progetto senza aspettare che il recall lo ricostruisca
+dal flusso dei prompt. Configurati in `hindsight.config.json` → `mental_models`:
+
+| id | Cosa sintetizza |
+|---|---|
+| `user-profile` | ruolo, preferenze strumenti/linguaggi, stile comunicazione, ambiente di lavoro |
+| `project-conventions` | shell/path, gestione pacchetti, regole git, sicurezza, posizione file test |
+| `recurring-learnings` | bug ricorrenti, workaround, lezioni apprese sul campo, criticità toolchain |
+
+`mental_models_inject_on_start: true` e `mental_models_inject_ids` nel config del plugin
+controllano quali vengono caricati. Il token budget è `mental_model_max_tokens` (plugin: 2048).
 
 ---
 
@@ -305,6 +397,468 @@ una variabile separata.
 
 ---
 
+## 11. Job schedulati (System Scheduler)
+
+Sei job girano in background via **System Scheduler (Splinterware)**, lo scheduler a
+icona nella tray di Windows. Non sono hook Claude Code: girano indipendentemente dalla
+sessione, secondo una cadenza configurata nella GUI del programma. Ogni job segue la stessa
+struttura a tre livelli:
+
+```
+System Scheduler (orario programmato)
+  └─ <nome>-scheduled.cmd     ponte Windows → MSYS2 (imposta MSYSTEM, HOME, PATH)
+       └─ <nome>-scheduled.sh  wrapper: log, gestione alert, exit code
+            └─ mise run <task>  dà Ruby/Python giusti + env TLS proxy aziendale
+```
+
+Il `.cmd` è necessario perché System Scheduler è un eseguibile Windows puro: non può lanciare
+direttamente uno script MSYS2 senza che qualcuno prima imposti l'ambiente UCRT64. Il `.sh`
+gestisce log (una riga JSON per run), alert via Notepad e codici d'uscita standard (`0` = OK,
+`10` = novità/candidati, `3` = server Hindsight giù — il job salta senza tentare la
+connessione).
+
+| Job | Cartella | Cadenza | Cosa fa |
+|---|---|---|---|
+| `api-check` | `scheduler/check_update_hindsight_api/` | settimanale | Controlla PyPI: nuova versione di `hindsight-api` o `hindsight-api-slim` rispetto a quella installata. Baseline = versione installata (si alza da sola dopo ogni upgrade, niente pin da aggiornare) |
+| `cp-check` | `scheduler/check_update_hindsight_control_plane/` | settimanale | Controlla npm: nuova versione di `@vectorize-io/hindsight-control-plane` rispetto al pin nel `mise.toml`. Baseline = pin (va alzato a mano nel `mise.toml` per aggiornare) |
+| `promote-scan` | `scheduler/promote_scan/` | settimanale | Scansiona i bank Hindsight di progetto, triage LLM (gpt-4.1-nano) dei fatti candidati alla promozione sul core. Non promuove nulla: apre un alert se ci sono candidati per `/trinity:promote`. Verdetti cachati in `logs/promote-state.json` |
+| `nb-auth-refresh` | `scheduler/notebooklm/` | ogni 15–20 min | Rinnova i cookie di sessione di `notebooklm-py` (`__Secure-1PSIDTS`) prima che scadano. Dopo 3 fallimenti consecutivi apre un alert con le istruzioni per rigenerare i cookie SID di base |
+| `nb-check` | `scheduler/check_update_notebooklm/` | settimanale | Controlla PyPI: nuova versione di `notebooklm-py` rispetto a quella installata in `E:/AI/tools/notebooklm`. Baseline = versione installata (dal dist-info locale). Nota: la versione corrente viene da GitHub (`main`, exe-free); l'alert si attiverà quando PyPI raggiungerà la stessa versione |
+| `yt-check` | `scheduler/check_update_yt_extract/` | settimanale | Controlla GitHub (`/releases/latest`, fallback `/tags`): nuova versione del plugin `yt-extract` rispetto al clone locale `E:/AI/tools/claude-code-youtube-extract`. Baseline = prima riga `## [X.Y.Z]` del `CHANGELOG.md`. Ricorda: dopo ogni `git pull` va riapplicata la patch `run_ytdlp()` (exe-free) |
+
+**Alert**: quando un job trova qualcosa da segnalare, scrive `*-ALERT.txt` nella sua cartella
+e lo apre in Notepad. Quando non c'è più nulla, **rimuove** l'alert: la sola presenza del
+file è un segnale affidabile. La variabile `*_NO_OPEN=1` evita l'apertura del Notepad nei
+test manuali (es. `PROMOTE_NO_OPEN=1 bash scheduler/promote_scan/promote-scan-scheduled.sh`).
+
+**Configurazione comune in System Scheduler:**
+
+| Campo | Valore |
+|---|---|
+| Event Type | `Run Application` |
+| Application | path assoluto al `.cmd` della cartella del job |
+| Parameters | *(vuoto)* |
+| Working Dir | `E:\AI\Claude\Trinity` |
+| State | `Minimized` o `Hidden` |
+
+I dettagli di ogni job (campi esatti, note TLS/proxy, variabili override, test manuali) stanno
+nel `README.md` della rispettiva cartella.
+
+---
+
+## 12. External Tools
+
+Strumenti di **terze parti** usati accanto a Trinity ma che **non** fanno parte del plugin: vivono
+fuori dal repo, si installano per-macchina e — a differenza dei plugin (§8) — non si caricano in
+Claude Code, sono processi/proxy esterni.
+
+### 12.1 Headroom (compressione del contesto via proxy)
+
+[Headroom](https://github.com/chopratejas/headroom) comprime il contesto che arriva all'LLM
+(output di tool, log, file, RAG, cronologia) — stessi risultati, **meno token**. Si usa come
+**proxy locale** davanti all'API Anthropic: zero modifiche al codice.
+
+**Vincolo PC Eni:** l'EDR blocca i `.exe`. Headroom è installato **exe-free** (come `notebooklm-py`
+e `yt-extract`): wheel scompattati a mano, mai `pip install`. Il nodo è che la compressione gira in
+un **core Rust** (`headroom._core`) e su PyPI **non esiste un wheel Windows** → il core è stato
+**compilato in locale** con la toolchain Rust di pacman, senza creare `.exe` nuovi.
+
+| Voce | Valore |
+|---|---|
+| Repo sorgente | `E:/AI/tools/headroom` (v0.27.0) |
+| Pacchetto runtime | `E:/AI/tools/headroom-pkg` (dipendenze + `headroom/` + `_core.pyd`) |
+| Python | mise 3.13.13 |
+| Toolchain build | `mingw-w64-ucrt-x86_64-rust` (`/ucrt64/bin/cargo`, target gnu, linker gcc) |
+| Motore compressione | SmartCrusher (JSON) / CodeCompressor (AST) — algoritmici, locali, lingua-agnostici; **niente** modello ML inglese |
+
+#### Installazione (riepilogo)
+
+Le dipendenze sono scaricate con `pip download` e **scompattate a mano** (mai `pip install`, che
+creerebbe i `.exe` dei `console_scripts`). Set minimale: `fastapi`, `uvicorn`, `httpx`, `tiktoken`,
+`pydantic`, `click`, `rich`, `tree-sitter`. **Esclusi** gli extra ML (`onnxruntime`, `transformers`,
+`torch`, `magika`, `fastembed`) — sono lazy, e il loro modello testo (Kompress/ModernBERT) è tarato
+sull'inglese, inutile per la prosa italiana. Escluso anche `ast_grep_cli` (unico wheel con `.exe`
+interni); la compressione del codice usa `tree-sitter`.
+
+Ricompilare il core Rust `_core.pyd` (serve solo se aggiorni il repo):
+
+```bash
+cd E:/AI/tools/headroom
+export PATH="/ucrt64/bin:$PATH"
+export CARGO_HTTP_CHECK_REVOKE=false   # il proxy MITM Eni rompe il check di revoca di schannel
+cargo build --release -p headroom-py --features extension-module
+cp target/release/_core.dll E:/AI/tools/headroom-pkg/headroom/_core.pyd
+```
+
+Verifica finale: **nessun `.exe`** nel pacchetto — `find E:/AI/tools/headroom-pkg -iname '*.exe'`
+deve essere vuoto.
+
+#### Avvio
+
+Due launcher:
+
+| Launcher | Cosa fa |
+|---|---|
+| `E:/AI/tools/headroom-pkg/headroom.sh` | base: imposta `PYTHONPATH` + `HEADROOM_BINARIES_OFFLINE=1` (blocca il fetch a runtime di `difft.exe`/`scc.exe`) e lancia `python -m headroom.cli`. Per i comandi statistiche/dashboard. |
+| `~/.local/bin/claude-headroom.sh` | integrato: avvia il proxy su `:8787`, punta `ANTHROPIC_BASE_URL` al proxy e lancia `claude`; replica le env dell'alias zsh `claude` (`HOME`/`USERPROFILE`/`CLAUDE_CONFIG_DIR`). Allo stop di Claude ferma il proxy se l'ha avviato lui. |
+
+```bash
+claude-headroom.sh            # avvia proxy + Claude attraverso la compressione
+```
+
+> ⚠️ Distinto dai launcher LiteLLM (§13): `claude-headroom.sh` punta a Headroom (`:8787`),
+> `litellm-*.sh` puntano a LiteLLM (`:4000`). Entrambi impostano `ANTHROPIC_BASE_URL` → non
+> mescolarli nella stessa sessione.
+
+#### Monitoraggio (dashboard web)
+
+Con il proxy attivo:
+
+```bash
+E:/AI/tools/headroom-pkg/headroom.sh dashboard      # apre http://127.0.0.1:8787/dashboard
+```
+
+| Comando / endpoint | Cosa mostra |
+|---|---|
+| `headroom.sh dashboard` | UI web **live**: risparmi in tempo reale |
+| `headroom.sh savings` | riepilogo persistente (ledger `~/.headroom/savings_events.jsonl`) |
+| `headroom.sh perf --hours 24` | analisi dai log: token salvati, cache hit, breakdown dei transform |
+| `curl http://127.0.0.1:8787/stats` | statistiche grezze (anche `/stats-history`, `/health`) |
+| `http://127.0.0.1:8787/dashboard` | nel browser vedo la dashboard |
+
+I **token** risparmiati sono tracciati; il valore in **€** resta `0` perché richiede LiteLLM,
+escluso di proposito.
+
+> **Perché il `SAVED` è spesso ~0%?** Headroom preserva il **prompt caching** di Anthropic e
+> protegge il contesto recente: su una sessione di coding con cache piena comprime poco (la cache
+> fa già il risparmio grosso), mentre rende molto su grossi output di tool / JSON. Per comprimere
+> anche le **letture vecchie**, `claude-headroom.sh` imposta
+> `HEADROOM_STALE_READ_COMPRESS_AFTER_TURNS=2` (letture più vecchie di 2 turni diventano
+> comprimibili; alza il valore per essere più conservativo, `0` disattiva). Trade-off: possibili
+> cache miss sul prefix — tieni d'occhio anche la **latenza** in dashboard.
+
+#### Attribuzione per progetto ("Per-Project Savings")
+
+La dashboard ha una sezione **Per-Project Savings** che separa i risparmi per progetto
+invece di un unico totale. Il proxy riconosce un prefisso `/p/<nome>` nel path del base
+URL (`proxy/project_context.py` → `split_project_path`): il primo segmento dopo `/p/`
+viene url-decodato e sanitizzato (solo caratteri stampabili) come nome progetto.
+
+`claude-headroom.sh` accoda automaticamente `/p/<basename della cartella corrente>` a
+`ANTHROPIC_BASE_URL` (gli spazi sono encodati `%20`). Esempio: lanciato da
+`…/Claude/Trinity` la sessione usa `http://127.0.0.1:8787/p/Trinity` e nella dashboard
+compare la riga **`Trinity`** (verificato live). Il nome segue sempre la cartella: nessun
+override.
+
+> Il base URL viene letto **all'avvio** di `claude`: una sessione già in corso non cambia
+> attribuzione a caldo. Per attivarla apri una **nuova** sessione col launcher dalla cartella
+> del progetto — le sessioni Headroom convivono (multi-sessione).
+
+### 12.2 Context Window Dashboard (analisi dei token del contesto)
+
+Web app **locale** che analizza la **context window** di Claude Code: cosa entra in contesto e quanti
+token costa, leggendo i **transcript reali** in `.claude/projects` (nessun dato finto). Una sola vista
+"ciclo di vita" — la composizione pre-prompt più la timeline di ogni interazione — che si aggiorna
+**live** mentre lavori. A differenza di Headroom (proxy che _riduce_ i token), questa solo _analizza_;
+gira come processo esterno e non fa parte del plugin.
+
+| Voce | Valore |
+|---|---|
+| Cartella | `D:/AI/Claude/Dashboard Context Window` |
+| Stack | Ruby + Roda + Puma (backend) · Mithril + Vite (frontend) · mise |
+| Dati | transcript JSONL in `.claude/projects` (`CLAUDE_DIR`, default `E:/msys64/home/Sphynx/.claude`) |
+| Runtime | Ruby 4.0.1 (mise) · Node lts · Mithril 2.3.6 |
+| Porte | Puma `:9292` (API + build) · Vite dev `:5173` (proxy `/api` → `:9292`) |
+
+#### Cosa mostra
+
+- **Before you type anything**: composizione del contesto pre-prompt (system prompt, memoria
+  `MEMORY.md`, descrizioni skill, tool MCP, `CLAUDE.md`, output hook) — token **misurati** da disco e
+  dal transcript, **stimati** ed etichettati dove interni a Claude Code.
+- **Per ogni prompt**: timeline reale degli eventi (tool call, file read, output, risposte di Claude,
+  subagent, hook), con totali per categoria You/Files/Output/Claude/Hooks/Subagent.
+- **Contesto vs limite del modello** (Opus/Sonnet 4.x → 1M, letto da `message.model`), **sparkline**
+  dell'andamento, **pannello Inspect** (input/output di ogni elemento) e un **player** che ripercorre la
+  sessione dall'avvio con scrub.
+- Aggiornamento **live** via polling 2s finché la sessione è viva.
+
+#### Installazione (prima volta)
+
+```bash
+cd "D:/AI/Claude/Dashboard Context Window"
+mise run setup     # bundle install (gem: roda, puma, rackup, json) + npm --prefix web install (mithril, vite)
+```
+
+I task `mise` (in `mise.toml`): `setup` · `dev` · `api` · `web` · `build` · `serve`. Lanciali **dalla
+shell con `mise activate`** (lì `ruby` → 4.0.1, `node` → lts).
+
+#### Sviluppo (hot reload)
+
+Due processi: Puma serve le API su `:9292`, Vite serve il frontend su `:5173` con HMR e fa **proxy** di
+`/api` verso Puma.
+
+```bash
+mise run dev       # avvia Puma :9292 e Vite :5173 insieme → apri http://localhost:5173
+# oppure, in due terminali separati:
+mise run api       # solo backend  → http://localhost:9292
+mise run web       # solo frontend → http://localhost:5173
+```
+
+In sviluppo apri sempre **:5173** (non :9292): è Vite che serve i sorgenti non buildati e inoltra le API.
+
+#### Build di produzione (bundle del frontend)
+
+```bash
+mise run build     # = npm --prefix web run build  →  vite build
+```
+
+Emette il **bundle statico** in `web/dist/`: `index.html` + `assets/index-*.js` e `assets/index-*.css`
+(con content-hash, minificati). È ciò che va in produzione; `web/dist/` è git-ignored e si rigenera a ogni
+build. Roda lo serve da questa cartella (costante `App::DIST` in `app/app.rb`).
+
+#### Produzione (porta singola)
+
+In produzione **un solo processo** Roda/Puma serve sia la SPA buildata sia le API, sulla stessa origine
+`:9292` (niente Vite, niente proxy):
+
+```bash
+mise run serve     # = build del frontend + Puma :9292 che serve web/dist + le API
+# se web/dist è già buildato, basta avviare Puma:
+bundle exec puma -p 9292        # legge config.ru → run App
+```
+
+Apri **http://localhost:9292**. Ferma con `Ctrl-C`. Se apri la root **senza** aver fatto la build, Roda
+risponde con un avviso _"Frontend non buildato"_ (fallback in `app/app.rb`) invece della pagina.
+
+| | Sviluppo | Produzione |
+|---|---|---|
+| Comando | `mise run dev` | `mise run serve` |
+| Frontend | Vite `:5173` (HMR, sorgenti) | Roda serve `web/dist` |
+| API | Puma `:9292` (via proxy) | Puma `:9292` (stessa origine) |
+| URL da aprire | `http://localhost:5173` | `http://localhost:9292` |
+
+API esposte: `/api/projects`, `/api/projects/:id/sessions`, `/api/context/:pid/:sid`,
+`/api/timeline/:pid/:sid?after=N`, `/api/event/:pid/:sid/:index`.
+
+> **Configurazione:** `CLAUDE_DIR` (in `mise.toml`, sezione `[env]`) decide quale cartella `.claude`
+> analizzare. Porta diversa: `bundle exec puma -p 8080` (e in sviluppo aggiorna il `proxy` in
+> `web/vite.config.js`).
+
+> ⚠️ **Windows/MSYS2:** i task `web`/`build` usano `npm` e funzionano nella shell con `mise activate`
+> (`npm` è quello di Node gestito da mise). Se invece `npm` crasha fuori da mise (il wrapper MSYS2 dà
+> `std::bad_weak_ptr` sotto bash), bypassalo lanciando Vite con `node` diretto:
+> `node web/node_modules/vite/bin/vite.js build` (dev: senza `build`, con `--root web`). L'anteprima nel
+> pannello usa `.claude/launch.json` (config `dashboard`, Roda su `:9292`).
+
+---
+
+## 13. Modelli alternativi: LiteLLM e claude-code-router
+
+Claude Code punta di default all'API Anthropic. Per usare altri provider (GPT, DeepSeek, Gemini)
+esistono due approcci complementari, entrambi attivi su questa macchina:
+
+| Approccio | Quando usarlo |
+|---|---|
+| **LiteLLM proxy** | approccio corrente; GPT (ChatGPT Max OAuth) e DeepSeek; più semplice da mantenere |
+| **claude-code-router (CCR)** | router con pipeline di transformer per provider; richiede patch e rebuild del bundle |
+
+---
+
+### 13.1 LiteLLM proxy (porta 4000)
+
+LiteLLM espone un endpoint OpenAI-compatible a `http://127.0.0.1:4000`. Claude Code ci punta
+tramite launcher shell che impostano le variabili d'ambiente corrette prima di lanciare `claude`.
+
+**File coinvolti** (tutti fuori dal repo Trinity, sulla macchina):
+
+| File | Ruolo |
+|---|---|
+| `~/.litellm/litellm_config.yaml` | modelli, routing, `reasoning_effort` per tier |
+| `~/.litellm/callbacks.py` | hook LiteLLM (pre-call, post-call) |
+| `~/.local/bin/litellm-start-proxy.sh` | avvia il proxy via `litellm-proxy-run.py` |
+| `~/.local/bin/litellm-gpt.sh` | launcher Claude Code → GPT/ChatGPT Max (OAuth) |
+| `~/.local/bin/litellm-deepseek.sh` | launcher Claude Code → DeepSeek (dal 2026-06-19) |
+
+Il DB di LiteLLM usa lo stesso Postgres embedded di Hindsight, ma su un database separato
+chiamato `litellm`.
+
+**`callbacks.py` — perché è necessario per il recall Hindsight.**
+
+Quando un hook `UserPromptSubmit` (hindsight-recall, skill-eval) ha qualcosa da dire al modello,
+stampa un JSON con `additionalContext`. Claude Code prende quel testo e lo inserisce nella
+request come messaggio **`role:system` inline**, mescolato tra i messaggi `user`/`assistant`:
+
+```
+request.messages = [
+  { role: "user",   content: "domanda utente" },
+  { role: "system", content: "## Hindsight persistent memory..." },  ← additionalContext
+  { role: "user",   content: "..." },
+  ...
+]
+```
+
+Con **Anthropic diretto** questo funziona: l'API Anthropic accetta `role:system` inline senza
+problemi e il modello vede il recall.
+
+Con **ChatGPT via LiteLLM** il problema è a due livelli:
+
+1. La catena interna LiteLLM `anthropic_messages → completion → responses` trasforma il
+   formato Anthropic in quello OpenAI, conservando solo ruoli `user` e `assistant` e scartando
+   i messaggi `role:system` inline.
+2. Anche se passassero, i modelli ChatGPT rifiutano `role:system` inline con **HTTP 400**.
+
+Risultato senza fix: recall Hindsight e skill-eval **sparivano silenziosamente** ogni volta
+che si usava un modello ChatGPT.
+
+**Soluzione:** la callback `SystemToInstructions.async_pre_call_hook` in `~/.litellm/callbacks.py`
+si attiva prima che la request parta verso ChatGPT e fa questa trasformazione:
+
+```
+PRIMA                                    DOPO
+─────────────────────────────────────    ────────────────────────────────────
+request.system  (top-level)         ┐    request.instructions = <tutto il
+request.messages[role:system] ...   ┘ →    contesto system unificato>
+request.messages = [user, system,        request.messages = [user, assistant,
+                    assistant, ...]                          ...]  ← solo questi
+```
+
+ChatGPT accetta `instructions` come campo nativo per il contesto di sistema. Con questo fix
+recall Hindsight, skill-eval e qualsiasi altro `additionalContext` degli hook arrivano
+correttamente al modello.
+
+> **Dettaglio:** nel pre-call hook il campo `model` è ancora l'**alias** LiteLLM
+> (es. `claude-gpt-5-5`), non il nome reale (`chatgpt/gpt-5.5`), perché il routing avviene
+> dopo. Il match nella callback copre entrambi i prefissi: `claude-gpt-` e `chatgpt/`.
+
+**Versioning e deploy automatico di `callbacks.py`.** La sorgente è versionata in questo
+repo come `scripts/litellm-callbacks.py`. Il file che LiteLLM carica effettivamente è la
+copia in `~/.litellm/callbacks.py` (o `$LITELLM_CONFIG_DIR/callbacks.py`).
+
+Per non dover copiare manualmente dopo ogni modifica, il repo usa **git hook versionati**
+in `.githooks/`:
+
+| File | Scopo |
+|---|---|
+| `.githooks/post-commit` | si attiva dopo ogni `git commit` |
+| `.githooks/post-merge` | si attiva dopo `git merge` / `git pull` |
+| `.githooks/lib/litellm-deploy-common.sh` | logica condivisa: controlla se `scripts/litellm-callbacks.py` è tra i file cambiati; se sì chiama `scripts/deploy-litellm-callback.sh` |
+| `scripts/deploy-litellm-callback.sh` | copia la sorgente in `$LITELLM_CONFIG_DIR` (default `~/.litellm/`) e avvisa di riavviare il proxy |
+
+Gli hook si attivano **solo se `scripts/litellm-callbacks.py` è tra i file modificati**,
+quindi non c'è overhead su commit normali.
+
+> **Nota path:** gli hook usano il git MSYS2 (`/usr/bin/git`) dove `$HOME` punta a
+> `E:\msys64\home\Sphynx`. Con Git-for-Windows `$HOME` sarebbe `C:\Users\EN27553` e il
+> deploy finirebbe nel posto sbagliato.
+
+Per attivare gli hook nel clone locale (operazione una tantum):
+
+```bash
+git -C "$TRINITY_PLUGIN_DIR" config core.hooksPath .githooks
+```
+
+Verifica che sia già impostato:
+
+```bash
+git -C "$TRINITY_PLUGIN_DIR" config core.hooksPath
+# deve rispondere: .githooks
+```
+
+**Variabili d'ambiente comuni nei launcher:**
+
+```bash
+ANTHROPIC_BASE_URL="http://127.0.0.1:4000"
+ANTHROPIC_AUTH_TOKEN="$LITELLM_MASTER_KEY"          # Bearer richiesto dalla discovery /v1/models
+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1        # attiva il picker /model per i modelli gateway
+```
+
+> **Gotcha:** Claude Code filtra la discovery mostrando solo modelli il cui id inizia con `claude`
+> o `anthropic`. Gli alias LiteLLM devono rispettare questo prefisso (es.
+> `claude-deepseek-v4-pro-thinking`, `claude-gpt-5-5-high`) altrimenti non compaiono nel picker
+> `/model`. Il nome upstream nel backend può essere qualsiasi (es. `deepseek/deepseek-v4-pro`).
+
+**Gestione dell'effort.** Claude Code invia l'effort via `/effort` nel campo
+`request.output_config.effort`, che LiteLLM diretto non mappa automaticamente. Soluzione: un
+alias per tier di reasoning per ciascun provider, ognuno con `reasoning_effort` fisso nel
+`litellm_config.yaml`, e le variabili `ANTHROPIC_DEFAULT_SONNET/OPUS/HAIKU_MODEL` nel launcher
+per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFlag: true`).
+
+DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due modelli distinti —
+`claude-deepseek-v4-pro` (no thinking) e `claude-deepseek-v4-pro-thinking` (thinking abilitato).
+
+---
+
+### 13.2 claude-code-router (CCR)
+
+CCR (`@musistudio/claude-code-router`, comando `ccr`) è un proxy con pipeline di **transformer**
+che converte le richieste Claude Code nel formato di ciascun provider. Il fork usato è
+`sphynx79/claude-code-router` (upstream: `musistudio/claude-code-router`), con patch custom
+mantenute nel branch `trinity-patches`.
+
+**Path di configurazione.** Su Windows, `os.homedir()` di Node.js segue `USERPROFILE`
+(non `HOME`): il config finisce in `C:\Users\EN27553\.claude-code-router`, non nella home MSYS.
+Soluzione: junction NTFS che allinea le due path:
+
+```
+C:\Users\EN27553\.claude-code-router  →  C:\msys64\home\EN27553\.claude-code-router
+```
+
+**File persistenti** (sopravvivono agli aggiornamenti npm, non vanno persi):
+
+| File | Ruolo |
+|---|---|
+| `~/.claude-code-router/config.json` | routing + ordine transformer per provider |
+| `~/.claude-code-router/transformers/skill-rehydrate.js` | skill/Hindsight per provider non-Anthropic |
+| `~/.claude-code-router/transformers/effort-transformer.js` | mappa `output_config.effort` → `reasoning.effort` per GPT |
+
+**Transformer chain per provider** (ordine critico — alcuni transformer distruggono `request.messages`):
+
+| Provider | Transformer (in ordine) | Note |
+|---|---|---|
+| `deepseek` | `deepseek → enhancetool → skill-rehydrate` | skill-rehydrate può stare in fondo: deepseek/enhancetool non toccano messages |
+| `openai` | `effort-from-outputconfig → skill-rehydrate → openai-responses` | skill-rehydrate deve precedere openai-responses (che cancella request.messages) |
+| `gemini` | `skill-rehydrate → gemini` | skill-rehydrate deve precedere gemini (che restituisce `{body,config}` senza messages) |
+| `anthropic` | — | nessun transformer personalizzato |
+
+**skill-rehydrate.js** — perché esiste. Gli hook `UserPromptSubmit` (skill-eval, hindsight-recall)
+consegnano il loro `additionalContext` via messaggi `role:system` inline, che il transformer
+Anthropic di CCR scartava silenziosamente. Fix a due livelli:
+
+1. **Patch core** (`anthropic.transformer.ts`): rifonde i messaggi `role:system` inline
+   nell'ultimo messaggio `user`, avvolti in `<injected-system-context>`.
+2. **Transformer esterno** (`skill-rehydrate.js`): per provider non-Anthropic (che non hanno il
+   tool meta `Skill`), riscrive l'istruzione `"Invoke the Skill tool"` in `"read the matched
+   SKILL.md with the Read tool"`, iniettando `<skill-instructions>` direttamente. Dedup via
+   ispezione della history `tool_calls` (self-healing sui compact).
+
+**Patch core — build e deploy.** Le patch si trovano nel branch `trinity-patches` del clone
+locale (`/c/Download/claude-code-router`). Dopo ogni reinstall dal registry npm vanno
+riapplicate:
+
+```bash
+# 1. ferma ccr (file lock su Windows)
+# 2. rebuild (node MSYS2 fa crashare tsc — usare il node di mise)
+mise exec node@24.16.0 -- pnpm build:core && pnpm build:cli   # NO build:ui
+
+# 3. copia il bundle
+cp dist/cli.js \
+  ~/.local/share/mise/installs/node/24.16.0/node_modules/@musistudio/claude-code-router/dist/cli.js
+```
+
+Il bundle originale va tenuto come `.bak` per rollback rapido. Le patch includono 3 commit:
+`anthropic system-inline merge`, `deepseek reasoning_content roundtrip`,
+`openai reasoning_effort mapping`.
+
+> **Gotcha chiave:** CCR è installato nel node di mise — un bump della versione Node lo fa
+> sparire e richiede reinstallazione. Le API key devono essere nelle env var al momento
+> dell'avvio del processo `ccr`; un `export KEY=... && ccr code` non aggiorna le chiavi se il
+> server è già in esecuzione.
+
+**Skill correlata:** `/trinity:ccr_model` mostra i modelli configurati in `config.json` con le
+route attuali (utile per debug del routing).
+
+---
+
 ## Struttura del repo
 
 ```
@@ -317,10 +871,11 @@ Trinity/
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval.*         suggerimento skill
-│   ├── windows-toast.ps1    toast Windows
+│   ├── windows-toast.sh     toast Windows (entry point hook → chiama il .ps1)
+│   ├── windows-toast.ps1    toast Windows (PowerShell, invocato da .sh)
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, ops, tools
 │       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 │       └── hindsight-dashboard/  dashboard log Roda/Puma :9292 (sviluppo)
-├── scheduler/               check aggiornamenti via Task Scheduler (api-check, cp-check)
+├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```
