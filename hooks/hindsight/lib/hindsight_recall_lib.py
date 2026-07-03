@@ -158,4 +158,15 @@ def build_recall_payload(prompt: str, cfg: dict, query_timestamp: str) -> dict:
     # risoluzione entita' (engine: `if include_entities and top_scored`).
     if not cfg.get("recall_include_entities", False):
         payload["include"] = {"entities": None}
+    # Floor per-stadio lato server (hindsight-api >=0.8.4): min_scores viene
+    # omesso del tutto se nessun floor e' configurato -> payload invariato.
+    ms = {
+        "semantic": cfg.get("recall_min_semantic"),
+        "keyword": cfg.get("recall_min_keyword"),
+        "reranker": cfg.get("recall_min_reranker"),
+        "final": cfg.get("recall_min_final"),
+    }
+    ms = {k: v for k, v in ms.items() if v is not None}
+    if ms:
+        payload["min_scores"] = ms
     return payload
