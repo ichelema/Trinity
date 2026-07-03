@@ -72,6 +72,21 @@ else
 	note "response: ${RECALL:0:200}"
 fi
 
+# 3b. min_scores (hindsight-api >=0.8.4): floor impossibile => 0 risultati.
+# Guardia sul server installato: se min_scores fosse ignorato (api vecchia)
+# tornerebbero le stesse memorie del check precedente.
+MS_N=$(curl -s -m 8 -X POST -H "Content-Type: application/json" \
+	-d '{"query":"diagnostica setup hindsight check","min_scores":{"final":9.9}}' \
+	"$API_BASE/memories/recall" 2>/dev/null |
+	python -c "import json,sys; print(len(json.load(sys.stdin).get('results',[])))" 2>/dev/null || echo "?")
+if [ "$MS_N" = "0" ]; then
+	ok "min_scores onorato dal server (floor impossibile → 0 risultati)"
+elif [ "$MS_N" = "?" ]; then
+	ko "recall con min_scores fallito o response malformata"
+else
+	ko "min_scores ignorato dal server ($MS_N risultati con floor 9.9) — serve hindsight-api >=0.8.4"
+fi
+
 # --- 4. TAGS PRESENTI ---
 sect "4. Tag propagation (verifica retain ha tagato)"
 TAGS=$(curl -s -m 3 "$API_BASE/tags?limit=20" 2>/dev/null |
@@ -577,13 +592,65 @@ filt_ok = rl.build_recall_payload("q", {**base, "recall_types": ["bogus", "obser
 omit_ok = "types" not in rl.build_recall_payload("q", {**base, "recall_types": ["bogus", "nope"]}, "T")
 # chiave assente => omesso (retrocompat con config vecchie)
 missing_ok = "types" not in rl.build_recall_payload("q", base, "T")
-print("OK" if (base_ok and incl_ok and filt_ok and omit_ok and missing_ok) else f"KO base={base_ok} incl={incl_ok} filt={filt_ok} omit={omit_ok} missing={missing_ok}")
+# min_scores: assente se floor assenti o tutti null (payload invariato)
+ms_none_ok = (
+    "min_scores" not in p0
+    and "min_scores" not in rl.build_recall_payload(
+        "q", {**base, "recall_min_semantic": None, "recall_min_keyword": None,
+              "recall_min_reranker": None, "recall_min_final": None}, "T")
+)
+# un solo floor => solo quella chiave; 0.0 e' un floor valido (il filtro e'
+# "is not None", non truthiness)
+ms_one_ok = rl.build_recall_payload(
+    "q", {**base, "recall_min_semantic": 0.4}, "T")["min_scores"] == {"semantic": 0.4}
+ms_zero_ok = rl.build_recall_payload(
+    "q", {**base, "recall_min_reranker": 0.0}, "T")["min_scores"] == {"reranker": 0.0}
+# piu' floor => dict completo
+ms_multi_ok = rl.build_recall_payload(
+    "q", {**base, "recall_min_semantic": 0.3, "recall_min_final": 0.6}, "T"
+)["min_scores"] == {"semantic": 0.3, "final": 0.6}
+print("OK" if (base_ok and incl_ok and filt_ok and omit_ok and missing_ok
+               and ms_none_ok and ms_one_ok and ms_zero_ok and ms_multi_ok)
+      else f"KO base={base_ok} incl={incl_ok} filt={filt_ok} omit={omit_ok} missing={missing_ok} "
+           f"ms_none={ms_none_ok} ms_one={ms_one_ok} ms_zero={ms_zero_ok} ms_multi={ms_multi_ok}")
 PY
 )
 if [ "$RT_PAYLOAD" = "OK" ]; then
-	ok "build_recall_payload: include types validi, filtra invalidi, omette se vuoto"
+	ok "build_recall_payload: types validi/filtrati/omessi + min_scores condizionale"
 else
 	ko "build_recall_payload logica errata ($RT_PAYLOAD)"
+fi
+
+# 18c. load_config: chiavi min_scores nei DEFAULTS (whitelist) + override JSON
+# applicato (0.0 compreso: il merge scarta solo i null)
+MS_CFG=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import json, os, sys, tempfile
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+
+keys = ("recall_min_semantic", "recall_min_keyword", "recall_min_reranker", "recall_min_final")
+defaults_ok = all(k in hc.DEFAULTS and hc.DEFAULTS[k] is None for k in keys)
+
+with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+    json.dump({"recall_min_reranker": 0.2, "recall_min_semantic": 0.0}, f)
+    forced = f.name
+os.environ["HS_CONFIG_FILE"] = forced
+cfg = hc.load_config()
+os.environ.pop("HS_CONFIG_FILE")
+os.unlink(forced)
+merge_ok = (
+    cfg["recall_min_reranker"] == 0.2
+    and cfg["recall_min_semantic"] == 0.0
+    and cfg["recall_min_keyword"] is None
+)
+print("OK" if defaults_ok and merge_ok else f"KO def={defaults_ok} merge={merge_ok}")
+PY
+)
+if [ "$MS_CFG" = "OK" ]; then
+	ok "config: chiavi min_scores nei DEFAULTS e override JSON applicato"
+else
+	ko "config min_scores errata ($MS_CFG)"
 fi
 
 # --- 19. MULTI-BANK (blocco bank, resolver, fan-out/merge, promote) ---
@@ -654,22 +721,26 @@ mb.zerank_rerank = boom
 res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4}, ["u1", "u2"], {})
 fb_ok = meta["merge"] == "interleave-fallback" and len(res) == 2
 
-# filtro soglia: min_score=0.9 lascia solo i punteggi alti
+# filtro soglia: min_score=0.9 lascia solo i punteggi alti. I result mock
+# portano uno `scores` server-side (RecallScores) che deve sopravvivere alla
+# fusione per finire nel debug log accanto a _rerank_score.
 scores = [0.9, 0.5, 0.95]
-mb.fetch_bank_results = lambda u, p, t: [{"text": f"t{1+i}"} for i in range(3)]
+srv_scores = {"reranker": 0.8, "final": 0.9}
+mb.fetch_bank_results = lambda u, p, t: [{"text": f"t{1+i}", "scores": dict(srv_scores)} for i in range(3)]
 mb.zerank_rerank = lambda query, results, model="zerank-2", timeout=6, api_key=None, min_score=None: [
     {**r, "_rerank_score": s} for r, s in zip(results, scores) if min_score is None or s >= min_score
 ]
 res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.9}, ["u1", "u2"], {})
 th_ok = len(res) == 2 and res[0]["_rerank_score"] >= 0.9
+sc_ok = all(r.get("scores") == srv_scores for r in res)
 # soglia superata da tutti: 0.2
 res2, _ = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.2}, ["u1", "u2"], {})
 th_all_ok = len(res2) == 3
-print("OK" if il_ok and dd_ok and fb_ok and th_ok and th_all_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok} th={th_ok} thall={th_all_ok}")
+print("OK" if il_ok and dd_ok and fb_ok and th_ok and sc_ok and th_all_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok} th={th_ok} sc={sc_ok} thall={th_all_ok}")
 PY
 )
 if [ "$MB_LIB" = "OK" ]; then
-	ok "multibank lib: interleave, dedup cross-bank, fallback senza rerank"
+	ok "multibank lib: interleave, dedup cross-bank, fallback, soglia + scores preservati"
 else
 	ko "hindsight_multibank logica errata ($MB_LIB)"
 fi
@@ -679,6 +750,13 @@ if grep -q "recall_bank_urls" "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'bank_
 	ok "recall hook risolve i bank e li include nella cache key"
 else
 	ko "recall hook non integra recall_bank_urls/cache key multi-bank"
+fi
+
+# recall hook logga i punteggi per-stadio del server (RecallScores, api >=0.8.4)
+if grep -q '"scores"' "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'min_score_filtered' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "recall hook logga scores per-stadio e meta min_score nel debug log"
+else
+	ko "recall hook non logga RecallScores/meta min_score"
 fi
 
 # retain worker scrive sul bank risolto da retain_bank
