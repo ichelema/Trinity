@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dopo un commit: se script/litellm-callbacks.py è tra i file appena committati,
+# Dopo un commit: se scripts/litellm-callbacks.py è tra i file appena committati,
 # ridistribuisce la callback in $HOME/.litellm/. Vedi .githooks/lib/.
 set -uo pipefail
 

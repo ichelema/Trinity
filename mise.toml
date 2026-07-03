@@ -241,7 +241,7 @@ run = "setsid nohup node C:/msys64/home/{{env.USERNAME}}/.local/opt/mcp_excalidr
 [tasks.stop-excalidraw]
 description = "Ferma il frontend canvas Excalidraw (porta 3000), solo se il server su :3000 è effettivamente Excalidraw."
 shell = "bash -c"
-run = "ruby script/stop-excalidraw.rb"
+run = "ruby scripts/stop-excalidraw.rb"
 
 [tasks.promote-scan]
 description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
@@ -252,7 +252,7 @@ run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
 # Attiva gli hook versionati in .githooks/ (non tracciati in .git/hooks/).
 # Da rilanciare una volta per ogni clone nuovo del repo.
 [tasks.install-git-hooks]
-description = "Configura git per usare .githooks/ (post-commit/post-merge: ridistribuiscono la callback LiteLLM se script/litellm-callbacks.py cambia)."
+description = "Configura git per usare .githooks/ (post-commit/post-merge: ridistribuiscono la callback LiteLLM se scripts/litellm-callbacks.py cambia)."
 shell = "bash -c"
 run = "git config core.hooksPath .githooks && echo 'core.hooksPath = .githooks'"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploya la callback del proxy LiteLLM nella config dir del proxy.
 #
-# La fonte versionata è script/litellm-callbacks.py (questo repo); LiteLLM
+# La fonte versionata è scripts/litellm-callbacks.py (questo repo); LiteLLM
 # carica il modulo `callbacks` dalla dir del config (litellm_config.yaml),
 # di default ~/.litellm/. Questo script copia la fonte nella destinazione.
 #

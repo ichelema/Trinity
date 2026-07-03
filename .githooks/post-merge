@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dopo un merge/pull: se script/litellm-callbacks.py è cambiato rispetto a prima
+# Dopo un merge/pull: se scripts/litellm-callbacks.py è cambiato rispetto a prima
 # del merge, ridistribuisce la callback in $HOME/.litellm/. Vedi .githooks/lib/.
 set -uo pipefail
 
