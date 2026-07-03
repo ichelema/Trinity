@@ -514,7 +514,9 @@ import hindsight_debug as d
 print(d._log_path({}))
 PY
 )
-case "$DBG_PATH" in
+# Normalizza i backslash: col python nativo Windows nel PATH os.path.join
+# produce separatori '\' e il pattern a forward slash non matcherebbe mai.
+case "${DBG_PATH//\\//}" in
 */logs/hindsight-debug.log) ok "path default del log → $DBG_PATH" ;;
 *) ko "path default del log inatteso ($DBG_PATH)" ;;
 esac
