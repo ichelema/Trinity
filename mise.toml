@@ -108,6 +108,18 @@ HINDSIGHT_API_RERANKER_ZEROENTROPY_TIMEOUT = "8"
 # 17 e sparisce dalla coda (found_any 15→14/18). Rivalutare se recall_max_results >= 10.
 HINDSIGHT_API_RERANKER_MAX_CANDIDATES = "100"
 
+# --- Recency decay del ranking (2026-07-03) ----------------------------------
+# Curva di freshness nel recall: exponential con emivita 60g al posto della
+# lineare a 365g. Con la lineare un fatto di 1 mese perde ~1.6 punti % di boost
+# vs uno di oggi: i near-duplicate superati (es. script/ -> scripts/) pesano
+# quasi quanto la versione fresca. Con exp-60: oggi +10%, 30g +4%, 60g neutro,
+# 180g -7.5% (boost cappato a +-10%, alpha 0.2 fissa upstream). E' una spinta
+# sui pari-merito, NON un fix dei fatti superati: quello resta l'igiene della
+# memoria (invalidate/update). NB: config server-GLOBALE (non e' tra i campi
+# bank-configurable: vale anche per core e obsidian); richiede restart server.
+HINDSIGHT_API_RECENCY_DECAY_FUNCTION = "exponential"
+HINDSIGHT_API_RECENCY_DECAY_HALFLIFE_DAYS = "60"
+
 # --- Embedding zembed-1 ZeroEntropy (PRODUZIONE, nativo da hindsight-api 0.7.1) -------
 # ⚠️ Cambiare provider IMPONE un REBUILD del bank: zembed-1 usa dim Matryoshka
 #    [2560,1280,640,...], non 1536. Procedura: export (hindsight_export.py) → cambia
