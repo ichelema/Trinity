@@ -77,9 +77,20 @@ DEFAULTS = {
     # Soglia minima relevance_score del reranker globale zerank-2. Null = disattivo
     # (nessun filtro). Un valore >=0 filtra i risultati sotto soglia, ma SOLO nel
     # percorso multi-bank (>=2 bank risolti -> multi_recall). In single-bank l'hook
-    # fa la POST diretta al server e NON applica la soglia (vedi hindsight-recall.sh:
-    # ramo `len(bank_urls) == 1`), perche' il server non espone uno score filtrabile.
+    # fa la POST diretta al server e NON applica questa soglia: li' il filtro
+    # equivalente e' recall_min_reranker (min_scores server-side, vedi sotto).
     "recall_min_rerank_score": None,
+    # --- Floor per-stadio passati al server (hindsight-api >=0.8.4, min_scores) ---
+    # Tutti None = nessun filtro (default sicuro). Agiscono nel payload di recall,
+    # quindi valgono per ENTRAMBI i rami (single- e multi-bank).
+    #   semantic/keyword = cutoff retrieval-level (pre-fusione, dentro le SQL arms)
+    #   reranker/final   = filtri post-rerank server-side
+    # NB: distinto da recall_min_rerank_score, che filtra il rerank GLOBALE
+    # client-side (zerank-2) usato solo per fondere piu' bank.
+    "recall_min_semantic": None,
+    "recall_min_keyword": None,
+    "recall_min_reranker": None,
+    "recall_min_final": None,
     # Filtra i tipi di fatto cercati dal server. Vuoto => tutti (world+experience+
     # observation), default API. Valori validi: "world", "experience", "observation".
     "recall_types": [],
