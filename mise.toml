@@ -232,6 +232,16 @@ description = "Controlla se è uscita una versione del Control Plane più recent
 shell = "bash -c"
 run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
 
+[tasks.nb-check]
+description = "Controlla se su PyPI è uscita una versione di notebooklm-py più recente di quella installata in E:/AI/tools/notebooklm. Exit 10 se sì."
+shell = "bash -c"
+run = "ruby scheduler/check_update_notebooklm/nb-check.rb"
+
+[tasks.yt-check]
+description = "Controlla se su GitHub è uscita una versione del plugin yt-extract più recente di quella clonata in E:/AI/tools/claude-code-youtube-extract. Exit 10 se sì."
+shell = "bash -c"
+run = "ruby scheduler/check_update_yt_extract/yt-check.rb"
+
 # --- Excalidraw Canvas (frontend MCP) -------------------------------------
 [tasks.start-excalidraw]
 description = "Avvia il frontend canvas Excalidraw (porta 3000). Log in logs/excalidraw-server.log."

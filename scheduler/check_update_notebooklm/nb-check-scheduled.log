@@ -1,0 +1,10 @@
+mise trusted \\?\D:\AI\Claude\Trinity
+[nb-check] $ ruby scheduler/check_update_notebooklm/nb-check.rb
+[2026-06-28 06:24:58] rc=0 {
+  "package": "notebooklm-py",
+  "installed": "0.8.0",
+  "installed_from": "E:/AI/tools/notebooklm (flat-extract exe-free, non pip)",
+  "latest_pypi": "0.7.2",
+  "update_available": false,
+  "checked_at": "2026-06-28T04:25:00Z"
+}
