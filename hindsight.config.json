@@ -18,7 +18,7 @@
   "recall_min_rerank_score": 0.5,
   "recall_min_semantic": null,
   "recall_min_keyword": null,
-  "recall_min_reranker": null,
+  "recall_min_reranker": 0.15,
   "recall_min_final": null,
   "recall_types": ["observation", "world", "experience"],
   "recall_include_entities": false,
