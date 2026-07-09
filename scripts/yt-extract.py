@@ -20,6 +20,7 @@ import tempfile
 import argparse
 import shutil
 import datetime
+from collections.abc import Sequence
 
 # Force UTF-8 on Windows
 if sys.platform == "win32":
@@ -35,9 +36,19 @@ SCENE_MIN_GAP_SECONDS = 4.0
 SCENE_MAX_SCREENSHOTS = 50
 SCENE_SEEK_OFFSET = 0.5  # settle offset past the detected change (fades)
 
+# Perceptual frame-dedup (scenes mode): compare 16x16 grayscale thumbnails.
+# Mean-absolute-difference (0..255 scale) at or below the threshold counts as a
+# near-duplicate and is dropped. 16x16 gray keeps it cheap and layout-robust.
+PERCEPTUAL_DEDUP_THRESHOLD = 2.0
+THUMBNAIL_SIZE = 16
+
+# Visual grounding (--visual): how many evenly-spaced keyframes the summarizer
+# worker looks at. Fixed (no override) — keeps the token cost predictable.
+VISUAL_FRAME_COUNT = 4
+
 
 def run_ytdlp(args: list[str]) -> subprocess.CompletedProcess:
-    # Setup locale exe-free (PC Eni/EDR): invoca il modulo Python yt_dlp invece del
+    # Setup locale exe-free (PC Eni\EDR): invoca il modulo Python yt_dlp invece del
     # comando esterno "yt-dlp" (un wrapper .cmd non e' eseguibile da subprocess senza
     # shell). yt_dlp e' estratto in E:/AI/tools/yt-dlp, aggiunto qui al PYTHONPATH.
     env = {
@@ -250,6 +261,7 @@ def render_screenshot_status(
     screenshot_requested: int,
     screenshots: list[tuple[float, str]],
     screenshot_warnings: list[str],
+    deduped: int = 0,
 ) -> str:
     if not screenshots_enabled:
         return ""
@@ -258,12 +270,32 @@ def render_screenshot_status(
     if screenshot_marker:
         lines.append(screenshot_marker)
     elif screenshot_requested > 0:
-        success = len(screenshots)
-        lines.append(
-            f"{screenshot_requested} screenshots requested, {success} successfully extracted."
-        )
+        kept = len(screenshots)
+        # "extracted" counts frames ffmpeg actually wrote (kept + deduped), so
+        # perceptual dedup never looks like an extraction failure.
+        extracted = kept + deduped
+        line = f"{screenshot_requested} screenshots requested, {extracted} successfully extracted"
+        if deduped:
+            line += f", {deduped} near-duplicate(s) removed ({kept} kept)"
+        lines.append(line + ".")
     for warning in screenshot_warnings:
         lines.append(f"- WARNING: {warning}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_keyframes(tmpdir: str, frames: list[tuple[float, str]]) -> str:
+    """Render the ### Keyframes section: one 'display_ts  abspath' line per
+    extracted visual frame. The summarizer worker CONSUMES this section (Reads
+    the images, weaves observations into the summary, deletes the temp dir) and
+    strips it from its returned output — it is never relayed to the orchestrator.
+    Returns "" when no frames were extracted (fail-open: summary is text-only)."""
+    if not frames:
+        return ""
+    lines = ["### Keyframes"]
+    for ts, fname in frames:
+        path = os.path.join(tmpdir, fname).replace(os.sep, "/")
+        lines.append(f"{format_timestamp_display(ts)}  {path}")
     lines.append("")
     return "\n".join(lines)
 
@@ -528,6 +560,16 @@ def apply_min_gap(timestamps: list[float], min_gap: float = SCENE_MIN_GAP_SECOND
     return kept
 
 
+def evenly_spaced_timestamps(duration: float, count: int) -> list[float]:
+    """Return `count` timestamps evenly spaced across a video of `duration`
+    seconds, at duration*i/(count+1) for i in 1..count. Used by --visual to
+    sample keyframes for visual grounding. Returns [] when duration or count
+    is non-positive (fail-open: the caller then extracts nothing)."""
+    if not duration or duration <= 0 or count <= 0:
+        return []
+    return [duration * i / (count + 1) for i in range(1, count + 1)]
+
+
 def thin_evenly(timestamps: list[float], max_count: int = SCENE_MAX_SCREENSHOTS) -> list[float]:
     """Reduce to max_count entries by even index sampling, preserving the
     first and last timestamp. Returns the list unchanged when small enough."""
@@ -536,6 +578,42 @@ def thin_evenly(timestamps: list[float], max_count: int = SCENE_MAX_SCREENSHOTS)
         return timestamps
     indices = {round(i * (n - 1) / (max_count - 1)) for i in range(max_count)}
     return [timestamps[i] for i in sorted(indices)]
+
+
+def frame_delta(a: Sequence[int], b: Sequence[int]) -> float:
+    """Mean absolute difference between two equal-length pixel sequences
+    (16x16 grayscale thumbnails, values 0..255).
+
+    Returns 0.0 for two empty inputs and ``inf`` on a length mismatch, so a
+    thumbnail that could not be built the same way as its neighbour is treated
+    as "definitely different" and kept rather than silently dropped.
+    """
+    if len(a) != len(b):
+        return float("inf")
+    if not a:
+        return 0.0
+    return sum(abs(x - y) for x, y in zip(a, b)) / len(a)
+
+
+def dedupe_perceptual_indices(
+    thumbs: list[Sequence[int]],
+    threshold: float = PERCEPTUAL_DEDUP_THRESHOLD,
+) -> list[int]:
+    """Return the indices of frames to keep, dropping near-duplicates.
+
+    Keeps the first frame, then keeps each subsequent frame only when its
+    delta against the last *kept* frame is strictly greater than ``threshold``.
+    Comparing against the last kept frame (not the previous one) prevents slow
+    visual drift from accumulating unnoticed: a static slide collapses to a
+    single capture, while a gradual pan still yields periodic keeps.
+    """
+    kept: list[int] = []
+    last_thumb: Sequence[int] | None = None
+    for i, thumb in enumerate(thumbs):
+        if last_thumb is None or frame_delta(thumb, last_thumb) > threshold:
+            kept.append(i)
+            last_thumb = thumb
+    return kept
 
 
 def get_chapter_for_timestamp(timestamp: float, chapters: list[dict]) -> str | None:
@@ -692,6 +770,21 @@ def detect_scene_timestamps(
     return [0.0] + offset_applied
 
 
+def _long_path(path: str) -> str:
+    """Return the \\\\?\\ extended-length form of an absolute Windows path.
+
+    Windows' legacy 260-char MAX_PATH silently breaks os.path.exists()/
+    getsize() for longer paths (observed with deep --output-base trees):
+    ffmpeg writes the frame fine, but a plain stat() on the same path
+    string returns False. The \\\\?\\ prefix opts into the real (32K) limit.
+    No-op on non-Windows, where this limit does not exist.
+    """
+    if os.name != "nt":
+        return path
+    abspath = os.path.normpath(os.path.abspath(path))
+    return abspath if abspath.startswith("\\\\?\\") else "\\\\?\\" + abspath
+
+
 def extract_screenshots(
     url: str,
     timestamps: list[float],
@@ -741,7 +834,8 @@ def extract_screenshots(
 
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if proc.returncode == 0 and os.path.exists(filepath):
+            checked_path = _long_path(filepath)
+            if os.path.exists(checked_path) and os.path.getsize(checked_path) > 0:
                 results.append((ts, filename))
             else:
                 err = proc.stderr.strip() if proc.stderr else "unknown error"
@@ -754,6 +848,57 @@ def extract_screenshots(
             print(f"WARNING: {msg}", file=sys.stderr)
 
     return results
+
+
+def compute_thumbnail(png_path: str, size: int = THUMBNAIL_SIZE) -> list[int] | None:
+    """Render a size x size grayscale thumbnail of a PNG as raw pixel values
+    via ffmpeg (no PIL dependency). Returns size*size ints (0..255), or None if
+    ffmpeg fails or the raw output has the wrong length."""
+    cmd = [
+        "ffmpeg", "-v", "error",
+        "-i", png_path,
+        "-vf", f"scale={size}:{size},format=gray",
+        "-f", "rawvideo", "-",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=30)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0 or len(proc.stdout) != size * size:
+        return None
+    return list(proc.stdout)
+
+
+def dedupe_screenshots(
+    out_dir: str,
+    screenshots: list[tuple[float, str]],
+    threshold: float = PERCEPTUAL_DEDUP_THRESHOLD,
+) -> list[tuple[float, str]]:
+    """Drop near-duplicate frames from an extracted screenshot set.
+
+    Builds a 16x16 grayscale thumbnail per file, keeps the perceptually
+    distinct ones (see ``dedupe_perceptual_indices``), deletes the dropped PNGs
+    from ``out_dir``, and returns the filtered ``[(ts, filename), ...]`` list.
+    Fail-open: if any thumbnail can't be built, every frame is kept rather than
+    risk dropping a distinct one. Original capture-order filenames are preserved
+    (gaps in the NNN prefix are cosmetic).
+    """
+    if len(screenshots) < 2:
+        return screenshots
+    thumbs = [compute_thumbnail(os.path.join(out_dir, fn)) for _, fn in screenshots]
+    if any(t is None for t in thumbs):
+        return screenshots
+    keep = set(dedupe_perceptual_indices(thumbs, threshold))
+    result: list[tuple[float, str]] = []
+    for i, (ts, filename) in enumerate(screenshots):
+        if i in keep:
+            result.append((ts, filename))
+        else:
+            try:
+                os.remove(os.path.join(out_dir, filename))
+            except OSError:
+                pass
+    return result
 
 
 def _is_chapter_aligned(
@@ -957,6 +1102,12 @@ def main():
              "description, chapters, comments, or screenshots. Skips the "
              "metadata fetch; names the output folder by video ID.",
     )
+    parser.add_argument(
+        "--visual", action="store_true",
+        help="Extract a few evenly-spaced keyframes to a temp dir and emit a "
+             "### Keyframes section so the summarizer can address on-screen "
+             "content. Ephemeral: the summarizer reads then deletes them.",
+    )
     args = parser.parse_args()
 
     if args.transcript_only:
@@ -989,6 +1140,8 @@ def main():
         if ss_mode == "scenes":
             stages.append("scene-detection")
         stages.append("screenshots")
+    if args.visual:
+        stages.append("visual")
     stages.append("output")
     total_stages = len(stages)
     stage_idx = 0
@@ -1030,6 +1183,7 @@ def main():
     # threshold-parse fallback has a place to report.
     screenshots = []
     screenshot_requested = 0
+    screenshot_deduped = 0  # near-duplicates dropped in scenes mode
     screenshot_marker = ""  # "FFMPEG_MISSING" or "SCREENSHOTS_ASK_USER"
     if args.screenshots is not None:
         if not check_ffmpeg():
@@ -1082,8 +1236,41 @@ def main():
                     url, timestamps, out_dir, meta["chapters"],
                     screenshot_warnings,
                 )
+                # Scenes mode can fire on near-identical frames (held slides,
+                # sub-threshold changes). Drop perceptual duplicates. Explicit
+                # chapters/timestamps are intentional, so they are left as-is.
+                if ss_mode == "scenes" and len(screenshots) > 1:
+                    before = len(screenshots)
+                    screenshots = dedupe_screenshots(out_dir, screenshots)
+                    screenshot_deduped = before - len(screenshots)
             else:
                 emit_stage(stage_idx, total_stages, "No valid screenshot timestamps")
+
+    # --- Step 4b: Visual keyframes (optional, ephemeral) ---
+    # Evenly-spaced frames extracted to a temp dir for the summarizer worker to
+    # Read. Independent of --screenshots. Fail-open: any failure yields fewer/no
+    # frames and a text-only summary, never an abort. The worker deletes the
+    # temp dir after reading; a crash before that leaks only into the OS temp dir.
+    visual_frames: list[tuple[float, str]] = []
+    visual_tmpdir = ""
+    if args.visual:
+        stage_idx += 1
+        if not check_ffmpeg():
+            emit_stage(stage_idx, total_stages, "Visual keyframes skipped (ffmpeg missing)")
+        else:
+            emit_stage(
+                stage_idx, total_stages,
+                f"Extracting {VISUAL_FRAME_COUNT} keyframes for visual grounding",
+            )
+            vts = evenly_spaced_timestamps(meta["duration"], VISUAL_FRAME_COUNT)
+            if vts:
+                visual_tmpdir = tempfile.mkdtemp(prefix="yt-extract-visual-")
+                # chapters=[] → plain NNN_ts.png names; warnings discarded (visual
+                # is internal/fail-open, its failures are not user-facing notes).
+                visual_frames = extract_screenshots(url, vts, visual_tmpdir, [], [])
+                if not visual_frames:
+                    shutil.rmtree(visual_tmpdir, ignore_errors=True)
+                    visual_tmpdir = ""
 
     # --- Step 5: Output ---
     stage_idx += 1
@@ -1110,7 +1297,9 @@ def main():
             screenshot_requested,
             screenshots,
             screenshot_warnings,
+            deduped=screenshot_deduped,
         ),
+        render_keyframes(visual_tmpdir, visual_frames),
         render_comments(args.comments, comments),
     ]
     print("\n".join(section for section in sections if section))
