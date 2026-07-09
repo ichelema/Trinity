@@ -810,12 +810,11 @@ che converte le richieste Claude Code nel formato di ciascun provider. Il fork u
 mantenute nel branch `trinity-patches`.
 
 **Path di configurazione.** Su Windows, `os.homedir()` di Node.js segue `USERPROFILE`
-(non `HOME`): il config finisce in `C:\Users\EN27553\.claude-code-router`, non nella home MSYS.
-Soluzione: junction NTFS che allinea le due path:
-
-```
-C:\Users\EN27553\.claude-code-router  →  C:\msys64\home\EN27553\.claude-code-router
-```
+(non `HOME`). Su questa macchina `USERPROFILE` è dirottato alla chiavetta
+(`E:\msys64\home\Sphynx`) dal launcher WezTerm e dall'alias `claude`, quindi `os.homedir()`
+cade già sulla home MSYS: il config vive in `~/.claude-code-router`
+(= `E:\msys64\home\Sphynx\.claude-code-router`). Nessuna junction necessaria — quella
+storica `C:\Users\EN27553\.claude-code-router` (target morto `C:\msys64\...`) è stata rimossa.
 
 **File persistenti** (sopravvivono agli aggiornamenti npm, non vanno persi):
 

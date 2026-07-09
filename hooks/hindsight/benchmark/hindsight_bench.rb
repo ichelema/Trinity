@@ -20,7 +20,7 @@ BASE          = "http://localhost:8888"
 # Path derivati a runtime (niente C:/msys64, versione o drive cablati): MSYS2_ROOT
 # per la home MSYS, `mise where python` per la Scripts dir, `which` per pwsh.
 # Il Ruby di mise è nativo Windows -> backtick via cmd.
-MISE_BIN      = "#{ENV['MSYS2_ROOT'].tr("\\", "/")}/home/#{ENV['USERNAME']}/.local/bin/mise.exe"
+MISE_BIN      = "#{ENV['MSYS2_ROOT'].tr("\\", "/")}/home/Sphynx/.local/bin/mise.exe"
 SCRIPTS_DIR   = "#{`"#{MISE_BIN}" where python 2>NUL`.strip.tr("\\", "/")}/Scripts"
 HINDSIGHT_EXE = "#{SCRIPTS_DIR}/hindsight-local-mcp.exe"
 PWSH          = `which pwsh.exe 2>NUL`.lines.first.to_s.strip.tr("\\", "/")

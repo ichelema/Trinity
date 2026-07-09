@@ -246,7 +246,7 @@ run = "ruby scheduler/check_update_yt_extract/yt-check.rb"
 [tasks.start-excalidraw]
 description = "Avvia il frontend canvas Excalidraw (porta 3000). Log in logs/excalidraw-server.log."
 shell = "bash -c"
-run = "setsid nohup node C:/msys64/home/{{env.USERNAME}}/.local/opt/mcp_excalidraw/dist/server.js > /tmp/excalidraw-server.log 2>&1 < /dev/null & disown"
+run = "setsid nohup node $HOME/.local/opt/mcp_excalidraw/dist/server.js > /tmp/excalidraw-server.log 2>&1 < /dev/null & disown"
 
 [tasks.stop-excalidraw]
 description = "Ferma il frontend canvas Excalidraw (porta 3000), solo se il server su :3000 è effettivamente Excalidraw."

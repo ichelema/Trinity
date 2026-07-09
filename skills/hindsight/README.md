@@ -273,7 +273,7 @@ NB: è config del bank (DB Postgres), quindi **sopravvive ai `pip upgrade`** del
 
 **GOTCHA — cambiare l'embedding obbliga a ricostruire il bank.** La dimensione dei vettori cambia (es. 384→1024→1536) e il server **rifiuta di partire** se il bank ha dati: `Cannot change embedding dimension from X to Y: memory_units contains N rows`. Rebuild:
 
-1. Postgres embedded in `C:/Users/$USERNAME/.pg0` — db `hindsight`, user/pass `hindsight`/`hindsight`, porta 5432, `psql.exe` in `installation/18.1.0/bin/` (credenziali in `instances/hindsight-mcp/instance.json`).
+1. Postgres embedded in `$HOMEDRIVE$HOMEPATH/.pg0` (drive del profilo Windows, es. C: o D:) — db `hindsight`, user/pass `hindsight`/`hindsight`, porta 5432, `psql.exe` in `installation/18.1.0/bin/` (credenziali in `instances/hindsight-mcp/instance.json`).
 2. `TRUNCATE public.memory_units, public.mental_models, public.documents, public.entities, public.entity_cooccurrences, public.memory_links, public.unit_entities, public.chunks, public.async_operations, public.audit_log CASCADE;` (preserva `banks` e `alembic_version`).
 3. Riavvia → la migrazione fa `ALTER` della colonna a `vector(<nuova dim>)` sul bank vuoto. Bank benchmark orfani: `DELETE FROM public.banks WHERE bank_id LIKE 'bench-%'`.
 
@@ -360,7 +360,7 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
 
 4. **Hook `mise reshim`.** Il Ruby mise, dopo `bundle install`, chiama `mise reshim` per gli shim
    degli eseguibili gem (puma); ma `mise` non è nel PATH MSYS2 → bundler aborta con
-   `No such file or directory - mise reshim`. → Aggiunto `E:/msys64/home/$USERNAME/.local/bin` a
+   `No such file or directory - mise reshim`. → Aggiunto `$HOME/.local/bin` a
    `_.path` in `[env]` di `.mise.toml`.
 
 5. **Stop dei processi nativi Windows.** Node e Puma sono processi Windows nativi: il `netstat` MSYS
@@ -384,5 +384,5 @@ mise run stop-dashboard
 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh" 9999 control-plane
 ```
 
-Nota benigna: durante `bundle install` compare `E:/msys64/home/$USERNAME is not writable` → bundler
+Nota benigna: durante `bundle install` compare `$HOME is not writable` → bundler
 ripiega su una temp dir e completa comunque.
