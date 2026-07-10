@@ -56,9 +56,20 @@ blocco `bank` di `hindsight.config.json`:
   interleaving se ZeroEntropy non risponde). Il core entra solo se listato.
 - URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
 
-**ATTENZIONE — i tool MCP `hindsight/*` parlano SOLO col core** (l'endpoint MCP
-è scoped su `trinity-project`): per leggere/scrivere un bank di progetto usa
-l'API REST (`http://127.0.0.1:8888/v1/default/banks/<nome>/...`).
+**Tool MCP `hindsight/*` — quale bank vedono** (dal 2026-07-10, MCP per-progetto):
+
+- **in Trinity**: il core `trinity-project` (URL statico nel `.mcp.json` di
+  progetto, che vince per precedence project > user);
+- **negli altri progetti**: il bank del progetto corrente, risolto dallo shim
+  stdio a scope user `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (stessa logica
+  `resolve_bank` degli hook: slug dal remote origin, fuori-git → core; bridge
+  via `mcp-remote` sul node di mise, registrato con `claude mcp add-json
+  hindsight --scope user`).
+
+I tool MCP parlano comunque con UN solo bank per sessione: il fan-out
+progetto+core (`recall_banks: ["auto", "core"]`) resta esclusivo degli hook
+REST. Per accedere a un bank arbitrario usa l'API REST
+(`http://127.0.0.1:8888/v1/default/banks/<nome>/...`).
 
 **Promozione progetto → core**: comando `/trinity:promote` (curata, mai
 automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei tag
