@@ -43,18 +43,24 @@ port_listening() {
     [ -n "$code" ] && [ "$code" != "000" ]
 }
 
+start_server() {
+    # Trust idempotente: ogni update del plugin cambia il path della copia installata
+    # (cache versionata ~/.claude/plugins/cache/...) e mise rifiuterebbe il config.
+    "$MISE" trust "$PLUGIN_ROOT/mise.toml" > /dev/null 2>&1 || true
+    "$MISE" -C "$PLUGIN_ROOT" run start-hindsight > /dev/null 2>&1 &
+    disown 2> /dev/null || true
+}
+
 # 1. gia' pronto: esci subito (nessun costo di avvio)
 if mcp_ready; then
     exit 0
 fi
 
 # 2/3. avvia il server SOLO se la porta e' libera (se occupata, e' gia' in boot)
+launched=0
 if ! port_listening; then
-    # Trust idempotente: ogni update del plugin cambia il path della copia installata
-    # (cache versionata ~/.claude/plugins/cache/...) e mise rifiuterebbe il config.
-    "$MISE" trust "$PLUGIN_ROOT/mise.toml" > /dev/null 2>&1 || true
-    "$MISE" -C "$PLUGIN_ROOT" run start-hindsight > /dev/null 2>&1 &
-    disown 2> /dev/null || true
+    start_server
+    launched=1
 fi
 
 # 4. polling readiness fino al deadline, poi esci comunque 0
@@ -62,6 +68,16 @@ elapsed=0
 while [ "$elapsed" -lt "$DEADLINE_SECS" ]; do
     if mcp_ready; then
         exit 0
+    fi
+    # Anti-race con lo shutdown detached della sessione precedente: la porta era
+    # occupata da un server MORENTE (lo shutdown lo stava per uccidere) e ora e'
+    # libera -> il boot che aspettavamo non arrivera' mai: rilancia noi, una sola
+    # volta. Il flag launched evita il doppio avvio quando il server l'abbiamo
+    # lanciato noi (in boot la porta resta libera qualche secondo e start-hindsight
+    # non e' idempotente: un 2o lancio fallirebbe il bind sporcando il log).
+    if [ "$launched" -eq 0 ] && ! port_listening; then
+        start_server
+        launched=1
     fi
     sleep "$POLL_INTERVAL"
     elapsed=$((elapsed + POLL_INTERVAL))

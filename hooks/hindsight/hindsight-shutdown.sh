@@ -41,6 +41,11 @@ if [ "${1:-}" = "--worker" ]; then
 	#    il server, e infine ferma server (launcher + python) e Postgres embedded.
 	[ -d "$SESS_DIR" ] && find "$SESS_DIR" -type f -delete 2>/dev/null || true
 	sleep 7
+	# Ultimo check anti-race: durante lo sleep puo' essere partita una NUOVA sessione
+	# (riavvio rapido di Claude Code). Spegnerle il server sotto i piedi lascerebbe
+	# la sessione senza MCP (il suo ensure-up ha gia' visto la porta occupata e non
+	# rilancia). Se c'e' un claude vivo, non toccare i servizi.
+	[ "$(claude_alive)" -gt 0 ] && exit 0
 	bash "$SCRIPT_DIR/ops/hindsight-stop-services.sh"
 	exit 0
 fi
