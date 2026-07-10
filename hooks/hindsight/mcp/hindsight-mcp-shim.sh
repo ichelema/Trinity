@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Shim MCP stdio→HTTP: bank Hindsight per-progetto (registrato a scope user).
 #
-# Claude Code avvia questo shim per le sessioni nei progetti FUORI da Trinity
-# (in Trinity vince il .mcp.json di progetto — precedence project > user — che
-# punta i tool MCP all'URL statico del core trinity-project).
+# Claude Code avvia questo shim in OGNI progetto: è l'unica definizione del
+# server "hindsight" (la entry statica nel .mcp.json di Trinity è stata rimossa
+# il 2026-07-10 — due scope con lo stesso nome generavano il warning
+# "Conflicting scopes"). In Trinity la risoluzione dà comunque il core
+# trinity-project, altrove il bank del progetto.
 #
 # Flusso:
 #   1. risolve il bank con la STESSA logica multibank degli hook REST

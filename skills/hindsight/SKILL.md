@@ -57,14 +57,14 @@ blocco `bank` di `hindsight.config.json`:
 - URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
 
 **Tool MCP `hindsight/*` — quale bank vedono** (dal 2026-07-10, MCP per-progetto):
-
-- **in Trinity**: il core `trinity-project` (URL statico nel `.mcp.json` di
-  progetto, che vince per precedence project > user);
-- **negli altri progetti**: il bank del progetto corrente, risolto dallo shim
-  stdio a scope user `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (stessa logica
-  `resolve_bank` degli hook: slug dal remote origin, fuori-git → core; bridge
-  via `mcp-remote` sul node di mise, registrato con `claude mcp add-json
-  hindsight --scope user`).
+il server "hindsight" è definito SOLO a scope user (`claude mcp add-json
+hindsight --scope user`) come shim stdio
+`hooks/hindsight/mcp/hindsight-mcp-shim.sh`, unico per tutti i progetti (una
+seconda definizione nel `.mcp.json` di Trinity causava il warning "Conflicting
+scopes" ed è stata rimossa). Lo shim risolve il bank con la stessa
+`resolve_bank` degli hook (slug dal remote origin via `CLAUDE_PROJECT_DIR`;
+repo Trinity o fuori-git → core `trinity-project`), attende la readiness del
+server e fa da ponte via `mcp-remote` sul node di mise.
 
 I tool MCP parlano comunque con UN solo bank per sessione: il fan-out
 progetto+core (`recall_banks: ["auto", "core"]`) resta esclusivo degli hook

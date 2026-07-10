@@ -18,17 +18,15 @@
       "type": "http",
       "url": "http://localhost:3002/mcp"
     },
-    "hindsight": {
-      "type": "http",
-      "url": "http://127.0.0.1:8888/mcp/trinity-project/"
-    },
     "playwright": {
       "type": "stdio",
       "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node.exe",
       "args": [
         "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
-        "--browser", "chrome",
-        "--output-dir", "E:/AI/Claude/Trinity/data/playwright-mcp"
+        "--browser",
+        "chrome",
+        "--output-dir",
+        "E:/AI/Claude/Trinity/data/playwright-mcp"
       ]
     },
     "notebooklm": {
