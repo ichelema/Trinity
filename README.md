@@ -221,11 +221,20 @@ progetto (sono file del plugin, non del singolo progetto):
 
 | Server | Tipo | Cosa fornisce |
 |---|---|---|
-| `hindsight` | http (`127.0.0.1:8888`) | memoria persistente Hindsight (retain/recall/reflect) — vedi §9 |
 | `playwright` | stdio (node) | automazione browser headless (Playwright) |
 | `notebooklm` | stdio (python, exe-free) | Google NotebookLM: notebook, sources, chat, artifact, deep research |
 | `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — `disabled: true` nel file |
+
+Il server `hindsight` (memoria persistente, vedi §9) dal 2026-07-10 **non** sta più nel
+`.mcp.json`: è registrato a **scope user** (`claude mcp add-json hindsight --scope user`)
+come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh`, che risolve il **bank
+per-progetto** con la stessa `resolve_bank` degli hook (slug dal remote origin via
+`CLAUDE_PROJECT_DIR`; repo Trinity o fuori git → core `trinity-project`), attende la
+readiness del server e fa da ponte verso `http://127.0.0.1:8888/mcp/<bank>/` via
+`mcp-remote` (node di mise, `npm install -g mcp-remote`). Non aggiungere una seconda
+definizione `hindsight` a scope project: due scope con lo stesso nome generano il warning
+"Conflicting scopes" a ogni sessione.
 
 Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
 `E:/AI/tools/notebooklm`, launcher con `truststore` per il proxy Eni): i file del plugin
@@ -877,7 +886,7 @@ route attuali (utile per debug del routing).
 ```
 Trinity/
 ├── core-behavior.md         comportamento iniettato al SessionStart
-├── .mcp.json                server MCP (hindsight, playwright, notebooklm; excalidraw/obsidian off)
+├── .mcp.json                server MCP (playwright, notebooklm; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
 ├── skills/                  11 skill
@@ -886,7 +895,7 @@ Trinity/
 │   ├── skill-eval.*         suggerimento skill
 │   ├── windows-toast.sh     toast Windows (entry point hook → chiama il .ps1)
 │   ├── windows-toast.ps1    toast Windows (PowerShell, invocato da .sh)
-│   └── hindsight/           recall, retain, ensure-up, shutdown, lib, ops, tools
+│   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 │       └── hindsight-dashboard/  dashboard log Roda/Puma :9292 (sviluppo)
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
