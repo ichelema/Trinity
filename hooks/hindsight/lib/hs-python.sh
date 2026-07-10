@@ -19,6 +19,24 @@ if [ -z "$HS_PY" ] && [ -x /ucrt64/bin/python ]; then
   HS_PY="/ucrt64/bin/python"
 fi
 [ -z "$HS_PY" ] && HS_PY="python"
+# Bypass dello shim mise: lo shim rilancia mise.exe a OGNI invocazione (~300ms
+# misurati, benchmark 2026-07-10). Risolvi il binario reale una volta e cachalo
+# su file; il check -x invalida da solo la cache quando il path cambia (upgrade
+# python). NB: la cache e' globale (non per-cwd): un progetto con una versione
+# python pinnata nel proprio mise.toml userebbe comunque quella cachata.
+case "$HS_PY" in
+  */mise/shims/*)
+    _hs_cache="${TMPDIR:-/tmp}/hs-python-real.path"
+    _hs_real=""
+    [ -f "$_hs_cache" ] && IFS= read -r _hs_real < "$_hs_cache"
+    if [ ! -x "$_hs_real" ]; then
+      _hs_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise.exe")"
+      _hs_real="$("$_hs_mise" which python 2>/dev/null | tr '\\' '/' || true)"
+      [ -n "$_hs_real" ] && [ -x "$_hs_real" ] && printf '%s' "$_hs_real" > "$_hs_cache"
+    fi
+    [ -n "$_hs_real" ] && [ -x "$_hs_real" ] && HS_PY="$_hs_real"
+    ;;
+esac
 export HS_PY
 # UTF-8 garantito anche fuori da Trinity (il python MSYS UCRT64 usa cp1252 di
 # default -> UnicodeEncodeError sul testo unicode delle memorie).

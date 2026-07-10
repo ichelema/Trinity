@@ -14,7 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODE_SCRIPT="$SCRIPT_DIR/skill-eval.js"
 
 # Check if Node.js is available
-if ! command -v node &>/dev/null; then
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+if [[ -z "$NODE_BIN" ]]; then
 	exit 0
 fi
 
@@ -23,8 +24,25 @@ if [[ ! -f "$NODE_SCRIPT" ]]; then
 	exit 0
 fi
 
+# Bypass dello shim mise: lo shim rilancia mise.exe a OGNI invocazione (~300ms
+# misurati, benchmark 2026-07-10). Risolvi il binario reale una volta e cachalo
+# su file; il check -x invalida da solo la cache quando il path cambia.
+case "$NODE_BIN" in
+	*/mise/shims/*)
+		_se_cache="${TMPDIR:-/tmp}/hs-node-real.path"
+		_se_real=""
+		[[ -f "$_se_cache" ]] && IFS= read -r _se_real <"$_se_cache"
+		if [[ ! -x "$_se_real" ]]; then
+			_se_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise.exe")"
+			_se_real="$("$_se_mise" which node 2>/dev/null | tr '\\' '/' || true)"
+			[[ -n "$_se_real" && -x "$_se_real" ]] && printf '%s' "$_se_real" >"$_se_cache"
+		fi
+		[[ -n "$_se_real" && -x "$_se_real" ]] && NODE_BIN="$_se_real"
+		;;
+esac
+
 # Pipe stdin to the Node.js script (suppress stderr noise from nvm/shell init)
-cat | node "$NODE_SCRIPT" 2>/dev/null
+cat | "$NODE_BIN" "$NODE_SCRIPT" 2>/dev/null
 
 # Always exit 0 to allow the prompt through
 exit 0
