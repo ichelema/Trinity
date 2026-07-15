@@ -3,7 +3,7 @@ name: book-to-skill
 description: "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, plain text, RTF, MOBI/AZW with Calibre) into structured agent skills, extracting frameworks, mental models, principles, techniques, and anti-patterns. Use when the user wants to study a document through Amp or Claude Code, apply an author's frameworks while working, or build a reusable knowledge base from a file."
 compatibility: "Amp skill directories (.agents/skills, ~/.config/agents/skills, ~/.config/amp/skills) and Claude Code skill directories (~/.claude/skills)."
 allowed-tools:
-  - shell_command
+  - Bash
   - Read
   - Write
   - Glob
@@ -121,6 +121,8 @@ Run the extraction script, passing the book type:
 ```bash
 SCRIPT_PATH=""
 for candidate in \
+  "${TRINITY_PLUGIN_DIR:+$TRINITY_PLUGIN_DIR/skills/book-to-skill/scripts/extract.py}" \
+  "$HOME/.claude/skills/trinity/skills/book-to-skill/scripts/extract.py" \
   ".agents/skills/book-to-skill/scripts/extract.py" \
   "$HOME/.config/agents/skills/book-to-skill/scripts/extract.py" \
   "$HOME/.config/amp/skills/book-to-skill/scripts/extract.py" \
