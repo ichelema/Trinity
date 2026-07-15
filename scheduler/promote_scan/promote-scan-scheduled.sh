@@ -20,7 +20,7 @@ set -uo pipefail
 # fallback relativo allo script (scheduler/promote_scan/ → 2 livelli su). Da System
 # Scheduler la var non c'è → vince il relativo, sempre valido.
 PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
-MISE="$(command -v mise 2>/dev/null || echo "/e/msys64/home/Sphynx/.local/bin/mise.exe")"
+MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
 
 cd "$PROJ" || {
 	echo "promote-scan-scheduled: cd $PROJ fallito" >&2

@@ -10,7 +10,9 @@ QUERY="${*:-What strategic project memory is relevant now?}"
 
 export HOOKS_DIR QUERY
 
-PYTHONUTF8=1 python <<'PY'
+. "$HOOKS_DIR/../lib/hs-python.sh"
+
+"$HS_PY" <<'PY'
 import json, os, sys, urllib.request
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "..", "lib"))

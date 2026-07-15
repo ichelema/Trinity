@@ -28,7 +28,11 @@ NODE="${HOME:-E:/msys64/home/Sphynx}/.local/share/mise/installs/node/24.16.0/nod
 PROXY="${HOME:-E:/msys64/home/Sphynx}/.local/share/mise/installs/node/24.16.0/node_modules/mcp-remote/dist/proxy.js"
 
 # 1) bank per-progetto — riusa resolve_bank() degli hook (unica fonte di verità)
-BANK="$(PYTHONUTF8=1 python -c "
+# Interprete via hs-python.sh (su molte distro esiste solo python3: il comando
+# nudo `python` degraderebbe in silenzio al bank core).
+[ -f "$LIB/hs-python.sh" ] && . "$LIB/hs-python.sh"
+: "${HS_PY:=python}"
+BANK="$(PYTHONUTF8=1 "$HS_PY" -c "
 import sys
 sys.path.insert(0, r'$LIB')
 from hindsight_config import load_config, resolve_bank

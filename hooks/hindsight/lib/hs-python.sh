@@ -10,9 +10,9 @@
 # python MSYS2 UCRT64 -> "python" come ultimo tentativo.
 HS_PY="$(command -v python 2>/dev/null || command -v python3 2>/dev/null || true)"
 if [ -z "$HS_PY" ]; then
-  # mise non è nel PATH della bash MSYS → cercalo nel PATH, poi ricadi sul launcher
-  # sotto la home MSYS dell'utente corrente (il plugin è pensato per Windows+MSYS2).
-  HS_MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise.exe")"
+  # mise non è nel PATH ristretto degli hook → cercalo nel PATH, poi ricadi sul
+  # launcher standard ~/.local/bin/mise (su MSYS2 risolve da solo il .exe).
+  HS_MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
   HS_PY="$("$HS_MISE" which python 2>/dev/null || true)"
 fi
 if [ -z "$HS_PY" ] && [ -x /ucrt64/bin/python ]; then
@@ -28,9 +28,11 @@ case "$HS_PY" in
   */mise/shims/*)
     _hs_cache="${TMPDIR:-/tmp}/hs-python-real.path"
     _hs_real=""
-    [ -f "$_hs_cache" ] && IFS= read -r _hs_real < "$_hs_cache"
+    # || true: la cache e' scritta senza newline finale -> read ritorna 1 a EOF
+    # pur popolando la variabile; senza guardia, sotto set -e lo script morirebbe.
+    { [ -f "$_hs_cache" ] && IFS= read -r _hs_real < "$_hs_cache"; } || true
     if [ ! -x "$_hs_real" ]; then
-      _hs_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise.exe")"
+      _hs_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
       _hs_real="$("$_hs_mise" which python 2>/dev/null | tr '\\' '/' || true)"
       [ -n "$_hs_real" ] && [ -x "$_hs_real" ] && printf '%s' "$_hs_real" > "$_hs_cache"
     fi

@@ -28,7 +28,7 @@ require "uri"
 require "time"
 require "fileutils"
 
-BASE = "http://localhost:8888"
+BASE = "http://127.0.0.1:8888"
 # Path derivati a runtime (niente C:/msys64, versione o drive cablati): MSYS2_ROOT
 # per la home MSYS, `mise where python` per la Scripts dir, `which` per pwsh.
 # Il Ruby di mise è nativo Windows -> backtick via cmd.

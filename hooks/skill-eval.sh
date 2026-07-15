@@ -33,7 +33,7 @@ case "$NODE_BIN" in
 		_se_real=""
 		[[ -f "$_se_cache" ]] && IFS= read -r _se_real <"$_se_cache"
 		if [[ ! -x "$_se_real" ]]; then
-			_se_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise.exe")"
+			_se_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
 			_se_real="$("$_se_mise" which node 2>/dev/null | tr '\\' '/' || true)"
 			[[ -n "$_se_real" && -x "$_se_real" ]] && printf '%s' "$_se_real" >"$_se_cache"
 		fi

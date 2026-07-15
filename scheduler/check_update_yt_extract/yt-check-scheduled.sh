@@ -13,7 +13,7 @@
 set -uo pipefail
 
 PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
-MISE="$(command -v mise 2>/dev/null || echo "/e/msys64/home/Sphynx/.local/bin/mise.exe")"
+MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
 
 cd "$PROJ" || {
 	echo "yt-check-scheduled: cd $PROJ fallito" >&2

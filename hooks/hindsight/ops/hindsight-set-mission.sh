@@ -20,7 +20,9 @@ set -euo pipefail
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export HOOKS_DIR API_URL="${HINDSIGHT_API_URL:-http://127.0.0.1:8888/v1/default/banks/trinity-project}"
 
-python <<'PY'
+. "$HOOKS_DIR/../lib/hs-python.sh"
+
+"$HS_PY" <<'PY'
 import json, os, sys, urllib.request, urllib.error
 
 # Mission dal config centralizzato del plugin (root del plugin; HOOKS_DIR = ops/).

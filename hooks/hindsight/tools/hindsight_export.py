@@ -15,7 +15,7 @@ al momento dell'import con il modello allora attivo.
 Uso:
   python hindsight_export.py                       # api_url da hindsight.config.json, out auto
   python hindsight_export.py --out C:/path/dump.json
-  python hindsight_export.py --api-url http://localhost:8888/v1/default/banks/trinity-project
+  python hindsight_export.py --api-url http://127.0.0.1:8888/v1/default/banks/trinity-project
 
 NB Windows: i path nei flag vanno in stile Windows (C:/...), non MSYS (/c/...).
 """

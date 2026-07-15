@@ -14,14 +14,16 @@
 # che fallirebbe il bind su :8888 sporcando il log.
 set -uo pipefail
 
-MCP_URL="http://localhost:8888/mcp/trinity-project/"
-ROOT_URL="http://localhost:8888/"
+# 127.0.0.1 e non localhost: su Windows localhost prova prima IPv6 e costa
+# ~0,2s a richiesta (misurato 2026-07-15) — questo probe polla ogni secondo.
+MCP_URL="http://127.0.0.1:8888/mcp/trinity-project/"
+ROOT_URL="http://127.0.0.1:8888/"
 # Root del plugin derivata dalla posizione dello script (hooks/hindsight/ -> 2 livelli su):
 # e' il punto -C per mise, che li' trova il mise.toml con env e task del servizio.
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-# mise non è nel PATH della bash MSYS → cercalo nel PATH, poi ricadi sul launcher
-# sotto la home MSYS dell'utente corrente (il plugin è pensato per Windows+MSYS2).
-MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise.exe")"
+# mise non è nel PATH ristretto degli hook → cercalo nel PATH, poi ricadi sul
+# launcher standard ~/.local/bin/mise (su MSYS2 risolve da solo il .exe).
+MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
 DEADLINE_SECS=25 # budget readiness; l'hook ha timeout 30 in settings.json
 POLL_INTERVAL=1
 
