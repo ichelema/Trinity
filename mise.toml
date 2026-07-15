@@ -44,8 +44,12 @@ _.file = ["{{ get_env(name='HOME', default='') }}/certs/default.env", "C:/certs/
 HINDSIGHT_API_LLM_PROVIDER = "openai"
 HINDSIGHT_API_LLM_MODEL = "gpt-4.1-mini"
 # La chiave viene risolta a runtime dall'env utente (OPENAI_API_KEY), non hardcodata qui.
-# Senza default: se manca la chiave il task abortisce subito — voluto, è il LLM di produzione.
-HINDSIGHT_API_LLM_API_KEY = "{{env.OPENAI_API_KEY}}"
+# default(''): il fail-fast sulla chiave mancante NON può stare qui. Questo blocco [env]
+# mise lo valuta prima di OGNI comando, quindi senza default il template rompe anche
+# `mise install`, `stop-hindsight`, `db-dump`, `cp-check` — che con OpenAI non c'entrano —
+# e il bootstrap Linux, che gira PRIMA che le chiavi siano impostate (SETUP-LINUX.md §2
+# vs §3). La validazione è in [tasks.start-hindsight], l'unico task che usa davvero il LLM.
+HINDSIGHT_API_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 # Salta la chiamata di verifica LLM al boot (2026-06-12): avvio più rapido per
 # hindsight-ensure-up.sh a inizio sessione, e niente hang se il proxy ENINET fa MITM.
 # Contro accettato: una OPENAI_API_KEY errata emerge al primo retain, non al boot.
@@ -60,7 +64,7 @@ HINDSIGHT_API_SKIP_LLM_VERIFICATION = "true"
 # cambiarla richiede restart.
 HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER = "openai"
 HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-4.1-mini"
-HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{env.OPENAI_API_KEY}}"
+HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 
 # PRODUZIONE: zembed-1 (ZeroEntropy) dal 2026-05-27. Per tornare a Gemini: rimetti "google"
@@ -160,7 +164,11 @@ shell = "bash -c"
 #   HINDSIGHT_API_TENANT_API_KEY=<chiave>
 # Nota: servono entrambe — la chiave da sola non attiva nulla. Poi ogni client (hook REST,
 # shim MCP, Control Plane, dashboard) deve mandare "Authorization: Bearer <chiave>".
-run = "setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown"
+#
+# La guardia ${...:?} è il fail-fast sulla chiave OpenAI: qui e non nel blocco [env] (vedi
+# HINDSIGHT_API_LLM_API_KEY). Serve perché SKIP_LLM_VERIFICATION=true salta il check al boot:
+# senza guardia il server partirebbe con chiave vuota e il danno emergerebbe al primo retain.
+run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-... (vedi docs/SETUP-LINUX.md sezione 3)}"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
 
 [tasks.stop-hindsight]
 description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"
