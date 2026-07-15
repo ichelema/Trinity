@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# Bootstrap di Trinity su un host Linux. IDEMPOTENTE: rieseguibile senza danni,
+# ogni passo controlla lo stato prima di agire.
+#
+# Prerequisiti: git, curl, bash (il resto viene segnalato/installato qui).
+# Uso:  bash scripts/setup/bootstrap-linux.sh
+# Docs: docs/SETUP-LINUX.md (guida completa, incluse chiavi API e primo restore)
+set -uo pipefail
+
+case "$(uname -s)" in
+Linux) : ;;
+*)
+	echo "[bootstrap] questo script e' solo per Linux (qui: $(uname -s))" >&2
+	exit 1
+	;;
+esac
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+MISE="$HOME/.local/bin/mise"
+OK=0
+WARN=0
+ok() { echo "  [OK ] $1"; OK=$((OK + 1)); }
+warn() {
+	echo "  [!! ] $1" >&2
+	WARN=$((WARN + 1))
+}
+sect() { printf '\n== %s ==\n' "$1"; }
+
+sect "1. Prerequisiti di sistema"
+MISSING=""
+for bin in git curl jq lsof; do
+	command -v "$bin" > /dev/null 2>&1 || MISSING="$MISSING $bin"
+done
+if [ -n "$MISSING" ]; then
+	warn "mancano:$MISSING — installa con: sudo apt-get install -y$MISSING (o equivalente della distro)"
+else
+	ok "git, curl, jq, lsof presenti"
+fi
+# Opzionali: ffmpeg (yt-extract/suoni), notify-send (toast desktop).
+command -v ffmpeg > /dev/null 2>&1 || echo "  [i  ] ffmpeg assente (opzionale: serve a yt-extract e ai suoni)"
+
+sect "2. mise (gestore runtime)"
+if command -v mise > /dev/null 2>&1; then
+	MISE="$(command -v mise)"
+	ok "mise gia' presente: $MISE"
+elif [ -x "$MISE" ]; then
+	ok "mise gia' presente: $MISE"
+else
+	echo "  installo mise..."
+	curl -fsSL https://mise.run | sh || {
+		warn "installazione mise fallita"
+		exit 1
+	}
+	ok "mise installato in $MISE"
+fi
+grep -q 'mise activate' "$HOME/.bashrc" 2> /dev/null || {
+	echo 'eval "$("$HOME/.local/bin/mise" activate bash)"' >> "$HOME/.bashrc"
+	ok "mise activate aggiunto a ~/.bashrc"
+}
+
+sect "3. Runtime del repo (python/node/ruby via mise)"
+"$MISE" trust "$ROOT/mise.toml" > /dev/null 2>&1 || true
+if "$MISE" -C "$ROOT" install; then
+	ok "runtime installati (mise install)"
+else
+	warn "mise install ha riportato errori — controlla l'output"
+fi
+
+sect "4. hindsight-api (server memoria) + mcp-remote (bridge shim)"
+if "$MISE" -C "$ROOT" run install-hindsight > /dev/null 2>&1; then
+	ok "hindsight-api installato/aggiornato"
+	"$MISE" reshim > /dev/null 2>&1 || true
+else
+	warn "install-hindsight fallito (rete/proxy?)"
+fi
+if "$MISE" -C "$ROOT" x -- npm ls -g mcp-remote > /dev/null 2>&1; then
+	ok "mcp-remote gia' presente"
+elif "$MISE" -C "$ROOT" x -- npm install -g mcp-remote > /dev/null 2>&1; then
+	ok "mcp-remote installato (npm -g)"
+else
+	warn "npm install -g mcp-remote fallito — lo shim MCP hindsight non partira'"
+fi
+
+sect "5. Skills-dir: symlink ~/.claude/skills/trinity -> repo"
+mkdir -p "$HOME/.claude/skills"
+LINK="$HOME/.claude/skills/trinity"
+if [ -L "$LINK" ] && [ "$(readlink -f "$LINK")" = "$ROOT" ]; then
+	ok "symlink gia' corretto"
+elif [ -e "$LINK" ]; then
+	warn "$LINK esiste ma non punta a $ROOT — sistemalo a mano (rm e rilancia)"
+else
+	ln -s "$ROOT" "$LINK" && ok "symlink creato: $LINK -> $ROOT"
+fi
+
+sect "6. Env utente in ~/.claude/settings.json"
+SETTINGS="$HOME/.claude/settings.json"
+"$MISE" -C "$ROOT" x -- python - "$SETTINGS" "$ROOT" <<'PY'
+import json, os, sys
+path, root = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path):
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+env = data.setdefault("env", {})
+changed = False
+if env.get("TRINITY_PLUGIN_DIR") != root:
+    env["TRINITY_PLUGIN_DIR"] = root
+    changed = True
+if changed:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print("  [OK ] TRINITY_PLUGIN_DIR impostata in", path)
+else:
+    print("  [OK ] TRINITY_PLUGIN_DIR gia' corretta")
+print("  [i  ] OBSIDIAN_VAULT/OBSIDIAN_VAULT_NAME: impostale qui solo se il vault esiste su questa macchina")
+PY
+
+sect "7. Git hooks del repo"
+if [ "$(git -C "$ROOT" config core.hooksPath 2> /dev/null)" = ".githooks" ]; then
+	ok "core.hooksPath gia' .githooks"
+else
+	git -C "$ROOT" config core.hooksPath .githooks && ok "core.hooksPath impostato"
+fi
+
+sect "8. Server MCP hindsight (scope user)"
+SHIM="$ROOT/hooks/hindsight/mcp/hindsight-mcp-shim.sh"
+if command -v claude > /dev/null 2>&1; then
+	if claude mcp get hindsight > /dev/null 2>&1; then
+		ok "server MCP hindsight gia' registrato"
+	else
+		claude mcp add-json hindsight "{\"type\":\"stdio\",\"command\":\"$SHIM\"}" --scope user \
+			&& ok "server MCP hindsight registrato (scope user)" \
+			|| warn "registrazione MCP fallita"
+	fi
+else
+	warn "claude CLI non trovato: dopo l'installazione esegui: claude mcp add-json hindsight '{\"type\":\"stdio\",\"command\":\"$SHIM\"}' --scope user"
+fi
+
+sect "9. Directory dei backup DB"
+mkdir -p "$HOME/backups/hindsight" && ok "~/backups/hindsight pronta"
+
+sect "Riepilogo"
+echo "  passi ok: $OK, avvisi: $WARN"
+cat <<EOF
+
+Prossimi passi (vedi docs/SETUP-LINUX.md):
+  1. chiavi API in ~/.profile:  export OPENAI_API_KEY=... ZEROENTROPY_API_KEY=...
+  2. primo avvio:               mise -C "$ROOT" run start-hindsight
+  3. importa la memoria:        mise -C "$ROOT" run db-restore  (dump dalla chiavetta o via scp)
+  4. timer schedulati:          vedi scheduler/systemd/README.md
+EOF
+exit 0
