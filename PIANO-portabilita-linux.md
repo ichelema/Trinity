@@ -157,7 +157,14 @@ Verifica end-to-end: checklist in `docs/SETUP-LINUX.md` — server risponde su :
 
 Due nuovi script in `hooks/hindsight/tools/` + task mise `db-dump` / `db-restore`:
 
-- **`hs-db-dump.sh`**: `pg_dump -Fc` del DB `hindsight` → `<BACKUP_DIR>/hindsight-<UTC>.dump` + aggiorna `sync-state.json` (`{host, dumped_at, max_created_at}`). `BACKUP_DIR` default: `E:/var/backups/hindsight` su Windows (= sulla chiavetta, che fa da corriere), `~/backups/hindsight` su Linux. Tiene le ultime N copie (default 5, ~385 MB).
+- **`hs-db-dump.sh`**: `pg_dump -Fc` del DB `hindsight` → tre file in `BACKUP_DIR`:
+  - `hindsight-<UTC>.dump` — il dump vero e proprio (~77-80 MB, 8 s);
+  - `hindsight-<UTC>.dump.meta.json` — `{host, dumped_at, max_created_at, database}`;
+    il watermark è letto PRIMA del dump ed è quello che il restore confronta col DB locale;
+  - `LATEST` — contiene il nome dell'ultimo dump: è il file che il restore legge per
+    sapere quale ripristinare.
+
+  Rotazione: tiene le ultime `HS_BACKUP_KEEP` coppie dump+meta (default 5, ~385 MB).
 - **`hs-db-restore.sh`**: **guardrail anti-perdita** prima di toccare qualsiasi cosa:
   confronta `MAX(created_at)` delle memorie locali con `max_created_at` registrato nel
   dump. Se il DB locale ha scritture PIÙ RECENTI del dump → **rifiuta** con messaggio
@@ -170,6 +177,30 @@ Due nuovi script in `hooks/hindsight/tools/` + task mise `db-dump` / `db-restore
   - dal server Linux, in alternativa alla chiavetta montata: `scp` da/verso il PC di casa.
 - Uso alternato = zero conflitti; il guardrail copre la dimenticanza (se scrivi su
   entrambi i lati senza sync, te ne accorgi al restore, non dopo).
+
+### Dove viene salvato il dump (e come arriva all'altra macchina)
+
+`BACKUP_DIR` è risolto per-OS in `hooks/hindsight/tools/hs-db-lib.sh`, senza path
+hardcoded altrove:
+
+| Ambiente | `BACKUP_DIR` di default | Riga |
+|---|---|---|
+| Windows (MSYS2) | `E:/var/backups/hindsight` — **sulla chiavetta stessa**, che fa da corriere tra le macchine | `hs-db-lib.sh:17` |
+| Linux | `$HOME/backups/hindsight` — disco nativo del server | `hs-db-lib.sh:23` |
+
+Su entrambi si sovrascrive con `HS_BACKUP_DIR` (es. per dumpare su un disco esterno
+diverso dalla chiavetta). La cartella viene creata dal dump se non esiste.
+
+**Trasporto Windows → Linux**: la chiavetta è già il supporto fisico del dump, quindi
+il passaggio è "stacca e riattacca". Sul server, se la chiavetta NTFS non è montata,
+si copia il dump via `scp` dal PC di casa (`scp E:/var/backups/hindsight/hindsight-*.dump
+server:~/backups/hindsight/` — serve anche il `.meta.json`, altrimenti il guardrail
+non ha il watermark da confrontare). La chiavetta serve solo in LETTURA: il datadir
+Postgres non si condivide mai tra OS.
+
+**Stato al 2026-07-15**: la cartella su Windows contiene già un dump reale,
+`hindsight-20260715T030357Z.dump` (80 MB) + meta + `LATEST` — prodotto dal collaudo
+della Fase 4. È il candidato per il primo `db-restore` sul server (punto 9 della Fase 3).
 
 Verifica: ciclo completo Windows→dump→restore su Linux→retain di prova→dump→restore su Windows, con conteggio documenti identico alle estremità (oggi: 298 totali).
 
