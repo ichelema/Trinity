@@ -8,3 +8,14 @@ mise trusted \\?\D:\AI\Claude\Trinity
   "update_available": false,
   "checked_at": "2026-06-28T04:24:49Z"
 }
+mise trusted \\?\D:\AI\Claude\Trinity
+[yt-check] $ ruby scheduler/check_update_yt_extract/yt-check.rb
+[yt-check] ERROR task failed
+[2026-07-09 23:49:04] rc=10 {
+  "repo": "muckybuzzwoo/claude-code-youtube-extract",
+  "installed": "1.8.2",
+  "installed_from": "E:/AI/tools/claude-code-youtube-extract",
+  "latest_github": "1.10.1",
+  "update_available": true,
+  "checked_at": "2026-07-09T21:49:09Z"
+}
