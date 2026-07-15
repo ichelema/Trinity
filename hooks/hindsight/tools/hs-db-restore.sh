@@ -59,12 +59,38 @@ else
 	echo "[db-restore] ATTENZIONE: $DUMP.meta.json assente — guardrail non applicabile" >&2
 fi
 
-LOCAL_WM="$(hs_db_watermark)"
+# Filtro rapido: -Fc valida l'header, quindi un file palesemente rotto muore qui
+# senza toccare niente. NON e' una difesa: --list legge solo il TOC (in testa al
+# file), quindi un dump TRONCATO passa (verificato: troncato al 50/90/99% -> exit 0
+# e restore poi fallito a meta'). Da quello protegge il restore su DB temporaneo.
+if ! "$PG_RESTORE" --list "$DUMP" > /dev/null 2>&1; then
+	echo "[db-restore] RIFIUTATO: dump illeggibile o corrotto — DB locale non toccato" >&2
+	exit 1
+fi
+
+# Il watermark locale governa TRE decisioni: guardrail sul sidecar, confronto col
+# dump e dump di sicurezza. Un vuoto AMBIGUO le spegne tutte e porta dritto al DROP,
+# quindi va distinto: DB assente = primo restore, niente da perdere. DB presente ma
+# muto = non sappiamo cosa stiamo per distruggere -> ci si ferma.
+LOCAL_WM=""
+if hs_db_exists; then
+	if ! LOCAL_WM="$(hs_db_watermark)"; then
+		if [ "$FORCE" -ne 1 ]; then
+			echo "[db-restore] RIFIUTATO: '$PGDATABASE' esiste ma non riesco a leggerne il watermark." >&2
+			echo "               Non so cosa contiene: non posso ne' confrontarlo col dump ne' salvarlo." >&2
+			echo "               Se sai cosa stai facendo, rilancia con --force." >&2
+			exit 2
+		fi
+		echo "[db-restore] --force: procedo senza aver letto il watermark locale" >&2
+		LOCAL_WM=""
+	fi
+else
+	echo "[db-restore] database '$PGDATABASE' assente: primo restore su questa macchina"
+fi
+
 # Sidecar assente/illeggibile: senza il watermark del dump il confronto sotto non
 # puo' scattare e si arriverebbe al DROP in silenzio, col solo warning stampato
 # sopra. Se il DB locale ha qualcosa da perdere, fermati: decide l'operatore.
-# LOCAL_WM vuoto (DB vuoto o irraggiungibile) NON e' un caso da bloccare: non c'e'
-# nulla da sovrascrivere ed e' il primo restore su una macchina nuova.
 if [ -n "$LOCAL_WM" ] && [ -z "$DUMP_WM" ] && [ "$FORCE" -ne 1 ]; then
 	echo "[db-restore] RIFIUTATO: watermark del dump non disponibile (sidecar assente o illeggibile)." >&2
 	echo "               Non posso stabilire se il dump e' piu' vecchio del DB locale." >&2
@@ -107,28 +133,58 @@ if [ "$PGDATABASE" = "hindsight" ]; then
 	sleep 1
 fi
 
-# --- 4. Chiudi le connessioni residue e ricrea il database -------------------
-"$PSQL" "${PGARGS[@]}" -d postgres -qc \
-	"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$PGDATABASE' AND pid<>pg_backend_pid();" > /dev/null 2>&1 || true
+# --- 4. Restore su un DB TEMPORANEO ------------------------------------------
+# Il DB corrente non si tocca finche' il restore non e' riuscito: prima si faceva
+# DROP + CREATE e solo dopo pg_restore, quindi un dump troncato (che supera --list,
+# vedi sopra) lasciava un DB parziale da recuperare a mano dal dump di sicurezza.
+TS="$(date -u +%Y%m%d%H%M%S)"
+NEWDB="${PGDATABASE}_new_$TS"
+OLDDB="${PGDATABASE}_old_$TS"
 
-echo "[db-restore] drop + create di '$PGDATABASE'"
-"$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$PGDATABASE\";" || {
-	echo "[db-restore] ERRORE: drop fallito (connessioni attive?)" >&2
+drop_newdb() { "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$NEWDB\";" > /dev/null 2>&1 || true; }
+
+echo "[db-restore] restore su '$NEWDB' ('$PGDATABASE' resta intatto)"
+"$PSQL" "${PGARGS[@]}" -d postgres -qc "CREATE DATABASE \"$NEWDB\" OWNER \"$PGUSER\";" || {
+	echo "[db-restore] ERRORE: create del DB temporaneo fallito" >&2
 	exit 1
 }
-"$PSQL" "${PGARGS[@]}" -d postgres -qc "CREATE DATABASE \"$PGDATABASE\" OWNER \"$PGUSER\";" || {
-	echo "[db-restore] ERRORE: create fallito" >&2
+if ! "$PG_RESTORE" "${PGARGS[@]}" -d "$NEWDB" --no-owner "$DUMP"; then
+	echo "[db-restore] ERRORE: pg_restore ha riportato errori — '$PGDATABASE' NON e' stato toccato" >&2
+	drop_newdb
 	exit 1
-}
-
-# --- 5. Restore ---------------------------------------------------------------
-echo "[db-restore] pg_restore in corso..."
-if ! "$PG_RESTORE" "${PGARGS[@]}" -d "$PGDATABASE" --no-owner "$DUMP"; then
-	echo "[db-restore] ERRORE: pg_restore ha riportato errori — controlla l'output sopra" >&2
+fi
+# Validazione prima dello swap: lo schema ripristinato e' leggibile? Intercetta i
+# dump che pg_restore accetta ma che non producono un DB utilizzabile.
+if ! NEW_WM="$(hs_db_watermark "$NEWDB")"; then
+	echo "[db-restore] ERRORE: il DB ripristinato non e' leggibile — '$PGDATABASE' NON e' stato toccato" >&2
+	drop_newdb
 	exit 1
 fi
 
-NEW_WM="$(hs_db_watermark)"
+# --- 5. Swap per rinomina -----------------------------------------------------
+# Nessun istante in cui '$PGDATABASE' non esiste: l'originale cambia nome, non viene
+# droppato. Se la seconda rinomina fallisce, si rimette il nome originale.
+"$PSQL" "${PGARGS[@]}" -d postgres -qc \
+	"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IN ('$PGDATABASE','$NEWDB') AND pid<>pg_backend_pid();" > /dev/null 2>&1 || true
+
+RENAMED=0
+if hs_db_exists; then
+	"$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$PGDATABASE\" RENAME TO \"$OLDDB\";" || {
+		echo "[db-restore] ERRORE: impossibile mettere da parte '$PGDATABASE' (connessioni attive?) — nulla e' cambiato" >&2
+		drop_newdb
+		exit 1
+	}
+	RENAMED=1
+fi
+if ! "$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$NEWDB\" RENAME TO \"$PGDATABASE\";"; then
+	echo "[db-restore] ERRORE: swap fallito — ripristino il database originale" >&2
+	[ "$RENAMED" -eq 1 ] && "$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$OLDDB\" RENAME TO \"$PGDATABASE\";" || true
+	drop_newdb
+	exit 1
+fi
+# Swap riuscito: il vecchio non serve piu' (il rollback resta nel dump di sicurezza).
+[ "$RENAMED" -eq 1 ] && "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$OLDDB\";" > /dev/null 2>&1
+
 echo "[db-restore] OK — watermark del DB ripristinato: $NEW_WM"
 echo "[db-restore] riavvia il server: mise run start-hindsight (o riapri Claude Code)"
 exit 0

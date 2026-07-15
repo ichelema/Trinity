@@ -27,8 +27,10 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="$BACKUP_DIR/hindsight-$STAMP.dump"
 
 # Watermark PRIMA del dump: fotografa l'ultima scrittura contenuta nel dump.
-WATERMARK="$(hs_db_watermark)"
-if [ -z "$WATERMARK" ]; then
+# Errore = psql muto, NON watermark vuoto: un DB legittimamente senza scritture da'
+# watermark "" ed e' dumpabile. Prima si guardava solo [ -z ] e il dump di un DB
+# vuoto falliva con un messaggio falso ("irraggiungibile").
+if ! WATERMARK="$(hs_db_watermark)"; then
 	echo "[db-dump] ERRORE: database '$PGDATABASE' irraggiungibile su $PGHOST:$PGPORT (server spento?)" >&2
 	exit 1
 fi

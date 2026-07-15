@@ -47,7 +47,12 @@ hs_db_require_pgbin() {
 
 # Ultima scrittura nel DB (watermark anti-perdita): l'istante piu' recente tra
 # documents (il retain scrive qui subito) e memory_units (estrazione async).
-# Stampa ISO o stringa vuota se il DB e' vuoto/irraggiungibile.
+# Stampa ISO, oppure stringa vuota se il DB non ha scritture. ESITO NELL'EXIT CODE:
+# 0 = psql ha risposto (il valore stampato e' attendibile, anche se vuoto)
+# 1 = psql e' muto (server giu', credenziali, DB inesistente): valore IGNOTO.
+# La distinzione e' obbligatoria: nel restore un watermark vuoto disattiva sia il
+# guardrail sia il dump di sicurezza, quindi "non so cosa c'e'" trattato come "non
+# c'e' niente da perdere" porta dritto al DROP di un DB pieno.
 #
 # created_at NON basta: il retain usa un document_id stabile per sessione (vedi
 # compute_document_id nel worker), quindi ogni Stop successivo AGGIORNA lo stesso
@@ -57,10 +62,27 @@ hs_db_require_pgbin() {
 # solo created_at il watermark resterebbe fermo al giorno della PRIMA scrittura e
 # il guardrail accetterebbe un dump piu' vecchio del lavoro appena fatto.
 hs_db_watermark() {
-	local db="${1:-$PGDATABASE}"
-	"$PSQL" "${PGARGS[@]}" -d "$db" -tA -c \
-		"SELECT COALESCE(GREATEST((SELECT max(GREATEST(created_at, updated_at)) FROM documents), (SELECT max(GREATEST(created_at, updated_at)) FROM memory_units))::text, '')" \
-		2>/dev/null | tr -d '\r'
+	local db="${1:-$PGDATABASE}" out
+	# Query di CATALOGO: gira su qualunque DB raggiungibile, anche senza le tabelle
+	# applicative. Se fallisce, psql e' muto -> esito ignoto. NB: il vecchio codice
+	# aveva il pipe a `tr` DENTRO la sostituzione, quindi leggeva l'exit di tr (0
+	# sempre) e non quello di psql: da qui il vuoto ambiguo.
+	out="$("$PSQL" "${PGARGS[@]}" -d "$db" -tAc \
+		"SELECT count(*) FROM pg_class WHERE relname IN ('documents','memory_units') AND relkind='r'" 2>/dev/null)" || return 1
+	# Tabelle assenti = DB nuovo, mai migrato. Esito NOTO: nessuna scrittura.
+	[ "$(printf '%s' "$out" | tr -dc '0-9')" = "2" ] || return 0
+	out="$("$PSQL" "${PGARGS[@]}" -d "$db" -tAc \
+		"SELECT COALESCE(GREATEST((SELECT max(GREATEST(created_at, updated_at)) FROM documents), (SELECT max(GREATEST(created_at, updated_at)) FROM memory_units))::text, '')" 2>/dev/null)" || return 1
+	printf '%s' "$out" | tr -d '\r'
+}
+
+# 0 se il database esiste. Distingue "DB assente" (primo restore: niente da perdere)
+# da "DB presente ma illeggibile" (fermarsi), che hs_db_watermark da solo non separa.
+hs_db_exists() {
+	local db="${1:-$PGDATABASE}" out
+	out="$("$PSQL" "${PGARGS[@]}" -d postgres -tAc \
+		"SELECT 1 FROM pg_database WHERE datname='$db'" 2>/dev/null)" || return 1
+	[ -n "$(printf '%s' "$out" | tr -dc '0-9')" ]
 }
 
 hs_db_host_label() {
