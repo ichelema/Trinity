@@ -146,7 +146,7 @@ Deliverable: `scripts/setup/bootstrap-linux.sh` (idempotente, rieseguibile) + `d
 3. Clone del repo in `~/ai/trinity` (o path a scelta) + `git config core.hooksPath .githooks`.
 4. `pip install hindsight-api` nel Python di mise + `mise reshim` (niente vincolo EDR su Linux: installazione normale, zero exe-free).
 5. Symlink skills-dir: `ln -sfn ~/ai/trinity ~/.claude/skills/trinity` (equivalente POSIX della junction).
-6. `~/.claude/settings.json` con env: `TRINITY_PLUGIN_DIR`, `OBSIDIAN_VAULT*` (se il vault esiste lì, altrimenti omesse). Chiavi API (`OPENAI_API_KEY`, `ZEROENTROPY_API_KEY`) in `~/.profile` o file env caricato da mise.
+6. `~/.claude/settings.json` con env: `TRINITY_PLUGIN_DIR`, `OBSIDIAN_VAULT*` (se il vault esiste lì, altrimenti omesse). Chiavi API (`OPENAI_API_KEY`, `ZEROENTROPY_API_KEY`, `TICKTICK_API_KEY`) in `~/.profile` o file env caricato da mise.
 7. Registrazione MCP hindsight a scope user: `claude mcp add-json hindsight … hindsight-mcp-shim.sh` (stesso shim, ora portabile dalla Fase 1).
 8. Primo avvio: `mise run start-hindsight` → pg0 scarica i binari Postgres **Linux** e crea un cluster nuovo in `~/.pg0/` (su filesystem nativo ext4: niente junction, niente NTFS).
 9. Primo import dati: `mise run db-restore` (Fase 4) dal dump più recente.

@@ -38,7 +38,12 @@ In `~/.profile` (o un env file caricato da mise):
 ```bash
 export OPENAI_API_KEY="sk-..."        # retain/recall/reflect (gpt-4.1-nano/mini)
 export ZEROENTROPY_API_KEY="ze-..."   # rerank multi-bank (opzionale ma consigliata)
+export TICKTICK_API_KEY="..."         # MCP TickTick (opzionale; web TickTick: Settings > Account > API Token)
 ```
+
+Il server MCP `ticktick` e' remoto (`https://mcp.ticktick.com/`): niente da installare,
+si autentica col Bearer token letto da questa variabile. E' l'unico MCP che funziona
+identico su Linux senza adattamenti.
 
 ## 4. Claude Code
 

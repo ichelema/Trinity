@@ -223,6 +223,7 @@ progetto (sono file del plugin, non del singolo progetto):
 |---|---|---|
 | `playwright` | stdio (node) | automazione browser headless (Playwright) |
 | `notebooklm` | stdio (python, exe-free) | Google NotebookLM: notebook, sources, chat, artifact, deep research |
+| `ticktick` | http (remoto, `mcp.ticktick.com`) | task, liste, abitudini, focus record e countdown di TickTick |
 | `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — `disabled: true` nel file |
 
@@ -235,6 +236,16 @@ readiness del server e fa da ponte verso `http://127.0.0.1:8888/mcp/<bank>/` via
 `mcp-remote` (node di mise, `npm install -g mcp-remote`). Non aggiungere una seconda
 definizione `hindsight` a scope project: due scope con lo stesso nome generano il warning
 "Conflicting scopes" a ogni sessione.
+
+`ticktick` è l'unico server **remoto**: è gestito da TickTick
+(`https://mcp.ticktick.com/`, Streamable HTTP), quindi non ha runtime locale né
+processo da avviare. Si autentica con un Bearer token letto a runtime da
+`${TICKTICK_API_KEY}` — l'espansione delle variabili vale anche nei campi `url` e
+`headers`, così il segreto **non** entra nel repo: va definito per-macchina (§10). Il
+token si crea dal web di TickTick: avatar in alto a sinistra → *Settings > Account >
+API Token*; se un giorno viene revocato o scade, si rigenera da lì (il Bearer non ha
+refresh automatico). Copre task, liste, abitudini, focus record e countdown; le funzioni
+avanzate di TickTick non sono esposte.
 
 Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
 `E:/AI/tools/notebooklm`, launcher con `truststore` per il proxy Eni): i file del plugin
@@ -413,6 +424,7 @@ una variabile separata.
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **da definire per-macchina** |
+| token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`, vedi `docs/SETUP-NUOVO-PC.md`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
 
 > Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
 > Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
@@ -886,7 +898,7 @@ route attuali (utile per debug del routing).
 ```
 Trinity/
 ├── core-behavior.md         comportamento iniettato al SessionStart
-├── .mcp.json                server MCP (playwright, notebooklm; excalidraw/obsidian off — hindsight a scope user, §7)
+├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
 ├── skills/                  11 skill

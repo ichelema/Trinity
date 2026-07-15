@@ -39,6 +39,13 @@
         "PYTHONPATH": "${NOTEBOOKLM_LIB:-E:/AI/tools/notebooklm}",
         "NOTEBOOKLM_HOME": "${NOTEBOOKLM_DATA:-E:/AI/tools/notebooklm-data}/nbhome"
       }
+    },
+    "ticktick": {
+      "type": "http",
+      "url": "https://mcp.ticktick.com/",
+      "headers": {
+        "Authorization": "Bearer ${TICKTICK_API_KEY}"
+      }
     }
   }
 }
