@@ -45,13 +45,21 @@ hs_db_require_pgbin() {
 	fi
 }
 
-# Ultima scrittura nel DB (watermark anti-perdita): max created_at tra documents
-# (il retain scrive qui subito) e memory_units (estrazione async). Stampa ISO o
-# stringa vuota se il DB e' vuoto/irraggiungibile.
+# Ultima scrittura nel DB (watermark anti-perdita): l'istante piu' recente tra
+# documents (il retain scrive qui subito) e memory_units (estrazione async).
+# Stampa ISO o stringa vuota se il DB e' vuoto/irraggiungibile.
+#
+# created_at NON basta: il retain usa un document_id stabile per sessione (vedi
+# compute_document_id nel worker), quindi ogni Stop successivo AGGIORNA lo stesso
+# documento invece di inserirne uno nuovo; la consolidation fa lo stesso sulle
+# observation (fonde, non inserisce). Sul DB reale meta' dei documents e un quarto
+# delle memory_units hanno updated_at > created_at, con gap fino a 25 giorni: con
+# solo created_at il watermark resterebbe fermo al giorno della PRIMA scrittura e
+# il guardrail accetterebbe un dump piu' vecchio del lavoro appena fatto.
 hs_db_watermark() {
 	local db="${1:-$PGDATABASE}"
 	"$PSQL" "${PGARGS[@]}" -d "$db" -tA -c \
-		"SELECT COALESCE(GREATEST((SELECT max(created_at) FROM documents), (SELECT max(created_at) FROM memory_units))::text, '')" \
+		"SELECT COALESCE(GREATEST((SELECT max(GREATEST(created_at, updated_at)) FROM documents), (SELECT max(GREATEST(created_at, updated_at)) FROM memory_units))::text, '')" \
 		2>/dev/null | tr -d '\r'
 }
 

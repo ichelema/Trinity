@@ -45,7 +45,7 @@ cat > "$OUT.meta.json" <<EOF
 {
   "host": "$(hs_db_host_label)",
   "dumped_at": "$STAMP",
-  "max_created_at": "$WATERMARK",
+  "max_write_at": "$WATERMARK",
   "database": "$PGDATABASE"
 }
 EOF

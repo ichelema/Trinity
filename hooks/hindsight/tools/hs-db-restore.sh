@@ -43,7 +43,16 @@ fi
 # --- 1. GUARDRAIL (sola lettura, prima di qualsiasi azione) ------------------
 DUMP_WM=""
 if [ -f "$DUMP.meta.json" ]; then
-	DUMP_WM="$(grep -o '"max_created_at": *"[^"]*"' "$DUMP.meta.json" | cut -d'"' -f4)"
+	DUMP_WM="$(grep -o '"max_write_at": *"[^"]*"' "$DUMP.meta.json" | cut -d'"' -f4)"
+	if [ -z "$DUMP_WM" ]; then
+		# Sidecar scritto prima che il watermark includesse updated_at (campo
+		# 'max_created_at'). Senza questo fallback DUMP_WM resterebbe vuoto e il
+		# guardrail sotto NON scatterebbe: si arriverebbe al DROP senza confronto.
+		# Il valore vecchio sottostima le scritture del dump -> il confronto e'
+		# conservativo (semmai rifiuta di piu', mai di meno).
+		DUMP_WM="$(grep -o '"max_created_at": *"[^"]*"' "$DUMP.meta.json" | cut -d'"' -f4)"
+		[ -n "$DUMP_WM" ] && echo "[db-restore] dump con watermark vecchio (solo created_at): confronto conservativo" >&2
+	fi
 	DUMP_HOST="$(grep -o '"host": *"[^"]*"' "$DUMP.meta.json" | cut -d'"' -f4)"
 	echo "[db-restore] dump: $(basename "$DUMP") (host: ${DUMP_HOST:-?}, watermark: ${DUMP_WM:-?})"
 else
