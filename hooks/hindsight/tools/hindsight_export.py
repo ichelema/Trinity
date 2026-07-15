@@ -113,6 +113,12 @@ def main() -> int:
     parser.add_argument(
         "--timeout", type=int, default=20, help="Timeout HTTP in secondi (default: 20)"
     )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Scrive l'export anche se alcuni documenti non sono recuperabili "
+        "(default: rifiuta, per non produrre un backup che sembra completo)",
+    )
     args = parser.parse_args()
 
     cfg = load_config()
@@ -131,32 +137,55 @@ def main() -> int:
     print(f"[export] documenti trovati: {len(summaries)}")
 
     items: list[dict] = []
-    skipped: list[str] = []
+    # Due liste, non una: un documento IRRAGGIUNGIBILE e' un buco nell'export (chi
+    # segue la procedura wipe+import lo perde per sempre); uno SENZA TESTO non lo e',
+    # non c'e' nulla da esportare. Mescolarli faceva chiamare "saltati senza testo"
+    # anche i fallimenti di rete.
+    failed: list[str] = []
+    empty: list[str] = []
     for i, summ in enumerate(summaries, 1):
         doc_id = summ.get("id")
         try:
             full = fetch_document(api_url, doc_id, args.timeout)
         except urllib.error.URLError as e:
             print(
-                f"[export] WARN: doc {doc_id} non recuperato ({e}) — salto",
+                f"[export] ERRORE: doc {doc_id} non recuperato ({e})",
                 file=sys.stderr,
             )
-            skipped.append(doc_id)
+            failed.append(doc_id)
             continue
         item = build_item(full)
         if not (item["content"] or "").strip():
-            skipped.append(doc_id)
+            empty.append(doc_id)
             continue
         items.append(item)
         print(
             f"[export]  ({i}/{len(summaries)}) {doc_id}  text={len(item['content'])}  tags={len(item['tags'])}"
         )
 
+    # Guardia PRIMA di scrivere: un export a cui mancano documenti che esistono nel
+    # bank e' un backup che sembra completo e non lo e'. Chi lo usa per wipe+import
+    # perde quei documenti senza accorgersene — e non ha modo di saperlo dopo, perche'
+    # il bank di origine non c'e' piu'. Meglio nessun file che un file bugiardo.
+    if failed and not args.allow_partial:
+        print(
+            f"[export] RIFIUTATO: {len(failed)} documenti su {len(summaries)} non recuperati.",
+            file=sys.stderr,
+        )
+        print(f"          ids: {failed[:10]}", file=sys.stderr)
+        print("          File NON scritto. Il bank e' raggiungibile? Riprova,", file=sys.stderr)
+        print("          oppure --allow-partial se accetti un export incompleto.", file=sys.stderr)
+        return 1
+
     payload = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "source_api_url": api_url,
         "document_count": len(items),
-        "skipped_ids": skipped,
+        # skipped_empty_ids: nessuna perdita (documenti senza testo).
+        # failed_ids + partial: buchi veri, presenti solo con --allow-partial.
+        "skipped_empty_ids": empty,
+        "failed_ids": failed,
+        "partial": bool(failed),
         "items": items,
     }
 
@@ -164,9 +193,16 @@ def main() -> int:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    print(f"[export] OK: {len(items)} documenti scritti in {out_path}")
-    if skipped:
-        print(f"[export] saltati {len(skipped)} documenti senza testo: {skipped}")
+    if failed:
+        print(
+            f"[export] PARZIALE: {len(items)} scritti, {len(failed)} NON recuperati -> {out_path}",
+            file=sys.stderr,
+        )
+        print(f"          mancano: {failed[:10]}", file=sys.stderr)
+    else:
+        print(f"[export] OK: {len(items)} documenti scritti in {out_path}")
+    if empty:
+        print(f"[export] saltati {len(empty)} documenti senza testo (nulla da esportare): {empty}")
     return 0
 
 
