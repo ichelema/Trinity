@@ -186,6 +186,23 @@ Solo i job che hanno senso sul server (systemd user timer, template in `schedule
 I `.cmd` e System Scheduler restano invariati per Windows. Gli `*-scheduled.sh` (già
 bash) vengono invocati direttamente dai timer con `TRINITY_PLUGIN_DIR` nell'unit.
 
+## Cose da fare successivamente (miglioramenti al sync, non bloccanti)
+
+Oggi `db-dump`/`db-restore` sono manuali (scelta deliberata: il restore è
+distruttivo). Automazione proposta, da fare dopo il collaudo sul server:
+
+1. **Dump automatico in uscita** — nel worker di `hindsight-shutdown.sh`
+   (scatta solo alla chiusura dell'ULTIMA sessione Claude), chiamare
+   `hs-db-dump.sh` tra il retain finale e `hindsight-stop-services.sh`.
+   Sicuro (sola lettura, ~8 s, rotazione a 5 copie): chiudi e basta, il dump
+   fresco finisce sulla chiavetta da solo.
+2. **Restore assistito in ingresso** — a SessionStart (in `ensure-up` o hook
+   dedicato) confrontare il watermark del dump in `BACKUP_DIR` (`.meta.json`)
+   con `hs_db_watermark()` locale: se la chiavetta è più avanti, iniettare un
+   avviso in sessione ("dump più recente del DB locale: lancia
+   `mise run db-restore`"). Il restore RESTA manuale: mai drop automatico
+   all'avvio. Il guardrail rimane come ultima difesa.
+
 ## Fuori scope (esplicitamente)
 
 - **LiteLLM / CCR / Headroom su Linux**: tool esterni per-macchina; si installano lì
