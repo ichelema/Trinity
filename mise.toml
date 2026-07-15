@@ -25,7 +25,7 @@ ruby = "4.0.1"
 # Espone gli entry-point script di hindsight-api (hindsight-local-mcp, hindsight-api, ecc.)
 # La Scripts dir del Python mise non e' nel PATH per default sotto MSYS2.
 _.path = [
-  "E:/msys64/home/Sphynx/.local/share/mise/installs/python/3.13.13/Scripts",
+  "{{ get_env(name='HOME', default='') }}/.local/share/mise/installs/python/3.13.13/Scripts",
 ]
 
 # Forza Python a usare UTF-8 per stdin/stdout/stderr. Hindsight stampa un banner
@@ -38,7 +38,7 @@ PYTHONUTF8 = "1"
 # perche' viene DOPO). mise ignora un _.file mancante senza errori, quindi a casa (niente
 # proxy.env) resta il default. Serve perche' alcuni PC hanno un SSL_CERT_FILE globale Windows
 # a un bundle incompleto → CERTIFICATE_VERIFY_FAILED su ZeroEntropy/LiteLLM/Node.
-_.file = ["E:/msys64/home/Sphynx/certs/default.env", "C:/certs/proxy.env"]
+_.file = ["{{ get_env(name='HOME', default='') }}/certs/default.env", "C:/certs/proxy.env"]
 
 # Provider LLM per le operazioni retain/recall/reflect di hindsight.
 HINDSIGHT_API_LLM_PROVIDER = "openai"

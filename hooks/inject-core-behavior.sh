@@ -15,11 +15,32 @@ FILE="$ROOT/core-behavior.md"
 : "${OBSIDIAN_VAULT_NAME:=⚠️ imposta OBSIDIAN_VAULT_NAME}"
 export OBSIDIAN_VAULT OBSIDIAN_VAULT_NAME
 
+# Il file contiene blocchi per-OS delimitati da <!-- OS:windows --> e
+# <!-- OS:linux -->: tieni solo quelli dell'OS corrente e togli i marker.
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*) OS_DROP=linux ;;
+*) OS_DROP=windows ;;
+esac
+# Filtro in puro bash (niente sed: col sed nativo ucrt64 la path conversion
+# MSYS2 mangia le espressioni che contengono slash).
+filter_os() {
+    local drop=0 line
+    while IFS= read -r line; do
+        case "$line" in
+        *"<!-- OS:$OS_DROP -->"*) drop=1; continue ;;
+        *"<!-- /OS:$OS_DROP -->"*) drop=0; continue ;;
+        *"<!-- OS:"* | *"<!-- /OS:"*) continue ;;
+        esac
+        [ "$drop" -eq 1 ] && continue
+        printf '%s\n' "$line"
+    done < "$FILE"
+}
+
 if command -v envsubst > /dev/null 2>&1; then
     # Lista esplicita: envsubst tocca SOLO queste due var, non $PATH/$r/$in.
-    envsubst '${OBSIDIAN_VAULT} ${OBSIDIAN_VAULT_NAME}' < "$FILE"
+    filter_os | envsubst '${OBSIDIAN_VAULT} ${OBSIDIAN_VAULT_NAME}'
 else
     # Fallback senza gettext: _NAME prima (evita match parziali).
-    sed -e "s|\${OBSIDIAN_VAULT_NAME}|${OBSIDIAN_VAULT_NAME}|g" \
-        -e "s|\${OBSIDIAN_VAULT}|${OBSIDIAN_VAULT}|g" "$FILE"
+    filter_os | sed -e "s|\${OBSIDIAN_VAULT_NAME}|${OBSIDIAN_VAULT_NAME}|g" \
+        -e "s|\${OBSIDIAN_VAULT}|${OBSIDIAN_VAULT}|g"
 fi

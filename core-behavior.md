@@ -58,15 +58,27 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 
 ## Ambiente di lavoro
 
+<!-- OS:windows -->
 - OS: Windows 11 Enterprise.
 - Shell: bash MSYS2 UCRT64 (`/usr/bin/bash`), `MSYSTEM=UCRT64`.
 - Vault principale Obsidian: `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`). Versione MSYS del path: ricavala con `cygpath -u "${OBSIDIAN_VAULT}"`.
+<!-- /OS:windows -->
+<!-- OS:linux -->
+- OS: Linux.
+- Shell: bash.
+- Vault principale Obsidian (se presente su questa macchina): `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`).
+<!-- /OS:linux -->
 
 ## Regole operative
 
 - Usa sintassi Unix compatibile bash/zsh: forward slash, `/dev/null`, pipe Unix.
 - Non usare PowerShell o CMD.
+<!-- OS:windows -->
 - Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo con `pacman -S --noconfirm <pacchetto>`.
+<!-- /OS:windows -->
+<!-- OS:linux -->
+- Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo col package manager della distro (es. `sudo apt-get install -y <pacchetto>`).
+<!-- /OS:linux -->
 - Mostra sempre l'output completo `stdout`/`stderr` dopo ogni comando.
 - Se un comando fallisce, mostra l'errore completo prima di tentare un fix.
 - Non silenziare mai gli errori.
@@ -97,10 +109,15 @@ Per il workflow completo (analisi d'impatto prima di un refactor, diagnostica do
 
 ## Regole path
 
+<!-- OS:windows -->
 - I path MSYS2 (`/c/...`, `/e/...`) funzionano solo in bash.
 - Ruby e Python girano nativamente su Windows e non riconoscono path MSYS.
 - Negli script Python usa sempre path Windows: `C:/Appl/...`, `E:/doublecmd/...` oppure backslash.
 - Negli script Python non usare mai path MSYS come `/c/...` o `/e/...`.
+<!-- /OS:windows -->
+<!-- OS:linux -->
+- Usa sempre path POSIX assoluti: niente lettere di unità, niente `cygpath`, nessuna conversione necessaria.
+<!-- /OS:linux -->
 
 ## Nushell per data processing
 
@@ -110,10 +127,15 @@ Usa Nushell quando l'output beneficia di formattazione tabulare, aggregazione o 
 $HOME/.local/bin/nu -c "..."
 ```
 
+<!-- OS:windows -->
 Nushell è un binario Windows nativo, non MSYS2: usa path Windows, non `/c/...` o `/e/...`.
 
 - Corretto: `nu -c "open 'C:/Desktop/Claude/Main/data.json'"`
 - Errato: `nu -c "open '/c/Desktop/Claude/Main/data.json'"`
+<!-- /OS:windows -->
+<!-- OS:linux -->
+Se `nu` non è in `~/.local/bin`, usa quello nel PATH; i path sono POSIX normali.
+<!-- /OS:linux -->
 
 ### Casi d'uso Nushell
 
