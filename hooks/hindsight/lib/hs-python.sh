@@ -6,6 +6,15 @@
 # altro progetto `python` puo' NON esistere nel PATH e gli hook fallirebbero in
 # silenzio (le invocazioni hanno `2>/dev/null`), niente injection di memoria.
 #
+# Esporta anche HS_CACHE_DIR: cache e file di stato degli hook, per-utente e 0700.
+# NON /tmp — su Linux e' 1777 e si svuota al reboot, quindi un altro utente puo'
+# crearci per primo i file che poi rileggiamo (il path dell'interprete qui sotto
+# verrebbe eseguito coi nostri privilegi) o leggere quelli che scriviamo.
+# Stesso path calcolato da cache_dir() in lib/hindsight_config.py per il lato Python.
+HS_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
+mkdir -p "$HS_CACHE_DIR" 2>/dev/null && chmod 700 "$HS_CACHE_DIR" 2>/dev/null
+export HS_CACHE_DIR
+#
 # Ordine di risoluzione: python/python3 nel PATH -> python gestito da mise ->
 # python MSYS2 UCRT64 -> "python" come ultimo tentativo.
 HS_PY="$(command -v python 2>/dev/null || command -v python3 2>/dev/null || true)"
@@ -26,7 +35,7 @@ fi
 # python pinnata nel proprio mise.toml userebbe comunque quella cachata.
 case "$HS_PY" in
   */mise/shims/*)
-    _hs_cache="${TMPDIR:-/tmp}/hs-python-real.path"
+    _hs_cache="$HS_CACHE_DIR/hs-python-real.path"
     _hs_real=""
     # || true: la cache e' scritta senza newline finale -> read ritorna 1 a EOF
     # pur popolando la variabile; senza guardia, sotto set -e lo script morirebbe.
@@ -34,7 +43,9 @@ case "$HS_PY" in
     if [ ! -x "$_hs_real" ]; then
       _hs_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
       _hs_real="$("$_hs_mise" which python 2>/dev/null | tr '\\' '/' || true)"
-      [ -n "$_hs_real" ] && [ -x "$_hs_real" ] && printf '%s' "$_hs_real" > "$_hs_cache"
+      # || true: se la cache dir non e' scrivibile non cachiamo e basta — si risolve
+      # via mise a ogni invocazione (~300ms in piu', ma corretto).
+      [ -n "$_hs_real" ] && [ -x "$_hs_real" ] && { printf '%s' "$_hs_real" > "$_hs_cache" 2>/dev/null || true; }
     fi
     [ -n "$_hs_real" ] && [ -x "$_hs_real" ] && HS_PY="$_hs_real"
     ;;

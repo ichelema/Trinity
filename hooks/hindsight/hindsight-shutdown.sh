@@ -19,7 +19,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # --- Worker: gira detached, fa il lavoro vero -------------------------------------
 if [ "${1:-}" = "--worker" ]; then
 	INPUT="$2"
-	SESS_DIR="/tmp/hs-sessions"
+	# Sotto $HOME e non in /tmp: su Linux /tmp e' scrivibile da tutti, quindi un altro
+	# utente potrebbe piazzare o rimuovere lease e influenzare il nostro shutdown.
+	SESS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-sessions"
 
 	# 1) Retain finale forzato: cattura la coda della sessione prima di spegnere il server.
 	printf '%s' "$INPUT" | HS_RETAIN_FORCE=1 bash "$SCRIPT_DIR/hindsight-retain.sh" >/dev/null 2>&1 || true

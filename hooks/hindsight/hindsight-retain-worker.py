@@ -20,7 +20,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -29,7 +28,7 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from hindsight_config import load_config, retain_bank_url
+from hindsight_config import cache_dir, load_config, retain_bank_url
 from hindsight_debug import debug_log
 
 CFG = load_config()
@@ -162,10 +161,9 @@ def count_transcript_lines(path: str) -> int:
 
 
 def _retain_state_path() -> str:
-    """File di stato per il tracking compaction. In temp dir Python-safe
-    (tempfile.gettempdir() risolve correttamente anche con python nativo Windows,
-    a differenza di un '/tmp' hardcoded). Override per i test via HS_RETAIN_STATE_DIR."""
-    d = os.environ.get("HS_RETAIN_STATE_DIR") or tempfile.gettempdir()
+    """File di stato per il tracking compaction. In cache_dir() (per-utente, 0700):
+    su Linux /tmp e' scrivibile da tutti. Override per i test via HS_RETAIN_STATE_DIR."""
+    d = os.environ.get("HS_RETAIN_STATE_DIR") or cache_dir()
     return os.path.join(d, "hs-retain-state.json")
 
 

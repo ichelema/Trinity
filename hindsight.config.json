@@ -27,7 +27,6 @@
   "recall_tags": ["claude-code"],
   "recall_tags_match": "any",
   "recall_cache_ttl": 300,
-  "recall_cache_dir": "/tmp/hs-recall-cache",
   "recall_timeout": 10,
 
   "retain_mode": "chunked",

@@ -123,7 +123,8 @@ done
 
 # --- 6. CACHE RECALL ---
 sect "6. Cache client-side"
-CACHE_DIR="${HINDSIGHT_CACHE_DIR:-/tmp/hs-recall-cache}"
+# Letta dalla config invece di cablarla: il default vive in hindsight_config.py.
+CACHE_DIR="${HINDSIGHT_CACHE_DIR:-$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get recall_cache_dir 2>/dev/null)}"
 if [ -d "$CACHE_DIR" ]; then
 	N_CACHE=$(ls -1 "$CACHE_DIR"/*.json 2>/dev/null | wc -l)
 	ok "cache dir esiste ($CACHE_DIR, $N_CACHE entries)"
@@ -186,15 +187,17 @@ else
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"check OK"},{"type":"tool_use","name":"Bash","input":{"command":"git status"}}]}}
 EOF
 	RETAIN_PAYLOAD=$(python -c "import json; print(json.dumps({'session_id':'check-1234','transcript_path':r'$FAKE_WIN','cwd':r'$PROJ','hook_event_name':'Stop'}))")
-	>/tmp/hs-retain.log
+	# Stesso path che usa hindsight-retain.sh (HS_CACHE_DIR, esportata da hs-python.sh).
+	RETAIN_LOG="${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-retain.log"
+	>"$RETAIN_LOG"
 	# HS_RETAIN_FORCE bypassa il throttling (step E) per testare il POST in modo deterministico
 	echo "$RETAIN_PAYLOAD" | HS_RETAIN_FORCE=1 "$HOOKS_DIR/hindsight-retain.sh"
 	sleep 1
-	if grep -q "\[retain\] OK 200" /tmp/hs-retain.log 2>/dev/null; then
-		ok "retain hook OK (log: $(head -1 /tmp/hs-retain.log | head -c 120))"
+	if grep -q "\[retain\] OK 200" "$RETAIN_LOG" 2>/dev/null; then
+		ok "retain hook OK (log: $(head -1 "$RETAIN_LOG" | head -c 120))"
 	else
-		ko "retain hook non ha scritto OK 200 in /tmp/hs-retain.log"
-		note "log: $(cat /tmp/hs-retain.log 2>/dev/null | head -3)"
+		ko "retain hook non ha scritto OK 200 in $RETAIN_LOG"
+		note "log: $(cat "$RETAIN_LOG" 2>/dev/null | head -3)"
 	fi
 	rm -f "$FAKE"
 fi

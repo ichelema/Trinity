@@ -29,8 +29,31 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
+
+def cache_dir() -> str:
+    """Directory delle cache/stato per-utente: $XDG_CACHE_HOME/trinity, fallback
+    ~/.cache/trinity. La crea 0700 se manca (idempotente) e ne ritorna il path.
+
+    NON /tmp, per due motivi distinti:
+      - sicurezza: su Linux /tmp e' 1777 e si svuota al reboot, quindi un altro
+        utente puo' creare per primo i file che poi rileggiamo (path di interpreti
+        -> esecuzione di codice; risultati di recall -> lettura delle memorie e
+        iniezione di testo nel contesto). Sotto $HOME 0700 non ci entra nessuno.
+      - correttezza: un literal "/tmp/..." su Python nativo Windows si risolve come
+        <drive-corrente>:\\tmp\\..., quindi la cache si frammentava per disco.
+    expanduser("~") e' Python-safe anche su Windows; $HOME in forma MSYS ("/e/...")
+    non lo sarebbe."""
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    # Slash avanti: il path finisce anche in bash (es. --get recall_cache_dir), dove
+    # i backslash di os.path.join sarebbero escape. Windows accetta entrambi.
+    d = os.path.join(base, "trinity").replace("\\", "/")
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+    except OSError:
+        pass
+    return d
+
 
 DEFAULTS = {
     "api_url": "http://127.0.0.1:8888/v1/default/banks/trinity-project",
@@ -109,7 +132,7 @@ DEFAULTS = {
     "recall_tags": ["claude-code"],
     "recall_tags_match": "any",
     "recall_cache_ttl": 300,
-    "recall_cache_dir": "/tmp/hs-recall-cache",
+    "recall_cache_dir": cache_dir() + "/hs-recall-cache",
     "recall_timeout": 6,
     # Parametri di chunking del retain, consumati da hindsight-retain-worker.py.
     # Devono stare nei DEFAULTS o load_config li scarta dalla whitelist (riga "if
@@ -290,7 +313,7 @@ _REPO_CACHE_TTL = 3600
 
 def _repo_cache_file(cwd: str) -> str:
     h = hashlib.sha256(cwd.encode("utf-8")).hexdigest()[:16]
-    return os.path.join(tempfile.gettempdir(), "hs-repo-cache", h + ".json")
+    return os.path.join(cache_dir(), "hs-repo-cache", h + ".json")
 
 
 def _git_root_and_slug(cwd: str) -> tuple[str, str]:

@@ -29,13 +29,20 @@ fi
 # su file; il check -x invalida da solo la cache quando il path cambia.
 case "$NODE_BIN" in
 	*/mise/shims/*)
-		_se_cache="${TMPDIR:-/tmp}/hs-node-real.path"
+		# Cache sotto $HOME e non in /tmp: su Linux /tmp e' 1777 e si svuota al reboot,
+		# quindi un altro utente puo' crearci il file per primo col path di un SUO
+		# eseguibile — il check -x qui sotto lo promuoverebbe a interprete e lo
+		# eseguirebbe coi nostri privilegi. In una dir 0700 sotto $HOME non entra nessuno.
+		_se_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
+		mkdir -p "$_se_cache_dir" 2>/dev/null && chmod 700 "$_se_cache_dir" 2>/dev/null
+		_se_cache="$_se_cache_dir/hs-node-real.path"
 		_se_real=""
 		[[ -f "$_se_cache" ]] && IFS= read -r _se_real <"$_se_cache"
 		if [[ ! -x "$_se_real" ]]; then
 			_se_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
 			_se_real="$("$_se_mise" which node 2>/dev/null | tr '\\' '/' || true)"
-			[[ -n "$_se_real" && -x "$_se_real" ]] && printf '%s' "$_se_real" >"$_se_cache"
+			# || true: se la cache dir non e' scrivibile non cachiamo e basta.
+			[[ -n "$_se_real" && -x "$_se_real" ]] && { printf '%s' "$_se_real" >"$_se_cache" 2>/dev/null || true; }
 		fi
 		[[ -n "$_se_real" && -x "$_se_real" ]] && NODE_BIN="$_se_real"
 		;;

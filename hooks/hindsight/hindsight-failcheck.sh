@@ -19,7 +19,7 @@ export HOOK_INPUT HOOKS_DIR
 . "$HOOKS_DIR/lib/hs-python.sh"
 
 "$HS_PY" <<'PY' 2>/dev/null
-import json, os, sys, tempfile, urllib.request
+import json, os, sys, urllib.request
 from datetime import datetime, timezone, timedelta
 
 # Forza UTF-8 su stdout: il python MSYS UCRT64 usa cp1252 di default e il testo
@@ -31,7 +31,7 @@ except Exception:
     pass
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
-from hindsight_config import load_config, retain_bank_url, recall_bank_urls
+from hindsight_config import cache_dir, load_config, retain_bank_url, recall_bank_urls
 
 cfg = load_config()
 
@@ -105,10 +105,11 @@ for r in raw:
     if cur is None or _RANK.get(r["task_type"], 9) < _RANK.get(cur["task_type"], 9):
         groups[key] = r
 
-# De-dup di notifica: state file con le chiavi gia' segnalate. gettempdir() da' il
-# TEMP reale di Windows (stabile cross-drive): un literal "/tmp/..." lo risolverebbe
-# su Python nativo come <drive-corrente>:\tmp, variando col cwd della sessione.
-state_file = os.path.join(tempfile.gettempdir(), "hs-failcheck-seen.json")
+# De-dup di notifica: state file con le chiavi gia' segnalate. cache_dir() e'
+# per-utente e 0700 (su Linux /tmp e' scrivibile da tutti) ed e' stabile cross-drive:
+# un literal "/tmp/..." su Python nativo si risolverebbe come <drive-corrente>:\tmp,
+# variando col cwd della sessione.
+state_file = os.path.join(cache_dir(), "hs-failcheck-seen.json")
 try:
     with open(state_file, encoding="utf-8") as f:
         # round-trip JSON: le liste tornano tuple per il confronto con groups
