@@ -188,6 +188,16 @@ bash) vengono invocati direttamente dai timer con `TRINITY_PLUGIN_DIR` nell'unit
 
 ## Cose da fare successivamente (miglioramenti al sync, non bloccanti)
 
+0. **`.lsp.json` su Linux** — resta machine-specific: i command sono i path
+   assoluti degli shim mise **con `.exe`** (obbligati: Claude Code e' un
+   processo Windows nativo e cerca il file letteralmente; il nome senza
+   estensione lo risolve solo la bash MSYS). Su Linux i path sono
+   `~/.local/share/mise/shims/<nome>` senza estensione: va deciso se
+   generarlo dal bootstrap (file versionato → sporcherebbe il repo), se
+   verificare che `.lsp.json` espanda le variabili d'ambiente, o se tenerlo
+   fuori dal versionamento. Nota: `lua-language-server` non e' gestito da
+   mise ed e' comunque per-macchina.
+
 Oggi `db-dump`/`db-restore` sono manuali (scelta deliberata: il restore è
 distruttivo). Automazione proposta, da fare dopo il collaudo sul server:
 
