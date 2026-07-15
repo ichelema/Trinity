@@ -348,6 +348,37 @@ sys.exit(0 if any('hindsight-shutdown.sh' in c for c in cmds) else 1)
 else
 	ko "hook SessionEnd con hindsight-shutdown.sh assente in hooks.json"
 fi
+# Conteggio sessioni vive: se sbaglia per difetto, lo shutdown spegne il server sotto
+# una sessione ancora aperta (che perde l'MCP in silenzio). Le regex si estraggono DAL
+# file, non si riscrivono qui, se no il check verifica se stesso.
+SHUT="$HOOKS_DIR/hindsight-shutdown.sh"
+RX_WIN="$(grep -o "grep -icE '[^']*'" "$SHUT" | sed "s/grep -icE '//;s/'$//")"
+RX_LIN="$(grep -o "pgrep -fc '[^']*'" "$SHUT" | sed "s/pgrep -fc '//;s/'$//")"
+CA_ERR=""
+[ -n "$RX_WIN" ] && [ -n "$RX_LIN" ] || CA_ERR="regex di claude_alive non estraibili"
+# DEVONO contare: CLI (padre MSYS → forma /e/...), CLI da Windows e app desktop (padre
+# Windows → forma C:\...\claude.exe). L'ancora al path di installazione le mancava.
+for p in '/e/msys64/home/Sphynx/.local/bin/claude' \
+	'C:\Users\x\AppData\Local\AnthropicClaude\claude.exe' \
+	'D:\msys64\home\Sphynx\.local\bin\claude.exe'; do
+	[ -z "$CA_ERR" ] && ! printf '%s' "$p" | grep -qiE "$RX_WIN" && CA_ERR="non conta una sessione viva: $p"
+done
+# NON devono contare: altri binari Anthropic e wrapper con prefisso 'claude-'.
+for p in 'C:\Users\x\AppData\Local\AnthropicClaude\app-1.0\resources\chrome-native-host.exe' \
+	'/e/msys64/home/Sphynx/.local/bin/claude-headroom.sh' '/usr/bin/zsh'; do
+	[ -z "$CA_ERR" ] && printf '%s' "$p" | grep -qiE "$RX_WIN" && CA_ERR="conta un processo che non e' una sessione: $p"
+done
+# pgrep -f legge la cmdline INTERA: il worker non deve contare se stesso (la config dir
+# '/.claude/' compare sempre nella sua riga di comando).
+if [ -z "$CA_ERR" ] && printf '%s' 'bash /home/s/.claude/skills/trinity/hooks/hindsight/hindsight-shutdown.sh --worker {}' | grep -qE "$RX_LIN"; then
+	CA_ERR="la regex Linux fa auto-match sul worker (server mai spento)"
+fi
+[ -z "$CA_ERR" ] && ! printf '%s' '/usr/local/bin/claude' | grep -qE "$RX_LIN" && CA_ERR="regex Linux ancorata al path di installazione"
+if [ -z "$CA_ERR" ]; then
+	ok "claude_alive conta le sessioni per NOME del binario (CLI, desktop, entrambi i separatori)"
+else
+	ko "claude_alive: $CA_ERR"
+fi
 
 # --- 15. CONFIG CENTRALIZZATA (step F) ---
 sect "15. Config centralizzata (step F)"

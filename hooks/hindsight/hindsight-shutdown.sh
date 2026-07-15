@@ -19,9 +19,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # --- Worker: gira detached, fa il lavoro vero -------------------------------------
 if [ "${1:-}" = "--worker" ]; then
 	INPUT="$2"
-	# Sotto $HOME e non in /tmp: su Linux /tmp e' scrivibile da tutti, quindi un altro
-	# utente potrebbe piazzare o rimuovere lease e influenzare il nostro shutdown.
-	SESS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-sessions"
 
 	# 1) Retain finale forzato: cattura la coda della sessione prima di spegnere il server.
 	printf '%s' "$INPUT" | HS_RETAIN_FORCE=1 bash "$SCRIPT_DIR/hindsight-retain.sh" >/dev/null 2>&1 || true
@@ -30,14 +27,27 @@ if [ "${1:-}" = "--worker" ]; then
 	#    crash (un lease orfano non blocca piu' lo stop). Il launcher di QUESTA sessione
 	#    sta uscendo: se ne restano >=2 c'e' di sicuro un'altra sessione (esci subito);
 	#    se ne resta 1 puo' essere solo la nostra in chiusura -> attendi che sparisca.
+	# Si conta il NOME del binario, non il path di installazione: ancorarlo a
+	# '.local/bin' mancava le sessioni avviate da claude_code_desktop.cmd, che girano
+	# come C:\...\AnthropicClaude\claude.exe -> conteggio 0 -> server spento sotto una
+	# sessione desktop viva. Costo accettato: l'app desktop e' lo stesso binario della
+	# chat, quindi con l'app aperta il server resta su finche' non fai stop-hindsight.
+	# Contare di troppo spreca RAM; contare di meno uccide la memoria di una sessione.
 	case "$(uname -s)" in
 	MINGW* | MSYS* | CYGWIN*)
 		# ps -W è MSYS-only: mostra anche i processi Windows nativi (il launcher claude).
-		claude_alive() { ps -W 2>/dev/null | grep -icE '/\.local/bin/claude(\.exe)?([[:space:]]|$)'; }
+		# Serve accettare ENTRAMBI i separatori: ps -W stampa la forma MSYS
+		# (/e/.../bin/claude) se il padre e' una shell MSYS, quella Windows
+		# (C:\...\claude.exe) se lo ha lanciato Windows (app desktop, .cmd, scorciatoia).
+		# Verificato con notepad: da bash -> /c/Windows/System32/notepad, da
+		# `cmd //c start` -> C:\Windows\System32\notepad.exe.
+		claude_alive() { ps -W 2>/dev/null | grep -icE '[/\\]claude(\.exe)?([[:space:]]|$)'; }
 		;;
 	*)
 		# pgrep -c stampa il conteggio (0 incluso) ma esce 1 senza match: || true.
-		claude_alive() { pgrep -fc '/\.local/bin/claude([[:space:]]|$)' 2>/dev/null || true; }
+		# [/] e non /: il match e' sul separatore prima del nome, cosi' '/.claude/...'
+		# (config dir, presente nella cmdline dell'hook) non viene contato per sbaglio.
+		claude_alive() { pgrep -fc '[/]claude([[:space:]]|$)' 2>/dev/null || true; }
 		;;
 	esac
 	[ "$(claude_alive)" -ge 2 ] && exit 0
@@ -47,13 +57,12 @@ if [ "${1:-}" = "--worker" ]; then
 	done
 	[ "$(claude_alive)" -gt 0 ] && exit 0
 
-	# 3) Nessuna sessione Claude viva: i lease rimasti sono orfani -> ripulisci. Poi
-	#    attendi che il server abbia DAVVERO estratto i fatti del retain finale prima
-	#    di ucciderlo: la POST e' async, l'estrazione LLM prosegue server-side e dura
-	#    ~32s in mediana. Il vecchio `sleep 7` fisso la troncava nell'89% dei casi e la
-	#    memoria di fine sessione spariva senza errori (vedi hindsight-drain-retain.py).
-	#    Infine ferma server (launcher + python) e Postgres embedded.
-	[ -d "$SESS_DIR" ] && find "$SESS_DIR" -type f -delete 2>/dev/null || true
+	# 3) Nessuna sessione Claude viva: attendi che il server abbia DAVVERO estratto i
+	#    fatti del retain finale prima di ucciderlo — la POST e' async, l'estrazione LLM
+	#    prosegue server-side e dura ~32s in mediana. Il vecchio `sleep 7` fisso la
+	#    troncava nell'89% dei casi e la memoria di fine sessione spariva senza errori
+	#    (vedi hindsight-drain-retain.py). Infine ferma server (launcher + python) e
+	#    Postgres embedded.
 	. "$SCRIPT_DIR/lib/hs-python.sh"
 	HOOK_INPUT="$INPUT" "$HS_PY" "$SCRIPT_DIR/ops/hindsight-drain-retain.py" >/dev/null 2>&1
 	# Ultimo check anti-race: durante lo sleep puo' essere partita una NUOVA sessione
