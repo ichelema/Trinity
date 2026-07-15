@@ -1,7 +1,12 @@
 # Piano — Trinity multipiattaforma (Windows + server Linux)
 
-> Stato: **proposta, da eseguire**. Basato sull'audit del 2026-07-15 (9 agent, 88 finding
-> + 3 gap) e sulle decisioni dell'utente. Tempi DB misurati sul cluster reale.
+> Stato al 2026-07-15: **fasi 0, 1, 2, 4 ESEGUITE e verificate su Windows**
+> (commit da `74925de` a `2349941`); **fasi 3 e 5**: deliverable scritti e
+> committati (`b04e0b5`, `f422b39`), esecuzione e collaudo DA FARE sul server
+> (bootstrap → chiavi API → start → db-restore → timer). Al primo riavvio di
+> Claude Code su Windows verificare: playwright MCP, LSP (nomi shim nel PATH),
+> suoni via play-sound.sh. Basato sull'audit del 2026-07-15 (9 agent, 88
+> finding + 3 gap); tempi DB misurati sul cluster reale.
 
 ## Decisioni prese (vincolanti per il piano)
 
