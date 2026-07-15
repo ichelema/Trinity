@@ -301,7 +301,7 @@ def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
 
 # Cache per-processo dello slug git: evita subprocess ripetuti quando "auto"
 # compare piu' volte (es. retain + recall nello stesso processo di test).
-_REPO_CACHE: dict[str, tuple[str, str]] = {}
+_REPO_CACHE: dict[str, tuple[str, str, str]] = {}
 
 
 # Cache su FILE del git-resolve. I due subprocess git (rev-parse + config) costano
@@ -316,24 +316,51 @@ def _repo_cache_file(cwd: str) -> str:
     return os.path.join(cache_dir(), "hs-repo-cache", h + ".json")
 
 
-def _git_root_and_slug(cwd: str) -> tuple[str, str]:
-    """(toplevel, slug) del repo che contiene cwd. Slug: nome dal remote 'origin'
-    (identificativo STABILE, invariante a spostamenti della cartella — stessa
-    logica di git_info nel retain worker), fallback basename della toplevel.
-    ("", "") fuori da un repo git (esito noto: cachato) oppure se git non risponde
-    — timeout, git assente (esito ignoto: NON cachato, si ritenta al prossimo hook)."""
+def _remote_identity(remote: str) -> str:
+    """Identita' canonica "host/owner/repo" da un URL di remote git, invariante al
+    protocollo: lo STESSO repo clonato via SSH o HTTPS deve dare la stessa stringa,
+    altrimenti il confronto col repo del plugin fallirebbe a seconda di come e'
+    stato clonato. host e owner in minuscolo (gli host git non distinguono le
+    maiuscole). Stringa vuota se il remote manca; forma non riconosciuta =>
+    ritorna il valore ripulito (meglio confrontare quello che niente)."""
+    clean = remote.strip().rstrip("/")
+    if not clean:
+        return ""
+    clean = clean[:-4] if clean.endswith(".git") else clean
+    # SCP-like: git@host:owner/repo
+    m = re.match(r"^[^@/]+@([^:/]+):(.+)$", clean)
+    if not m:
+        # URL: https://host[:port]/owner/repo, ssh://git@host[:port]/owner/repo
+        m = re.match(r"^(?:https?|ssh|git)://(?:[^@/]+@)?([^/]+)/(.+)$", clean)
+    if not m:
+        return clean.lower()
+    host = m.group(1).split(":")[0].lower()  # scarta la porta: host:22 == host
+    return f"{host}/{m.group(2).lower()}"
+
+
+def _git_root_and_slug(cwd: str) -> tuple[str, str, str]:
+    """(toplevel, slug, identity) del repo che contiene cwd.
+    Slug: nome dal remote 'origin' (identificativo STABILE, invariante a spostamenti
+    della cartella — stessa logica di git_info nel retain worker), fallback basename
+    della toplevel. Identity: "host/owner/repo" canonico dallo STESSO remote gia'
+    letto qui — deriva da quella lettura, quindi non costa un git in piu' e viaggia
+    sulla stessa cache (su MSYS un git subprocess costa ~1.4s: rifarlo a ogni hook
+    sarebbe una regressione visibile a ogni prompt).
+    ("", "", "") fuori da un repo git (esito noto: cachato) oppure se git non
+    risponde — timeout, git assente (esito ignoto: NON cachato, si ritenta)."""
     if cwd in _REPO_CACHE:
         return _REPO_CACHE[cwd]
 
     # Cache su file persistente tra invocazioni. Vale anche il risultato "vuoto"
-    # (cwd fuori da git): evita di ri-tentare il git ogni volta.
+    # (cwd fuori da git): evita di ri-tentare il git ogni volta. Le entry nel vecchio
+    # formato a 2 campi sollevano ValueError qui sotto -> cache miss -> riscritte.
     cache_f = _repo_cache_file(cwd)
     try:
         if time.time() - os.path.getmtime(cache_f) < _REPO_CACHE_TTL:
             with open(cache_f, encoding="utf-8") as f:
-                root, slug = json.load(f)
-            _REPO_CACHE[cwd] = (root, slug)
-            return root, slug
+                root, slug, ident = json.load(f)
+            _REPO_CACHE[cwd] = (root, slug, ident)
+            return root, slug, ident
     except Exception:
         pass
 
@@ -354,30 +381,32 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str]:
     if root is None:
         # Git muto: non sappiamo dove siamo. Ricadi sul core per QUESTA invocazione
         # ma non cachare, cosi' il prossimo hook ritenta invece di ereditare il buco.
-        return "", ""
+        return "", "", ""
     slug = ""
+    ident = ""
     if root:
         remote = _run(["config", "--get", "remote.origin.url"])
         if remote is None:
             # Senza remote lo slug sarebbe basename(root): stabile ma potenzialmente
             # diverso da quello del remote -> bank sbagliato cachato per un'ora.
-            return "", ""
+            return "", "", ""
         if remote:
             base = re.split(r"[/:]", remote.rstrip("/"))[-1]
             slug = base[:-4] if base.endswith(".git") else base
+            ident = _remote_identity(remote)
         if not slug:
             slug = os.path.basename(root)
-    _REPO_CACHE[cwd] = (root, slug)
+    _REPO_CACHE[cwd] = (root, slug, ident)
     # Persisti su file (best-effort, atomico tmp+rename).
     try:
         os.makedirs(os.path.dirname(cache_f), exist_ok=True)
         tmp = cache_f + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump([root, slug], f)
+            json.dump([root, slug, ident], f)
         os.replace(tmp, cache_f)
     except Exception:
         pass
-    return root, slug
+    return root, slug, ident
 
 
 def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
@@ -394,20 +423,25 @@ def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
     if name != "auto":
         return name
     cwd = cwd or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    _, slug = _git_root_and_slug(cwd)
+    _, slug, ident = _git_root_and_slug(cwd)
     if not slug:
         return core
     # Il plugin gira come skills-dir via junction/symlink (~/.claude/skills/trinity
     # -> repo): __file__ e' il path del symlink. Confrontare i git toplevel non e'
     # affidabile (git li risolve in modo inconsistente attraverso i symlink MSYS, e
-    # realpath di Python su Windows non li segue affatto). Confrontiamo invece lo
-    # SLUG del remote origin, invariante a junction/symlink: se il repo del cwd e
-    # quello che ospita il modulo sono lo stesso repo, siamo nel repo del plugin ->
-    # core (un bank "Trinity" separato spaccherebbe le sue memorie dal core).
+    # realpath di Python su Windows non li segue affatto). Confrontiamo invece
+    # l'IDENTITA' canonica del remote origin ("host/owner/repo"), invariante a
+    # junction/symlink: se il repo del cwd e quello che ospita il modulo sono lo
+    # stesso repo, siamo nel repo del plugin -> core (un bank "Trinity" separato
+    # spaccherebbe le sue memorie dal core).
+    # NON basta lo slug: un repo QUALSIASI chiamato Trinity (nome comune: su GitHub
+    # ce ne sono molti) verrebbe scambiato per il plugin e riverserebbe le sue
+    # memorie nel core. L'identita' completa distingue github.com/sphynx79/Trinity
+    # da chiunque altro.
     here = os.path.dirname(os.path.abspath(__file__))
     plugin_dir = os.path.abspath(os.path.join(here, "..", "..", ".."))
-    _, plugin_slug = _git_root_and_slug(plugin_dir)
-    if plugin_slug and slug == plugin_slug:
+    _, _, plugin_ident = _git_root_and_slug(plugin_dir)
+    if plugin_ident and ident == plugin_ident:
         return core
     return slug
 
