@@ -766,6 +766,47 @@ else
 	ko "config multi-bank errata ($MB_CFG)"
 fi
 
+# Identita' del repo del plugin: dal remote CANONICO, non dal basename. Col solo
+# basename un repo QUALSIASI chiamato Trinity (nome comune, su GitHub ce ne sono
+# molti) veniva scambiato per il plugin e riversava le sue memorie nel core.
+# L'altra meta' e' la normalizzazione SSH/HTTPS: lo stesso repo clonato nei due modi
+# deve restare riconosciuto, o torna il bug del 21 giugno (plugin staccato dal core).
+MB_IDENT=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+
+# stesso repo via SSH e via HTTPS -> stessa identita'; host diverso -> identita' diversa
+ssh = hc._remote_identity("git@github.com:sphynx79/Trinity.git")
+https = hc._remote_identity("https://github.com/sphynx79/Trinity.git")
+other = hc._remote_identity("https://impostor.example/Trinity.git")
+norm_ok = bool(ssh) and ssh == https and ssh != other
+
+cfg = hc.load_config()
+core = cfg["bank"]["core_bank"]
+plugin_root = os.path.abspath(os.path.join(sys.argv[1], "..", "..", ".."))
+_, plug_slug, plug_ident = hc._git_root_and_slug(plugin_root)
+# il plugin vero -> core (guardia anti-regressione sul fix di giugno)
+plugin_ok = bool(plug_ident) and hc.resolve_bank("auto", cfg, plugin_root) == core
+# impostore: STESSO basename del plugin, identita' diversa -> bank isolato, non il core.
+# Seed della cache invece di un repo finto su disco: su MSYS ogni git costa ~1.4s.
+fake = "Z:/fake-impostor"
+hc._REPO_CACHE[fake] = (fake, plug_slug, "impostor.example/" + plug_slug.lower())
+got = hc.resolve_bank("auto", cfg, fake)
+hc._REPO_CACHE.pop(fake, None)
+impostor_ok = bool(plug_slug) and got == plug_slug and got != core
+
+print("OK" if all([norm_ok, plugin_ok, impostor_ok])
+      else f"KO norm={norm_ok} plugin={plugin_ok} impostor={impostor_ok}")
+PY
+)
+if [ "$MB_IDENT" = "OK" ]; then
+	ok "identita' plugin dal remote canonico (un altro repo 'Trinity' non tocca il core)"
+else
+	ko "identita' del repo del plugin errata ($MB_IDENT)"
+fi
+
 MB_LIB=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import sys
