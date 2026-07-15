@@ -91,7 +91,28 @@ for base in urls:
             "error": (op.get("error_message") or "").strip(),
         })
 
-if not raw:
+# Fallimenti LOCALI del retain: il worker non ha raggiunto il server, quindi non
+# esiste nessuna operation e il fan-out qui sopra non li vede. Li appende
+# hindsight-retain.sh. Da leggere SEMPRE, anche con raw vuoto: il caso peggiore
+# (server irraggiungibile) da' raw=[] proprio PERCHE' tutto e' fallito.
+local_file = os.path.join(cache_dir(), "hs-retain-failed.log")
+local_fails = []
+try:
+    with open(local_file, encoding="utf-8") as f:
+        for line in f:
+            ts, _, msg = line.strip().partition("\t")
+            if not ts:
+                continue
+            when = _parse(ts.replace("Z", "+00:00"))
+            if when is not None and when < cutoff:
+                continue  # fuori finestra: stessa politica delle failed server-side
+            local_fails.append((ts, msg))
+except FileNotFoundError:
+    pass
+except Exception:
+    pass  # marker illeggibile: best-effort, non deve rompere il prompt
+
+if not raw and not local_fails:
     sys.exit(0)
 
 # Collassa parent/child dello stesso evento: un batch_retain fallito genera 2 entry
@@ -118,7 +139,7 @@ except Exception:
     notified = set()
 
 fresh = {k: v for k, v in groups.items() if k not in notified}
-if not fresh:
+if not fresh and not local_fails:
     sys.exit(0)
 
 # Gravita' per famiglia di task: retain = perdita di memoria (critico); il resto =
@@ -131,6 +152,13 @@ for r in fresh.values():
     err = r["error"][:160]
     line = f"- {r['task_type']} [bank: {r['bank']}, {hhmm}] — {err}"
     (crit if r["task_type"] in RETAIN else maint).append(line)
+
+# I fallimenti locali sono retain a tutti gli effetti: memoria non salvata. Vanno
+# in crit, ma con provenienza esplicita — qui la POST non e' MAI partita, quindi
+# non c'e' nessuna operation da ri-controllare lato server.
+for ts, msg in local_fails:
+    hhmm = ts[11:16] if len(ts) >= 16 else ts
+    crit.append(f"- retain [locale, non arrivato al server, {hhmm}] — {msg[:160]}")
 
 parts = ["## ⚠️ Hindsight — operazioni di memoria fallite\n"]
 if crit:
@@ -154,6 +182,16 @@ print(json.dumps({
         "additionalContext": context,
     }
 }, ensure_ascii=False))
+
+# Marker locali: il de-dup e' il troncamento del file, DOPO il print (stessa regola
+# dello state file sotto). Race teorica: un retain async potrebbe appendere tra la
+# lettura e il troncamento e perdere quella riga — finestra di millisecondi tra Stop
+# e UserPromptSubmit, che in pratica non si sovrappongono; non vale un lock.
+if local_fails:
+    try:
+        open(local_file, "w").close()
+    except Exception:
+        pass
 
 # Aggiorna lo state file: aggiungi i notificati ora, poi pota le chiavi fuori
 # finestra (created_at < cutoff) per evitare crescita illimitata.

@@ -15,4 +15,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Log in HS_CACHE_DIR (esportata da hs-python.sh) e non in /tmp: contiene l'output
 # del worker, cioe' pezzi di transcript e memorie — su Linux /tmp e' leggibile da tutti.
 "$HS_PY" "$SCRIPT_DIR/hindsight-retain-worker.py" >"$HS_CACHE_DIR/hs-retain.log" 2>&1
-exit 0
+rc=$?
+
+# Il worker torna !=0 quando la POST non arriva al server (server giu', rete, bank
+# irraggiungibile): in quel caso NON esiste nessuna async operation da interrogare,
+# quindi hindsight-failcheck.sh — che fa GET operations?status=failed — e' cieco
+# proprio qui. Lascia una traccia DUREVOLE che il failcheck raccoglie al prossimo
+# prompt: il log qui sopra non basta, viene azzerato dal retain successivo ('>').
+# File separato e append: una riga per fallimento, tab-separated (ts \t messaggio).
+if [ "$rc" -ne 0 ]; then
+	printf '%s\t%s\n' \
+		"$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+		"$(tail -2 "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tr '\n\t' '  ')" \
+		>> "$HS_CACHE_DIR/hs-retain-failed.log"
+fi
+
+# exit "$rc" e non "exit 0": l'hook e' async, quindi per Claude Code il codice
+# finisce solo nel debug log (non blocca e non risveglia nessuno — servirebbe
+# asyncRewake, che qui NON vogliamo: il retain gira a ogni Stop e con il server giu'
+# sveglierebbe Claude in loop). La visibilita' vera la da' il failcheck sopra; questo
+# exit onesto serve a chi legge il debug log e a chi invoca lo script a mano.
+exit "$rc"
