@@ -3,7 +3,7 @@
     "excalidraw": {
       "disabled": true,
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-node.sh",
+      "command": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/scripts/bin/run-node.sh",
       "args": [
         "${MCP_EXCALIDRAW_DIR:-E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw}/dist/index.js"
       ],
@@ -20,18 +20,18 @@
     },
     "playwright": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-node.sh",
+      "command": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/scripts/bin/run-node.sh",
       "args": [
         "npm:@playwright/mcp/cli.js",
         "--browser",
         "chrome",
         "--output-dir",
-        "${CLAUDE_PLUGIN_ROOT}/data/playwright-mcp"
+        "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/data/playwright-mcp"
       ]
     },
     "notebooklm": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-python.sh",
+      "command": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/scripts/bin/run-python.sh",
       "args": [
         "${NOTEBOOKLM_DATA:-E:/AI/tools/notebooklm-data}/run_notebooklm_mcp.py"
       ],
