@@ -60,11 +60,11 @@ if [[ "$RC" -eq 10 || "${API_FORCE_ALERT:-0}" == "1" ]]; then
 		echo " provider ZeroEntropy è nativo: non serve ri-applicare patch dopo l'upgrade.)"
 	} >"$ALERT"
 
-	WIN_ALERT="$(cygpath -aw "$ALERT")"
+	WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"
 
 	# System Scheduler gira nella sessione utente: apri l'alert in primo piano.
 	# API_NO_OPEN=1 disabilita l'apertura (utile per i test).
-	if [[ "${API_NO_OPEN:-0}" != "1" ]]; then
+	if [[ "${API_NO_OPEN:-0}" != "1" && -x "$NOTEPAD_EXE" ]]; then
 		"$NOTEPAD_EXE" "$WIN_ALERT" >>"$LOG" 2>&1 &
 	fi
 	exit 10

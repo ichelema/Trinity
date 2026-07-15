@@ -71,7 +71,7 @@ if [[ "$N" -gt 0 ]]; then
 		echo
 		echo "Nessun documento è stato spostato: la promozione è sempre curata."
 	} >"$ALERT"
-	if [[ "${PROMOTE_NO_OPEN:-0}" != "1" ]]; then
+	if [[ "${PROMOTE_NO_OPEN:-0}" != "1" && -x "$NOTEPAD_EXE" ]]; then
 		"$NOTEPAD_EXE" "$(cygpath -aw "$ALERT")" >>"$LOG" 2>&1 &
 	fi
 	exit 10

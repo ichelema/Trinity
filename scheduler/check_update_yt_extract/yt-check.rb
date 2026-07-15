@@ -20,7 +20,8 @@ require "uri"
 require "rubygems" # Gem::Version
 
 REPO      = "muckybuzzwoo/claude-code-youtube-extract"
-CLONE_DIR = "E:/AI/tools/claude-code-youtube-extract"
+# Sovrascrivibile via env per host diversi (es. Linux con clone in altra posizione).
+CLONE_DIR = ENV.fetch("YT_CLONE_DIR", "E:/AI/tools/claude-code-youtube-extract")
 
 # Legge la versione dalla prima riga ## [X.Y.Z] del CHANGELOG.md locale.
 def installed_version

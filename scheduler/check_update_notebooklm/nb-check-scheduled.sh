@@ -58,9 +58,9 @@ if [[ "$RC" -eq 10 || "${NB_FORCE_ALERT:-0}" == "1" ]]; then
 		echo "Vedi Hindsight (recall 'notebooklm aggiornamento exe-free') per i dettagli completi."
 	} >"$ALERT"
 
-	WIN_ALERT="$(cygpath -aw "$ALERT")"
+	WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"
 
-	if [[ "${NB_NO_OPEN:-0}" != "1" ]]; then
+	if [[ "${NB_NO_OPEN:-0}" != "1" && -x "$NOTEPAD_EXE" ]]; then
 		"$NOTEPAD_EXE" "$WIN_ALERT" >>"$LOG" 2>&1 &
 	fi
 	exit 10

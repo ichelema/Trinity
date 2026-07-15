@@ -56,11 +56,11 @@ if [[ "$RC" -eq 10 ]]; then
 		echo "del mise.toml (riga con hindsight-control-plane@...)."
 	} >"$ALERT"
 
-    WIN_ALERT="$(cygpath -aw "$ALERT")"
+    WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"
 
     # System Scheduler gira nella sessione utente: apri l'alert in primo piano.
     # CP_NO_OPEN=1 disabilita l'apertura (utile per i test).
-	if [[ "${CP_NO_OPEN:-0}" != "1" ]]; then
+	if [[ "${CP_NO_OPEN:-0}" != "1" && -x "$NOTEPAD_EXE" ]]; then
         "$NOTEPAD_EXE" "$WIN_ALERT" >>"$LOG" 2>&1 &
 	fi
 	exit 10

@@ -85,11 +85,11 @@ fi
 	echo "  $OUT"
 } >"$ALERT"
 
-WIN_ALERT="$(cygpath -aw "$ALERT")"
+WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"
 
 # System Scheduler gira nella sessione utente: apri l'alert in primo piano.
 # NB_NO_OPEN=1 disabilita l'apertura (utile per i test).
-if [[ "${NB_NO_OPEN:-0}" != "1" ]]; then
+if [[ "${NB_NO_OPEN:-0}" != "1" && -x "$NOTEPAD_EXE" ]]; then
 	"$NOTEPAD_EXE" "$WIN_ALERT" >>"$LOG" 2>&1 &
 fi
 
