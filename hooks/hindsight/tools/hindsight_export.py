@@ -45,19 +45,33 @@ def _get(url: str, timeout: int) -> dict:
         return json.loads(res.read().decode("utf-8", errors="replace"))
 
 
-def list_all_documents(api_url: str, page: int, timeout: int) -> list[dict]:
-    """Pagina /documents finche' non li ha raccolti tutti (usa `total`)."""
-    docs: list[dict] = []
+def list_all_documents(api_url: str, page: int, timeout: int) -> tuple[list[dict], int]:
+    """Pagina /documents deduplicando per id. Ritorna (documenti, total_iniziale).
+
+    L'API ordina per created_at DESC e offre SOLO limit/offset — niente filtro
+    temporale ne' cursore (verificato sull'OpenAPI) — quindi la paginazione NON e'
+    uno snapshot: se il bank cambia mentre paginiamo, l'offset scivola.
+      - Documento NUOVO: entra in testa (DESC) e spinge tutto giu' -> la pagina dopo
+        RILEGGE uno gia' preso. Duplicato, innocuo: lo toglie il dedup qui sotto.
+      - DELETE: tira tutto su -> la pagina dopo SALTA un documento. Questa e' la
+        perdita vera e il client non puo' prevenirla (servirebbe uno snapshot lato
+        server); la scopre il confronto col `total` della PRIMA pagina, in main().
+    """
+    docs: dict[str, dict] = {}
     offset = 0
+    total_start = 0
     while True:
         data = _get(f"{api_url}/documents?limit={page}&offset={offset}", timeout)
         items = data.get("items") or []
-        docs.extend(items)
-        total = int(data.get("total", len(docs)))
+        if not offset:
+            total_start = int(data.get("total", 0))
+        for it in items:
+            if it.get("id"):
+                docs.setdefault(it["id"], it)
         offset += len(items)
-        if not items or offset >= total:
+        if not items or offset >= int(data.get("total", offset)):
             break
-    return docs
+    return list(docs.values()), total_start
 
 
 def fetch_document(api_url: str, doc_id: str, timeout: int) -> dict:
@@ -127,7 +141,7 @@ def main() -> int:
 
     print(f"[export] bank: {api_url}")
     try:
-        summaries = list_all_documents(api_url, args.page, args.timeout)
+        summaries, total_start = list_all_documents(api_url, args.page, args.timeout)
     except urllib.error.URLError as e:
         print(
             f"[export] ERRORE: impossibile contattare il bank ({e}). Il server e' acceso?",
@@ -135,6 +149,27 @@ def main() -> int:
         )
         return 1
     print(f"[export] documenti trovati: {len(summaries)}")
+
+    # Meno documenti di quanti ne aveva il bank quando abbiamo iniziato: una DELETE
+    # ha fatto scivolare l'offset e ci e' sfuggito qualcosa (vedi list_all_documents).
+    # Il confronto e' col total della PRIMA pagina, non dell'ultima: un retain
+    # concorrente alza il total finale e darebbe un falso allarme, ma quel documento
+    # all'inizio non esisteva e non e' un buco del backup.
+    if len(summaries) < total_start and not args.allow_partial:
+        print(
+            f"[export] RIFIUTATO: letti {len(summaries)} documenti ma il bank ne "
+            f"aveva {total_start} all'inizio.",
+            file=sys.stderr,
+        )
+        print(
+            "          Il bank e' cambiato durante la lettura: l'export avrebbe dei buchi.",
+            file=sys.stderr,
+        )
+        print(
+            "          Riprova (meglio a sessioni chiuse), oppure --allow-partial.",
+            file=sys.stderr,
+        )
+        return 1
 
     items: list[dict] = []
     # Due liste, non una: un documento IRRAGGIUNGIBILE e' un buco nell'export (chi
