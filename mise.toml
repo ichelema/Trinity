@@ -214,7 +214,10 @@ run = "cd hooks/hindsight/hindsight-dashboard && bundle install"
 [tasks.dashboard]
 description = "Avvia la dashboard log Hindsight (Roda/Puma) su http://localhost:9292. Foreground: Ctrl-C per fermarla. Richiede prima `mise run install-dashboard`."
 shell = "bash -c"
-run = "cd hooks/hindsight/hindsight-dashboard && bundle exec puma -p 9292"
+# -b invece di -p: senza host esplicito Puma ascolta su tutte le interfacce, e la
+# dashboard non ha autenticazione — /api/events servirebbe alla LAN il debug log,
+# che contiene i prompt e le memorie.
+run = "cd hooks/hindsight/hindsight-dashboard && bundle exec puma -b tcp://127.0.0.1:9292"
 
 [tasks.stop-dashboard]
 description = "Ferma la dashboard log (processo Puma in ascolto su :9292)"

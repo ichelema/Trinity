@@ -297,7 +297,8 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str]:
     """(toplevel, slug) del repo che contiene cwd. Slug: nome dal remote 'origin'
     (identificativo STABILE, invariante a spostamenti della cartella — stessa
     logica di git_info nel retain worker), fallback basename della toplevel.
-    ("", "") fuori da un repo git o senza git disponibile."""
+    ("", "") fuori da un repo git (esito noto: cachato) oppure se git non risponde
+    — timeout, git assente (esito ignoto: NON cachato, si ritenta al prossimo hook)."""
     if cwd in _REPO_CACHE:
         return _REPO_CACHE[cwd]
 
@@ -313,18 +314,31 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str]:
     except Exception:
         pass
 
-    def _run(args: list[str]) -> str:
+    def _run(args: list[str]) -> str | None:
+        """Output di `git <args>`. "" se git ha RISPOSTO senza risultato (exit!=0:
+        fuori da un repo, chiave assente) -> esito noto, cachabile. None se git non
+        ha potuto rispondere (timeout, git assente) -> esito ignoto, da non cachare."""
         try:
             return subprocess.check_output(
-                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=2, text=True
+                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=5, text=True
             ).strip()
-        except Exception:
+        except subprocess.CalledProcessError:
             return ""
+        except Exception:
+            return None
 
     root = _run(["rev-parse", "--show-toplevel"])
+    if root is None:
+        # Git muto: non sappiamo dove siamo. Ricadi sul core per QUESTA invocazione
+        # ma non cachare, cosi' il prossimo hook ritenta invece di ereditare il buco.
+        return "", ""
     slug = ""
     if root:
         remote = _run(["config", "--get", "remote.origin.url"])
+        if remote is None:
+            # Senza remote lo slug sarebbe basename(root): stabile ma potenzialmente
+            # diverso da quello del remote -> bank sbagliato cachato per un'ora.
+            return "", ""
         if remote:
             base = re.split(r"[/:]", remote.rstrip("/"))[-1]
             slug = base[:-4] if base.endswith(".git") else base

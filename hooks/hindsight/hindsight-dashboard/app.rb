@@ -10,6 +10,11 @@ require "thread"
 # questo file (.../hooks/hindsight/hindsight-dashboard/app.rb → 3 livelli su = plugin root).
 # Coerente con lib/hindsight_debug.py, che scrive lì quando debug_log_file e' vuoto in config.
 DEFAULT_LOG_PATH = ENV.fetch("LOG_FILE", File.expand_path("../../../logs/hindsight-debug.log", __dir__))
+# Cartella consentita a /api/open. L'endpoint non ha autenticazione: senza questo
+# vincolo una richiesta puo' far aprire QUALSIASI file leggibile dall'utente (es.
+# ~/.ssh/config), che /api/events poi serve riga per riga nel campo raw.
+# LOG_FILE resta libero: e' l'operatore a impostarlo, non una richiesta HTTP.
+ALLOWED_LOG_DIR = File.expand_path("../../../logs", __dir__)
 MAX_INITIAL_LIMIT = Integer(ENV.fetch("MAX_INITIAL_LIMIT", "5000"))
 DEFAULT_INITIAL_LIMIT = Integer(ENV.fetch("INITIAL_LIMIT", "500"))
 POLL_INTERVAL = Float(ENV.fetch("POLL_INTERVAL", "0.6"))
@@ -60,6 +65,8 @@ module JsonResponse
 end
 
 class LogState
+  class PathNotAllowed < StandardError; end
+
   @mutex = Mutex.new
   @path = DEFAULT_LOG_PATH
   @version = 0
@@ -75,6 +82,8 @@ class LogState
 
     def set_path(path)
       normalized = normalize_path(path)
+      raise PathNotAllowed unless allowed?(normalized)
+
       @mutex.synchronize do
         @path = normalized
         @version += 1
@@ -87,6 +96,13 @@ class LogState
       p = p.sub(%r{\A/d/}i, "D:/")
       p = p.sub(%r{\A/c/}i, "C:/")
       p.tr("\\", "/")
+    end
+
+    # Il controllo sta qui e non nella rotta: e' l'unico punto che scrive @path, e
+    # /api/events legge @path senza validare. Validare dopo la scrittura lascerebbe
+    # lo stato gia' avvelenato. expand_path collassa anche i ".." (non i symlink).
+    def allowed?(path)
+      File.expand_path(path).start_with?(ALLOWED_LOG_DIR + "/")
     end
   end
 end
@@ -496,7 +512,11 @@ class HindsightDashboard < Roda
           r.halt JsonResponse.error(422, "missing path")
         end
 
-        normalized = LogState.set_path(path)
+        begin
+          normalized = LogState.set_path(path)
+        rescue LogState::PathNotAllowed
+          r.halt JsonResponse.error(403, "path fuori da #{ALLOWED_LOG_DIR}")
+        end
         r.halt JsonResponse.ok(LogReader.status(normalized).merge(version: LogState.version))
       end
 

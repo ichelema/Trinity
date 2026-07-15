@@ -68,7 +68,7 @@ def git_info(cwd: str) -> dict:
     def _run(args: list[str]) -> str:
         try:
             out = subprocess.check_output(
-                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=2, text=True
+                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=5, text=True
             )
             return out.strip()
         except Exception:
