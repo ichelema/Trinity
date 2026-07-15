@@ -28,7 +28,16 @@ if [ "${1:-}" = "--worker" ]; then
 	#    crash (un lease orfano non blocca piu' lo stop). Il launcher di QUESTA sessione
 	#    sta uscendo: se ne restano >=2 c'e' di sicuro un'altra sessione (esci subito);
 	#    se ne resta 1 puo' essere solo la nostra in chiusura -> attendi che sparisca.
-	claude_alive() { ps -W 2>/dev/null | grep -icE '/\.local/bin/claude(\.exe)?([[:space:]]|$)'; }
+	case "$(uname -s)" in
+	MINGW* | MSYS* | CYGWIN*)
+		# ps -W è MSYS-only: mostra anche i processi Windows nativi (il launcher claude).
+		claude_alive() { ps -W 2>/dev/null | grep -icE '/\.local/bin/claude(\.exe)?([[:space:]]|$)'; }
+		;;
+	*)
+		# pgrep -c stampa il conteggio (0 incluso) ma esce 1 senza match: || true.
+		claude_alive() { pgrep -fc '/\.local/bin/claude([[:space:]]|$)' 2>/dev/null || true; }
+		;;
+	esac
 	[ "$(claude_alive)" -ge 2 ] && exit 0
 	for _ in $(seq 1 10); do
 		[ "$(claude_alive)" -eq 0 ] && break

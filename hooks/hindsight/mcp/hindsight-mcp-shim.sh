@@ -20,12 +20,39 @@
 #      verso http://127.0.0.1:8888/mcp/<bank>/.
 set -uo pipefail
 
-PLUGIN_DIR="${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}"
+# Root del plugin: env esplicita, altrimenti derivata dalla posizione dello
+# script (mcp/ -> 3 livelli su), come gli altri hook. Niente fallback E:/.
+SHIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_DIR="${TRINITY_PLUGIN_DIR:-$(cd "$SHIM_DIR/../../.." && pwd)}"
 LIB="$PLUGIN_DIR/hooks/hindsight/lib"
-# Node di mise: stessa convenzione (path versionato cablato) del .mcp.json
-# di progetto (playwright/excalidraw). Se aggiorni node in mise, aggiorna qui.
-NODE="${HOME:-E:/msys64/home/Sphynx}/.local/share/mise/installs/node/24.16.0/node.exe"
-PROXY="${HOME:-E:/msys64/home/Sphynx}/.local/share/mise/installs/node/24.16.0/node_modules/mcp-remote/dist/proxy.js"
+
+# Node risolto a runtime (niente path versionato cablato): prima il binario
+# reale via mise (which), poi il PATH. tr: mise su Windows stampa backslash.
+_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
+NODE="$("$_mise" which node 2>/dev/null | tr -d '\r' | tr '\\' '/' || true)"
+{ [ -n "$NODE" ] && [ -x "$NODE" ]; } || NODE="$(command -v node 2>/dev/null || true)"
+if [ -z "$NODE" ]; then
+	echo "[hindsight-mcp-shim] node non trovato (mise/PATH): impossibile avviare mcp-remote" >&2
+	exit 1
+fi
+
+# mcp-remote (npm install -g): il layout dei global module differisce per OS —
+# Windows: <prefix>/node_modules/...   Linux/mac: <prefix>/lib/node_modules/...
+NODE_DIR="$(dirname "$NODE")"
+PROXY=""
+for _cand in \
+	"$NODE_DIR/node_modules/mcp-remote/dist/proxy.js" \
+	"$NODE_DIR/../node_modules/mcp-remote/dist/proxy.js" \
+	"$NODE_DIR/../lib/node_modules/mcp-remote/dist/proxy.js"; do
+	if [ -f "$_cand" ]; then
+		PROXY="$_cand"
+		break
+	fi
+done
+if [ -z "$PROXY" ]; then
+	echo "[hindsight-mcp-shim] mcp-remote non trovato accanto a $NODE: esegui 'npm install -g mcp-remote'" >&2
+	exit 1
+fi
 
 # 1) bank per-progetto — riusa resolve_bank() degli hook (unica fonte di verità)
 # Interprete via hs-python.sh (su molte distro esiste solo python3: il comando

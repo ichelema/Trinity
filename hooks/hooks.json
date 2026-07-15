@@ -57,7 +57,7 @@
       "matcher": "",
       "hooks": [{
           "type": "command",
-          "command": "/usr/bin/bash -c \"ffplay -nodisp -autoexit -loglevel quiet \\\"$(cygpath -u \\\"${CLAUDE_PLUGIN_ROOT}\\\")/sound/Windows_Proximity_Notification.wav\\\" 2>/dev/null\""
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/play-sound.sh Windows_Proximity_Notification.wav"
         },
         {
           "type": "command",
@@ -79,7 +79,7 @@
       "matcher": "permission_prompt",
       "hooks": [{
           "type": "command",
-          "command": "/usr/bin/bash -c \"ffplay -nodisp -autoexit -loglevel quiet \\\"$(cygpath -u \\\"${CLAUDE_PLUGIN_ROOT}\\\")/sound/Windows_Exclamation.wav\\\" 2>/dev/null\"",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/play-sound.sh Windows_Exclamation.wav",
           "timeout": 10
         },
         {

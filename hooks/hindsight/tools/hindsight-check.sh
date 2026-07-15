@@ -8,6 +8,8 @@ HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # check.sh vive in tools/: con /.. HOOKS_DIR torna a hooks/hindsight (root del
 # sottosistema). lib/ ops/ tools/ sono sotto di qui; la root di progetto e' due livelli sopra.
 PROJ="${CLAUDE_PROJECT_DIR:-$(cd "$HOOKS_DIR/../.." && pwd)}"
+# Conversione path per il Python nativo: su Windows serve cygpath -w, altrove no-op.
+w() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 # API_BASE dalla config centralizzata (hindsight.config.json), con fallback.
 API_BASE="$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get api_url 2>/dev/null)"
 API_BASE="${API_BASE:-http://127.0.0.1:8888/v1/default/banks/trinity-project}"
@@ -41,7 +43,16 @@ else
 	note "fix: 'mise run start-hindsight' e ricontrolla tra 20s"
 fi
 
-PID=$(/c/Windows/System32/netstat.exe -ano 2>/dev/null | grep ":8888" | grep LISTENING | awk '{print $NF}' | tr -d '\r' | head -1)
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*)
+	# netstat.exe nativo: quello MSYS non vede sempre i processi Windows.
+	PID=$(/c/Windows/System32/netstat.exe -ano 2>/dev/null | grep ":8888" | grep LISTENING | awk '{print $NF}' | tr -d '\r' | head -1)
+	;;
+*)
+	PID=$(ss -ltnp 2>/dev/null | grep ':8888' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+	[ -n "$PID" ] || PID=$(lsof -ti tcp:8888 -sTCP:LISTEN 2>/dev/null | head -1)
+	;;
+esac
 if [ -n "$PID" ]; then
 	ok "porta 8888 LISTENING (PID $PID)"
 else
@@ -126,7 +137,7 @@ fi
 sect "7. Config hooks/hooks.json (plugin)"
 HOOKSJSON="$HOOKS_DIR/../hooks.json"
 if [ -r "$HOOKSJSON" ]; then
-	if python -c "import json; json.load(open(r'$(cygpath -w $HOOKSJSON)'))" 2>/dev/null; then
+	if python -c "import json; json.load(open(r'$(w $HOOKSJSON)'))" 2>/dev/null; then
 		ok "hooks.json valido"
 		for hook in "hindsight-recall.sh" "hindsight-retain.sh"; do
 			if grep -q "$hook" "$HOOKSJSON"; then
@@ -169,7 +180,7 @@ if [ "$RETAIN_ON" = "False" ]; then
 	skip "retain disabilitato (retain_enabled:false) — e2e retain non applicabile"
 else
 	FAKE=$(mktemp /tmp/hs-check-XXXXXX.jsonl)
-	FAKE_WIN=$(cygpath -w "$FAKE")
+	FAKE_WIN=$(w "$FAKE")
 	cat >"$FAKE" <<EOF
 {"type":"user","message":{"role":"user","content":"diagnostica check end-to-end del retain hook con prompt sufficientemente lungo"}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"check OK"},{"type":"tool_use","name":"Bash","input":{"command":"git status"}}]}}
@@ -190,7 +201,7 @@ fi
 
 # --- 10. RETAIN WORKER: git_info popola i tag (regression fix A) ---
 sect "10. Retain worker: git_info (regression A)"
-WORKER_WIN="$(cygpath -w "$HOOKS_DIR/hindsight-retain-worker.py")"
+WORKER_WIN="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
 GTMP=$(mktemp -d /tmp/hs-git-XXXXXX)
 (
 	cd "$GTMP" || exit 1
@@ -202,7 +213,7 @@ GTMP=$(mktemp -d /tmp/hs-git-XXXXXX)
 	git add f.txt
 	git commit -qm init
 )
-GTMP_WIN=$(cygpath -w "$GTMP")
+GTMP_WIN=$(w "$GTMP")
 GIT_OK=$(
 	PYTHONUTF8=1 python - "$WORKER_WIN" "$GTMP_WIN" <<'PY' 2>/dev/null
 import sys, importlib.util
@@ -234,7 +245,7 @@ done
 
 # --- 12. ANTI-FEEDBACK-LOOP: strip blocco-memoria nel retain (step C) ---
 sect "12. Anti-feedback-loop (step C)"
-WORKER_WIN="$(cygpath -w "$HOOKS_DIR/hindsight-retain-worker.py")"
+WORKER_WIN="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
 STRIP_OK=$(
 	PYTHONUTF8=1 python - "$WORKER_WIN" <<'PY' 2>/dev/null
 import sys, importlib.util
@@ -269,9 +280,9 @@ fi
 
 # --- 13. DOCUMENT_ID stabile + guardia compaction (step D) ---
 sect "13. document_id anti-duplicati (step D)"
-WORKER_WIN="$(cygpath -w "$HOOKS_DIR/hindsight-retain-worker.py")"
+WORKER_WIN="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
 DSTATE=$(mktemp -d /tmp/hs-dstate-XXXXXX)
-DSTATE_WIN=$(cygpath -w "$DSTATE")
+DSTATE_WIN=$(w "$DSTATE")
 DOC_OK=$(
 	HS_RETAIN_STATE_DIR="$DSTATE_WIN" PYTHONUTF8=1 python - "$WORKER_WIN" <<'PY' 2>/dev/null
 import sys, importlib.util
@@ -295,9 +306,9 @@ rm -rf "$DSTATE"
 
 # --- 14. THROTTLING retain ogni N + force su SessionEnd (step E) ---
 sect "14. Throttling retain (step E)"
-WORKER_WIN="$(cygpath -w "$HOOKS_DIR/hindsight-retain-worker.py")"
+WORKER_WIN="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
 TSTATE=$(mktemp -d /tmp/hs-tstate-XXXXXX)
-TSTATE_WIN=$(cygpath -w "$TSTATE")
+TSTATE_WIN=$(w "$TSTATE")
 THR_OK=$(
 	HS_RETAIN_STATE_DIR="$TSTATE_WIN" PYTHONUTF8=1 python - "$WORKER_WIN" <<'PY' 2>/dev/null
 import sys, importlib.util
@@ -325,7 +336,7 @@ import json,sys
 h=json.load(open(sys.argv[1]))['hooks'].get('SessionEnd',[])
 cmds=[c.get('command','') for g in h for c in g.get('hooks',[])]
 sys.exit(0 if any('hindsight-shutdown.sh' in c for c in cmds) else 1)
-" "$(cygpath -w "$HOOKSJSON")" 2>/dev/null; then
+" "$(w "$HOOKSJSON")" 2>/dev/null; then
 	if grep -q 'hindsight-retain.sh' "$HOOKS_DIR/hindsight-shutdown.sh"; then
 		ok "SessionEnd → hindsight-shutdown.sh, che invoca il force-retain finale"
 	else
@@ -349,7 +360,7 @@ if [ -r "$PLUGIN_CFG" ]; then
 else
 	ko "hindsight.config.json mancante nella root del plugin"
 fi
-if PYTHONUTF8=1 python -c "import json,sys; json.load(open(sys.argv[1],encoding='utf-8'))" "$(cygpath -w "$PLUGIN_CFG")" 2>/dev/null; then
+if PYTHONUTF8=1 python -c "import json,sys; json.load(open(sys.argv[1],encoding='utf-8'))" "$(w "$PLUGIN_CFG")" 2>/dev/null; then
 	ok "hindsight.config.json e' JSON valido"
 else
 	ko "hindsight.config.json non e' JSON valido"
@@ -477,7 +488,7 @@ import json,sys
 h=json.load(open(sys.argv[1]))['hooks'].get('SessionStart',[])
 cmds=[c.get('command','') for g in h for c in g.get('hooks',[])]
 sys.exit(0 if any('hindsight-mm-inject.sh' in c for c in cmds) else 1)
-" "$(cygpath -w "$HOOKSJSON")" 2>/dev/null; then
+" "$(w "$HOOKSJSON")" 2>/dev/null; then
 	ok "SessionStart registra hindsight-mm-inject.sh"
 else
 	ko "hindsight-mm-inject.sh assente da SessionStart in hooks.json"
@@ -522,7 +533,7 @@ case "${DBG_PATH//\\//}" in
 esac
 
 DBG_TMP="$PROJ/test/hs-debug-check.log"
-DBG_TMP_WIN="$(cygpath -w "$DBG_TMP")"
+DBG_TMP_WIN="$(w "$DBG_TMP")"
 rm -f "$DBG_TMP"
 # Prompt corto = path recall_skip: niente chiamata al server, test veloce.
 # Forziamo OFF via env per testare il no-op a prescindere dal flag in config.json.
@@ -565,7 +576,7 @@ else
 fi
 
 # 18b. build_recall_payload: include 'types' solo se valido, filtra invalidi, omette altrimenti
-RECALL_LIB_WIN="$(cygpath -w "$HOOKS_DIR/lib/hindsight_recall_lib.py")"
+RECALL_LIB_WIN="$(w "$HOOKS_DIR/lib/hindsight_recall_lib.py")"
 RT_PAYLOAD=$(
 	PYTHONUTF8=1 python - "$RECALL_LIB_WIN" <<'PY' 2>/dev/null
 import sys, importlib.util
