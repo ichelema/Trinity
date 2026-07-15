@@ -25,7 +25,10 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
 2. **Review umana**: mostra all'utente una tabella dei candidati con:
    - bank di provenienza e doc_id
    - motivazione del triage (`reason`)
-   - anteprima del contenuto (`preview`)
+   - contenuto COMPLETO del documento: il campo `preview` è troncato a 500
+     caratteri e i documenti superano spesso i 1000, quindi approvare dal
+     preview significa non vedere metà del testo. Leggi l'`original_text`
+     intero (`GET /documents/<id>` sul bank di provenienza).
    Chiedi quali promuovere. L'utente può anche promuovere documenti che il
    triage ha scartato: in quel caso usa `--scan` per l'elenco completo dei
    non revisionati.
@@ -38,13 +41,24 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
    Il move fa: retain dell'`original_text` sul core (con strip dei tag
    `repo:`/`branch:`) + `delete_document` dal bank progetto + aggiornamento
    dello state file. È un MOVE, non una copia: un fatto vive in un solo bank.
-4. **Reject dei respinti** (così non ricompaiono al prossimo scan):
+
+   Usa `--move` SOLO per i documenti interamente trasversali: sposta
+   l'`original_text` per intero, senza guardarci dentro.
+4. **Documenti MISTI** (fatti trasversali *e* fatti specifici del progetto nello
+   stesso documento: normale, un documento contiene 3-6 fatti estratti). Il
+   `--move` porterebbe sul core anche la parte specifica. Invece:
+   - `mcp__hindsight__retain` del solo fatto trasversale, **riscritto a mano**
+     (lanciando il comando dal repo Trinity il retain MCP scrive sul core),
+     `tags: ["claude-code"]`
+   - poi tratta il documento come respinto (punto 5): il sorgente resta nel
+     bank del progetto, dove i fatti specifici devono stare.
+5. **Reject dei respinti** (così non ricompaiono al prossimo scan):
 
    ```bash
    python .../hindsight-promote.py --reject <DOC_ID> --bank <BANK>
    ```
 
-5. **Riepilogo finale**: mostra `--status` (promossi/respinti totali).
+6. **Riepilogo finale**: mostra `--status` (promossi/respinti totali).
 
 ## Regole
 
