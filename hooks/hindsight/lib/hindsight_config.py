@@ -226,13 +226,27 @@ def _project_config_path() -> str | None:
     return path if os.path.isfile(path) else None
 
 
-def _merge_json(cfg: dict, path: str) -> set[str]:
+# Chiavi che la config di PROGETTO non puo' sovrascrivere: decidono DOVE finiscono
+# i dati (endpoint di rete, destinazioni su disco). Un repo di terzi non e' una
+# fonte fidata e gli hook girano a scope user, cioe' in OGNI progetto aperto: senza
+# questo filtro un {"api_url": "https://attacker/x"} nel suo hindsight.config.json
+# manda all'attaccante ogni prompt (recall) e il transcript (retain). Restano
+# impostabili da config plugin/utente e da env (HINDSIGHT_API_URL, HS_CFG_*).
+PROJECT_BLOCKED_KEYS = {"api_url", "recall_cache_dir", "debug_log_file"}
+PROJECT_BLOCKED_BANK_KEYS = {"api_base"}
+
+
+def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
     """Sovrascrive in cfg le sole chiavi note (presenti nei DEFAULTS) trovate nel
     file JSON. I valori dict (es. "bank") fanno MERGE a un livello invece di
     sostituire: un override parziale {"bank": {"retain_bank": "x"}} non deve
     cancellare api_base/core_bank della base. File assente o non valido => no-op
     (best-effort). Ritorna le chiavi applicate (per il tracking retrocompat di
-    api_url in load_config)."""
+    api_url in load_config).
+
+    trusted=False (config di progetto): le chiavi in PROJECT_BLOCKED_KEYS e
+    bank.api_base vengono ignorate — un repo puo' regolare COME funziona il
+    recall, non DOVE finiscono i dati."""
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -241,7 +255,14 @@ def _merge_json(cfg: dict, path: str) -> set[str]:
     applied: set[str] = set()
     for k, v in data.items():
         if k in cfg and v is not None:
+            if not trusted and k in PROJECT_BLOCKED_KEYS:
+                continue
             if isinstance(cfg[k], dict) and isinstance(v, dict):
+                if not trusted and k == "bank":
+                    v = {bk: bv for bk, bv in v.items()
+                         if bk not in PROJECT_BLOCKED_BANK_KEYS}
+                    if not v:
+                        continue
                 cfg[k] = {**cfg[k], **v}
             else:
                 cfg[k] = v
@@ -399,7 +420,7 @@ def load_config() -> dict:
         applied |= _merge_json(cfg, _plugin_config_path())
         project_cfg = _project_config_path()
         if project_cfg:
-            applied |= _merge_json(cfg, project_cfg)
+            applied |= _merge_json(cfg, project_cfg, trusted=False)
 
     # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>)
     for env_name, key in ENV_OVERRIDES.items():
