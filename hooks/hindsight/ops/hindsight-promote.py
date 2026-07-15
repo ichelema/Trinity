@@ -234,6 +234,7 @@ def cmd_move(cfg: dict, args) -> int:
     bank, doc_id = args.bank[0], args.move
     full = fetch_document(cfg, bank, doc_id, args.timeout)
     text = full.get("original_text") or ""
+    hash_before = full.get("content_hash")
     if not text.strip():
         print(f"[move] ERRORE: documento {doc_id} senza original_text", file=sys.stderr)
         return 1
@@ -262,6 +263,21 @@ def cmd_move(cfg: dict, args) -> int:
         print(f"[move] ERRORE: retain sul core fallito: {res}", file=sys.stderr)
         return 1
     print(f"[move] retain sul core OK (sync, {res.get('items_count')} item)")
+    # Il retain sopra e' sincrono e puo' durare 90s (estrazione + embedding). In quella
+    # finestra un altro scrittore puo' riscrivere QUESTO documento: il retain usa
+    # session_id come document_id, quindi un secondo retain della stessa sessione fa
+    # upsert, non un documento nuovo (meta' dei documenti del server ha updated_at !=
+    # created_at). Cancellare qui butterebbe un testo che sul core non e' mai arrivato.
+    again = fetch_document(cfg, bank, doc_id, args.timeout)
+    if again.get("content_hash") != hash_before:
+        print(f"[move] ANNULLATO: {doc_id} e' cambiato durante il retain sul core.",
+              file=sys.stderr)
+        print("        Il documento NON e' stato cancellato e resta da revisionare:",
+              file=sys.stderr)
+        print("        rilancia il move — il document_id deterministico fa upsert sul",
+              file=sys.stderr)
+        print("        core con la versione nuova, senza doppioni.", file=sys.stderr)
+        return 1
     safe = urllib.parse.quote(doc_id, safe="")
     _request(f"{bank_url(cfg, bank)}/documents/{safe}", method="DELETE",
              timeout=args.timeout)
