@@ -9,12 +9,15 @@ Complete programmatic access to Google NotebookLM—including capabilities not e
 
 ## Setup in questo ambiente (PC Eni — installazione exe-free)
 
-> **LEGGI PRIMA DI TUTTO.** Su questo PC la libreria è GIÀ installata e configurata in modo specifico. **Ignora** la sezione "Installation" standard e i comandi `notebooklm login` / `--browser-cookies` che compaiono più avanti: qui non funzionano (nessun browser, nessun Playwright, nessun rookiepy). Segui invece queste regole.
+> **LEGGI PRIMA DI TUTTO.** Sui PC Windows la libreria è GIÀ installata e configurata in modo specifico (exe-free per l'EDR aziendale). **Ignora** la sezione "Installation" standard e i comandi `notebooklm login` / `--browser-cookies` che compaiono più avanti: qui non funzionano (nessun browser, nessun Playwright, nessun rookiepy). Segui invece queste regole. Su Linux il vincolo exe-free NON esiste: la libreria si installa normalmente (`pip install` nel Python di mise).
 
-**Comando base.** L'alias `notebooklm` esiste solo nella shell zsh interattiva dell'utente, NON in Bash. Negli script e nei comandi Bash usa SEMPRE il launcher col path completo:
+**Comando base (dipende dall'OS).** L'alias `notebooklm` esiste solo nella shell zsh interattiva dell'utente, NON in Bash. Negli script e nei comandi Bash usa SEMPRE il launcher:
 
 ```bash
+# Windows (launcher exe-free, path fisso):
 /e/AI/tools/notebooklm-data/notebooklm <comando>
+# Linux (env NOTEBOOKLM_BIN se definita, altrimenti il comando nel PATH):
+"${NOTEBOOKLM_BIN:-notebooklm}" <comando>
 ```
 
 Il launcher imposta già da solo il Python di mise, il file dei cookie (`--storage`) e la verifica certificati nativa di Windows (necessaria per il proxy aziendale Eni `eni Root CA G1`). **Non** aggiungere `pip install`, `--storage`, né variabili d'ambiente di setup: è tutto incluso.
@@ -29,7 +32,7 @@ Il launcher imposta già da solo il Python di mise, il file dei cookie (`--stora
 
 ---
 
-> **Nota sui comandi sotto:** da qui in poi la skill scrive `notebooklm ...`. In questo ambiente esegui ogni comando come `/e/AI/tools/notebooklm-data/notebooklm ...`. Salta qualsiasi istruzione di installazione o login via browser.
+> **Nota sui comandi sotto:** da qui in poi la skill scrive `notebooklm ...`. Esegui ogni comando come `/e/AI/tools/notebooklm-data/notebooklm ...` su Windows, oppure `"${NOTEBOOKLM_BIN:-notebooklm}" ...` su Linux. Salta qualsiasi istruzione di installazione o login via browser.
 
 ## Reference approfondite (consulta on-demand)
 

@@ -30,11 +30,13 @@ Atteso: `HTTP 200`.
 
 > ⚠️ **NON usare `npm run canvas`.** Quel comando esegue prima `build:server` (`npx tsc`), e su questa macchina il **node di MSYS2** (`/ucrt64/bin/node`, attualmente 24.14.1) fa **crashare `tsc`** con `std::bad_weak_ptr` (exit 127) → la build fallisce e per via del `&&` il server non viene mai lanciato. Il problema è **solo** lo step di build: `node dist/server.js` gira benissimo, e `dist/` è già compilato.
 
-**Rebuild dei sorgenti `.ts`** (solo se hai modificato `src/`, raramente) — usa il **node di mise** (Windows nativo), che compila `tsc` senza crashare; mai `npx tsc` con il node MSYS2:
+**Rebuild dei sorgenti `.ts`** (solo se hai modificato `src/`, raramente). Su Windows usa il **node di mise** (il node MSYS2 fa crashare `tsc`, vedi sopra); su Linux basta `npx tsc`:
 
 ```bash
-"$HOME/.local/share/mise/installs/node/24.16.0/node.exe" \
-  "$REPO/node_modules/typescript/bin/tsc" -p "$REPO/tsconfig.json"
+# Windows (node di mise risolto a runtime, mai npx col node MSYS2):
+"$(mise which node)" "$REPO/node_modules/typescript/bin/tsc" -p "$REPO/tsconfig.json"
+# Linux:
+npx tsc -p "$REPO/tsconfig.json"
 ```
 
 ---

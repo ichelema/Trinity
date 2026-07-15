@@ -15,7 +15,7 @@ Argomenti ricevuti: `$ARGUMENTS`
 
 ## Premesse fisse di questo progetto
 
-- Server MCP Hindsight registrato in `.mcp.json` come `hindsight` (HTTP, bank statico `trinity-project`).
+- Server MCP Hindsight registrato a **scope user** come shim stdio (`hooks/hindsight/mcp/hindsight-mcp-shim.sh`), bank risolto per-progetto (nel repo Trinity: core `trinity-project`).
 - I subagent **ereditano** il server MCP dalla sessione: NON usare `mcpServers:` nel frontmatter.
   Si controllano i permessi col campo `tools:`.
 - Isolamento memoria: ogni agent usa il tag-namespace **`agent:<nome>`** su ogni

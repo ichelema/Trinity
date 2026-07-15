@@ -57,7 +57,7 @@ versione e il gate di conferma sul push.
    git push --follow-tags origin master
    ```
 
-   Nota MSYS2: il push via SSH dal Bash tool può fallire perché msys2 ignora
+   Nota MSYS2 (solo Windows): il push via SSH dal Bash tool può fallire perché msys2 ignora
    HOME/config — se succede, usa i percorsi SSH assoluti (vedi il workaround
    noto nella memoria nativa) e ripeti.
 

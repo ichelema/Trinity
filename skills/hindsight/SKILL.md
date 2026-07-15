@@ -28,12 +28,12 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 - LLM per retain/recall: **OpenAI `gpt-4.1-nano`** (chiave da `$OPENAI_API_KEY`)
 - Storage: embedded PostgreSQL in `~/.pg0/hindsight-mcp/`
 - Endpoint MCP: `http://localhost:8888/mcp/trinity-project/` (bank statico per-progetto)
-- Registrato in `.mcp.json` con scope project
+- Registrato a **scope user** come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (bank risolto per-progetto; vedi sotto)
 - **Avvio / stop del server:**
 
 ```bash
 mise run start-hindsight   # lancia in background, log in /tmp/hs.log
-mise run stop-hindsight    # taskkill /F /IM hindsight-local-mcp.exe
+mise run stop-hindsight    # Windows: taskkill | Linux: pkill (branch per-OS in ops/hindsight-stop-services.sh)
 ```
 
 Verifica veloce che il server risponda:
@@ -93,7 +93,7 @@ mise run dashboard         # → http://localhost:9292
 
 - **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `127.0.0.1` (no LAN; non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi).
 - **Dashboard**: prima volta esegui `mise run install-dashboard` (bundle install). Gira sul **Ruby gestito da mise** (`[tools] ruby = "4.0.1"`), non quello MSYS2 — le gem vanno installate con lo stesso Ruby che le esegue.
-- Stop affidabile via `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh <porta>` (usa `Get-NetTCPConnection`: il netstat MSYS non vede sempre i processi nativi Windows).
+- Stop affidabile via `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh <porta>` (su Windows usa `Get-NetTCPConnection` perché il netstat MSYS non vede sempre i processi nativi; su Linux usa `lsof`/`fuser`).
 
 > Dettagli e gotcha d'ambiente (npx MSYS2 rotto, doppio-Ruby, hook `mise reshim`, bind `HOSTNAME`): vedi `README.md` §16.
 

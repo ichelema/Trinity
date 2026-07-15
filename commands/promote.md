@@ -11,6 +11,7 @@ MAI promuovere senza approvazione esplicita.
 Lo script meccanico è:
 
 ```bash
+# (su Linux, se `python` non esiste nel PATH, usa `python3`)
 python "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
 ```
 
