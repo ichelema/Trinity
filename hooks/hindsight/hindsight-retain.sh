@@ -23,10 +23,13 @@ rc=$?
 # proprio qui. Lascia una traccia DUREVOLE che il failcheck raccoglie al prossimo
 # prompt: il log qui sopra non basta, viene azzerato dal retain successivo ('>').
 # File separato e append: una riga per fallimento, tab-separated (ts \t messaggio).
+# Il messaggio dice da se' cosa e' successo: nello stesso file scrive anche
+# hindsight-drain-retain.py (retain arrivato al server ma non estratto in tempo),
+# quindi l'etichetta non puo' stare cablata nel failcheck.
 if [ "$rc" -ne 0 ]; then
 	printf '%s\t%s\n' \
 		"$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-		"$(tail -2 "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tr '\n\t' '  ')" \
+		"non arrivato al server — $(tail -2 "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tr '\n\t' '  ')" \
 		>> "$HS_CACHE_DIR/hs-retain-failed.log"
 fi
 

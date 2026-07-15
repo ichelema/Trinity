@@ -47,11 +47,15 @@ if [ "${1:-}" = "--worker" ]; then
 	done
 	[ "$(claude_alive)" -gt 0 ] && exit 0
 
-	# 3) Nessuna sessione Claude viva: i lease rimasti sono orfani -> ripulisci. Poi dai
-	#    al worker async il tempo di estrarre i fatti del retain finale PRIMA di uccidere
-	#    il server, e infine ferma server (launcher + python) e Postgres embedded.
+	# 3) Nessuna sessione Claude viva: i lease rimasti sono orfani -> ripulisci. Poi
+	#    attendi che il server abbia DAVVERO estratto i fatti del retain finale prima
+	#    di ucciderlo: la POST e' async, l'estrazione LLM prosegue server-side e dura
+	#    ~32s in mediana. Il vecchio `sleep 7` fisso la troncava nell'89% dei casi e la
+	#    memoria di fine sessione spariva senza errori (vedi hindsight-drain-retain.py).
+	#    Infine ferma server (launcher + python) e Postgres embedded.
 	[ -d "$SESS_DIR" ] && find "$SESS_DIR" -type f -delete 2>/dev/null || true
-	sleep 7
+	. "$SCRIPT_DIR/lib/hs-python.sh"
+	HOOK_INPUT="$INPUT" "$HS_PY" "$SCRIPT_DIR/ops/hindsight-drain-retain.py" >/dev/null 2>&1
 	# Ultimo check anti-race: durante lo sleep puo' essere partita una NUOVA sessione
 	# (riavvio rapido di Claude Code). Spegnerle il server sotto i piedi lascerebbe
 	# la sessione senza MCP (il suo ensure-up ha gia' visto la porta occupata e non

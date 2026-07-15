@@ -154,11 +154,14 @@ for r in fresh.values():
     (crit if r["task_type"] in RETAIN else maint).append(line)
 
 # I fallimenti locali sono retain a tutti gli effetti: memoria non salvata. Vanno
-# in crit, ma con provenienza esplicita — qui la POST non e' MAI partita, quindi
-# non c'e' nessuna operation da ri-controllare lato server.
+# in crit con provenienza esplicita. Il "cosa e' andato storto" lo porta il messaggio,
+# non l'etichetta: nel file scrivono due produttori con cause diverse — la POST mai
+# partita (hindsight-retain.sh) e l'estrazione non completata prima dello stop del
+# server (hindsight-drain-retain.py). In entrambi i casi non c'e' nessuna operation
+# failed da ri-controllare lato server.
 for ts, msg in local_fails:
     hhmm = ts[11:16] if len(ts) >= 16 else ts
-    crit.append(f"- retain [locale, non arrivato al server, {hhmm}] — {msg[:160]}")
+    crit.append(f"- retain [locale, {hhmm}] — {msg[:160]}")
 
 parts = ["## ⚠️ Hindsight — operazioni di memoria fallite\n"]
 if crit:
