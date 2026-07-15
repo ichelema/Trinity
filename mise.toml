@@ -163,6 +163,17 @@ description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgr
 shell = "bash -c"
 run = "bash hooks/hindsight/ops/hindsight-stop-services.sh"
 
+# --- Sync del DB tra macchine (uso alternato, mai concorrente) ---------------
+[tasks.db-dump]
+description = "pg_dump del DB hindsight per il sync tra macchine (default: E:/var/backups/hindsight sulla chiavetta; Linux: ~/backups/hindsight)"
+shell = "bash -c"
+run = "bash hooks/hindsight/tools/hs-db-dump.sh"
+
+[tasks.db-restore]
+description = "Restore del DB hindsight dall'ultimo dump (guardrail anti-perdita; --force per forzare). Uso: mise run db-restore [-- file.dump] [-- --force]"
+shell = "bash -c"
+run = "bash hooks/hindsight/tools/hs-db-restore.sh"
+
 # --- Control Plane (Web UI Hindsight) --------------------------------------
 [tasks.control-plane]
 description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:9999, collegato all'API :8888. Foreground: Ctrl-C per fermarlo."
