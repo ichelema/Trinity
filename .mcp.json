@@ -3,9 +3,9 @@
     "excalidraw": {
       "disabled": true,
       "type": "stdio",
-      "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node.exe",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-node.sh",
       "args": [
-        "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw/dist/index.js"
+        "${MCP_EXCALIDRAW_DIR:-E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw}/dist/index.js"
       ],
       "env": {
         "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
@@ -20,24 +20,24 @@
     },
     "playwright": {
       "type": "stdio",
-      "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node.exe",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-node.sh",
       "args": [
-        "E:/msys64/home/Sphynx/.local/share/mise/installs/node/24.16.0/node_modules/@playwright/mcp/cli.js",
+        "npm:@playwright/mcp/cli.js",
         "--browser",
         "chrome",
         "--output-dir",
-        "E:/AI/Claude/Trinity/data/playwright-mcp"
+        "${CLAUDE_PLUGIN_ROOT}/data/playwright-mcp"
       ]
     },
     "notebooklm": {
       "type": "stdio",
-      "command": "E:/msys64/home/Sphynx/.local/share/mise/installs/python/3.13.13/python.exe",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-python.sh",
       "args": [
-        "E:/AI/tools/notebooklm-data/run_notebooklm_mcp.py"
+        "${NOTEBOOKLM_DATA:-E:/AI/tools/notebooklm-data}/run_notebooklm_mcp.py"
       ],
       "env": {
-        "PYTHONPATH": "E:/AI/tools/notebooklm",
-        "NOTEBOOKLM_HOME": "E:/AI/tools/notebooklm-data/nbhome"
+        "PYTHONPATH": "${NOTEBOOKLM_LIB:-E:/AI/tools/notebooklm}",
+        "NOTEBOOKLM_HOME": "${NOTEBOOKLM_DATA:-E:/AI/tools/notebooklm-data}/nbhome"
       }
     }
   }
