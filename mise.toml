@@ -153,7 +153,14 @@ description = "Avvia hindsight-local-mcp in background (porta 8888). Log in /tmp
 #   - nohup: extra sicurezza; < /dev/null: chiude stdin; & disown: fuori dal job control
 # Senza setsid+nohup, su MSYS/Windows il child viene reaped quando il bash dell'hook esce.
 shell = "bash -c"
-run = "setsid nohup hindsight-local-mcp --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown"
+# --host 127.0.0.1: il default del pacchetto è 0.0.0.0 e il server NON ha autenticazione.
+# Se un giorno esponi oltre localhost (es. VPS), PRIMA abilita l'auth, altrimenti la
+# memoria è leggibile/cancellabile da chiunque raggiunga la porta:
+#   HINDSIGHT_API_TENANT_EXTENSION=hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+#   HINDSIGHT_API_TENANT_API_KEY=<chiave>
+# Nota: servono entrambe — la chiave da sola non attiva nulla. Poi ogni client (hook REST,
+# shim MCP, Control Plane, dashboard) deve mandare "Authorization: Bearer <chiave>".
+run = "setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown"
 
 [tasks.stop-hindsight]
 description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"
