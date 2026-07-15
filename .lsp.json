@@ -1,7 +1,7 @@
 {
   "typescript": {
-    "command": "E:/msys64/home/Sphynx/.local/share/mise/shims/typescript-language-server.exe",
-    "args": ["--stdio"],
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-lsp.sh",
+    "args": ["typescript-language-server", "--stdio"],
     "extensionToLanguage": {
       ".ts": "typescript",
       ".tsx": "typescriptreact",
@@ -13,8 +13,8 @@
     "maxRestarts": 3
   },
   "python": {
-    "command": "E:/msys64/home/Sphynx/.local/share/mise/shims/pyright-langserver.exe",
-    "args": ["--stdio"],
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-lsp.sh",
+    "args": ["pyright-langserver", "--stdio"],
     "extensionToLanguage": {
       ".py": "python",
       ".pyi": "python"
@@ -22,7 +22,8 @@
     "maxRestarts": 3
   },
   "ruby": {
-    "command": "E:/msys64/home/Sphynx/.local/share/mise/shims/ruby-lsp.exe",
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-lsp.sh",
+    "args": ["ruby-lsp"],
     "extensionToLanguage": {
       ".rb": "ruby",
       ".rbw": "ruby",
@@ -32,7 +33,8 @@
     "maxRestarts": 3
   },
   "lua": {
-    "command": "E:/msys64/home/Sphynx/.local/bin/lua-language-server/bin/lua-language-server.exe",
+    "command": "${CLAUDE_PLUGIN_ROOT}/scripts/bin/run-lsp.sh",
+    "args": ["lua-language-server"],
     "extensionToLanguage": {
       ".lua": "lua"
     },
