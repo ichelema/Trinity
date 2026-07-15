@@ -1,0 +1,16 @@
+# Job settimanale promote-scan (scan+triage candidati alla promozione sul core).
+# Equivalente Linux del bridge .cmd + System Scheduler di Windows.
+# Installazione: vedi README.md in questa cartella.
+[Unit]
+Description=Trinity - scan settimanale candidati promozione Hindsight
+# Il job parla con Hindsight su 127.0.0.1:8888; se il server e' giu' esce 3 (skip pulito).
+
+[Service]
+Type=oneshot
+# Adatta il path se il clone non e' in ~/ai/trinity.
+Environment=TRINITY_PLUGIN_DIR=%h/ai/trinity
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PROMOTE_NO_OPEN=1
+ExecStart=/usr/bin/env bash %h/ai/trinity/scheduler/promote_scan/promote-scan-scheduled.sh
+# Exit 10 = candidati trovati (alert scritto su file), 3 = server giu': non sono errori.
+SuccessExitStatus=3 10

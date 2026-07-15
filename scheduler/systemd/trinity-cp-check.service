@@ -1,0 +1,12 @@
+# Job settimanale cp-check (nuova versione del Control Plane su npm vs pin nel mise.toml).
+# Installazione: vedi README.md in questa cartella.
+[Unit]
+Description=Trinity - check settimanale versione Control Plane
+
+[Service]
+Type=oneshot
+Environment=TRINITY_PLUGIN_DIR=%h/ai/trinity
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CP_NO_OPEN=1
+ExecStart=/usr/bin/env bash %h/ai/trinity/scheduler/check_update_hindsight_control_plane/cp-check-scheduled.sh
+SuccessExitStatus=10

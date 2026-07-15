@@ -1,0 +1,13 @@
+# Job settimanale api-check (nuove versioni di hindsight-api/slim su PyPI).
+# Installazione: vedi README.md in questa cartella.
+[Unit]
+Description=Trinity - check settimanale versioni hindsight-api
+
+[Service]
+Type=oneshot
+Environment=TRINITY_PLUGIN_DIR=%h/ai/trinity
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=API_NO_OPEN=1
+ExecStart=/usr/bin/env bash %h/ai/trinity/scheduler/check_update_hindsight_api/api-check-scheduled.sh
+# Exit 10 = update disponibile (alert scritto su file): non e' un errore.
+SuccessExitStatus=10
