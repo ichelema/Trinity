@@ -60,6 +60,18 @@ else
 fi
 
 LOCAL_WM="$(hs_db_watermark)"
+# Sidecar assente/illeggibile: senza il watermark del dump il confronto sotto non
+# puo' scattare e si arriverebbe al DROP in silenzio, col solo warning stampato
+# sopra. Se il DB locale ha qualcosa da perdere, fermati: decide l'operatore.
+# LOCAL_WM vuoto (DB vuoto o irraggiungibile) NON e' un caso da bloccare: non c'e'
+# nulla da sovrascrivere ed e' il primo restore su una macchina nuova.
+if [ -n "$LOCAL_WM" ] && [ -z "$DUMP_WM" ] && [ "$FORCE" -ne 1 ]; then
+	echo "[db-restore] RIFIUTATO: watermark del dump non disponibile (sidecar assente o illeggibile)." >&2
+	echo "               Non posso stabilire se il dump e' piu' vecchio del DB locale." >&2
+	echo "               locale: $LOCAL_WM" >&2
+	echo "               Se sai cosa stai facendo, rilancia con --force." >&2
+	exit 2
+fi
 if [ -n "$LOCAL_WM" ] && [ -n "$DUMP_WM" ]; then
 	# Confronto lessicografico: i timestamp ISO (stesso fuso +00) ordinano bene.
 	if [[ "$LOCAL_WM" > "$DUMP_WM" ]] && [ "$FORCE" -ne 1 ]; then
