@@ -1,6 +1,7 @@
 # Setup di Trinity su un server Linux
 
-Guida gemella di `SETUP-NUOVO-PC.md` (che resta la procedura Windows/chiavetta).
+Versione Linux della procedura di setup; su Windows il setup segue invece la
+modalità portatile a chiavetta USB (guida tenuta solo in locale, non versionata).
 Su Linux **niente chiavetta come runtime**: il repo arriva via git, il database
 via `db-restore`, i runtime si installano nativi. La chiavetta serve al massimo
 come corriere dei dump (montata in sola lettura) — mai come datadir Postgres.
