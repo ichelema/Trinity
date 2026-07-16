@@ -16,6 +16,11 @@ require "uri"
 require "time"
 require "fileutils"
 
+# Windows-only: sotto usa mise.exe, la Scripts dir di Windows, gli eseguibili .exe e
+# PowerShell (env utente dal registro, kill per porta). Non e' portato su Linux; la
+# guardia evita un NoMethodError oscuro su ENV['MSYS2_ROOT'] nil e dice perche'.
+abort "hindsight_bench.rb e' Windows-only (usa pwsh, .exe, la Scripts dir di Windows). Su Linux non e' supportato." unless Gem.win_platform?
+
 BASE          = "http://127.0.0.1:8888"
 # Path derivati a runtime (niente C:/msys64, versione o drive cablati): MSYS2_ROOT
 # per la home MSYS, `mise where python` per la Scripts dir, `which` per pwsh.
