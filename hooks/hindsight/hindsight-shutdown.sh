@@ -9,16 +9,27 @@
 # NON dobbiamo spegnere i servizi. Filtriamo sul campo `reason` dello stdin.
 #
 # Perché detached: all'uscita Claude Code NON aspetta il completamento dell'hook
-# SessionEnd; appena il processo termina lo annulla ("Hook cancelled"). Quindi il lavoro
-# lento (retain + sleep + stop) gira in un processo staccato con setsid/nohup e l'hook
-# ritorna subito. Logica di stop condivisa con `mise run stop-hindsight`.
+# SessionEnd; lo annulla subito ("Hook cancelled"), su Ctrl+C anche ignorando il
+# `timeout` configurato (issue anthropics/claude-code#32712). Quindi il lavoro lento
+# (retain + sleep + stop) gira in un processo staccato con setsid/nohup e l'hook
+# ritorna subito. Anche il percorso foreground deve restare minimo: su MSYS2 ogni
+# processo extra costa ~850ms di fork emulato e se l'annullamento arriva prima dello
+# spawn del worker, retain finale e stop dei servizi vanno persi (verificato: kill a
+# 0.5s con jq in foreground -> worker mai partito; senza jq sopravvive a kill a 0.15s).
+# Logica di stop condivisa con `mise run stop-hindsight`.
 set -uo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Worker: gira detached, fa il lavoro vero -------------------------------------
 if [ "${1:-}" = "--worker" ]; then
+	# SCRIPT_DIR solo qui: il $(cd ... && pwd) è un fork (~300ms su MSYS2) che il
+	# percorso foreground non può permettersi (usa solo BASH_SOURCE).
+	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	INPUT="$2"
+
+	# Ri-verifica autorevole del reason con jq (in foreground costava ~850ms, qui il
+	# tempo non manca). Il filtro bash dell'hook resta la prima difesa.
+	REASON="$(printf '%s' "$INPUT" | jq -r '.reason // "other"' 2>/dev/null | tr -d '\r')"
+	[ "$REASON" = "clear" ] && exit 0
 
 	# 1) Retain finale forzato: cattura la coda della sessione prima di spegnere il server.
 	printf '%s' "$INPUT" | HS_RETAIN_FORCE=1 bash "$SCRIPT_DIR/hindsight-retain.sh" >/dev/null 2>&1 || true
@@ -74,12 +85,13 @@ if [ "${1:-}" = "--worker" ]; then
 	exit 0
 fi
 
-# --- Hook: filtra /clear, lancia il worker detached e ritorna subito ---------------
-INPUT="$(cat)"
-REASON="$(printf '%s' "$INPUT" | jq -r '.reason // "other"' 2>/dev/null | tr -d '\r')"
-case "$REASON" in
-clear) exit 0 ;;
-esac
+# --- Hook: lancia il worker detached SUBITO e ritorna -------------------------------
+# Niente jq né subshell qui (vedi header): stdin letto col builtin `read` (zero fork)
+# e filtro /clear con match bash istantaneo, sicuro perché l'input di SessionEnd è un
+# JSON piccolo e piatto, senza contenuto utente annidato.
+INPUT=""
+IFS= read -r -d '' INPUT || true
+[[ "$INPUT" =~ \"reason\"[[:space:]]*:[[:space:]]*\"clear\" ]] && exit 0
 
 setsid nohup bash "${BASH_SOURCE[0]}" --worker "$INPUT" </dev/null >/dev/null 2>&1 &
 disown 2>/dev/null || true
