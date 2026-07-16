@@ -37,9 +37,18 @@ In `~/.profile` (o un env file caricato da mise):
 
 ```bash
 export OPENAI_API_KEY="sk-..."        # retain/recall/reflect (gpt-4.1-nano/mini)
-export ZEROENTROPY_API_KEY="ze-..."   # rerank multi-bank (opzionale ma consigliata)
+export ZEROENTROPY_API_KEY="ze-..."   # OBBLIGATORIA: embedding (zembed-1) + rerank
 export TICKTICK_API_KEY="..."         # MCP TickTick (opzionale; web TickTick: Settings > Account > API Token)
 ```
+
+`ZEROENTROPY_API_KEY` NON e' opzionale: `mise.toml` imposta
+`HINDSIGHT_API_EMBEDDINGS_PROVIDER = "zeroentropy"`, quindi senza chiave il server
+muore all'avvio (`ValueError: ...ZEROENTROPY_API_KEY is required when
+HINDSIGHT_API_EMBEDDINGS_PROVIDER is 'zeroentropy'`). Non aggirarla cambiando
+provider: il DB ha colonne `vector(1280)` (zembed-1) e gli altri hanno dimensioni
+diverse (gemini 1536, bge-m3 1024), quindi i vettori nuovi non entrerebbero. Per il
+solo rerank la chiave sarebbe invece opzionale (fallback a interleaving), ma il
+provider e' lo stesso.
 
 Il server MCP `ticktick` e' remoto (`https://mcp.ticktick.com/`): niente da installare,
 si autentica col Bearer token letto da questa variabile. E' l'unico MCP che funziona
