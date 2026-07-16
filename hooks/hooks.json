@@ -15,7 +15,7 @@
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-mm-inject.sh",
-          "timeout": 6
+          "timeout": 25
         }
       ]
     }],
