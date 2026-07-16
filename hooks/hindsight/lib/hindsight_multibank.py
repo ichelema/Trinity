@@ -9,8 +9,11 @@ Usato da hindsight-recall.sh quando recall_bank_urls() risolve piu' di un bank
      dei singoli bank NON sono confrontabili tra loro, il rerank unico li
      ricalibra sulla query. Stesso provider del reranker interno del server
      (ZEROENTROPY_API_KEY), nessuna esposizione privacy nuova.
-  4. fallback: se ZeroEntropy non risponde, interleave() alterna i risultati
-     dei bank (round-robin) senza rerank. MAI sollevare verso il hook.
+  4. fallback: se ZeroEntropy non risponde e recall_min_rerank_score NON e'
+     attivo, interleave() alterna i risultati dei bank (round-robin) senza
+     rerank; con la soglia attiva il fallback e' fail-closed (lista vuota):
+     senza score non possiamo garantire la qualita' richiesta dalla soglia.
+     MAI sollevare verso il hook.
 
 Con un solo bank risolto il chiamante salta tutto questo e fa la singola POST
 di sempre (zero latenza aggiunta nel caso comune).
@@ -195,6 +198,12 @@ def multi_recall(
             meta["min_score_filtered"] = len(candidates) - len(merged)
         return merged[:max_n], meta
     except Exception as e:  # noqa: BLE001 — fallback, mai rompere il recall
-        meta["merge"] = "interleave-fallback"
         meta["rerank_error"] = f"{type(e).__name__}: {e}"[:200]
+        if min_score is not None:
+            # Fail-closed: la soglia chiede una garanzia di qualita' che senza
+            # rerank non possiamo dare. Meglio zero risultati che candidati non
+            # qualificati iniettati nel contesto aggirando la soglia.
+            meta["merge"] = "rerank-failed-min-score"
+            return [], meta
+        meta["merge"] = "interleave-fallback"
         return interleave(per_bank, max_n), meta

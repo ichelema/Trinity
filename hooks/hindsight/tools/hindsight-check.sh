@@ -914,6 +914,10 @@ mb.zerank_rerank = boom
 res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4}, ["u1", "u2"], {})
 fb_ok = meta["merge"] == "interleave-fallback" and len(res) == 2
 
+# fallback con soglia attiva: fail-closed (lista vuota), la soglia non si aggira
+res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.5}, ["u1", "u2"], {})
+fc_ok = meta["merge"] == "rerank-failed-min-score" and res == []
+
 # filtro soglia: min_score=0.9 lascia solo i punteggi alti. I result mock
 # portano uno `scores` server-side (RecallScores) che deve sopravvivere alla
 # fusione per finire nel debug log accanto a _rerank_score.
@@ -929,11 +933,11 @@ sc_ok = all(r.get("scores") == srv_scores for r in res)
 # soglia superata da tutti: 0.2
 res2, _ = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.2}, ["u1", "u2"], {})
 th_all_ok = len(res2) == 3
-print("OK" if il_ok and dd_ok and fb_ok and th_ok and sc_ok and th_all_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok} th={th_ok} sc={sc_ok} thall={th_all_ok}")
+print("OK" if il_ok and dd_ok and fb_ok and fc_ok and th_ok and sc_ok and th_all_ok else f"KO il={il_ok} dd={dd_ok} fb={fb_ok} fc={fc_ok} th={th_ok} sc={sc_ok} thall={th_all_ok}")
 PY
 )
 if [ "$MB_LIB" = "OK" ]; then
-	ok "multibank lib: interleave, dedup cross-bank, fallback, soglia + scores preservati"
+	ok "multibank lib: interleave, dedup cross-bank, fallback, fail-closed con soglia, soglia + scores preservati"
 else
 	ko "hindsight_multibank logica errata ($MB_LIB)"
 fi
