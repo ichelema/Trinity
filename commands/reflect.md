@@ -19,18 +19,15 @@ Quali pattern, decisioni architetturali, rischi, vincoli o lezioni precedenti so
 ## Istruzioni operative
 
 1. Usa il tool MCP Hindsight `reflect`.
-2. Endpoint del progetto:
-
-```text
-http://localhost:8888/mcp/trinity-project/
-```
-
+2. Il bank è quello del progetto corrente: il server MCP lo risolve dal repo
+   (slug dal remote origin; repo Trinity o fuori-git → core). Non indicare a
+   mano endpoint o nome del bank.
 3. Usa questi parametri:
 
 ```text
 budget: high
 max_tokens: 4096
-tags: claude-code, project:trinity-project
+tags: claude-code
 tags_match: any
 ```
 

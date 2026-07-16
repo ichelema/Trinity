@@ -8,18 +8,20 @@ Rivedi i candidati alla promozione dai bank Hindsight di progetto al bank CORE
 condiviso e promuovi SOLO quelli approvati dall'utente. La promozione è curata:
 MAI promuovere senza approvazione esplicita.
 
-Lo script meccanico è:
+Lo script meccanico è (risolvi l'interprete come gli hook: `hs-python.sh`
+esporta `$HS_PY` — su Windows il python del PATH, su Linux/mac quello di mise —
+e imposta `PYTHONUTF8=1`; ogni blocco sotto assume `$HS_PY` già risolto così):
 
 ```bash
-# (su Linux, se `python` non esiste nel PATH, usa `python3`)
-python "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
+. "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/lib/hs-python.sh"
+"$HS_PY" "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
 ```
 
 ## Flusso operativo
 
 1. **Report candidati**: leggi `${CLAUDE_PLUGIN_ROOT}/logs/promote-candidates.json`.
    - Se esiste ed è fresco (generato da meno di 7 giorni), usalo direttamente.
-   - Altrimenti rigeneralo: `python .../hindsight-promote.py --triage`
+   - Altrimenti rigeneralo: `"$HS_PY" .../hindsight-promote.py --triage`
      (richiede il server Hindsight su :8888 e `OPENAI_API_KEY`; usa il triage
      gpt-4.1-nano con cache dei verdetti, quindi è economico ripeterlo).
 2. **Review umana**: mostra all'utente una tabella dei candidati con:
@@ -35,7 +37,7 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
 3. **Move degli approvati** (uno per documento):
 
    ```bash
-   python .../hindsight-promote.py --move <DOC_ID> --bank <BANK>
+   "$HS_PY" .../hindsight-promote.py --move <DOC_ID> --bank <BANK>
    ```
 
    Il move fa: retain dell'`original_text` sul core (con strip dei tag
@@ -55,7 +57,7 @@ python "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-promote.py"
 5. **Reject dei respinti** (così non ricompaiono al prossimo scan):
 
    ```bash
-   python .../hindsight-promote.py --reject <DOC_ID> --bank <BANK>
+   "$HS_PY" .../hindsight-promote.py --reject <DOC_ID> --bank <BANK>
    ```
 
 6. **Riepilogo finale**: mostra `--status` (promossi/respinti totali).
