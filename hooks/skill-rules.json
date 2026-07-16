@@ -67,8 +67,6 @@
       "triggers": {
         "keywords": [
           "vault",
-          "nota",
-          "note",
           "obsidian",
           "frontmatter",
           "wikilink",
@@ -83,7 +81,6 @@
         ],
         "keywordPatterns": [
           "\\bvault\\b",
-          "\\bnot[ae]\\b",
           "\\bbacklink\\b",
           "\\bdataview\\b",
           "\\btemplater\\b",
@@ -95,9 +92,10 @@
           "**/*.excalidraw.md"
         ],
         "intentPatterns": [
-          "(?:salva|crea|scrivi|embed|inserisci).*(?:nota|vault|obsidian)",
-          "(?:save|create|write).*(?:note|vault)",
-          "(?:salva|esporta).*(?:nel vault|in obsidian)"
+          "(?:salva|crea|scrivi|embed|inserisci).*(?:vault|obsidian)",
+          "(?:save|create|write).*(?:vault|obsidian)",
+          "(?:salva|esporta).*(?:nel vault|in obsidian)",
+          "(?:salva|crea|scrivi).*nota.*(?:vault|obsidian|sinapsi)"
         ],
         "contextPatterns": [
           "nel vault",
@@ -307,7 +305,6 @@
         "pathPatterns": [
           "**/Gemfile",
           "**/Gemfile.lock",
-          "**/*.rb",
           ".claude/skills/ruby/**"
         ],
         "intentPatterns": [
@@ -359,31 +356,18 @@
           "estrai framework",
           "documento in skill",
           "libro in skill",
-          "mental model",
           "framework extraction",
           "skill generation",
-          "calibre",
-          "epub",
-          "mobi",
-          "azw"
+          "calibre"
         ],
         "keywordPatterns": [
           "\\bbook[-\\s]to[-\\s]skill\\b",
           "\\bconvert.*(?:book|document|pdf|epub|docx)\\b",
           "\\bconverti.*(?:libro|documento|pdf|epub|docx)\\b",
           "\\bestrai.*(?:framework|principi|skill|mental model)\\b",
-          "\\b(?:pdf|epub|docx|mobi|azw3?)\\b",
-          "\\bmental\\s+model\\b",
           "\\bframework\\s+extraction\\b"
         ],
         "pathPatterns": [
-          "**/*.pdf",
-          "**/*.epub",
-          "**/*.docx",
-          "**/*.mobi",
-          "**/*.azw",
-          "**/*.azw3",
-          "**/*.rtf",
           ".claude/skills/book-to-skill/**"
         ],
         "intentPatterns": [

@@ -53,7 +53,7 @@ function extractFilePaths(prompt) {
 
   // Match paths with extensions relevant to this project
   const extensionPattern =
-    /(?:^|\s|["'`])([\w\-./\\:]+\.(?:py|rb|sh|xlsx?|csv|excalidraw|md|json|lua|toml|cr|go|rs|png|svg|ya?ml))\b/gi;
+    /(?:^|\s|["'`])([\w\-./\\:]+\.(?:py|rb|sh|xlsx?|csv|excalidraw|md|json|lua|toml|cr|go|rs|png|svg|ya?ml|pdf|epub|docx|mobi|azw3?|rtf))\b/gi;
   let match;
   while ((match = extensionPattern.exec(prompt)) !== null) {
     paths.add(match[1]);
