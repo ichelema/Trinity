@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 
 def cache_dir() -> str:
     """Directory delle cache/stato per-utente: $XDG_CACHE_HOME/trinity, fallback
@@ -447,9 +448,21 @@ def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
 
 
 def bank_url(cfg: dict, bank_name: str) -> str:
-    """URL scoped del bank: <api_base>/banks/<nome>."""
+    """URL scoped del bank: <api_base>/banks/<nome>.
+
+    Il nome finisce in un segmento di path, quindi va percent-encodato: lo slug non
+    e' sotto il nostro controllo (repo senza 'origin' => basename della cartella, che
+    puo' avere spazi o accenti). Senza encoding urllib solleva InvalidURL sugli spazi
+    e UnicodeEncodeError sugli accenti, e l'errore non emerge da nessuna parte: nel
+    recall multi-bank fetch_bank_results lo inghiotte (return [] muto) e il bank di
+    progetto sparisce senza traccia; nel retain la POST fallisce e la memoria e' persa.
+    safe="" encoda anche '?' e '/': uno slug come "repo.git?token=x" resta un NOME e
+    non degenera in query string su un altro endpoint.
+    I bank esistenti sono invarianti a quote() (nessun carattere speciale): il fix non
+    li rinomina e non richiede migrazione.
+    """
     base = (cfg.get("bank") or {}).get("api_base", "").rstrip("/")
-    return f"{base}/banks/{bank_name}"
+    return f"{base}/banks/{urllib.parse.quote(bank_name, safe='')}"
 
 
 def retain_bank_url(cfg: dict, cwd: str | None = None) -> str:

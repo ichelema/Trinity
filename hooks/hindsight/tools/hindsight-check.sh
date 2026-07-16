@@ -838,6 +838,41 @@ else
 	ko "identita' del repo del plugin errata ($MB_IDENT)"
 fi
 
+MB_QUOTE=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+
+cfg = hc.load_config()
+# I bank esistenti non devono cambiare URL: quote() li lascia identici, quindi il fix
+# non rinomina nulla e non serve migrazione. Se questo salta, i bank reali si spostano.
+same_ok = all(
+    hc.bank_url(cfg, n).endswith("/banks/" + n)
+    for n in ("trinity-project", "Obsidian_Sinapsi", "Remit_Mappa", "PluginPilot")
+)
+# Slug fuori dal nostro controllo (repo senza origin -> basename cartella). Si
+# verificano le PROPRIETA' dell'URL, non che Request() non sollevi: il costruttore
+# accetta tutto e l'eccezione arriva solo alla urlopen, quindi un check "costruisci
+# e vedi" passerebbe sempre, anche senza encoding.
+# Spazio => InvalidURL ("URL can't contain control characters") alla POST.
+space_ok = " " not in hc.bank_url(cfg, "My Project")
+# Non-ASCII => UnicodeEncodeError ('ascii' codec) alla POST.
+ascii_ok = hc.bank_url(cfg, "café").isascii()
+# '?' encodato: se restasse letterale, la coda dello slug diventerebbe query string e
+# la POST finirebbe su un endpoint diverso (bank sbagliato, non un errore).
+q_ok = "%3F" in hc.bank_url(cfg, "repo.git?token=x")
+
+print("OK" if all([same_ok, space_ok, ascii_ok, q_ok])
+      else f"KO invarianti={same_ok} spazi={space_ok} ascii={ascii_ok} query={q_ok}")
+PY
+)
+if [ "$MB_QUOTE" = "OK" ]; then
+	ok "bank_url percent-encoda il nome (spazi/accenti/'?') senza spostare i bank esistenti"
+else
+	ko "bank_url non encoda il nome del bank ($MB_QUOTE)"
+fi
+
 MB_LIB=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import sys
