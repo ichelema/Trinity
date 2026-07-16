@@ -19,6 +19,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MISE="$HOME/.local/bin/mise"
 OK=0
 WARN=0
+MCP_SKIPPED=""
 ok() { echo "  [OK ] $1"; OK=$((OK + 1)); }
 warn() {
 	echo "  [!! ] $1" >&2
@@ -134,7 +135,8 @@ if command -v claude > /dev/null 2>&1; then
 			|| warn "registrazione MCP fallita"
 	fi
 else
-	warn "claude CLI non trovato: dopo l'installazione esegui: claude mcp add-json hindsight '{\"type\":\"stdio\",\"command\":\"$SHIM\"}' --scope user"
+	MCP_SKIPPED=1
+	warn "claude CLI non trovato: la registrazione MCP e' saltata — rilancia questo script (idempotente) dopo aver installato claude"
 fi
 
 sect "9. Directory dei backup DB"
@@ -142,9 +144,12 @@ mkdir -p "$HOME/backups/hindsight" && ok "~/backups/hindsight pronta"
 
 sect "Riepilogo"
 echo "  passi ok: $OK, avvisi: $WARN"
+echo
+echo "Prossimi passi (vedi docs/SETUP-LINUX.md):"
+# Punto condizionale fuori dall'heredoc: dentro ${VAR:+...} l'apostrofo di "l'MCP"
+# aprirebbe una stringa quotata e romperebbe l'espansione (bad substitution).
+[ -n "$MCP_SKIPPED" ] && echo "  0. registra l'MCP hindsight:   installa claude, poi rilancia  bash scripts/setup/bootstrap-linux.sh"
 cat <<EOF
-
-Prossimi passi (vedi docs/SETUP-LINUX.md):
   1. chiavi API in ~/.profile:  export OPENAI_API_KEY=... ZEROENTROPY_API_KEY=...
   2. primo avvio:               mise -C "$ROOT" run start-hindsight
   3. importa la memoria:        mise -C "$ROOT" run db-restore  (dump dalla chiavetta o via scp)

@@ -61,6 +61,11 @@ a differenza di Windows). Al primo avvio in un progetto qualsiasi il plugin
 Trinity viene scoperto dal symlink skills-dir; l'hook SessionStart avvia da
 solo il server Hindsight.
 
+> **Poi rilancia il bootstrap** (è idempotente): `bash scripts/setup/bootstrap-linux.sh`.
+> Al primo giro `claude` non c'era ancora, quindi la registrazione del server MCP
+> `hindsight` (scope user) è stata saltata con un avviso; ora che il CLI è installato
+> viene fatta. Senza questo passo i tool `mcp__hindsight__*` non compaiono in sessione.
+
 ## 5. Primo avvio del server e import della memoria
 
 ```bash
