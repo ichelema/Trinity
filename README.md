@@ -408,10 +408,20 @@ da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude
   "env": {
     "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
     "OBSIDIAN_VAULT_NAME": "Sinapsi",
-    "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity"
+    "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity",
+    "NOTEBOOKLM_DATA": "E:/AI/tools/notebooklm-data",
+    "NOTEBOOKLM_LIB": "E:/AI/tools/notebooklm",
+    "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw"
   }
 }
 ```
+
+Le ultime tre servono ai server MCP `notebooklm` ed `excalidraw` e puntano a
+strumenti esterni installati **fuori dal repo**: definiscile col path locale
+dell'installazione. Su un'altra macchina (o su Linux) i path cambiano — vanno
+messi quelli dell'installazione locale di quegli strumenti (vedi
+`docs/SETUP-LINUX.md`). Senza queste variabili quei due server non partono (warning
+in avvio, resto invariato); `excalidraw` è comunque `disabled` di default.
 
 Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
 valore (es. `"/home/sphynx/Obsidian/Sinapsi"`): `core-behavior.md` resta identico, l'iniezione 
@@ -425,6 +435,8 @@ una variabile separata.
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **da definire per-macchina** |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`, vedi `docs/SETUP-NUOVO-PC.md`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
+| server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
+| server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
 
 > Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
 > Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 

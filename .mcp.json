@@ -3,14 +3,14 @@
     "excalidraw": {
       "disabled": true,
       "type": "stdio",
-      "command": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/scripts/bin/run-node.sh",
+      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
       "args": [
-        "${MCP_EXCALIDRAW_DIR:-E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw}/dist/index.js"
+        "${MCP_EXCALIDRAW_DIR}/dist/index.js"
       ],
       "env": {
         "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
         "ENABLE_CANVAS_SYNC": "true",
-        "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/logs/excalidraw.log"
+        "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR}/logs/excalidraw.log"
       }
     },
     "obsidian_semantic_notes_vault": {
@@ -20,24 +20,24 @@
     },
     "playwright": {
       "type": "stdio",
-      "command": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/scripts/bin/run-node.sh",
+      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
       "args": [
         "npm:@playwright/mcp/cli.js",
         "--browser",
         "chrome",
         "--output-dir",
-        "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/data/playwright-mcp"
+        "${TRINITY_PLUGIN_DIR}/data/playwright-mcp"
       ]
     },
     "notebooklm": {
       "type": "stdio",
-      "command": "${TRINITY_PLUGIN_DIR:-E:/AI/Claude/Trinity}/scripts/bin/run-python.sh",
+      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-python.sh",
       "args": [
-        "${NOTEBOOKLM_DATA:-E:/AI/tools/notebooklm-data}/run_notebooklm_mcp.py"
+        "${NOTEBOOKLM_DATA}/run_notebooklm_mcp.py"
       ],
       "env": {
-        "PYTHONPATH": "${NOTEBOOKLM_LIB:-E:/AI/tools/notebooklm}",
-        "NOTEBOOKLM_HOME": "${NOTEBOOKLM_DATA:-E:/AI/tools/notebooklm-data}/nbhome"
+        "PYTHONPATH": "${NOTEBOOKLM_LIB}",
+        "NOTEBOOKLM_HOME": "${NOTEBOOKLM_DATA}/nbhome"
       }
     },
     "ticktick": {

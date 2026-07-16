@@ -147,6 +147,7 @@ Deliverable: `scripts/setup/bootstrap-linux.sh` (idempotente, rieseguibile) + `d
 4. `pip install hindsight-api` nel Python di mise + `mise reshim` (niente vincolo EDR su Linux: installazione normale, zero exe-free).
 5. Symlink skills-dir: `ln -sfn ~/ai/trinity ~/.claude/skills/trinity` (equivalente POSIX della junction).
 6. `~/.claude/settings.json` con env: `TRINITY_PLUGIN_DIR`, `OBSIDIAN_VAULT*` (se il vault esiste lì, altrimenti omesse). Chiavi API (`OPENAI_API_KEY`, `ZEROENTROPY_API_KEY`, `TICKTICK_API_KEY`) in `~/.profile` o file env caricato da mise.
+   - **Server MCP con strumento esterno** (`.mcp.json` usa `${VAR}` puro, senza più fallback hardcoded dopo il refactoring del 2026-07-16): le variabili vanno definite qui con i **percorsi dell'installazione Linux** di quegli strumenti, non i path Windows `E:/...`. Servono `NOTEBOOKLM_DATA` e `NOTEBOOKLM_LIB` (root dei dati e libreria di notebooklm, install pip normale su Linux) e — se si abilita excalidraw — `MCP_EXCALIDRAW_DIR`. Se una di queste manca, quel solo server non parte (warning in avvio, resto invariato): definirle solo per gli strumenti che si installa davvero sul server.
 7. Registrazione MCP hindsight a scope user: `claude mcp add-json hindsight … hindsight-mcp-shim.sh` (stesso shim, ora portabile dalla Fase 1).
 8. Primo avvio: `mise run start-hindsight` → pg0 scarica i binari Postgres **Linux** e crea un cluster nuovo in `~/.pg0/` (su filesystem nativo ext4: niente junction, niente NTFS).
 9. Primo import dati: `mise run db-restore` (Fase 4) dal dump più recente.
