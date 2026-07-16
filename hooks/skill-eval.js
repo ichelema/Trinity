@@ -227,7 +227,7 @@ function getRelatedSkills(matches, skills) {
     const skill = skills[match.name];
     if (skill?.relatedSkills) {
       for (const relatedName of skill.relatedSkills) {
-        if (!matchedNames.has(relatedName)) {
+        if (!matchedNames.has(relatedName) && !isSkillDisabled(relatedName)) {
           related.add(relatedName);
         }
       }
