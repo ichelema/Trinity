@@ -89,6 +89,9 @@ DEFAULTS = {
     "failcheck_enabled": True,
     "failcheck_window_hours": 24,
     "failcheck_timeout": 3,
+    # Dimensione pagina della query /operations?status=failed (ordinata created_at
+    # DESC): l'hook pagina finche' un record esce dalla finestra o raggiunge 'total'.
+    "failcheck_page_limit": 100,
     "recall_budget": "low",
     "recall_max_tokens": 800,
     "recall_max_results": 8,

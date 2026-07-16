@@ -69,27 +69,53 @@ def _parse(ts):
 
 # Raccogli le operation failed da ogni bank. Una failed resta failed: per non
 # rinotificarla a ogni prompt c'e' il de-dup piu' sotto.
+# Paginazione: la query e' ordinata created_at DESC (verificato sull'endpoint);
+# un singolo limit=20 perdeva le failed oltre la prima pagina. Scorri le pagine e
+# fermati appena un record esce dalla finestra (da li' in poi sono tutte piu'
+# vecchie) o quando hai raggiunto 'total'. Cap di sicurezza per non scandire
+# storie enormi di failed vecchie in stati degenerati. Caso normale (total <=
+# pagina): una sola richiesta per bank, come prima.
+page = max(1, int(cfg.get("failcheck_page_limit", 100)))
+SCAN_CAP = 1000
 raw = []
 for base in urls:
-    try:
-        req = urllib.request.Request(
-            base + "/operations?status=failed&limit=20", method="GET"
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as res:
-            data = json.loads(res.read().decode("utf-8", errors="replace"))
-    except Exception:
-        continue  # bank giu'/irraggiungibile: best-effort, salta
     bank = base.rsplit("/", 1)[-1]
-    for op in data.get("operations") or []:
-        when = _parse(op.get("updated_at") or op.get("created_at") or "")
-        if when is not None and when < cutoff:
-            continue
-        raw.append({
-            "bank": bank,
-            "created": op.get("created_at") or "",
-            "task_type": op.get("task_type") or "?",
-            "error": (op.get("error_message") or "").strip(),
-        })
+    offset = 0
+    stop_bank = False
+    while not stop_bank:
+        try:
+            req = urllib.request.Request(
+                base + f"/operations?status=failed&limit={page}&offset={offset}",
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as res:
+                data = json.loads(res.read().decode("utf-8", errors="replace"))
+        except Exception:
+            break  # bank giu'/irraggiungibile: best-effort, salta
+        ops = data.get("operations") or []
+        if not ops:
+            break
+        for op in ops:
+            created = _parse(op.get("created_at") or "")
+            if created is not None and created < cutoff:
+                stop_bank = True  # DESC: le rimanenti sono ancora piu' vecchie
+                break
+            # filtro d'inclusione invariato: usa updated_at se il retry e' recente
+            when = _parse(op.get("updated_at") or op.get("created_at") or "")
+            if when is not None and when < cutoff:
+                continue
+            raw.append({
+                "bank": bank,
+                "created": op.get("created_at") or "",
+                "task_type": op.get("task_type") or "?",
+                "error": (op.get("error_message") or "").strip(),
+            })
+        offset += len(ops)
+        total = data.get("total")
+        if isinstance(total, int) and offset >= total:
+            break
+        if offset >= SCAN_CAP:
+            break
 
 # Fallimenti LOCALI del retain: il worker non ha raggiunto il server, quindi non
 # esiste nessuna operation e il fan-out qui sopra non li vede. Li appende
