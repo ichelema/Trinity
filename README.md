@@ -444,7 +444,13 @@ una variabile separata.
 
 ---
 
-## 11. Job schedulati (System Scheduler)
+## 11. Job schedulati
+
+Su **Windows** i job girano via **System Scheduler (Splinterware)**; sul **server Linux**
+gli stessi job — limitati a quelli sensati sul server — girano via **timer systemd**
+(vedi [`scheduler/systemd/README.md`](scheduler/systemd/README.md) e la sottosezione 11.2).
+
+### 11.1 Windows — System Scheduler
 
 Sei job girano in background via **System Scheduler (Splinterware)**, lo scheduler a
 icona nella tray di Windows. Non sono hook Claude Code: girano indipendentemente dalla
@@ -490,6 +496,22 @@ test manuali (es. `PROMOTE_NO_OPEN=1 bash scheduler/promote_scan/promote-scan-sc
 
 I dettagli di ogni job (campi esatti, note TLS/proxy, variabili override, test manuali) stanno
 nel `README.md` della rispettiva cartella.
+
+### 11.2 Linux (server) — timer systemd
+
+Sul server Linux non c'è System Scheduler: gli `*-scheduled.sh` (già bash portabile) sono
+lanciati **direttamente** da timer systemd utente, senza il ponte `.cmd`. Girano solo i 3 job
+sensati sul server; `nb-check`, `yt-check` e `nb-auth-refresh` restano Windows-only (dipendono
+dagli strumenti exe-free in `E:/AI/tools` e dai cookie del browser dell'utente).
+
+| Unit | Cadenza | Job |
+|---|---|---|
+| `trinity-promote-scan` | dom 09:00 | scan+triage candidati promozione |
+| `trinity-api-check` | dom 09:15 | nuove versioni `hindsight-api`/`-slim` su PyPI |
+| `trinity-cp-check` | dom 09:30 | nuova versione Control Plane su npm vs pin `mise.toml` |
+
+Installazione (unit utente, niente root), verifica e gestione: vedi
+[`scheduler/systemd/README.md`](scheduler/systemd/README.md).
 
 ---
 
