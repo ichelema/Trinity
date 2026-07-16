@@ -157,6 +157,7 @@ def multi_recall(
     """Orchestrazione completa: fan-out -> dedup -> rerank globale (fallback
     interleave). Ritorna (results fusi, meta per il debug log). Mai solleva."""
     timeout = float(cfg.get("recall_timeout", 6))
+    rerank_timeout = float(cfg.get("recall_rerank_timeout", 6))
     per_bank_cap = int(cfg.get("recall_per_bank_candidates", 5))
     max_n = int(cfg.get("recall_max_results_multibank") or cfg.get("recall_max_results", 8))
     min_score = cfg.get("recall_min_rerank_score")
@@ -187,7 +188,7 @@ def multi_recall(
 
     try:
         merged = zerank_rerank(
-            prompt, candidates, timeout=timeout, min_score=min_score
+            prompt, candidates, timeout=rerank_timeout, min_score=min_score
         )
         meta["merge"] = "zerank"
         if min_score is not None:

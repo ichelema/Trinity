@@ -135,6 +135,11 @@ DEFAULTS = {
     "recall_cache_ttl": 300,
     "recall_cache_dir": cache_dir() + "/hs-recall-cache",
     "recall_timeout": 6,
+    # Budget separato per il rerank ZeroEntropy in multi_recall: gira IN SERIE dopo
+    # il fan-out sui bank, quindi recall_timeout + recall_rerank_timeout deve stare
+    # sotto il timeout dell'hook recall (hooks.json). Senza budget suo il rerank
+    # riusava recall_timeout e la somma sforava il tetto dell'hook.
+    "recall_rerank_timeout": 6,
     # Parametri di chunking del retain, consumati da hindsight-retain-worker.py.
     # Devono stare nei DEFAULTS o load_config li scarta dalla whitelist (riga "if
     # k in cfg"). I valori coincidono coi fallback hardcoded del worker.

@@ -28,6 +28,7 @@
   "recall_tags_match": "any",
   "recall_cache_ttl": 300,
   "recall_timeout": 10,
+  "recall_rerank_timeout": 6,
 
   "retain_mode": "chunked",
   "retain_overlap_turns": 1,

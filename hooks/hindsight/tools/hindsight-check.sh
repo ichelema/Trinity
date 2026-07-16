@@ -916,6 +916,51 @@ else
 	ko "hindsight_multibank logica errata ($MB_LIB)"
 fi
 
+# Budget recall multi-bank: fan-out e rerank corrono IN SERIE (fan-out -> rerank),
+# quindi la loro somma deve stare sotto il timeout dell'hook recall in hooks.json,
+# se no nel caso peggiore l'hook viene ucciso e il recall va perso in silenzio. Il
+# rerank deve avere il SUO budget (recall_rerank_timeout), non riusare recall_timeout.
+MB_BUDGET=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" "$(w "$HOOKSJSON")" <<'PY' 2>/dev/null
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+import hindsight_multibank as mb
+
+cfg = hc.load_config()
+bank_to = float(cfg["recall_timeout"])
+rerank_to = float(cfg["recall_rerank_timeout"])
+
+# 1) multi_recall passa recall_rerank_timeout al rerank, non recall_timeout. Valori
+#    distinti (9 vs 4) cosi' se qualcuno rimette timeout=timeout il check lo becca.
+seen = {}
+mb.fetch_bank_results = lambda u, p, t: [{"text": f"da-{u}"}]
+def capture(query, results, model="zerank-2", timeout=6, api_key=None, min_score=None):
+    seen["timeout"] = timeout
+    return [dict(r, _rerank_score=1.0) for r in results]
+mb.zerank_rerank = capture
+mb.multi_recall("q", {**cfg, "recall_timeout": 9, "recall_rerank_timeout": 4}, ["u1", "u2"], {})
+wired_ok = seen.get("timeout") == 4
+
+# 2) somma dei budget SERIALI sotto il timeout dell'hook (margine per startup+join).
+hooks = json.load(open(sys.argv[2], encoding="utf-8"))
+groups = hooks["hooks"].get("UserPromptSubmit", [])
+hook_to = next(
+    h["timeout"] for g in groups for h in g.get("hooks", [])
+    if "hindsight-recall.sh" in h.get("command", "")
+)
+budget_ok = bank_to + rerank_to < hook_to
+
+print("OK" if wired_ok and budget_ok
+      else f"KO wired={wired_ok} budget={budget_ok} sum={bank_to + rerank_to} hook={hook_to}")
+PY
+)
+if [ "$MB_BUDGET" = "OK" ]; then
+	ok "budget recall: rerank ha il suo timeout e fan-out+rerank < timeout hook"
+else
+	ko "budget recall multi-bank fuori scala ($MB_BUDGET)"
+fi
+
 # recall hook usa il fan-out e la cache key tiene conto dei bank
 if grep -q "recall_bank_urls" "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'bank_urls)' "$HOOKS_DIR/hindsight-recall.sh"; then
 	ok "recall hook risolve i bank e li include nella cache key"
