@@ -191,10 +191,10 @@ In `skills/` (11), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `mise` | gestione runtime, env e task |
 | `nushell` | pipeline su dati strutturati |
 | `ruby` | gem per analisi dati in Ruby |
-| `excel-data-analyst` | analisi e grafici da file Excel (Python) |
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `book-to-skill` | converte libri/documenti in skill strutturate |
+| `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
 
 ---
 
