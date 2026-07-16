@@ -67,7 +67,10 @@ if not wait_ready(f"{base}/mental-models/{ids[0]}", time.monotonic() + 20):
 blocks = []
 for mid in ids:
     try:
-        req = urllib.request.Request(f"{base}/mental-models/{mid}", method="GET")
+        # detail=content: senza, il default e' "full" che trascina anche il
+        # reflect_response (provenance, anche centinaia di KB) — qui inutile,
+        # servono solo name e content.
+        req = urllib.request.Request(f"{base}/mental-models/{mid}?detail=content", method="GET")
         with urllib.request.urlopen(req, timeout=2) as res:
             m = json.loads(res.read().decode("utf-8", errors="replace"))
     except Exception:
@@ -80,11 +83,34 @@ for mid in ids:
 if not blocks:
     sys.exit(0)
 
-context = (
-    "## Hindsight knowledge pages (advisory, auto-maintained)\n\n"
-    + "\n\n".join(blocks)
-    + "\n\nUse as consultative context. Verify mutable facts against the repo."
-)
+HEADER = "## Hindsight knowledge pages (advisory, auto-maintained)\n\n"
+TRAILER = "\n\nUse as consultative context. Verify mutable facts against the repo."
+SEP = "\n\n"
+
+# Claude Code tronca l'output degli hook oltre 10.000 char (e per un bug noto il
+# preview inline si ferma a ~2.000: issue #44086): meglio cedere la coda delle
+# pagine che perdere l'80% del blocco. Taglio EQUO: ogni pagina cede in
+# proporzione alla propria lunghezza, a fine riga, con marcatore visibile.
+# Il TRAILER non si tocca mai: e' l'ancora anti-feedback-loop che il retain
+# worker usa per scartare il blocco (strip_memory_block).
+max_chars = int(cfg.get("mental_models_inject_max_chars") or 9500)
+budget = max_chars - len(HEADER) - len(TRAILER) - len(SEP) * (len(blocks) - 1)
+total = sum(len(b) for b in blocks)
+if total > budget:
+    marker = "\n[...troncato: budget contesto]"
+    ratio = (budget - len(marker) * len(blocks)) / total
+    cut = []
+    for b in blocks:
+        target = int(len(b) * ratio)
+        if 0 < target < len(b):
+            head = b[:target]
+            head = head[:head.rfind("\n")] if "\n" in head else head
+            cut.append(head.rstrip() + marker)
+        else:
+            cut.append(b)
+    blocks = cut
+
+context = HEADER + SEP.join(blocks) + TRAILER
 
 print(json.dumps({
     "hookSpecificOutput": {

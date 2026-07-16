@@ -543,6 +543,28 @@ else
 	ko "inject hook con flag ON malformato ($INJ_ON)"
 fi
 
+# Budget del blocco iniettato: Claude Code tronca l'output hook oltre 10.000 char
+# (inline resta solo un preview ~2KB), quindi mm-inject deve cappare il blocco a
+# mental_models_inject_max_chars SENZA mai tagliare il trailer anti-feedback-loop
+# (e' l'ancora con cui strip_memory_block scarta il blocco nel retain). Budget
+# forzato basso via env cosi' il taglio scatta a prescindere dai contenuti reali.
+INJ_CAP=$(echo '{"hook_event_name":"SessionStart"}' |
+	HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 HS_CFG_MENTAL_MODELS_INJECT_MAX_CHARS=3000 \
+		bash "$HOOKS_DIR/hindsight-mm-inject.sh" 2>/dev/null | python -c "
+import json,sys
+c=json.load(sys.stdin)['hookSpecificOutput']['additionalContext']
+cap_ok = len(c) <= 3000
+trailer_ok = c.endswith('Use as consultative context. Verify mutable facts against the repo.')
+header_ok = c.startswith('## Hindsight knowledge pages')
+print('OK' if cap_ok and trailer_ok and header_ok
+      else f'KO len={len(c)} cap={cap_ok} trailer={trailer_ok} header={header_ok}')
+" 2>/dev/null || echo "KO")
+if [ "$INJ_CAP" = "OK" ]; then
+	ok "inject hook rispetta il budget char e preserva header+trailer (anti-loop)"
+else
+	ko "inject hook non cappa il blocco o taglia il trailer ($INJ_CAP)"
+fi
+
 KP_STRIP=$(
 	PYTHONUTF8=1 python - "$WORKER_WIN" <<'PY' 2>/dev/null
 import sys, importlib.util

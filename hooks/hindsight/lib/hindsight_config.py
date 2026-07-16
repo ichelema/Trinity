@@ -200,6 +200,11 @@ DEFAULTS = {
     "mental_model_max_tokens": 1024,
     "mental_models_inject_on_start": False,
     "mental_models_inject_ids": ["user-profile", "project-conventions"],
+    # Tetto sul blocco iniettato da hindsight-mm-inject.sh: Claude Code tronca
+    # l'output degli hook oltre 10.000 char (inline resta solo un preview ~2KB),
+    # quindi si sta sotto con margine. Il max_tokens dei mental model NON e' un
+    # cap affidabile (il percorso done-tool del reflect agent lo bypassa).
+    "mental_models_inject_max_chars": 9500,
     "mental_models": [],
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
