@@ -15,6 +15,7 @@ Filtri rumore: niente output di tool, niente codice raw, niente env dump.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -167,6 +168,62 @@ def _retain_state_path() -> str:
     return os.path.join(d, "hs-retain-state.json")
 
 
+@contextlib.contextmanager
+def _state_lock(path: str, timeout: float = 5.0):
+    """Lock interprocesso best-effort sul file di stato condiviso (flock su POSIX,
+    msvcrt su Windows). Serializza il read-modify-write di piu' worker Stop concorrenti
+    (piu' finestre Claude Code sullo stesso utente): senza, l'ultimo writer sovrascrive
+    l'update dell'altra sessione (lost update su stop_count e line_count/chunk).
+    Best-effort: se il lock non si prende entro timeout, procede senza — il throttling
+    non e' critico e bloccare un worker async sarebbe peggio del lost update che evita.
+    Il lock e' legato al fd, quindi si rilascia da solo se il worker viene killato."""
+    lock_path = path + ".lock"
+    f = release = None
+    try:
+        try:
+            import fcntl
+
+            def acquire(fd):
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            def _release(fd):
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        except ImportError:
+            import msvcrt
+
+            def acquire(fd):
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+
+            def _release(fd):
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        f = open(lock_path, "a+")
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                # msvcrt.locking blocca dalla posizione corrente: seek(0) cosi' tutti
+                # i worker contendono lo stesso byte 0 (per flock la posizione e' ininfluente).
+                f.seek(0)
+                acquire(f.fileno())
+                release = _release
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    break  # timeout: procede senza lock (best-effort)
+                time.sleep(0.05)
+        yield
+    except Exception:
+        yield  # qualunque problema col lock non deve bloccare il retain
+    finally:
+        if f is not None:
+            if release is not None:
+                try:
+                    f.seek(0)
+                    release(f.fileno())
+                except Exception:
+                    pass
+            f.close()
+
+
 def compute_document_id(session_id: str, line_count: int) -> str | None:
     """document_id stabile per sessione → il server fa upsert invece di duplicare.
     Guardia compaction: se il transcript si accorcia (line_count < ultimo visto),
@@ -175,20 +232,21 @@ def compute_document_id(session_id: str, line_count: int) -> str | None:
     if not session_id:
         return None
     path = _retain_state_path()
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            state = json.load(f)
-    except Exception:
-        state = {}
-    entry = state.get(session_id) or {}
-    chunk = entry.get("chunk", 0)
-    if line_count < entry.get("line_count", 0):
-        chunk += 1
-    # merge: preserva altri campi (es. stop_count del throttling)
-    entry["line_count"] = line_count
-    entry["chunk"] = chunk
-    state[session_id] = entry
-    _write_retain_state(path, state)
+    with _state_lock(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+        entry = state.get(session_id) or {}
+        chunk = entry.get("chunk", 0)
+        if line_count < entry.get("line_count", 0):
+            chunk += 1
+        # merge: preserva altri campi (es. stop_count del throttling)
+        entry["line_count"] = line_count
+        entry["chunk"] = chunk
+        state[session_id] = entry
+        _write_retain_state(path, state)
     return session_id if chunk == 0 else f"{session_id}-c{chunk}"
 
 
@@ -201,7 +259,18 @@ def _write_retain_state(path: str, state: dict) -> None:
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f)
-        os.replace(tmp, path)
+        # os.replace su Windows fallisce con PermissionError se un altro processo
+        # tiene aperto path per un istante (antivirus/indexer, o il worker Stop
+        # precedente): sotto _state_lock la RMW e' serializzata, ma questa flakiness
+        # del rename resta e perderebbe l'update in silenzio. Ritenta brevemente.
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.02)
     except Exception:
         pass
 
@@ -218,16 +287,17 @@ def should_retain_now(
     if force or not session_id or every_n <= 1:
         return True
     path = _retain_state_path()
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            state = json.load(f)
-    except Exception:
-        state = {}
-    entry = state.get(session_id) or {}
-    cnt = entry.get("stop_count", 0) + 1
-    entry["stop_count"] = cnt
-    state[session_id] = entry
-    _write_retain_state(path, state)
+    with _state_lock(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+        entry = state.get(session_id) or {}
+        cnt = entry.get("stop_count", 0) + 1
+        entry["stop_count"] = cnt
+        state[session_id] = entry
+        _write_retain_state(path, state)
     return cnt % every_n == 0
 
 
