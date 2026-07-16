@@ -56,14 +56,28 @@ if len(prompt) > _max_chars:
 # si fa fan-out parallelo + fusione (vedi hindsight_multibank.py).
 bank_urls = recall_bank_urls(cfg, hook.get("cwd") or None)
 
+# --- Payload di recall (serve anche per la cache key) ---
+# Costruito PRIMA della key: i parametri di filtro (types, tags, min_scores,
+# budget, cap...) devono entrare nella chiave, altrimenti un loro cambio in
+# config entro il TTL riuserebbe una risposta calcolata con la config vecchia.
+query_ts = datetime.now(timezone.utc).isoformat()
+payload = build_recall_payload(prompt, cfg, query_ts)
+
 # --- Cache lookup ---
 cache_dir = cfg["recall_cache_dir"]
 cache_ttl = int(cfg["recall_cache_ttl"])
 os.makedirs(cache_dir, exist_ok=True)
-# Key: hash del prompt normalizzato (case-insensitive, whitespace collassato)
-# + set dei bank risolti: lo stesso prompt da progetti diversi legge bank
-# diversi e NON deve condividere la entry di cache.
-key_src = " ".join(prompt.lower().split()) + "|" + ",".join(bank_urls)
+# Key: prompt normalizzato (case-insensitive, whitespace collassato) + set dei
+# bank risolti + fingerprint del payload di filtro. Dal payload si escludono
+# 'query' (gia' coperta dal prompt normalizzato) e 'query_timestamp' (volatile:
+# romperebbe ogni cache hit). Cosi' un cambio di recall_types/min_scores/tags/
+# budget entro il TTL produce una key diversa.
+payload_fp = json.dumps(
+    {k: v for k, v in payload.items() if k not in ("query", "query_timestamp")},
+    sort_keys=True,
+    ensure_ascii=False,
+)
+key_src = " ".join(prompt.lower().split()) + "|" + ",".join(bank_urls) + "|" + payload_fp
 cache_key = hashlib.sha256(key_src.encode("utf-8")).hexdigest()[:32]
 cache_file = os.path.join(cache_dir, cache_key + ".json")
 
@@ -90,9 +104,6 @@ if cached is None:
                 os.remove(fp)
     except Exception:
         pass
-    payload = build_recall_payload(
-        prompt, cfg, datetime.now(timezone.utc).isoformat()
-    )
     if len(bank_urls) == 1:
         # Bank singolo: stessa singola POST di sempre, zero overhead multi-bank.
         req = urllib.request.Request(
