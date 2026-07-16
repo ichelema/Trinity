@@ -66,6 +66,21 @@ solo il server Hindsight.
 > `hindsight` (scope user) è stata saltata con un avviso; ora che il CLI è installato
 > viene fatta. Senza questo passo i tool `mcp__hindsight__*` non compaiono in sessione.
 
+## Language server per la navigazione codice (opzionale)
+
+Il plugin abilita 4 language server (`.lsp.json`): TypeScript, Python (pyright),
+Ruby (ruby-lsp), Lua. Servono solo alla navigazione semantica del codice (il tool
+`LSP`); Trinity funziona senza. Il bootstrap **non** li installa: li rileva e, se
+mancano, stampa il comando. Su Arch sono tutti nel repo `extra`:
+
+```bash
+sudo pacman -S --needed lua-language-server pyright typescript-language-server ruby-lsp
+```
+
+`run-lsp.sh` cerca ogni server tra gli shim di mise, `~/.local/bin/<nome>/bin/` e
+il PATH: i binari messi in `/usr/bin` da pacman vengono trovati senza altra
+configurazione. Su distro non-Arch, installa gli equivalenti col package manager locale.
+
 ## 5. Primo avvio del server e import della memoria
 
 ```bash

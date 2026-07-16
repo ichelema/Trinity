@@ -142,6 +142,34 @@ fi
 sect "9. Directory dei backup DB"
 mkdir -p "$HOME/backups/hindsight" && ok "~/backups/hindsight pronta"
 
+sect "10. Language server (LSP) — opzionali, per la navigazione codice"
+# .lsp.json abilita 4 server; run-lsp.sh li risolve via shim mise, ~/.local/bin
+# (tarball) o PATH. Come per i prerequisiti di sistema al passo 1, il bootstrap NON
+# li installa: li rileva e, se mancano, stampa il comando (niente sudo qui dentro).
+# Coppie "binario da cercare : pacchetto da installare" (il binario di pyright e'
+# pyright-langserver, ma il pacchetto e' pyright).
+LSP_SHIMS="$HOME/.local/share/mise/shims"
+lsp_present() {
+	[ -x "$LSP_SHIMS/$1" ] && return 0
+	[ -x "$HOME/.local/bin/$1/bin/$1" ] && return 0
+	command -v "$1" > /dev/null 2>&1
+}
+MISSING_LSP=""
+for pair in \
+	typescript-language-server:typescript-language-server \
+	pyright-langserver:pyright \
+	ruby-lsp:ruby-lsp \
+	lua-language-server:lua-language-server; do
+	lsp_present "${pair%%:*}" || MISSING_LSP="$MISSING_LSP ${pair##*:}"
+done
+if [ -z "$MISSING_LSP" ]; then
+	ok "4 language server presenti (typescript, pyright, ruby-lsp, lua)"
+elif command -v pacman > /dev/null 2>&1; then
+	warn "LSP mancanti (opzionali):$MISSING_LSP — installa con: sudo pacman -S --needed$MISSING_LSP"
+else
+	warn "LSP mancanti (opzionali):$MISSING_LSP — installali col package manager della distro (su Arch: extra/*, un solo pacman -S)"
+fi
+
 sect "Riepilogo"
 echo "  passi ok: $OK, avvisi: $WARN"
 echo
