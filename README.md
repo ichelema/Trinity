@@ -95,7 +95,7 @@ Esempio — un hook del plugin (da `hooks/hooks.json`):
 {
   "type": "command",
   "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
-  "timeout": 10
+  "timeout": 20
 }
 ```
 
