@@ -14,7 +14,6 @@
       }
     },
     "obsidian_semantic_notes_vault": {
-      "disabled": true,
       "type": "http",
       "url": "http://localhost:3002/mcp"
     },

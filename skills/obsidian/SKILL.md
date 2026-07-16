@@ -64,6 +64,7 @@ Regola di routing:
 
 - se la richiesta riguarda contenuti reali del Vault senza vincolo CLI, usare prima il MCP `obsidian_semantic_notes_vault`;
 - se la richiesta cita CLI, terminale, shell, script, automation, cron o comandi `obsidian`, usare la skill `obsidian-cli`;
+- se il MCP `obsidian_semantic_notes_vault` non è disponibile o una sua chiamata fallisce (tipicamente perché Obsidian non è aperto), avvisare esplicitamente l'utente che il MCP non risponde e che probabilmente Obsidian non è in esecuzione; ricorrere alla skill `obsidian-cli` come fallback solo dopo questo avviso;
 - se serve sapere flag, subcommand o output format della CLI, leggere la command reference indicata dalla skill `obsidian-cli`;
 - non usare la skill CLI per spiegazioni concettuali su Obsidian, configurazioni GUI, teoria PKM o esempi non operativi.
 
@@ -123,6 +124,7 @@ Se non ti e chiara la struttura guarda immagine in `references/struttura directo
 
 Se la richiesta riguarda contenuti specifici del Vault e non richiede esplicitamente CLI/terminale, usare il MCP `obsidian_semantic_notes_vault`.
 Se la richiesta chiede di agire tramite CLI, terminale, shell, script o comandi `obsidian`, usare la skill correlata `obsidian-cli`.
+Se il MCP non risponde (Obsidian non aperto), avvisare l'utente prima di ricorrere alla skill `obsidian-cli` come fallback.
 Non inventare note, path, backlink, frontmatter o risultati.
 
 Usare MCP per:
