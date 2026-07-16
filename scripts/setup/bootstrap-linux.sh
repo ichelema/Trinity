@@ -85,10 +85,21 @@ fi
 sect "5. Skills-dir: symlink ~/.claude/skills/trinity -> repo"
 mkdir -p "$HOME/.claude/skills"
 LINK="$HOME/.claude/skills/trinity"
-if [ -L "$LINK" ] && [ "$(readlink -f "$LINK")" = "$ROOT" ]; then
-	ok "symlink gia' corretto"
+if [ -L "$LINK" ]; then
+	if [ "$(readlink -f "$LINK")" = "$ROOT" ]; then
+		ok "symlink gia' corretto"
+	else
+		# Symlink presente ma verso il target sbagliato o PENDENTE (clone rimosso/spostato).
+		# Il ramo -e sotto NON lo intercetta: su un link pendente -e e' falso, quindi si
+		# finiva nell'else dove `ln -s` fallisce ("File exists") -> nessuna riparazione,
+		# nessun avviso, plugin non caricato. Rimuovere un symlink e' sicuro: cancella il
+		# puntatore, non il target.
+		rm -f "$LINK" && ln -s "$ROOT" "$LINK" \
+			&& ok "symlink ricreato (era verso un target errato/pendente): $LINK -> $ROOT" \
+			|| warn "impossibile ricreare il symlink $LINK"
+	fi
 elif [ -e "$LINK" ]; then
-	warn "$LINK esiste ma non punta a $ROOT — sistemalo a mano (rm e rilancia)"
+	warn "$LINK esiste ma e' una dir/file reale, non un symlink — sistemalo a mano (rm e rilancia)"
 else
 	ln -s "$ROOT" "$LINK" && ok "symlink creato: $LINK -> $ROOT"
 fi
