@@ -56,9 +56,11 @@ if [ "${1:-}" = "--worker" ]; then
 		;;
 	*)
 		# pgrep -c stampa il conteggio (0 incluso) ma esce 1 senza match: || true.
+		# (^|[/]): lanciando `claude` per nome dal PATH (il caso comune) la cmdline
+		# inizia con la parola nuda, senza slash: argv[0] e' quello che hai digitato.
 		# [/] e non /: il match e' sul separatore prima del nome, cosi' '/.claude/...'
 		# (config dir, presente nella cmdline dell'hook) non viene contato per sbaglio.
-		claude_alive() { pgrep -fc '[/]claude([[:space:]]|$)' 2>/dev/null || true; }
+		claude_alive() { pgrep -fc '(^|[/])claude([[:space:]]|$)' 2>/dev/null || true; }
 		;;
 	esac
 	[ "$(claude_alive)" -ge 2 ] && exit 0

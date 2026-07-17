@@ -374,6 +374,9 @@ if [ -z "$CA_ERR" ] && printf '%s' 'bash /home/s/.claude/skills/trinity/hooks/hi
 	CA_ERR="la regex Linux fa auto-match sul worker (server mai spento)"
 fi
 [ -z "$CA_ERR" ] && ! printf '%s' '/usr/local/bin/claude' | grep -qE "$RX_LIN" && CA_ERR="regex Linux ancorata al path di installazione"
+# Lancio per nome dal PATH: argv[0] e' la parola nuda, senza slash (caso comune su Linux).
+[ -z "$CA_ERR" ] && ! printf '%s' 'claude --resume abc' | grep -qE "$RX_LIN" && CA_ERR="regex Linux non conta il lancio per nome (cmdline senza slash)"
+[ -z "$CA_ERR" ] && printf '%s' 'claude-headroom.sh --loop' | grep -qE "$RX_LIN" && CA_ERR="regex Linux conta un wrapper claude-*"
 if [ -z "$CA_ERR" ]; then
 	ok "claude_alive conta le sessioni per NOME del binario (CLI, desktop, entrambi i separatori)"
 else
