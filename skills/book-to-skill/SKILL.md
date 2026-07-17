@@ -50,7 +50,9 @@ Three paths available. Route based on what the user asks:
 
 ## Skill Locations
 
-This converter can run from multiple skill systems. When looking for this converter's helper script or writing the generated book skill, prefer these locations in order:
+This converter can run from multiple skill systems. To locate this converter's helper script (`extract.py`), use the candidate loop in Step 2 — it checks the Trinity plugin paths first, then the Amp and Claude Code locations.
+
+When writing the **generated** book skill, prefer these output locations in order:
 
 1. Amp project-local skills: `.agents/skills/`
 2. Amp global skills: `~/.config/agents/skills/`
