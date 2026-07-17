@@ -49,9 +49,26 @@ e imposta `PYTHONUTF8=1`; ogni blocco sotto assume `$HS_PY` già risolto così):
 4. **Documenti MISTI** (fatti trasversali *e* fatti specifici del progetto nello
    stesso documento: normale, un documento contiene 3-6 fatti estratti). Il
    `--move` porterebbe sul core anche la parte specifica. Invece:
-   - `mcp__hindsight__retain` del solo fatto trasversale, **riscritto a mano**
-     (lanciando il comando dal repo Trinity il retain MCP scrive sul core),
-     `tags: ["claude-code"]`
+   - retain del solo fatto trasversale, **riscritto a mano**, direttamente sul
+     core via REST — NON col tool MCP `mcp__hindsight__retain`: questo comando
+     è a scope user e il retain MCP scrive sul bank risolto dal cwd, quindi
+     lanciato fuori dal repo Trinity il fatto finirebbe in silenzio nel bank
+     del progetto (l'opposto della promozione). La REST è indipendente dal
+     cwd, stesso pattern del `--move`:
+
+     ```bash
+     CORE_URL="$("$HS_PY" -c "import sys; sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/lib'); from hindsight_config import load_config, bank_url; cfg = load_config(); print(bank_url(cfg, (cfg.get('bank') or {}).get('core_bank', '')))")"
+     curl -s -m 120 -X POST "$CORE_URL/memories" \
+       -H "Content-Type: application/json" \
+       -d '{"items":[{"content":"<fatto riscritto>","tags":["claude-code"],
+            "metadata":{"promoted_from":"<BANK>"},
+            "document_id":"promoted:<BANK>:<DOC_ID>#curato"}],"async":false}'
+     ```
+
+     Verifica `"success": true` nella risposta (sync: può durare fino a ~90s).
+     Il `document_id` deterministico fa upsert su retry invece di duplicare;
+     il suffisso `#curato` lo distingue dall'id di un eventuale `--move` dello
+     stesso documento.
    - poi tratta il documento come respinto (punto 5): il sorgente resta nel
      bank del progetto, dove i fatti specifici devono stare.
 5. **Reject dei respinti** (così non ricompaiono al prossimo scan):
