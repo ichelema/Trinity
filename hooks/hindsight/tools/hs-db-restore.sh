@@ -104,7 +104,7 @@ fi
 # puo' scattare e si arriverebbe al DROP in silenzio, col solo warning stampato
 # sopra. Se il DB locale ha qualcosa da perdere, fermati: decide l'operatore.
 if [ -n "$LOCAL_WM" ] && [ -z "$DUMP_WM" ] && [ "$FORCE" -ne 1 ]; then
-	echo "[db-restore] RIFIUTATO: watermark del dump non disponibile (sidecar assente o illeggibile)." >&2
+	echo "[db-restore] RIFIUTATO: watermark del dump non disponibile (sidecar assente/illeggibile, o dump di un DB senza scritture)." >&2
 	echo "               Non posso stabilire se il dump e' piu' vecchio del DB locale." >&2
 	echo "               locale: $LOCAL_WM" >&2
 	echo "               Se sai cosa stai facendo, rilancia con --force." >&2
