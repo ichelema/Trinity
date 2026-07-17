@@ -21,8 +21,10 @@ HS_PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 # Risolve il binario python reale di mise per il plugin, con cache su file. Lo shim
 # mise rilancerebbe mise.exe a OGNI invocazione (~300ms, benchmark 2026-07-10): qui
-# si risolve una volta e si cacha; il check -x invalida da solo la cache quando il
-# path cambia (upgrade python). NB: cache globale (non per-cwd) — coerente perche' e'
+# si risolve una volta e si cacha; il check -x invalida la cache solo se il VECCHIO
+# binario sparisce (es. mise prune) — un upgrade lo lascia accanto al nuovo, percio'
+# e' il task install-hindsight a buttare la cache quando il runtime puo' cambiare.
+# NB: cache globale (non per-cwd) — coerente perche' e'
 # sempre il python del PLUGIN. || true: cache scritta senza newline -> read ritorna 1
 # a EOF pur popolando la variabile; senza guardia, sotto set -e lo script morirebbe.
 _hs_mise_python() {
