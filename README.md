@@ -227,7 +227,7 @@ progetto (sono file del plugin, non del singolo progetto):
 | `notebooklm` | stdio (python, exe-free) | Google NotebookLM: notebook, sources, chat, artifact, deep research |
 | `ticktick` | http (remoto, `mcp.ticktick.com`) | task, liste, abitudini, focus record e countdown di TickTick |
 | `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
-| `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — `disabled: true` nel file |
+| `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — attivo, richiede l'app Obsidian in ascolto su :3002 |
 
 Il server `hindsight` (memoria persistente, vedi §9) dal 2026-07-10 **non** sta più nel
 `.mcp.json`: è registrato a **scope user** (`claude mcp add-json hindsight --scope user`)
@@ -251,8 +251,8 @@ avanzate di TickTick non sono esposte.
 
 Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
 `E:/AI/tools/notebooklm`, launcher con `truststore` per il proxy Eni): i file del plugin
-restano il *cervello*, il runtime sta sul sistema (vedi §1). I due server `disabled: true`
-non si avviano salvo riabilitazione (`enabledMcpjsonServers`). Oltre a questi, Claude Code
+restano il *cervello*, il runtime sta sul sistema (vedi §1). Il solo `excalidraw` è
+marcato `disabled: true` nel file. Oltre a questi, Claude Code
 espone i propri MCP **built-in** (es. `claude-in-chrome`), non gestiti da Trinity.
 
 **Per esempio di utilizzo vedere il videp youtube**
