@@ -6,7 +6,7 @@
 Add to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```bash
-export ENABLE_LSP_TOOLS=1
+export ENABLE_LSP_TOOL=1
 ```
 
 Restart your shell or run `source ~/.bashrc`.
@@ -247,7 +247,7 @@ jq -s '{ hooks: [ .[0].hooks[], .[1].hooks[] ] }' \
 ## Troubleshooting
 
 ### LSP Not Working
-1. Verify `ENABLE_LSP_TOOLS=1`: `echo $ENABLE_LSP_TOOLS`
+1. Verify `ENABLE_LSP_TOOL=1`: `echo $ENABLE_LSP_TOOL`
 2. Check plugin: `claude /plugin list`
 3. Verify server installed: `which <server>` (e.g., `which pyright`, `which gopls`)
 4. Check errors: `claude /plugin errors`
