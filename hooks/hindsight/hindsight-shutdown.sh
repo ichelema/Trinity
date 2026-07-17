@@ -32,6 +32,9 @@ if [ "${1:-}" = "--worker" ]; then
 	[ "$REASON" = "clear" ] && exit 0
 
 	# 1) Retain finale forzato: cattura la coda della sessione prima di spegnere il server.
+	#    NB: con retain_enabled:false (config attuale) questo passo e' un NO-OP consapevole:
+	#    il worker esce prima di valutare HS_RETAIN_FORCE (scelta di 6e21acf, "vale per
+	#    quando verra' riacceso"). La coda della sessione si salva solo via retain MCP.
 	printf '%s' "$INPUT" | HS_RETAIN_FORCE=1 bash "$SCRIPT_DIR/hindsight-retain.sh" >/dev/null 2>&1 || true
 
 	# 2) Liveness reale: conta i processi launcher di Claude ancora attivi. Robusto ai
