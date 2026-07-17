@@ -23,17 +23,17 @@
       "hooks": [{
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval.sh",
-          "timeout": 10
-        },
-        {
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
           "timeout": 20
         },
         {
           "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
+          "timeout": 30
+        },
+        {
+          "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh",
-          "timeout": 10
+          "timeout": 30
         }
       ]
     }],
