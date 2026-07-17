@@ -165,10 +165,12 @@ shell = "bash -c"
 # Nota: servono entrambe — la chiave da sola non attiva nulla. Poi ogni client (hook REST,
 # shim MCP, Control Plane, dashboard) deve mandare "Authorization: Bearer <chiave>".
 #
-# La guardia ${...:?} è il fail-fast sulla chiave OpenAI: qui e non nel blocco [env] (vedi
-# HINDSIGHT_API_LLM_API_KEY). Serve perché SKIP_LLM_VERIFICATION=true salta il check al boot:
-# senza guardia il server partirebbe con chiave vuota e il danno emergerebbe al primo retain.
-run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-... (vedi docs/SETUP-LINUX.md sezione 3)}"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
+# Le guardie ${...:?} sono il fail-fast sulle chiavi: qui e non nel blocco [env] (vedi
+# HINDSIGHT_API_LLM_API_KEY). OpenAI: SKIP_LLM_VERIFICATION=true salta il check al boot,
+# senza guardia il server partirebbe con chiave vuota e il danno emergerebbe al primo
+# retain. ZeroEntropy: senza chiave il server detached muore col ValueError del motore
+# embedding visibile solo in /tmp/hs.log, mentre il task uscirebbe comunque con 0.
+run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-... (vedi docs/SETUP-LINUX.md sezione 3)}"; : "${ZEROENTROPY_API_KEY:?manca la chiave: export ZEROENTROPY_API_KEY=ze-... (vedi docs/SETUP-LINUX.md sezione 3)}"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
 
 [tasks.stop-hindsight]
 description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"
