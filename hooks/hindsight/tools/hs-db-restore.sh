@@ -69,6 +69,17 @@ if ! "$PG_RESTORE" --list "$DUMP" > /dev/null 2>&1; then
 	exit 1
 fi
 
+# Prerequisito: Postgres raggiungibile. Senza questa probe hs_db_exists non
+# distingue "DB assente" (primo restore) da "server muto" (Postgres che sta
+# ancora partendo): si classificherebbe 'primo restore' — niente guardrail ne'
+# dump di sicurezza — e se il server diventasse raggiungibile a meta' corsa si
+# arriverebbe allo swap del DB reale senza alcuna protezione.
+if ! hs_db_ping; then
+	echo "[db-restore] RIFIUTATO: Postgres non risponde su $PGHOST:$PGPORT." >&2
+	echo "               Avvia il cluster (mise run start-hindsight) e riprova." >&2
+	exit 1
+fi
+
 # Il watermark locale governa TRE decisioni: guardrail sul sidecar, confronto col
 # dump e dump di sicurezza. Un vuoto AMBIGUO le spegne tutte e porta dritto al DROP,
 # quindi va distinto: DB assente = primo restore, niente da perdere. DB presente ma

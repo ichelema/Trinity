@@ -76,6 +76,14 @@ hs_db_watermark() {
 	printf '%s' "$out" | tr -d '\r'
 }
 
+# 0 se il server Postgres risponde. Da chiamare PRIMA di fidarsi di hs_db_exists:
+# il suo exit 1 significa "DB assente" solo a server raggiungibile — senza questa
+# probe "server muto" (es. Postgres sta ancora partendo) e "DB assente" sono
+# indistinguibili, e il restore classificherebbe 'primo restore' un DB che c'e'.
+hs_db_ping() {
+	"$PSQL" "${PGARGS[@]}" -d postgres -qtAc "SELECT 1" > /dev/null 2>&1
+}
+
 # 0 se il database esiste. Distingue "DB assente" (primo restore: niente da perdere)
 # da "DB presente ma illeggibile" (fermarsi), che hs_db_watermark da solo non separa.
 hs_db_exists() {
