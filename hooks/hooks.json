@@ -41,7 +41,7 @@
       "matcher": "Bash",
       "hooks": [{
           "type": "command",
-          "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if echo \"$CMD\" | grep -qE '^git( -C [^ ]+)? commit([[:space:]]|$)' && ! echo \"$CMD\" | grep -qE '[;&|]' && ! echo \"$CMD\" | grep -qE '^git( -C [^ ]+)? push([[:space:]]|$)'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
+          "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if [ \"$(printf '%s' \"$CMD\" | wc -l)\" -eq 0 ] && printf '%s' \"$CMD\" | grep -qE '^git( -C [^ ]+)? commit([[:space:]]|$)' && ! printf '%s' \"$CMD\" | grep -qE '[;&|<>$`(){}\\\\]|[[:cntrl:]]'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
         }
       ]
     }],
