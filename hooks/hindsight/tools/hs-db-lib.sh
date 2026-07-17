@@ -46,7 +46,9 @@ hs_db_require_pgbin() {
 }
 
 # Ultima scrittura nel DB (watermark anti-perdita): l'istante piu' recente tra
-# documents (il retain scrive qui subito) e memory_units (estrazione async).
+# documents (il retain scrive qui subito), memory_units (estrazione async) e
+# directives (user-authored, fuori dal flusso retain: una directive creata dopo
+# l'ultimo dump verrebbe persa da un restore senza guardrail).
 # Stampa ISO, oppure stringa vuota se il DB non ha scritture. ESITO NELL'EXIT CODE:
 # 0 = psql ha risposto (il valore stampato e' attendibile, anche se vuoto)
 # 1 = psql e' muto (server giu', credenziali, DB inesistente): valore IGNOTO.
@@ -62,17 +64,23 @@ hs_db_require_pgbin() {
 # solo created_at il watermark resterebbe fermo al giorno della PRIMA scrittura e
 # il guardrail accetterebbe un dump piu' vecchio del lavoro appena fatto.
 hs_db_watermark() {
-	local db="${1:-$PGDATABASE}" out
+	local db="${1:-$PGDATABASE}" out dir_branch
 	# Query di CATALOGO: gira su qualunque DB raggiungibile, anche senza le tabelle
 	# applicative. Se fallisce, psql e' muto -> esito ignoto. NB: il vecchio codice
 	# aveva il pipe a `tr` DENTRO la sostituzione, quindi leggeva l'exit di tr (0
 	# sempre) e non quello di psql: da qui il vuoto ambiguo.
 	out="$("$PSQL" "${PGARGS[@]}" -d "$db" -tAc \
-		"SELECT count(*) FROM pg_class WHERE relname IN ('documents','memory_units') AND relkind='r'" 2>/dev/null)" || return 1
-	# Tabelle assenti = DB nuovo, mai migrato. Esito NOTO: nessuna scrittura.
-	[ "$(printf '%s' "$out" | tr -dc '0-9')" = "2" ] || return 0
+		"SELECT string_agg(relname, ',' ORDER BY relname) FROM pg_class WHERE relname IN ('documents','memory_units','directives') AND relkind='r'" 2>/dev/null)" || return 1
+	out="$(printf '%s' "$out" | tr -d '\r')"
+	# Tabelle core assenti = DB nuovo, mai migrato. Esito NOTO: nessuna scrittura.
+	case "$out" in *documents,memory_units*) ;; *) return 0 ;; esac
+	# directives: terzo ramo solo se la tabella esiste (uno schema piu' vecchio senza
+	# directives non deve rompere la query). GREATEST ignora i NULL: una directives
+	# vuota non altera il watermark.
+	dir_branch=""
+	case "$out" in *directives*) dir_branch=", (SELECT max(GREATEST(created_at, updated_at)) FROM directives)" ;; esac
 	out="$("$PSQL" "${PGARGS[@]}" -d "$db" -tAc \
-		"SELECT COALESCE(GREATEST((SELECT max(GREATEST(created_at, updated_at)) FROM documents), (SELECT max(GREATEST(created_at, updated_at)) FROM memory_units))::text, '')" 2>/dev/null)" || return 1
+		"SELECT COALESCE(GREATEST((SELECT max(GREATEST(created_at, updated_at)) FROM documents), (SELECT max(GREATEST(created_at, updated_at)) FROM memory_units)$dir_branch)::text, '')" 2>/dev/null)" || return 1
 	printf '%s' "$out" | tr -d '\r'
 }
 
