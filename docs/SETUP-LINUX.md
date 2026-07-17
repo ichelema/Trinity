@@ -82,6 +82,26 @@ sudo pacman -S --needed lua-language-server pyright typescript-language-server r
 il PATH: i binari messi in `/usr/bin` da pacman vengono trovati senza altra
 configurazione. Su distro non-Arch, installa gli equivalenti col package manager locale.
 
+## Server MCP del plugin su Linux
+
+`.mcp.json` e' versionato e definisce anche server pensati per il PC Windows.
+Su un host Linux appena bootstrappato lo stato e' questo:
+
+| Server | Stato su Linux | Per usarlo |
+|---|---|---|
+| `hindsight` | registrato dal bootstrap (§2 + rilancio in §4) | niente da fare |
+| `ticktick` | funziona identico (server remoto) | solo `TICKTICK_API_KEY` (§3) |
+| `notebooklm` | non parte, con un warning innocuo: `NOTEBOOKLM_DATA`/`NOTEBOOKLM_LIB` non sono definite | installa notebooklm-py su questo host e definisci le 2 variabili in `~/.claude/settings.json` → `env` coi path dell'installazione **Linux** (vedi README §10) |
+| `playwright` | parte ma muore subito: il bootstrap non installa `@playwright/mcp` | `mise -C ~/ai/trinity x -- npm install -g @playwright/mcp` **piu'** un browser: il `--browser chrome` in `.mcp.json` presuppone Google Chrome installato; su un server headless conviene disabilitarlo |
+| `obsidian_semantic_notes_vault` | in errore a ogni sessione: punta a `http://localhost:3002/mcp`, servito dal plugin MCP dentro Obsidian | ha senso solo dove gira Obsidian con quel plugin; su un server disabilitalo |
+
+Per spegnere i server che non vuoi su questo host usa il layer per-macchina
+(`~/.claude/settings.json`), NON `.mcp.json` (versionato, condiviso tra gli OS):
+
+```json
+{ "disabledMcpjsonServers": ["playwright", "notebooklm", "obsidian_semantic_notes_vault"] }
+```
+
 ## 5. Primo avvio del server e import della memoria
 
 ```bash

@@ -181,6 +181,19 @@ else
 	warn "LSP mancanti (opzionali):$MISSING_LSP — installali col package manager della distro (su Arch: extra/*, un solo pacman -S)"
 fi
 
+sect "11. Server MCP opzionali del plugin (playwright, notebooklm, obsidian)"
+# .mcp.json versionato definisce anche server pensati per il PC Windows. Come per
+# gli LSP al passo 10: si rileva e si segnala, niente install automatico. Dettagli
+# e alternativa disabledMcpjsonServers in docs/SETUP-LINUX.md ("Server MCP del
+# plugin su Linux").
+if "$MISE" -C "$ROOT" x -- npm ls -g @playwright/mcp > /dev/null 2>&1; then
+	ok "@playwright/mcp presente (npm -g)"
+else
+	warn "playwright MCP: manca @playwright/mcp — installa con: mise -C \"$ROOT\" x -- npm install -g @playwright/mcp (serve anche un browser), oppure disabilitalo in ~/.claude/settings.json (disabledMcpjsonServers)"
+fi
+echo "  [i  ] notebooklm resta spento (warning innocuo) finche' NOTEBOOKLM_DATA/NOTEBOOKLM_LIB non sono definite in ~/.claude/settings.json"
+echo "  [i  ] obsidian_semantic_notes_vault richiede Obsidian in esecuzione su questo host: senza, disabilitalo (disabledMcpjsonServers)"
+
 sect "Riepilogo"
 echo "  passi ok: $OK, avvisi: $WARN"
 echo
