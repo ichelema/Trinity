@@ -155,7 +155,8 @@ def main() -> int:
     # Il confronto e' col total della PRIMA pagina, non dell'ultima: un retain
     # concorrente alza il total finale e darebbe un falso allarme, ma quel documento
     # all'inizio non esisteva e non e' un buco del backup.
-    if len(summaries) < total_start and not args.allow_partial:
+    pagination_hole = len(summaries) < total_start
+    if pagination_hole and not args.allow_partial:
         print(
             f"[export] RIFIUTATO: letti {len(summaries)} documenti ma il bank ne "
             f"aveva {total_start} all'inizio.",
@@ -170,6 +171,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if pagination_hole:
+        print(
+            f"[export] ATTENZIONE: letti {len(summaries)} documenti ma il bank ne aveva "
+            f"{total_start} all'inizio: l'export avra' dei buchi (--allow-partial).",
+            file=sys.stderr,
+        )
 
     items: list[dict] = []
     # Due liste, non una: un documento IRRAGGIUNGIBILE e' un buco nell'export (chi
@@ -216,11 +223,13 @@ def main() -> int:
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "source_api_url": api_url,
         "document_count": len(items),
+        "total_at_start": total_start,
         # skipped_empty_ids: nessuna perdita (documenti senza testo).
-        # failed_ids + partial: buchi veri, presenti solo con --allow-partial.
+        # failed_ids/partial: buchi veri (fetch falliti o paginazione scivolata),
+        # presenti solo con --allow-partial.
         "skipped_empty_ids": empty,
         "failed_ids": failed,
-        "partial": bool(failed),
+        "partial": bool(failed) or pagination_hole,
         "items": items,
     }
 
@@ -228,12 +237,19 @@ def main() -> int:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    if failed:
+    if failed or pagination_hole:
         print(
-            f"[export] PARZIALE: {len(items)} scritti, {len(failed)} NON recuperati -> {out_path}",
+            f"[export] PARZIALE: {len(items)} scritti -> {out_path}",
             file=sys.stderr,
         )
-        print(f"          mancano: {failed[:10]}", file=sys.stderr)
+        if failed:
+            print(f"          {len(failed)} NON recuperati: {failed[:10]}", file=sys.stderr)
+        if pagination_hole:
+            print(
+                f"          paginazione scivolata: il bank aveva {total_start} documenti "
+                f"all'inizio, letti {len(summaries)}",
+                file=sys.stderr,
+            )
     else:
         print(f"[export] OK: {len(items)} documenti scritti in {out_path}")
     if empty:
