@@ -8,9 +8,10 @@
 #   senza argomento usa l'ultimo dump (file LATEST in BACKUP_DIR).
 #
 # Sequenza: guardrail (sola lettura) -> dump di sicurezza locale -> stop del
-# solo server MCP (Postgres resta su) -> terminate connessioni -> drop/create
-# -> pg_restore --no-owner. Al termine riavvia il server con
-# `mise run start-hindsight` (o riapri una sessione Claude Code).
+# solo server MCP (Postgres resta su) -> pg_restore su un DB TEMPORANEO ->
+# validazione -> swap per rinomina (terminate connessioni) -> drop del vecchio.
+# Al termine riavvia il server con `mise run start-hindsight` (o riapri una
+# sessione Claude Code).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -141,29 +142,59 @@ TS="$(date -u +%Y%m%d%H%M%S)"
 NEWDB="${PGDATABASE}_new_$TS"
 OLDDB="${PGDATABASE}_old_$TS"
 
-drop_newdb() { "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$NEWDB\";" > /dev/null 2>&1 || true; }
+# WITH (FORCE): termina da solo eventuali connessioni residue al DB temporaneo
+# (es. il pg_restore appena interrotto), che altrimenti bloccherebbero il drop.
+drop_newdb() { "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$NEWDB\" WITH (FORCE);" > /dev/null 2>&1 || true; }
+
+# Cleanup su uscita anomala (Ctrl-C, kill, errore): senza trap un kill durante
+# pg_restore (minuti) lascia '$NEWDB' orfano (~330MB, run dopo run); un kill tra
+# le due rinomine dello swap lascia il DB SOLO col nome '$OLDDB', senza nessun
+# '$PGDATABASE' e senza messaggi. PHASE dice alla trap cosa c'e' da pulire.
+PHASE=""
+cleanup() {
+	rc=$?
+	case "$PHASE" in
+	restore)
+		echo "[db-restore] uscita anomala: rimuovo il DB temporaneo '$NEWDB'" >&2
+		drop_newdb
+		;;
+	swap)
+		if "$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$OLDDB\" RENAME TO \"$PGDATABASE\";" > /dev/null 2>&1; then
+			echo "[db-restore] uscita durante lo swap: '$PGDATABASE' ripristinato (era '$OLDDB')" >&2
+		else
+			echo "[db-restore] ATTENZIONE: il DB originale e' rimasto col nome '$OLDDB' — rinominalo a mano in '$PGDATABASE'" >&2
+		fi
+		drop_newdb
+		;;
+	esac
+	exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "[db-restore] restore su '$NEWDB' ('$PGDATABASE' resta intatto)"
+PHASE="restore"
 "$PSQL" "${PGARGS[@]}" -d postgres -qc "CREATE DATABASE \"$NEWDB\" OWNER \"$PGUSER\";" || {
 	echo "[db-restore] ERRORE: create del DB temporaneo fallito" >&2
 	exit 1
 }
 if ! "$PG_RESTORE" "${PGARGS[@]}" -d "$NEWDB" --no-owner "$DUMP"; then
 	echo "[db-restore] ERRORE: pg_restore ha riportato errori — '$PGDATABASE' NON e' stato toccato" >&2
-	drop_newdb
-	exit 1
+	exit 1 # la trap rimuove il DB temporaneo
 fi
 # Validazione prima dello swap: lo schema ripristinato e' leggibile? Intercetta i
 # dump che pg_restore accetta ma che non producono un DB utilizzabile.
 if ! NEW_WM="$(hs_db_watermark "$NEWDB")"; then
 	echo "[db-restore] ERRORE: il DB ripristinato non e' leggibile — '$PGDATABASE' NON e' stato toccato" >&2
-	drop_newdb
-	exit 1
+	exit 1 # la trap rimuove il DB temporaneo
 fi
 
 # --- 5. Swap per rinomina -----------------------------------------------------
-# Nessun istante in cui '$PGDATABASE' non esiste: l'originale cambia nome, non viene
-# droppato. Se la seconda rinomina fallisce, si rimette il nome originale.
+# L'originale non viene MAI droppato prima che il nuovo sia al suo posto: cambia
+# solo nome. Tra le due rinomine resta un breve istante in cui '$PGDATABASE' non
+# esiste (ALTER DATABASE RENAME non e' transazionabile): se qualcosa muore li',
+# la trap (PHASE=swap) rimette il nome originale.
 "$PSQL" "${PGARGS[@]}" -d postgres -qc \
 	"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IN ('$PGDATABASE','$NEWDB') AND pid<>pg_backend_pid();" > /dev/null 2>&1 || true
 
@@ -171,19 +202,20 @@ RENAMED=0
 if hs_db_exists; then
 	"$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$PGDATABASE\" RENAME TO \"$OLDDB\";" || {
 		echo "[db-restore] ERRORE: impossibile mettere da parte '$PGDATABASE' (connessioni attive?) — nulla e' cambiato" >&2
-		drop_newdb
-		exit 1
+		exit 1 # la trap rimuove il DB temporaneo
 	}
 	RENAMED=1
+	PHASE="swap"
 fi
 if ! "$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$NEWDB\" RENAME TO \"$PGDATABASE\";"; then
-	echo "[db-restore] ERRORE: swap fallito — ripristino il database originale" >&2
-	[ "$RENAMED" -eq 1 ] && "$PSQL" "${PGARGS[@]}" -d postgres -qc "ALTER DATABASE \"$OLDDB\" RENAME TO \"$PGDATABASE\";" || true
-	drop_newdb
-	exit 1
+	echo "[db-restore] ERRORE: swap fallito" >&2
+	exit 1 # la trap rimette '$OLDDB' come '$PGDATABASE' (o dice come farlo a mano) e rimuove '$NEWDB'
 fi
+PHASE=""
 # Swap riuscito: il vecchio non serve piu' (il rollback resta nel dump di sicurezza).
-[ "$RENAMED" -eq 1 ] && "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$OLDDB\";" > /dev/null 2>&1
+if [ "$RENAMED" -eq 1 ] && ! "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABASE IF EXISTS \"$OLDDB\";" > /dev/null 2>&1; then
+	echo "[db-restore] ATTENZIONE: drop di '$OLDDB' fallito (connessioni?) — rimuovilo a mano, occupa spazio" >&2
+fi
 
 echo "[db-restore] OK — watermark del DB ripristinato: $NEW_WM"
 echo "[db-restore] riavvia il server: mise run start-hindsight (o riapri Claude Code)"
