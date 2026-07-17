@@ -9,9 +9,10 @@
 #
 # Flusso:
 #   1. risolve il bank con la STESSA logica multibank degli hook REST
-#      (hindsight_config.resolve_bank: slug dal remote origin, fallback
-#      basename; repo Trinity o fuori-git → core trinity-project). Il cwd di
-#      riferimento è CLAUDE_PROJECT_DIR, che Claude Code passa nell'env di
+#      (hindsight_config.resolve_bank: nome = slug dal remote origin, fallback
+#      basename; fuori-git o repo con la stessa identità canonica del remote
+#      del plugin → core trinity-project), percent-encodato per l'URL. Il cwd
+#      di riferimento è CLAUDE_PROJECT_DIR, che Claude Code passa nell'env di
 #      ogni server MCP stdio. Se python/resolve falliscono → fallback core
 #      (degradazione sicura, mai crash).
 #   2. attende che il server Hindsight sia pronto (ad avviarlo ci pensa l'hook
@@ -60,11 +61,12 @@ fi
 [ -f "$LIB/hs-python.sh" ] && . "$LIB/hs-python.sh"
 : "${HS_PY:=python}"
 BANK="$(PYTHONUTF8=1 "$HS_PY" -c "
-import sys
+import sys, urllib.parse
 sys.path.insert(0, r'$LIB')
 from hindsight_config import load_config, resolve_bank
 cfg = load_config()
-print(resolve_bank((cfg.get('bank') or {}).get('retain_bank', 'core'), cfg))
+# percent-encode: lo slug finisce in un path URL (spazi/accenti/'?' lo romperebbero)
+print(urllib.parse.quote(resolve_bank((cfg.get('bank') or {}).get('retain_bank', 'core'), cfg), safe=''))
 " 2>/dev/null | tr -d '\r')"
 [ -n "$BANK" ] || BANK="trinity-project"
 
