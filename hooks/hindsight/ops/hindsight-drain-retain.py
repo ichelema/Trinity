@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib")
 )
-from hindsight_config import cache_dir, load_config, retain_bank_url
+from hindsight_config import bank_url, cache_dir, load_config, retain_bank_url
 
 # Budget generoso rispetto al p90 misurato (47s) ma finito: un task incastrato non
 # deve tenere in piedi server (~1.5GB) e Postgres all'infinito.
@@ -56,6 +56,26 @@ def in_flight_retains(base: str, timeout: float = 3) -> int | None:
     return n
 
 
+def server_bank_urls(cfg: dict, timeout: float = 3) -> list[str] | None:
+    """URL di TUTTE le bank del server (GET /banks), None se la lista non e'
+    disponibile (server giu', api_base assente). Un retain in volo puo' vivere su
+    qualunque bank, non solo su quella del cwd di CHI spegne: con due sessioni su
+    progetti DIVERSI chiuse quasi insieme, il drain lo esegue l'ultima — che senza
+    la lista vedrebbe solo la propria bank e ucciderebbe il retain dell'altra."""
+    base = (cfg.get("bank") or {}).get("api_base", "").rstrip("/")
+    if not base:
+        return None
+    try:
+        req = urllib.request.Request(f"{base}/banks", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            data = json.loads(res.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+    names = [b.get("bank_id") or b.get("name") for b in data.get("banks") or []]
+    urls = [bank_url(cfg, n) for n in names if n]
+    return urls or None
+
+
 def report_stuck(n: int) -> None:
     """Traccia durevole del timeout: il worker gira detached con output su /dev/null,
     quindi stderr qui non lo legge nessuno. Stesso canale dei fallimenti locali di
@@ -79,17 +99,26 @@ def main() -> int:
         hook = json.loads(os.environ.get("HOOK_INPUT", ""))
     except Exception:
         hook = {}
-    base = retain_bank_url(cfg, hook.get("cwd") or None)
+    # Tutte le bank del server; fallback alla sola bank della sessione se la
+    # lista non e' disponibile (comportamento precedente).
+    bases = server_bank_urls(cfg) or [retain_bank_url(cfg, hook.get("cwd") or None)]
 
     deadline = time.monotonic() + BUDGET_S
     while True:
-        n = in_flight_retains(base)
-        if n is None:
-            return 0  # bank gia' giu': non c'e' nulla da attendere
-        if n == 0:
+        total = 0
+        alive = False
+        for base in bases:
+            n = in_flight_retains(base)
+            if n is None:
+                continue  # bank giu': nulla da attendere qui
+            alive = True
+            total += n
+        if not alive:
+            return 0  # server gia' giu': non c'e' nulla da attendere
+        if total == 0:
             return 0
         if time.monotonic() >= deadline:
-            report_stuck(n)
+            report_stuck(total)
             return 1
         time.sleep(POLL_S)
 
