@@ -1,7 +1,6 @@
 {
   "mcpServers": {
     "excalidraw": {
-      "disabled": true,
       "type": "stdio",
       "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
       "args": [
