@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # UserPromptSubmit hook: recupera memorie rilevanti da Hindsight via REST.
 # Cache client-side filesystem-based con TTL 5 min: HIT ~500ms (Python startup +
-# read file), MISS ~2.7s (Python + server). Cache key = SHA256(query).
+# read file), MISS ~2.7s (Python + server). Cache key = SHA256(prompt
+# normalizzato + bank risolti + fingerprint del payload di filtro), dettagli
+# al blocco "Cache lookup" sotto.
 # Vedi https://hindsight.vectorize.io/developer/performance — "client-side cache
 # raccomandata", hit rate atteso 50-70% su prompt simili.
 set -uo pipefail
