@@ -309,8 +309,8 @@
         ],
         "intentPatterns": [
           "(?:analisi|analizza|elabora|processa).*(?:dati|data|csv|excel).*ruby",
-          "ruby.*(?:analisi|dataframe|dataframe|statistiche|machine learning)",
-          "(?:dataframe|dataframe|ml|machine learning).*(?:in|con|usando)\\s+ruby",
+          "ruby.*(?:analisi|dataframe|statistiche|machine learning)",
+          "(?:dataframe|ml|machine learning).*(?:in|con|usando)\\s+ruby",
           "(?:gem|libreria|library).*(?:ruby|rb).*(?:dati|data|analisi|statistiche)",
           "(?:polars|rumale|numo|roo).*(?:ruby|rb)"
         ],
@@ -371,8 +371,8 @@
           ".claude/skills/book-to-skill/**"
         ],
         "intentPatterns": [
-          "(?:converti|trasforma|trasforma|analizza|studia).*(?:libro|documento|pdf|epub|docx|mobi|azw)",
-          "(?:convert|transform|analyze|study).*(?:book|document|pdf|epub|docx|mobi)",
+          "(?:converti|trasforma).*(?:libro|documento|pdf|epub|docx|mobi|azw)",
+          "(?:convert|transform).*(?:book|document|pdf|epub|docx|mobi)",
           "(?:estrai|extract|genera|generate).*(?:skill|framework|principi|mental model).*(?:da|from|libro|book|documento|document)",
           "(?:crea|genera|build|create).*(?:skill|agent skill).*(?:da|from|libro|book|documento|document)",
           "(?:voglio|want|studia|study).*(?:libro|book|documento|document).*(?:con claude|tramite agent|through agent|skill)"
