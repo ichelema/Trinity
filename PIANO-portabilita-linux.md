@@ -161,18 +161,19 @@ Due nuovi script in `hooks/hindsight/tools/` + task mise `db-dump` / `db-restore
 
 - **`hs-db-dump.sh`**: `pg_dump -Fc` del DB `hindsight` → tre file in `BACKUP_DIR`:
   - `hindsight-<UTC>.dump` — il dump vero e proprio (~77-80 MB, 8 s);
-  - `hindsight-<UTC>.dump.meta.json` — `{host, dumped_at, max_created_at, database}`;
+  - `hindsight-<UTC>.dump.meta.json` — `{host, dumped_at, max_write_at, database}`;
     il watermark è letto PRIMA del dump ed è quello che il restore confronta col DB locale;
   - `LATEST` — contiene il nome dell'ultimo dump: è il file che il restore legge per
     sapere quale ripristinare.
 
   Rotazione: tiene le ultime `HS_BACKUP_KEEP` coppie dump+meta (default 5, ~385 MB).
 - **`hs-db-restore.sh`**: **guardrail anti-perdita** prima di toccare qualsiasi cosa:
-  confronta `MAX(created_at)` delle memorie locali con `max_created_at` registrato nel
-  dump. Se il DB locale ha scritture PIÙ RECENTI del dump → **rifiuta** con messaggio
-  chiaro (`--force` per forzare consapevolmente). Poi: dump di sicurezza locale,
-  `dropdb`+`createdb`+`pg_restore --no-owner`. Il DB `litellm` resta fuori dal sync
-  (è per-macchina: chiavi virtuali e spend log locali).
+  confronta l'ultima scrittura locale (watermark su `created_at` E `updated_at`) con
+  `max_write_at` registrato nel dump. Se il DB locale ha scritture PIÙ RECENTI del
+  dump → **rifiuta** con messaggio chiaro (`--force` per forzare consapevolmente).
+  Poi: dump di sicurezza locale, `pg_restore --no-owner` su un DB temporaneo e swap
+  dei nomi (l'originale non è droppato finché il nuovo non è validato). Il DB
+  `litellm` resta fuori dal sync (è per-macchina: chiavi virtuali e spend log locali).
 - Workflow d'uso (documentato, ~20 secondi in tutto):
   - lasci una macchina → `mise run db-dump` (la chiavetta ha il dump)
   - arrivi sull'altra → `mise run db-restore` (rifiuta se stai per perdere dati)
@@ -254,7 +255,7 @@ distruttivo). Automazione proposta, da fare dopo il collaudo sul server:
 
 | Rischio | Mitigazione |
 |---|---|
-| Restore sovrascrive scritture non ancora dumpate | guardrail `max_created_at` in `hs-db-restore.sh` (rifiuta, serve `--force`) |
+| Restore sovrascrive scritture non ancora dumpate | guardrail `max_write_at` in `hs-db-restore.sh` (rifiuta, serve `--force`) |
 | Drift di versione Postgres/hindsight-api tra i due lati | pin: pg0 18.x entrambi; `api-check` gira su entrambi; nota in SETUP-LINUX.md di aggiornare in coppia |
 | Regressioni su Windows durante il porting | ogni task di Fase 1-2 ha verifica su Windows PRIMA del commit; ramo Windows testuale invariato |
 | pg0 su Linux si comporta diversamente dal previsto | punto 8 della Fase 3 è la prima cosa da provare sul server: se pg0 non supporta Linux si passa al Postgres di sistema + pgvector (piano B, stesso restore) |
