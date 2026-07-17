@@ -11,7 +11,7 @@
 # Perché detached: all'uscita Claude Code NON aspetta il completamento dell'hook
 # SessionEnd; lo annulla subito ("Hook cancelled"), su Ctrl+C anche ignorando il
 # `timeout` configurato (issue anthropics/claude-code#32712). Quindi il lavoro lento
-# (retain + sleep + stop) gira in un processo staccato con setsid/nohup e l'hook
+# (retain + attesa sessioni + drain + stop) gira in un processo staccato con setsid/nohup e l'hook
 # ritorna subito. Anche il percorso foreground deve restare minimo: su MSYS2 ogni
 # processo extra costa ~850ms di fork emulato e se l'annullamento arriva prima dello
 # spawn del worker, retain finale e stop dei servizi vanno persi (verificato: kill a
