@@ -331,27 +331,23 @@ else
 	ko "logica throttling errata ($THR_OK)"
 fi
 rm -rf "$TSTATE"
-# SessionEnd registra hindsight-shutdown.sh, che fa il force-retain finale (cattura la
-# coda) PRIMA di fermare i servizi. Il retain finale passa per il wrapper, non diretto:
-# percio' verifichiamo (1) shutdown.sh in SessionEnd e (2) che shutdown.sh chiami retain.
-if grep -q '"SessionEnd"' "$HOOKSJSON" && python -c "
-import json,sys
-h=json.load(open(sys.argv[1]))['hooks'].get('SessionEnd',[])
-cmds=[c.get('command','') for g in h for c in g.get('hooks',[])]
-sys.exit(0 if any('hindsight-shutdown.sh' in c for c in cmds) else 1)
-" "$(w "$HOOKSJSON")" 2>/dev/null; then
-	if grep -q 'hindsight-retain.sh' "$HOOKS_DIR/hindsight-shutdown.sh"; then
-		ok "SessionEnd → hindsight-shutdown.sh, che invoca il force-retain finale"
-	else
-		ko "hindsight-shutdown.sh non chiama piu' hindsight-retain.sh (retain finale perso)"
-	fi
+# Lo shutdown e' delegato alla sentinella (hindsight-sentinel.sh), spawnata da
+# ensure-up a SessionStart: l'hook SessionEnd e' stato rimosso perche' Claude Code
+# lo cancella SEMPRE alla chiusura interattiva ("Hook cancelled", issue #32712).
+# Verifichiamo (1) nessun SessionEnd residuo in hooks.json, (2) ensure-up spawna
+# la sentinella, (3) la sentinella ferma davvero i servizi.
+if grep -q '"SessionEnd"' "$HOOKSJSON"; then
+	ko "hooks.json registra ancora un hook SessionEnd (verrebbe cancellato: issue #32712)"
+elif grep -q 'hindsight-sentinel.sh' "$HOOKS_DIR/hindsight-ensure-up.sh" &&
+	grep -q 'hindsight-stop-services.sh' "$HOOKS_DIR/hindsight-sentinel.sh"; then
+	ok "shutdown via sentinella: ensure-up la spawna, lei drena e ferma i servizi"
 else
-	ko "hook SessionEnd con hindsight-shutdown.sh assente in hooks.json"
+	ko "catena sentinella incompleta (spawn in ensure-up o stop-services nella sentinella mancante)"
 fi
-# Conteggio sessioni vive: se sbaglia per difetto, lo shutdown spegne il server sotto
+# Conteggio sessioni vive: se sbaglia per difetto, la sentinella spegne il server sotto
 # una sessione ancora aperta (che perde l'MCP in silenzio). Le regex si estraggono DAL
 # file, non si riscrivono qui, se no il check verifica se stesso.
-SHUT="$HOOKS_DIR/hindsight-shutdown.sh"
+SHUT="$HOOKS_DIR/hindsight-sentinel.sh"
 RX_WIN="$(grep -o "grep -icE '[^']*'" "$SHUT" | sed "s/grep -icE '//;s/'$//")"
 RX_LIN="$(grep -o "pgrep -fc '[^']*'" "$SHUT" | sed "s/pgrep -fc '//;s/'$//")"
 CA_ERR=""
@@ -368,10 +364,10 @@ for p in 'C:\Users\x\AppData\Local\AnthropicClaude\app-1.0\resources\chrome-nati
 	'/e/msys64/home/Sphynx/.local/bin/claude-headroom.sh' '/usr/bin/zsh'; do
 	[ -z "$CA_ERR" ] && printf '%s' "$p" | grep -qiE "$RX_WIN" && CA_ERR="conta un processo che non e' una sessione: $p"
 done
-# pgrep -f legge la cmdline INTERA: il worker non deve contare se stesso (la config dir
-# '/.claude/' compare sempre nella sua riga di comando).
-if [ -z "$CA_ERR" ] && printf '%s' 'bash /home/s/.claude/skills/trinity/hooks/hindsight/hindsight-shutdown.sh --worker {}' | grep -qE "$RX_LIN"; then
-	CA_ERR="la regex Linux fa auto-match sul worker (server mai spento)"
+# pgrep -f legge la cmdline INTERA: la sentinella non deve contare se stessa (la config
+# dir '/.claude/' compare sempre nella sua riga di comando).
+if [ -z "$CA_ERR" ] && printf '%s' 'bash /home/s/.claude/skills/trinity/hooks/hindsight/hindsight-sentinel.sh' | grep -qE "$RX_LIN"; then
+	CA_ERR="la regex Linux fa auto-match sulla sentinella (server mai spento)"
 fi
 [ -z "$CA_ERR" ] && ! printf '%s' '/usr/local/bin/claude' | grep -qE "$RX_LIN" && CA_ERR="regex Linux ancorata al path di installazione"
 # Lancio per nome dal PATH: argv[0] e' la parola nuda, senza slash (caso comune su Linux).

@@ -12,10 +12,10 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
 | `hindsight-recall.sh`        | UserPromptSubmit   | inietta come `additionalContext` le memorie rilevanti al prompt (con cache client-side) |
-| `hindsight-ensure-up.sh`     | SessionStart       | se il server :8888 è giù, lo avvia (`mise run start-hindsight`) e attende il boot       |
+| `hindsight-ensure-up.sh`     | SessionStart       | se il server :8888 è giù, lo avvia (`mise run start-hindsight`) e attende il boot; spawna la sentinella |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
 | `hindsight-retain.sh`        | Stop               | lancia il worker async che memorizza la coda della sessione                             |
-| `hindsight-shutdown.sh`      | SessionEnd         | retain finale forzato, poi ferma server + Postgres (via `ops/`)                         |
+| `hindsight-sentinel.sh`      | — (detached)       | singleton spawnato da ensure-up: quando non resta alcun processo claude vivo drena i retain pendenti e ferma server + Postgres (sostituisce l'hook SessionEnd, sempre cancellato: issue #32712) |
 | `hindsight-retain-worker.py` | —                  | worker chiamato da `hindsight-retain.sh` (non è un hook a sé)                           |
 
 ## 📁 `lib/` — libreria condivisa
@@ -37,7 +37,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 
 | File                         | Chi lo chiama                                                     | Cosa fa                                                      |
 | ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
-| `hindsight-stop-services.sh` | `hindsight-shutdown.sh`, `mise run stop-hindsight`                | ferma server MCP + Postgres embedded                         |
+| `hindsight-stop-services.sh` | `hindsight-sentinel.sh`, `mise run stop-hindsight`                | ferma server MCP + Postgres embedded                         |
 | `kill-port.sh`               | `mise` (control-plane/dashboard)                                  | uccide il processo su una porta (via `Get-NetTCPConnection`) |
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
 | `hindsight-set-mission.sh`   | manuale                                                           | imposta retain/reflect mission sul bank                      |

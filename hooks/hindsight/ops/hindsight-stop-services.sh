@@ -5,7 +5,7 @@
 #
 # Punto UNICO della logica di stop, condiviso da:
 #   - task `mise run stop-hindsight`
-#   - hook SessionEnd (hindsight-shutdown.sh), che prima fa il retain finale
+#   - sentinella hindsight-sentinel.sh, che prima drena i retain pendenti
 # NON fa retain: è solo lo stop dei processi.
 set -uo pipefail
 

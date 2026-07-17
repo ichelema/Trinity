@@ -6,7 +6,7 @@ raggiunga uno stato terminale perde quella memoria SENZA nessun errore — l'ope
 resta 'pending' per sempre e nemmeno hindsight-failcheck.sh la vede (cerca
 status=failed). Misurato sulle 100 operation piu' recenti di trinity-project: 89%
 dei retain impiega piu' di 7s (mediana 32s, p90 47s), cioe' il vecchio `sleep 7`
-fisso in hindsight-shutdown.sh perdeva quasi sempre il retain finale.
+fisso nel vecchio hook di shutdown perdeva quasi sempre il retain finale.
 
 Exit 0: nessun retain in volo (o bank gia' irraggiungibile). Exit 1: budget scaduto.
 In entrambi i casi il chiamante spegne — il server non puo' restare su per sempre.

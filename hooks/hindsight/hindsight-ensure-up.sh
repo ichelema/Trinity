@@ -53,6 +53,19 @@ start_server() {
     disown 2> /dev/null || true
 }
 
+# 0. sentinella shutdown: guarda il conteggio dei processi claude e spegne i
+# servizi quando arriva a 0. Sostituisce l'hook SessionEnd, che Claude Code
+# cancella SEMPRE alla chiusura interattiva (issue #32712). Prima del check di
+# readiness: deve girare anche sul percorso caldo. Zero fork se e' gia' viva
+# (builtin + kill -0); spawn detached altrimenti (pattern msys-background-detach).
+SENTINEL_PIDFILE="${TMPDIR:-/tmp}/hindsight-sentinel.pid"
+spid=""
+[ -f "$SENTINEL_PIDFILE" ] && spid="$(<"$SENTINEL_PIDFILE")"
+if [ -z "$spid" ] || ! kill -0 "$spid" 2> /dev/null; then
+    setsid nohup bash "$PLUGIN_ROOT/hooks/hindsight/hindsight-sentinel.sh" < /dev/null > /dev/null 2>&1 &
+    disown 2> /dev/null || true
+fi
+
 # 1. gia' pronto: esci subito (nessun costo di avvio)
 if mcp_ready; then
     exit 0

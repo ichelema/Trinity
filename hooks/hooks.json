@@ -69,14 +69,6 @@
         }
       ]
     }],
-    "SessionEnd": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-shutdown.sh",
-        "timeout": 40
-      }]
-    }],
     "Notification": [{
       "matcher": "permission_prompt",
       "hooks": [{
