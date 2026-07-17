@@ -577,6 +577,49 @@
       "relatedSkills": [
         "obsidian"
       ]
+    },
+    "adhd": {
+      "description": "Parallel divergent ideation (tree-of-thought con pruning): brainstorming a più rami cognitivi, scoring, trappole e approfondimento dei migliori",
+      "priority": 6,
+      "triggers": {
+        "keywords": [
+          "adhd",
+          "adhd mode",
+          "brainstorm",
+          "brainstorming",
+          "ideazione",
+          "idee divergenti",
+          "divergent ideation",
+          "tree of thought"
+        ],
+        "keywordPatterns": [
+          "\\badhd\\b",
+          "\\bbrainstorm(?:ing)?\\b",
+          "\\bide(?:azione|e)\\s+divergent[ei]\\b",
+          "\\btree.of.thought\\b"
+        ],
+        "pathPatterns": [
+          "**/skills/adhd/**"
+        ],
+        "intentPatterns": [
+          "(?:genera|proponi|esplora|butta\\s+giù).{0,30}(?:idee|alternative|approcci|opzioni|varianti)",
+          "(?:generate|propose|explore|come\\s+up\\s+with).{0,30}(?:ideas|alternatives|approaches|options)",
+          "(?:brainstorm|ideate|ideazione).{0,40}",
+          "(?:come\\s+potre[im]|how\\s+(?:could|might)\\s+we).{0,50}(?:chiamar|nominar|design|architettur|name|approach)"
+        ],
+        "contentPatterns": [
+          "adhd\\s+\"",
+          "--frames\\s+\\d+",
+          "adhd-agent"
+        ],
+        "contextPatterns": [
+          "modalità adhd",
+          "adhd mode",
+          "in modalità brainstorm",
+          "con adhd"
+        ]
+      },
+      "relatedSkills": []
     }
   }
 }

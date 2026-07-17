@@ -181,7 +181,7 @@ Conseguenze pratiche:
 
 ## 5. Skill incluse
 
-In `skills/` (11), attivate per rilevanza dall'hook skill-eval o a richiesta:
+In `skills/` (12), attivate per rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |
 |---|---|
@@ -195,6 +195,7 @@ In `skills/` (11), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `book-to-skill` | converte libri/documenti in skill strutturate |
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
+| `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming; variante CLI in §12.3 |
 
 ---
 
@@ -211,6 +212,7 @@ collidono con i comandi locali del progetto:
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
 | `/trinity:ccr_model` | elenca i modelli configurati in ccr e le route attuali |
 | `/trinity:release` | versiona il plugin (bump, commit, tag) e push dopo conferma |
+| `/trinity:adhd-cli` | lancia la CLI `adhd-agent` (§12.3) con parametri formali (`--frames`, `--ideas`, `--top`, `--json`, …) |
 
 ---
 
@@ -411,12 +413,14 @@ da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude
     "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity",
     "NOTEBOOKLM_DATA": "E:/AI/tools/notebooklm-data",
     "NOTEBOOKLM_LIB": "E:/AI/tools/notebooklm",
-    "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw"
+    "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw",
+    "ADHD_LIB": "E:/AI/tools/adhd"
   }
 }
 ```
 
-Le ultime tre servono ai server MCP `notebooklm` ed `excalidraw` e puntano a
+`NOTEBOOKLM_*` e `MCP_EXCALIDRAW_DIR` servono ai server MCP `notebooklm` ed
+`excalidraw`, `ADHD_LIB` alla CLI `adhd` (§12.3): puntano tutte a
 strumenti esterni installati **fuori dal repo**: definiscile col path locale
 dell'installazione. Su un'altra macchina (o su Linux) i path cambiano — vanno
 messi quelli dell'installazione locale di quegli strumenti (vedi
@@ -437,6 +441,7 @@ una variabile separata.
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
+| CLI adhd (§12.3) | `${ADHD_LIB}` — **da definire per-macchina** (root dell'installazione di `adhd-agent`, non del repo); se manca, `scripts/bin/adhd` esce con errore esplicito |
 
 > Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
 > Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
@@ -719,6 +724,25 @@ API esposte: `/api/projects`, `/api/projects/:id/sessions`, `/api/context/:pid/:
 > `node web/node_modules/vite/bin/vite.js build` (dev: senza `build`, con `--root web`). L'anteprima nel
 > pannello usa `.claude/launch.json` (config `dashboard`, Roda su `:9292`).
 
+### 12.3 adhd-agent (CLI di ideazione divergente)
+
+[adhd](https://github.com/UditAkhourii/adhd) esiste in due forme: la **skill** `skills/adhd/`
+(solo Markdown, viaggia col repo, vedi §5) e la **CLI** `adhd-agent`, che esegue lo stesso
+metodo in autonomia via Claude Agent SDK (usa l'autenticazione di `claude` già presente)
+e accetta parametri formali: `--frames`, `--ideas`, `--top`, `--context`, `--json`, ….
+
+**Install exe-free (Windows/Eni):** niente npm — tarball scaricati con curl da
+`registry.npmjs.org` e scompattati a mano in `${ADHD_LIB}/node_modules/`
+(`adhd-agent` 0.1.4 già compilato + `@anthropic-ai/claude-agent-sdk` 0.1.77 +
+`p-limit` + `yocto-queue` + `zod`; l'SDK non ha dipendenze runtime obbligatorie).
+Su Linux, senza vincolo EDR, basta `npm install adhd-agent` in una cartella locale.
+
+**Invocazione:** il wrapper versionato `scripts/bin/adhd` risolve Node a runtime via
+`run-node.sh` (mise → PATH) e legge la root dell'installazione da `${ADHD_LIB}` (§10) —
+zero path hardcoded. Da una sessione: `/trinity:adhd-cli "problema" --frames 3`.
+Ogni run fa più chiamate LLM (minuti e quota reali: per prove usare
+`--frames 1 --ideas 2 --top 1 --model claude-haiku-*`).
+
 ---
 
 ## 13. Modelli alternativi: LiteLLM e claude-code-router
@@ -935,7 +959,7 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── skills/                  11 skill
+├── skills/                  12 skill
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval.*         suggerimento skill

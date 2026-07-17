@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Wrapper exe-free per la CLI adhd-agent (ideazione divergente parallela).
+# Node risolto a runtime da run-node.sh (mise → PATH); l'installazione dei
+# pacchetti npm (tarball scompattati a mano, senza npm su Windows) è
+# per-macchina e indicata dalla variabile ADHD_LIB (~/.claude/settings.json).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -z "${ADHD_LIB:-}" ]; then
+	echo "[adhd] ADHD_LIB non definita (root dell'installazione, es. e:/ai/tools/adhd)" >&2
+	exit 1
+fi
+exec "$SCRIPT_DIR/run-node.sh" "$ADHD_LIB/node_modules/adhd-agent/dist/cli.js" "$@"
