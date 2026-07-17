@@ -132,6 +132,14 @@ if [ -n "$LOCAL_WM" ]; then
 		echo "[db-restore] ERRORE: dump di sicurezza fallito — mi fermo (il DB locale resta intatto)" >&2
 		exit 1
 	}
+	# Rotazione: tieni gli ultimi HS_BACKUP_KEEP pre-restore (default 5, come
+	# db-dump) — ~330MB l'uno, senza rotazione si accumulano per sempre. Ordinati
+	# per mtime (ls -t), non per nome: il nome contiene l'host label e con host
+	# diversi l'ordine alfabetico non e' cronologico.
+	ls -1t "$BACKUP_DIR"/pre-restore-*.dump 2>/dev/null | tail -n +"$((${HS_BACKUP_KEEP:-5} + 1))" | while IFS= read -r old; do
+		rm -f "$old"
+		echo "[db-restore] rotazione: rimosso $(basename "$old")"
+	done
 fi
 
 # --- 3. Ferma il SOLO server MCP (Postgres deve restare su) ------------------
