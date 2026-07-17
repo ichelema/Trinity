@@ -86,7 +86,10 @@ sect "5. Skills-dir: symlink ~/.claude/skills/trinity -> repo"
 mkdir -p "$HOME/.claude/skills"
 LINK="$HOME/.claude/skills/trinity"
 if [ -L "$LINK" ]; then
-	if [ "$(readlink -f "$LINK")" = "$ROOT" ]; then
+	# readlink -f su ENTRAMBI i lati: se il path del repo contiene un componente
+	# symlink, il $ROOT logico non combacia mai col target risolto del link e il
+	# symlink verrebbe "ricreato" a ogni run pur essendo corretto.
+	if [ "$(readlink -f "$LINK")" = "$(readlink -f "$ROOT")" ]; then
 		ok "symlink gia' corretto"
 	else
 		# Symlink presente ma verso il target sbagliato o PENDENTE (clone rimosso/spostato).
