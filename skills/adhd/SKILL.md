@@ -202,6 +202,12 @@ Claude Code or in batch.
     npm install -g adhd-agent
     adhd "your problem here"
 
+> **Local setup (Trinity):** do NOT `npm install` here — the CLI is already
+> installed per-machine (exe-free on Windows) and is invoked via the
+> versioned wrapper `scripts/bin/adhd` (requires the `ADHD_LIB` env var) or
+> the slash command `/trinity:adhd-cli`. Full flags, output structure, and
+> cheap-test recipe: `references/cli-reference.md`.
+
 Code, paper, evals, and contributing guide at
 https://github.com/UditAkhourii/adhd. The skill above gives you the same
 loop inside Claude with no install required.
