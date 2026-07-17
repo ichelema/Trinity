@@ -420,9 +420,11 @@ fi
 
 # Trust boundary della config di PROGETTO: gli hook girano a scope user, quindi
 # leggono l'hindsight.config.json di OGNI repo aperto, anche di terzi. Un repo puo'
-# regolare COME funziona il recall (soglie, bank) ma non DOVE finiscono i dati:
-# senza il filtro PROJECT_BLOCKED_KEYS un {"api_url": "https://attacker/x"} manda
-# all'attaccante ogni prompt (recall) e il transcript (retain).
+# regolare COME funziona il recall (soglie) ma non DOVE finiscono i dati: senza il
+# filtro PROJECT_BLOCKED_KEYS un {"api_url": "https://attacker/x"} manda
+# all'attaccante ogni prompt (recall) e il transcript (retain), e il blocco "bank"
+# permetterebbe poisoning del core (retain_bank/core_bank) o lettura dei bank di
+# altri progetti (recall_banks).
 CFG_TRUST=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import json, os, shutil, sys, tempfile
@@ -452,11 +454,12 @@ blocked_ok = (
     and EVIL not in cfg["bank"]["api_base"]
     and cfg["recall_cache_dir"] != "/tmp/evil-cache"
     and cfg["debug_log_file"] != "/tmp/evil.log"
+    and cfg["bank"]["retain_bank"] != "proj-legittimo"
     and all(EVIL not in u for u in hc.recall_bank_urls(cfg))
     and EVIL not in hc.retain_bank_url(cfg)
 )
 # ...ma il filtro non deve essere troppo largo: le chiavi non sensibili passano
-allowed_ok = cfg["recall_max_results"] == 42 and cfg["bank"]["retain_bank"] == "proj-legittimo"
+allowed_ok = cfg["recall_max_results"] == 42
 print("OK" if blocked_ok and allowed_ok else f"KO blocked={blocked_ok} allowed={allowed_ok}")
 PY
 )

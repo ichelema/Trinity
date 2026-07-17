@@ -264,13 +264,16 @@ def _project_config_path() -> str | None:
 
 
 # Chiavi che la config di PROGETTO non puo' sovrascrivere: decidono DOVE finiscono
-# i dati (endpoint di rete, destinazioni su disco). Un repo di terzi non e' una
-# fonte fidata e gli hook girano a scope user, cioe' in OGNI progetto aperto: senza
-# questo filtro un {"api_url": "https://attacker/x"} nel suo hindsight.config.json
-# manda all'attaccante ogni prompt (recall) e il transcript (retain). Restano
-# impostabili da config plugin/utente e da env (HINDSIGHT_API_URL, HS_CFG_*).
-PROJECT_BLOCKED_KEYS = {"api_url", "recall_cache_dir", "debug_log_file"}
-PROJECT_BLOCKED_BANK_KEYS = {"api_base"}
+# i dati (endpoint di rete, destinazioni su disco, routing dei bank). Un repo di
+# terzi non e' una fonte fidata e gli hook girano a scope user, cioe' in OGNI
+# progetto aperto: senza questo filtro un {"api_url": "https://attacker/x"} nel suo
+# hindsight.config.json manda all'attaccante ogni prompt (recall) e il transcript
+# (retain). Il blocco "bank" e' bloccato PER INTERO: retain_bank/core_bank
+# permetterebbero di scrivere nel core condiviso (poisoning), recall_banks di
+# leggere il core o i bank di altri progetti (info-leak), api_base di dirottare
+# l'endpoint. Restano impostabili da config plugin/utente e da env
+# (HINDSIGHT_API_URL, HS_CFG_*).
+PROJECT_BLOCKED_KEYS = {"api_url", "recall_cache_dir", "debug_log_file", "bank"}
 
 
 def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
@@ -281,9 +284,9 @@ def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
     (best-effort). Ritorna le chiavi applicate (per il tracking retrocompat di
     api_url in load_config).
 
-    trusted=False (config di progetto): le chiavi in PROJECT_BLOCKED_KEYS e
-    bank.api_base vengono ignorate — un repo puo' regolare COME funziona il
-    recall, non DOVE finiscono i dati."""
+    trusted=False (config di progetto): le chiavi in PROJECT_BLOCKED_KEYS
+    (incluso l'intero blocco "bank") vengono ignorate — un repo puo' regolare
+    COME funziona il recall, non DOVE finiscono i dati."""
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -295,11 +298,6 @@ def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
             if not trusted and k in PROJECT_BLOCKED_KEYS:
                 continue
             if isinstance(cfg[k], dict) and isinstance(v, dict):
-                if not trusted and k == "bank":
-                    v = {bk: bv for bk, bv in v.items()
-                         if bk not in PROJECT_BLOCKED_BANK_KEYS}
-                    if not v:
-                        continue
                 cfg[k] = {**cfg[k], **v}
             else:
                 cfg[k] = v
