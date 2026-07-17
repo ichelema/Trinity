@@ -455,8 +455,19 @@ def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     plugin_dir = os.path.abspath(os.path.join(here, "..", "..", ".."))
     _, _, plugin_ident = _git_root_and_slug(plugin_dir)
+    # Se il plugin non avesse un remote origin, plugin_ident sarebbe "" e la
+    # guardia non scatterebbe: dentro il repo del plugin si otterrebbe un bank
+    # "Trinity" separato dal core (prima di a75781a si cadeva sul core). Caso
+    # teorico — il plugin E' un clone con origin — ma se mai accadesse il
+    # sintomo e' questo: memorie del plugin fuori dal core.
     if plugin_ident and ident == plugin_ident:
         return core
+    # LIMITE NOTO (scelta deliberata in a75781a): il NOME del bank resta il solo
+    # slug, quindi due repo diversi con lo stesso basename (alice/api e bob/api)
+    # condividono il bank "api". La collisione non tocca piu' il core (guardia
+    # per identita' qui sopra), ma tra progetti omonimi resta. Chiusura vera:
+    # nome derivato dall'identita' (es. f"{slug}-{sha256(ident)[:8]}"), che pero'
+    # richiede la migrazione una-tantum dei bank esistenti — da pianificare a parte.
     return slug
 
 
