@@ -179,6 +179,11 @@ def _state_lock(path: str, timeout: float = 5.0):
     Il lock e' legato al fd, quindi si rilascia da solo se il worker viene killato."""
     lock_path = path + ".lock"
     f = release = None
+    # Setup in un try SENZA yield: un errore qui (import, open, acquire) degrada a
+    # "procedi senza lock". Lo yield deve stare FUORI da questo try: se ci finisse
+    # dentro, un'eccezione nel CORPO del with rientrerebbe qui via throw(), l'except
+    # farebbe un secondo yield e il chiamante riceverebbe RuntimeError("generator
+    # didn't stop after throw()") che maschera l'errore originale.
     try:
         try:
             import fcntl
@@ -210,9 +215,10 @@ def _state_lock(path: str, timeout: float = 5.0):
                 if time.monotonic() >= deadline:
                     break  # timeout: procede senza lock (best-effort)
                 time.sleep(0.05)
-        yield
     except Exception:
-        yield  # qualunque problema col lock non deve bloccare il retain
+        pass  # qualunque problema col lock non deve bloccare il retain
+    try:
+        yield
     finally:
         if f is not None:
             if release is not None:
@@ -238,6 +244,8 @@ def compute_document_id(session_id: str, line_count: int) -> str | None:
                 state = json.load(f)
         except Exception:
             state = {}
+        if not isinstance(state, dict):
+            state = {}  # file avvelenato (JSON valido ma non-dict): auto-ripara
         entry = state.get(session_id) or {}
         chunk = entry.get("chunk", 0)
         if line_count < entry.get("line_count", 0):
@@ -293,6 +301,8 @@ def should_retain_now(
                 state = json.load(f)
         except Exception:
             state = {}
+        if not isinstance(state, dict):
+            state = {}  # file avvelenato (JSON valido ma non-dict): auto-ripara
         entry = state.get(session_id) or {}
         cnt = entry.get("stop_count", 0) + 1
         entry["stop_count"] = cnt
