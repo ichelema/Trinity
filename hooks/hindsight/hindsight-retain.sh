@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Stop hook (async:true in settings.json): salva un riassunto strutturato del turno
+# Stop hook (async:true in hooks/hooks.json): salva un riassunto strutturato del turno
 # appena completato in Hindsight. Non blocca nulla perche' eseguito in background da
-# Claude Code; ha timeout 60s in settings.json. La POST e' async:true sul server,
+# Claude Code; ha timeout 60s in hooks/hooks.json. La POST e' async:true sul server,
 # quindi anche internamente non aspetta l'estrazione LLM dei fatti.
 set -uo pipefail
 
