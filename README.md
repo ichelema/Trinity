@@ -181,7 +181,7 @@ Conseguenze pratiche:
 
 ## 5. Skill incluse
 
-In `skills/` (12), attivate per rilevanza dall'hook skill-eval o a richiesta:
+In `skills/` (13), attivate per rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |
 |---|---|
@@ -196,6 +196,7 @@ In `skills/` (12), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `book-to-skill` | converte libri/documenti in skill strutturate |
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
 | `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming; variante CLI in §12.3 |
+| `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
 
 ---
 
