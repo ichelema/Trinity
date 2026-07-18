@@ -29,3 +29,13 @@ mise trusted \\?\D:\AI\Claude\Trinity
   "update_available": false,
   "checked_at": "2026-07-15T21:49:05Z"
 }
+mise trusted \\?\D:\AI\Claude\Trinity
+[yt-check] $ ruby scheduler/check_update_yt_extract/yt-check.rb
+[2026-07-17 23:49:02] rc=0 {
+  "repo": "muckybuzzwoo/claude-code-youtube-extract",
+  "installed": "1.10.1",
+  "installed_from": "E:/AI/tools/claude-code-youtube-extract",
+  "latest_github": "1.10.1",
+  "update_available": false,
+  "checked_at": "2026-07-17T21:49:06Z"
+}
