@@ -8,7 +8,8 @@
 #   senza argomento usa l'ultimo dump (file LATEST in BACKUP_DIR).
 #
 # Sequenza: guardrail (sola lettura) -> dump di sicurezza locale -> stop del
-# solo server MCP (Postgres resta su) -> pg_restore su un DB TEMPORANEO ->
+# solo server MCP (su Windows Postgres resta su; su Linux muore col server e
+# viene rialzato standalone con pg_ctl) -> pg_restore su un DB TEMPORANEO ->
 # validazione -> swap per rinomina (terminate connessioni) -> drop del vecchio.
 # Al termine riavvia il server con `mise run start-hindsight` (o riapri una
 # sessione Claude Code).
@@ -142,15 +143,41 @@ if [ -n "$LOCAL_WM" ]; then
 	done
 fi
 
-# --- 3. Ferma il SOLO server MCP (Postgres deve restare su) ------------------
+# --- 3. Ferma il SOLO server MCP (Postgres deve restare raggiungibile) -------
 # Serve solo se il target e' il DB a cui il server e' connesso ('hindsight'):
 # con un target diverso (es. test) il server puo' restare su.
+PG_STANDALONE=0
+PGDATA_DIR="${HS_PGDATA:-$HOME/.pg0/instances/hindsight-mcp/data}"
 if [ "$PGDATABASE" = "hindsight" ]; then
 	case "$_HS_OS" in
 	windows) /c/Windows/System32/taskkill.exe //F //T //IM hindsight-local-mcp.exe > /dev/null 2>&1 || true ;;
-	*) pkill -TERM -f hindsight-local-mcp > /dev/null 2>&1 || true ;;
+	*)
+		pkill -TERM -f hindsight-local-mcp > /dev/null 2>&1 || true
+		# Attendi la fine dello shutdown: subito dopo il TERM server (e Postgres)
+		# possono essere ancora vivi, e la probe hs_db_ping sotto mentirebbe.
+		for _ in 1 2 3 4 5 6 7 8 9 10; do
+			pgrep -f hindsight-local-mcp > /dev/null 2>&1 || break
+			sleep 1
+		done
+		;;
 	esac
 	sleep 1
+	# Su Linux Postgres NON resta su: pg0 lo avvia come figlio di
+	# hindsight-local-mcp, quindi il kill qui sopra spegne anche lui (su Windows
+	# e' un processo staccato e sopravvive). Lo si rialza standalone per la
+	# durata del restore; la trap di uscita lo riferma, e il riavvio finale
+	# resta comunque a `mise run start-hindsight`.
+	if [ "$_HS_OS" != windows ] && ! hs_db_ping; then
+		echo "[db-restore] Postgres e' sceso insieme al server MCP: lo rialzo standalone"
+		# LD_LIBRARY_PATH: i binari portabili di pg0 cercano le proprie librerie
+		# condivise (libicuuc & c.) che il loader di sistema non conosce.
+		LD_LIBRARY_PATH="$PGBIN/../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+			"$PGBIN/pg_ctl" -D "$PGDATA_DIR" -w -l /tmp/hs-pg-standalone.log start > /dev/null || {
+			echo "[db-restore] ERRORE: avvio standalone di Postgres fallito (log: /tmp/hs-pg-standalone.log)" >&2
+			exit 1
+		}
+		PG_STANDALONE=1
+	fi
 fi
 
 # --- 4. Restore su un DB TEMPORANEO ------------------------------------------
@@ -186,6 +213,13 @@ cleanup() {
 		drop_newdb
 		;;
 	esac
+	# Se Postgres l'abbiamo alzato noi (standalone, Linux), va rifermato DOPO le
+	# pulizie qui sopra (usano psql): un postmaster orfano sulla 5432
+	# impedirebbe a start-hindsight di riportare su il cluster pg0.
+	if [ "$PG_STANDALONE" -eq 1 ]; then
+		LD_LIBRARY_PATH="$PGBIN/../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+			"$PGBIN/pg_ctl" -D "$PGDATA_DIR" -m fast -w stop > /dev/null 2>&1 || true
+	fi
 	exit "$rc"
 }
 trap cleanup EXIT
