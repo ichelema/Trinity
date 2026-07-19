@@ -22,7 +22,7 @@
       "args": [
         "npm:@playwright/mcp/cli.js",
         "--browser",
-        "chrome",
+        "${PLAYWRIGHT_MCP_BROWSER:-chrome}",
         "--output-dir",
         "${TRINITY_PLUGIN_DIR}/data/playwright-mcp"
       ]
