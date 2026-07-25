@@ -53,7 +53,10 @@ cat > "$OUT.meta.json" <<EOF
 EOF
 printf '%s\n' "$(basename "$OUT")" > "$BACKUP_DIR/LATEST"
 
-SIZE="$(du -h "$OUT" | cut -f1)"
+# --apparent-size: senza, du misura i blocchi allocati e su ZFS (scrittura
+# asincrona) subito dopo pg_dump ne risultano ancora zero -> riportava "2,0K"
+# per un dump da 40M, facendolo sembrare fallito.
+SIZE="$(du -h --apparent-size "$OUT" | cut -f1)"
 echo "[db-dump] OK: $SIZE, watermark: $WATERMARK"
 
 # Rotazione: tieni le ultime $KEEP coppie dump+meta (ordinate per nome = per data).

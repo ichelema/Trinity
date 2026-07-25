@@ -145,10 +145,17 @@ HINDSIGHT_API_AUDIT_LOG_ENABLED = "true"
 HINDSIGHT_API_AUDIT_LOG_RETENTION_DAYS = "30"
 
 [tasks.install-hindsight]
-description = "Installa/aggiorna hindsight-api (server Python locale, espone MCP) tramite pip del Python mise."
+description = "Installa/aggiorna hindsight-api-slim (server Python locale, espone MCP) tramite pip del Python mise."
 shell = "bash -c"
 run = [
-  "python -m pip install --upgrade hindsight-api",
+  # NON usare il meta-pacchetto "hindsight-api": e' un alias di hindsight-api-slim[all],
+  # e [all] tira dentro l'extra local-ml (torch + stack CUDA + sentence-transformers +
+  # mlx) per ~3,5 GB che qui non servono mai: embeddings e reranker sono su ZeroEntropy
+  # (provider remoto, vedi HINDSIGHT_API_EMBEDDINGS_PROVIDER) e l'LLM e' OpenAI. Con
+  # provider != "local" il server non importa nemmeno torch al boot. Serve solo l'extra
+  # embedded-db (pg0-embedded) per il Postgres in ~/.pg0. Se un giorno si torna ai
+  # modelli locali: reinstallare "hindsight-api-slim[all]".
+  'python -m pip install --upgrade "hindsight-api-slim[embedded-db]"',
   # Il runtime python puo' essere appena cambiato (upgrade via mise): butta la cache
   # del path reale usata dagli hook (hs-python.sh). Il suo check -x non basta: un
   # upgrade installa il nuovo python ACCANTO al vecchio, che resta eseguibile, e la

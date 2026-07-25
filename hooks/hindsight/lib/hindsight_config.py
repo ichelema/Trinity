@@ -205,8 +205,18 @@ DEFAULTS = {
     "mental_models_inject_ids": ["user-profile", "project-conventions"],
     # Tetto sul blocco iniettato da hindsight-mm-inject.sh: Claude Code tronca
     # l'output degli hook oltre 10.000 char (inline resta solo un preview ~2KB),
-    # quindi si sta sotto con margine. Il max_tokens dei mental model NON e' un
-    # cap affidabile (il percorso done-tool del reflect agent lo bypassa).
+    # quindi si sta sotto con margine. Da hindsight-api 0.8.5 (issue #2756) il
+    # max_tokens dei mental model e' finalmente un cap reale su tutti i percorsi
+    # del reflect agent, MA non usarlo per far stare N pagine in questo budget:
+    # provato il 2026-07-25 con cap 700 e 850, le pagine perdono meta' contenuto
+    # (spariti i workaround specifici, non solo la coda) e l'ultima frase resta
+    # mozza. Il motivo: il modello non sa contare i token, ignora il "target
+    # budget" del prompt e a fermarlo e' il max_completion_tokens dell'API, che
+    # taglia di netto (finish_reason=length). Per accorciare le pagine si agisce
+    # sulla fonte: vincolo di formato nella source_query ("max N voci, una riga
+    # ciascuna, forma sintomo -> fix, niente intro/conclusione"). Le voci il
+    # modello le conta: dal 2026-07-25 le 3 pagine stanno in ~6.6k char (era
+    # 10.4k) e il taglio proporzionale qui sotto non scatta piu'.
     "mental_models_inject_max_chars": 9500,
     "mental_models": [],
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
