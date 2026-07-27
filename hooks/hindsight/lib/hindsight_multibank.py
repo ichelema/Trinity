@@ -5,11 +5,11 @@ Usato da hindsight-recall.sh quando recall_bank_urls() risolve piu' di un bank
   1. fan_out_recall: POST /memories/recall su ogni bank IN PARALLELO (thread),
      ~recall_per_bank_candidates risultati per bank
   2. dedup_results: scarta i duplicati esatti di testo tra bank
-  3. zerank_rerank: rerank GLOBALE via ZeroEntropy REST (zerank-2) — gli score
+  3. global_rerank: rerank GLOBALE via Voyage REST (rerank-2.5) — gli score
      dei singoli bank NON sono confrontabili tra loro, il rerank unico li
      ricalibra sulla query. Stesso provider del reranker interno del server
-     (ZEROENTROPY_API_KEY), nessuna esposizione privacy nuova.
-  4. fallback: se ZeroEntropy non risponde e recall_min_rerank_score NON e'
+     (VOYAGE_API_KEY), nessuna esposizione privacy nuova.
+  4. fallback: se Voyage non risponde e recall_min_rerank_score NON e'
      attivo, interleave() alterna i risultati dei bank (round-robin) senza
      rerank; con la soglia attiva il fallback e' fail-closed (lista vuota):
      senza score non possiamo garantire la qualita' richiesta dalla soglia.
@@ -26,7 +26,9 @@ import os
 import threading
 import urllib.request
 
-ZEROENTROPY_RERANK_URL = "https://api.zeroentropy.dev/v1/models/rerank"
+# Migrato da ZeroEntropy (spento il 2026-09-04) il 2026-07-26. NB: Voyage mette la
+# lista dei risultati in "data", ZeroEntropy la metteva in "results".
+VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank"
 
 
 def fetch_bank_results(url: str, payload: dict, timeout: float) -> list[dict]:
@@ -106,24 +108,24 @@ def interleave(per_bank: list[list[dict]], max_n: int) -> list[dict]:
     return out
 
 
-def zerank_rerank(
+def global_rerank(
     query: str,
     results: list[dict],
-    model: str = "zerank-2",
+    model: str = "rerank-2.5",
     timeout: float = 6,
     api_key: str | None = None,
     min_score: float | None = None,
 ) -> list[dict]:
-    """Rerank globale via ZeroEntropy REST. Riordina `results` per rilevanza
+    """Rerank globale via Voyage REST. Riordina `results` per rilevanza
     rispetto a `query`, attaccando a ogni result il campo _rerank_score. Se
     min_score è settato, scarta i risultati sotto soglia. Solleva su errore:
     il chiamante decide il fallback (interleave)."""
-    api_key = api_key or os.environ.get("ZEROENTROPY_API_KEY")
+    api_key = api_key or os.environ.get("VOYAGE_API_KEY")
     if not api_key:
-        raise RuntimeError("ZEROENTROPY_API_KEY non impostata")
+        raise RuntimeError("VOYAGE_API_KEY non impostata")
     documents = [(r.get("text") or "") for r in results]
     req = urllib.request.Request(
-        ZEROENTROPY_RERANK_URL,
+        VOYAGE_RERANK_URL,
         data=json.dumps({
             "model": model, "query": query, "documents": documents
         }).encode("utf-8"),
@@ -135,8 +137,8 @@ def zerank_rerank(
     )
     with urllib.request.urlopen(req, timeout=timeout) as res:
         data = json.loads(res.read().decode("utf-8", errors="replace"))
-    ranked = data.get("results") or []
-    # results: [{index, relevance_score}, ...] già ordinati per score desc;
+    ranked = data.get("data") or []
+    # data: [{index, relevance_score}, ...] già ordinati per score desc;
     # riordina difensivamente, attacca _rerank_score, scarta indici fuori range.
     ranked.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
     out = []
@@ -176,7 +178,7 @@ def multi_recall(
     if not candidates:
         return [], meta
 
-    # Se la soglia è attiva, passa SEMPRE da zerank-2 (anche quando i bank risolti
+    # Se la soglia è attiva, passa SEMPRE dal rerank globale (anche quando i bank risolti
     # si riducono a una sola fonte dopo il dedup) per avere score confrontabili su
     # cui filtrare. NB: vale solo DENTRO multi_recall, cioè con >=2 bank risolti;
     # il caso single-bank dell'hook non arriva mai qui (fa la POST diretta).
@@ -189,10 +191,10 @@ def multi_recall(
         return candidates[:max_n], meta
 
     try:
-        merged = zerank_rerank(
+        merged = global_rerank(
             prompt, candidates, timeout=rerank_timeout, min_score=min_score
         )
-        meta["merge"] = "zerank"
+        meta["merge"] = "voyage"
         if min_score is not None:
             meta["min_score_filtered"] = len(candidates) - len(merged)
         return merged[:max_n], meta

@@ -912,7 +912,7 @@ dd_ok = [len(x) for x in d] == [1, 1]
 # fallback: rerank che fallisce non deve sollevare
 mb.fetch_bank_results = lambda u, p, t: [{"text": f"da-{u}"}]
 def boom(*args, **kw): raise RuntimeError("no api")
-mb.zerank_rerank = boom
+mb.global_rerank =boom
 res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4}, ["u1", "u2"], {})
 fb_ok = meta["merge"] == "interleave-fallback" and len(res) == 2
 
@@ -926,7 +926,7 @@ fc_ok = meta["merge"] == "rerank-failed-min-score" and res == []
 scores = [0.9, 0.5, 0.95]
 srv_scores = {"reranker": 0.8, "final": 0.9}
 mb.fetch_bank_results = lambda u, p, t: [{"text": f"t{1+i}", "scores": dict(srv_scores)} for i in range(3)]
-mb.zerank_rerank = lambda query, results, model="zerank-2", timeout=6, api_key=None, min_score=None: [
+mb.global_rerank =lambda query, results, model="rerank-2.5", timeout=6, api_key=None, min_score=None: [
     {**r, "_rerank_score": s} for r, s in zip(results, scores) if min_score is None or s >= min_score
 ]
 res, meta = mb.multi_recall("q", {"recall_timeout": 1, "recall_per_bank_candidates": 5, "recall_max_results": 4, "recall_min_rerank_score": 0.9}, ["u1", "u2"], {})
@@ -963,10 +963,10 @@ rerank_to = float(cfg["recall_rerank_timeout"])
 #    distinti (9 vs 4) cosi' se qualcuno rimette timeout=timeout il check lo becca.
 seen = {}
 mb.fetch_bank_results = lambda u, p, t: [{"text": f"da-{u}"}]
-def capture(query, results, model="zerank-2", timeout=6, api_key=None, min_score=None):
+def capture(query, results, model="rerank-2.5", timeout=6, api_key=None, min_score=None):
     seen["timeout"] = timeout
     return [dict(r, _rerank_score=1.0) for r in results]
-mb.zerank_rerank = capture
+mb.global_rerank =capture
 mb.multi_recall("q", {**cfg, "recall_timeout": 9, "recall_rerank_timeout": 4}, ["u1", "u2"], {})
 wired_ok = seen.get("timeout") == 4
 

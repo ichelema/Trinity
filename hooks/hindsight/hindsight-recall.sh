@@ -121,7 +121,7 @@ if cached is None:
             debug_log(cfg, "recall_error", query=prompt, error=str(e)[:200])
             sys.exit(0)
     else:
-        # Multi-bank: fan-out parallelo -> dedup -> rerank globale zerank-2
+        # Multi-bank: fan-out parallelo -> dedup -> rerank globale voyage/rerank-2.5
         # (fallback interleave). multi_recall non solleva mai.
         merged, merge_meta = multi_recall(prompt, cfg, bank_urls, payload)
         data = {"results": merged}
