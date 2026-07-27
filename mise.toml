@@ -67,14 +67,24 @@ HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-4.1-mini"
 HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 
-# PRODUZIONE: zembed-1 (ZeroEntropy) dal 2026-05-27. Per tornare a Gemini: rimetti "google"
-# (richiede rebuild del bank). Le righe Gemini sotto restano come fallback documentato.
-HINDSIGHT_API_EMBEDDINGS_PROVIDER = "zeroentropy"
-# default(''): nel plugin la chiave Gemini è opzionale (fallback non attivo) — non deve
-# abortire il lancio del server se manca nell'ambiente.
+# PRODUZIONE: gemini-embedding-001 (1536 dim) dal 2026-07-27, di nuovo dopo la parentesi
+# zembed-1 (2026-05-27 → 2026-07-27), chiusa perche' ZeroEntropy spegne tutto il 2026-09-04.
+# Scelto su benchmark vettoriale (bench_results/embed_20260727_000525.json, corpus ostico
+# 61 doc / 23 query): gemini-001 MRR 0.978 = zembed-1 al suo massimo (2560 dim), contro
+# voyage-4 0.914, text-embedding-3-large 0.895, jina-v3 0.853. Sulla singola query e' anche
+# piu' rapido e stabile di zembed-1 (238ms mediana / 281ms peggiore, contro 362 / 546).
+# Baseline di qualita' PRE-migrazione in bench_results/baseline-zembed1-20260727/.
+# ⚠️ Solo zembed-1 e onnx implementano encode_query asimmetrico: con gemini la query passa
+#    da encode() come i documenti. Non e' un problema (gemini e' simmetrico per costruzione),
+#    ma spiega perche' zembed-1 usato senza asimmetria crolla a MRR 0.571.
+# ⚠️ Usare un progetto Google con BILLING ATTIVO: sul free tier Google dichiara di usare i
+#    contenuti inviati per addestrare i propri modelli; sul tier a pagamento no.
+HINDSIGHT_API_EMBEDDINGS_PROVIDER = "google"
+# default(''): non deve abortire il lancio del server se la chiave manca nell'ambiente.
 HINDSIGHT_API_EMBEDDINGS_GEMINI_API_KEY = "{{ env.GEMINI_API_KEY | default(value='') }}"
-# NB: gemini-embedding-2 NON e' compatibile (l'API multimodale rende 1 embedding per
-# N input → rompe il batching 1:1 di hindsight-api). Restare su 001.
+# NB: gemini-embedding-2 esiste (il nome "gemini-embedding-002" da 404) e dal 2026-07-27 non
+# rompe piu' il batching 1:1, ma resta peggiore: MRR 0.906 vs 0.978 e in modalita' batch
+# serializza (17.5s per 61 doc contro 1.2s). Restare su 001.
 HINDSIGHT_API_EMBEDDINGS_GEMINI_MODEL = "gemini-embedding-001"
 HINDSIGHT_API_EMBEDDINGS_GEMINI_OUTPUT_DIMENSIONALITY = 1536
 
@@ -89,18 +99,39 @@ HINDSIGHT_API_RERANKER_LOCAL_MODEL = "BAAI/bge-reranker-v2-m3"
 # tradurrebbe i nomi entità e frammenterebbe il grafo (path, comandi, identificatori).
 HINDSIGHT_API_TEXT_SEARCH_EXTENSION_NATIVE_LANGUAGE = "italian"
 
-# --- Reranker ZeroEntropy (remoto, via API) ---------------------------------
-# ATTIVATO il 2026-05-26 dopo benchmark: zerank-2 batte bge-reranker-v2-m3 su qualita'
-# (R@1 0.73 vs 0.47) e latenza (3.4s vs 29.5s). Con provider != "local" la validazione
-# config NON importa torch/transformers al boot (~20s in meno). Cambiare reranker NON
-# richiede rebuild del bank (agisce a query-time).
-HINDSIGHT_API_RERANKER_PROVIDER = "zeroentropy"
-HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
-HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2" # flagship; alt: zerank-2-small
-# Gate del braccio semantico (default fabbrica 0.3). Alzato a 0.4 il 2026-06-12 dopo
-# misura sul bank reale (8 query, trace 0.8.1): i risultati che vincono hanno similarity
-# >= 0.47, il pool 0.33-0.45 non vince mai e consuma budget activation/fusione RRF.
-# NON salire oltre 0.45: margine sul peggior finalista osservato (0.470) troppo sottile.
+# --- Reranker Voyage via LiteLLM SDK (remoto, in-process) --------------------
+# MIGRATO il 2026-07-26: ZeroEntropy e' stata acquisita da Notion e spegne tutto il
+# 2026-09-04. 'litellm-sdk' usa la libreria litellm IN-PROCESS, NON richiede il proxy
+# LiteLLM. Cambiare reranker NON richiede rebuild del bank (agisce a query-time).
+#
+# Scelto rerank-2.5 al posto di jina-reranker-v3 MALGRADO un MRR piu' basso (0.600 vs
+# 0.700 su 15 query, bench_results_rerank/20260726-211857): Jina ordina un filo meglio
+# ma non CALIBRA gli score, e qui servono anche per filtrare. Distribuzione misurata
+# su 13 query del bank reale (forti / deboli / fuori dominio):
+#   voyage/rerank-2.5      0.762-0.938   0.447-0.563   0.297-0.375   -> finestra 0.199
+#   jina_ai/jina-reranker-v3  0.587-0.649   0.516-0.556   0.500-0.533   -> finestra 0.030
+# Con Jina il taglio di recall_min_rerank_score andrebbe infilato in 3 centesimi, e la
+# carbonara prende 0.50 contro lo 0.59 di una domanda vera. Soglie tarate su questa
+# scala in hindsight.config.json: recall_min_rerank_score 0.60, recall_min_reranker 0.40.
+# Rollback fino al 2026-09-04: provider "zeroentropy" + le due righe sotto.
+#   HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
+#   HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2"
+HINDSIGHT_API_RERANKER_PROVIDER = "litellm-sdk"
+HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL = "voyage/rerank-2.5"
+HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY = "{{ env.VOYAGE_API_KEY | default(value='') }}"
+HINDSIGHT_API_RERANKER_LITELLM_SDK_TIMEOUT = "8"
+# Gate del braccio semantico (default fabbrica 0.3). Alzato a 0.4 il 2026-06-12 sulla scala
+# di zembed-1 (i vincenti stavano >= 0.47; il pool 0.33-0.45 non vinceva mai).
+# RI-TARATO il 2026-07-27 per gemini-embedding-001, che ha una scala diversa e piu' compressa
+# (18 query gold sul bank reale): gold migliore min 0.5439 / med 0.6623 / max 0.6940;
+# tutti i rilevanti 0.5403-0.7120; NON rilevanti 0.5087-0.7304. Le due distribuzioni si
+# sovrappongono: la cosine di gemini NON separa pertinente da rumore (lo fa il reranker).
+# Sweep 0.0 / 0.50 / 0.55 / 0.60: MRR 0.7778 e 14/18 in prima posizione in TUTTI i casi,
+# mentre i candidati semantici crollano (900 -> 900 -> 368 -> 43). Alzarla non migliora
+# nulla e non fa risparmiare: il reranker riceve comunque il suo cap di 100 candidati.
+# LASCIATA a 0.4 (= inerte, il peggior risultato che entra nel recall sta a 0.5087) perche'
+# 0.55+ escluderebbe dal braccio semantico il gold piu' debole (q09, 0.5439), che oggi
+# sopravvive solo grazie a BM25/graph: dipendenza fragile in cambio di zero guadagno.
 HINDSIGHT_API_SEMANTIC_MIN_SIMILARITY = "0.4"
 # Timeout zerank-2 sotto il recall_timeout(10s) dell'hook (2026-06-12, default 60):
 # se ZeroEntropy si appende, il rerank fallisce in fretta e il recall ripiega
@@ -143,6 +174,15 @@ HINDSIGHT_API_AUDIT_LOG_ENABLED = "true"
 # Senza retention la tabella cresce per sempre (default -1): 30 giorni bastano
 # per l'analisi dei timing; la pulizia la fa il MaintenanceLoop in background.
 HINDSIGHT_API_AUDIT_LOG_RETENTION_DAYS = "30"
+
+# --- Retain: errori di estrazione non silenziosi (2026-07-26, da 0.8.5) ------
+# Senza questa, un retain in cui l'LLM fallisce su una parte dei fatti chiude
+# comunque l'operation come "completed" (con extraction_errors_count > 0 sepolto
+# nel result_metadata): le memorie mancano ma nulla lo segnala. Con true
+# l'operation diventa "failed", quindi la intercetta hindsight-failcheck.sh, che
+# interroga /operations?status=failed. Il dettaglio sta in
+# result_metadata.extraction_errors_sample.
+HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS = "true"
 
 [tasks.install-hindsight]
 description = "Installa/aggiorna hindsight-api-slim (server Python locale, espone MCP) tramite pip del Python mise."
@@ -218,7 +258,7 @@ description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:999
 # Bind su "localhost" fa combaciare gli origin. NON tornare a --hostname 127.0.0.1:
 # il loop riappare (e con bind localhost l'URL http://127.0.0.1:9999 non risponde).
 shell = "bash -c"
-run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.4 --hostname localhost --api-url http://localhost:8888"
+run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.5 --hostname localhost --api-url http://localhost:8888"
 
 [tasks.stop-control-plane]
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"

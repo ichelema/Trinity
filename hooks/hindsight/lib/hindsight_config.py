@@ -101,7 +101,7 @@ DEFAULTS = {
     # Multi-bank: candidati massimi presi da OGNI bank nel fan-out, PRIMA della
     # fusione (rerank globale / interleave) e del taglio a recall_max_results.
     "recall_per_bank_candidates": 5,
-    # Soglia minima relevance_score del reranker globale zerank-2. Null = disattivo
+    # Soglia minima relevance_score del reranker globale (voyage/rerank-2.5). Null = disattivo
     # (nessun filtro). Un valore >=0 filtra i risultati sotto soglia, ma SOLO nel
     # percorso multi-bank (>=2 bank risolti -> multi_recall). In single-bank l'hook
     # fa la POST diretta al server e NON applica questa soglia: li' il filtro
@@ -113,7 +113,7 @@ DEFAULTS = {
     #   semantic/keyword = cutoff retrieval-level (pre-fusione, dentro le SQL arms)
     #   reranker/final   = filtri post-rerank server-side
     # NB: distinto da recall_min_rerank_score, che filtra il rerank GLOBALE
-    # client-side (zerank-2) usato solo per fondere piu' bank.
+    # client-side (voyage/rerank-2.5) usato solo per fondere piu' bank.
     "recall_min_semantic": None,
     "recall_min_keyword": None,
     "recall_min_reranker": None,
