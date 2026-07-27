@@ -1,14 +1,20 @@
 #!/usr/bin/env python
 """
-Benchmark EMBEDDING (vettoriale puro) per Hindsight: zembed-1 (ZeroEntropy) vs Gemini vs bge-m3 locale.
+Benchmark EMBEDDING (vettoriale puro) per Hindsight: candidati al sunset di ZeroEntropy
+(2026-09-04) messi a confronto con zembed-1 e Gemini.
 
 A differenza del reranker, valutare un embedding model non richiede ne' Postgres ne' il bank: si misura
 a livello di vettori. Per ogni provider: encode(documenti) + encode(query) → coseno → ranking → MRR e
 recall@k contro la ground truth (`relevant_ids`). NESSUN rebuild, NESSUNA modifica alla produzione.
 
-Fedelta' alla produzione: embedda TUTTO (doc e query) con input_type="document", come fa l'integrazione
-(l'interfaccia encode() di hindsight e' simmetrica). Misura quindi il comportamento reale, non il
-potenziale del modello con la separazione query/document.
+Fedelta' alla produzione: i documenti passano da encode_documents() e le query da encode_query(),
+esattamente come fa il recall del server (memory_engine usa input_type="query"). Solo zembed-1 e
+il provider onnx implementano davvero l'asimmetria: per tutti gli altri la classe base fa cadere
+encode_query() su encode(), quindi la query viene trattata come un documento. La riga
+"zembed-1 doc-only" e' li' apposta per quantificare quanto vale quell'asimmetria sul corpus.
+
+NB (2026-07-26): fino a hindsight-api 0.8.4 l'input_type si passava al costruttore; dalla 0.8.5
+si usano i metodi encode_query/encode_documents. Lo script e' stato aggiornato di conseguenza.
 
 Corpus riusato: bench_corpus_rerank.json (50 doc, 15 query, rank-aware con hard negatives).
 I provider senza chiave/dipendenza vengono SALTATI con un avviso (no crash).
@@ -46,11 +52,67 @@ def build_providers():
     Le chiavi/dipendenze mancanti emergono solo a init: gestite nel loop principale con SKIP."""
     from hindsight_api.engine.embeddings import (
         GeminiEmbeddings,
+        LiteLLMSDKEmbeddings,
         LocalSTEmbeddings,
+        OpenAIEmbeddings,
         ZeroEntropyEmbeddings,
     )
 
     providers = []
+
+    # --- Candidati al posto di zembed-1 (sunset ZeroEntropy 2026-09-04) ---------
+    # Passano tutti da litellm-sdk (in-process, nessun proxy). Nessuno di questi
+    # implementa encode_query asimmetrico: le query finiscono su encode().
+    voyage_key = os.environ.get("VOYAGE_API_KEY")
+    if voyage_key:
+        for vmodel, vdims in (("voyage-4-large", 1024), ("voyage-4", 1024)):
+            providers.append(
+                (
+                    f"{vmodel} ({vdims})",
+                    # encoding_format=None obbligatorio: il default "float" di
+                    # LiteLLMSDKEmbeddings fa rifiutare la richiesta da Voyage e Jina.
+                    lambda m=vmodel, d=vdims: LiteLLMSDKEmbeddings(
+                        api_key=voyage_key,
+                        model=f"voyage/{m}",
+                        output_dimensions=d,
+                        encoding_format=None,
+                    ),
+                    True,
+                )
+            )
+    else:
+        print("[skip] voyage: VOYAGE_API_KEY assente")
+
+    jina_key = os.environ.get("JINA_API_KEY") or os.environ.get("JINA_AI_API_KEY")
+    if jina_key:
+        for jmodel, jdims in (("jina-embeddings-v3", 1024), ("jina-embeddings-v4", 2048)):
+            providers.append(
+                (
+                    f"{jmodel} ({jdims})",
+                    lambda m=jmodel: LiteLLMSDKEmbeddings(
+                        api_key=jina_key, model=f"jina_ai/{m}", encoding_format=None
+                    ),
+                    True,
+                )
+            )
+    else:
+        print("[skip] jina: JINA_API_KEY assente")
+
+    openai_key = os.environ.get("HINDSIGHT_API_EMBEDDINGS_OPENAI_API_KEY") or os.environ.get(
+        "OPENAI_API_KEY"
+    )
+    if openai_key:
+        providers.append(
+            (
+                "text-embedding-3-large (1536)",
+                lambda: OpenAIEmbeddings(
+                    api_key=openai_key, model="text-embedding-3-large", dimensions=1536
+                ),
+                True,
+            )
+        )
+    else:
+        print("[skip] openai: OPENAI_API_KEY assente")
 
     gemini_key = os.environ.get(
         "HINDSIGHT_API_EMBEDDINGS_GEMINI_API_KEY"
@@ -67,6 +129,21 @@ def build_providers():
                 False,
             )
         )
+        # gemini-embedding-2: a giugno 2026 era inutilizzabile (restituiva 1 vettore
+        # per N input, rompendo il batching di hindsight). Ri-verificato il 2026-07-27
+        # con hindsight-api 0.8.5: allineamento 1:1 corretto, quindi torna in gara.
+        # NB: il nome "gemini-embedding-002" NON esiste (404), e' "gemini-embedding-2".
+        providers.append(
+            (
+                "gemini-embedding-2 (1536)",
+                lambda: GeminiEmbeddings(
+                    model="gemini-embedding-2",
+                    api_key=gemini_key,
+                    output_dimensionality=1536,
+                ),
+                True,
+            )
+        )
     else:
         print("[skip] gemini: GEMINI_API_KEY assente")
 
@@ -76,22 +153,21 @@ def build_providers():
     if ze_key:
 
         def _ze(d):
-            return ZeroEntropyEmbeddings(
-                api_key=ze_key, model="zembed-1", dimensions=d, input_type="document"
-            )
+            return ZeroEntropyEmbeddings(api_key=ze_key, model="zembed-1", dimensions=d)
 
-        # query-aware (= comportamento CON la patch sul recall): query embeddate input_type="query".
+        # query-aware = come gira oggi in produzione: encode_query() -> input_type "query".
         for ze_dims in (1280, 2560):
             providers.append(
                 (
-                    f"zembed-1 ({ze_dims}, query-aware = CON patch)",
+                    f"zembed-1 ({ze_dims}, query-aware = PROD)",
                     lambda d=ze_dims: _ze(d),
                     True,
                 )
             )
-        # doc-only (= switch naive SENZA patch): query embeddate come "document", come fa oggi Hindsight.
+        # doc-only: query passate da encode_documents(). Serve a misurare quanto vale
+        # l'asimmetria, cioe' cosa si perde migrando su un provider che non ce l'ha.
         providers.append(
-            ("zembed-1 (2560, doc-only = SENZA patch)", lambda: _ze(2560), False)
+            ("zembed-1 (1280, doc-only = no asimmetria)", lambda: _ze(1280), False)
         )
     else:
         print(
@@ -169,23 +245,18 @@ def main() -> int:
             asyncio.run(emb.initialize())
             t_init = time.perf_counter() - t0
 
-            # Documenti: input_type="document" (default per i provider che lo supportano).
+            # Documenti: encode_documents(), come il retain lato server.
             t0 = time.perf_counter()
-            dv = np.array(emb.encode(doc_texts), dtype=float)
+            dv = np.array(emb.encode_documents(doc_texts), dtype=float)
             t_docs = time.perf_counter() - t0
 
-            # Query: con query_aware=True e provider asimmetrico (ZeroEntropy) usa input_type="query"
-            # — la condizione ottimale del modello (= comportamento CON la patch sul recall).
-            # Con query_aware=False le query restano "document" (= switch naive, comportamento attuale).
-            use_query_type = query_aware and hasattr(emb, "input_type")
-            if use_query_type:
-                _saved = emb.input_type
-                emb.input_type = "query"
+            # Query: encode_query() e' quello che usa davvero il recall. Sui provider
+            # simmetrici la classe base fa cadere entrambi su encode(), quindi il flag
+            # cambia qualcosa solo per zembed-1 (e onnx).
+            encode_q = emb.encode_query if query_aware else emb.encode_documents
             t0 = time.perf_counter()
-            qv = np.array(emb.encode(query_texts), dtype=float)
+            qv = np.array(encode_q(query_texts), dtype=float)
             t_q = time.perf_counter() - t0
-            if use_query_type:
-                emb.input_type = _saved
 
             metrics = evaluate(dv, qv, doc_ids, queries)
             metrics.update(
@@ -211,7 +282,7 @@ def main() -> int:
     rows.sort(key=lambda r: r["mrr"], reverse=True)
     print("\n=== RIEPILOGO (ordinato per MRR) ===")
     header = (
-        f"{'provider':<34}{'dim':>5}{'MRR':>8}"
+        f"{'provider':<42}{'dim':>5}{'MRR':>8}"
         + "".join(f"{'R@' + str(k):>7}" for k in KS)
         + f"{'docs_s':>8}{'query_s':>9}"
     )
@@ -219,7 +290,7 @@ def main() -> int:
     print("-" * len(header))
     for r in rows:
         print(
-            f"{r['name']:<34}{r['dim']:>5}{r['mrr']:>8.3f}"
+            f"{r['name']:<42}{r['dim']:>5}{r['mrr']:>8.3f}"
             + "".join(f"{r[f'recall@{k}']:>7.2f}" for k in KS)
             + f"{r['docs_s']:>8.2f}{r['query_s']:>9.2f}"
         )

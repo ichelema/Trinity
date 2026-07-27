@@ -8,6 +8,10 @@
 # Reranker variati:
 #   - local       -> bge-reranker-v2-m3 (baseline reale di produzione)
 #   - zeroentropy -> zerank-2
+#   - voyage      -> voyage/rerank-2.5 via litellm-sdk (candidato al sunset di ZeroEntropy)
+#   - voyage-lite -> voyage/rerank-2.5-lite via litellm-sdk
+#   - jina-v3     -> jina_ai/jina-reranker-v3 via litellm-sdk (131k ctx, multilingue)
+#   - jina-v2     -> jina_ai/jina-reranker-v2-base-multilingual via litellm-sdk
 #   - rrf         -> nessun reranker, solo fusione RRF del retrieval grezzo (controllo)
 #
 # Metrica RANK-AWARE su ground truth document_id (vedi bench_corpus_rerank.json):
@@ -60,6 +64,17 @@ LLM_MODEL = "gpt-4.1-nano"
 RERANKERS = [
   { slug: "local", label: "Local bge-reranker-v2-m3", provider: "local" },
   { slug: "zeroentropy", label: "ZeroEntropy zerank-2", provider: "zeroentropy" },
+  { slug: "voyage", label: "Voyage rerank-2.5", provider: "litellm-sdk", model: "voyage/rerank-2.5" },
+  { slug: "voyage-lite", label: "Voyage rerank-2.5-lite", provider: "litellm-sdk", model: "voyage/rerank-2.5-lite" },
+  { slug: "jina-v3", label: "Jina reranker-v3", provider: "litellm-sdk", model: "jina_ai/jina-reranker-v3" },
+  { slug: "jina-v2", label: "Jina v2-multilingual", provider: "litellm-sdk",
+    model: "jina_ai/jina-reranker-v2-base-multilingual" },
+  { slug: "cohere-or", label: "Cohere rerank-v3.5 (OpenRouter)", provider: "openrouter",
+    model: "cohere/rerank-v3.5" },
+  { slug: "cohere-4-pro", label: "Cohere rerank-4-pro (OpenRouter)", provider: "openrouter",
+    model: "cohere/rerank-4-pro" },
+  { slug: "cohere-4-fast", label: "Cohere rerank-4-fast (OpenRouter)", provider: "openrouter",
+    model: "cohere/rerank-4-fast" },
   { slug: "rrf", label: "Nessun reranker (RRF)", provider: "rrf" },
 ].freeze
 
@@ -72,6 +87,19 @@ end
 
 OPENAI_KEY = ENV["OPENAI_API_KEY"] || read_user_env("OPENAI_API_KEY")
 ZE_KEY = ENV["ZEROENTROPY_API_KEY"] || read_user_env("ZEROENTROPY_API_KEY")
+VOYAGE_KEY = ENV["VOYAGE_API_KEY"] || read_user_env("VOYAGE_API_KEY")
+JINA_KEY = ENV["JINA_AI_API_KEY"] || read_user_env("JINA_AI_API_KEY") ||
+           ENV["JINA_API_KEY"] || read_user_env("JINA_API_KEY")
+# OpenRouter espone /api/v1/rerank in formato Cohere (POST, {results:[{index,
+# relevance_score}]}). Modelli verificati il 2026-07-27: cohere/rerank-v3.5,
+# cohere/rerank-4-pro, cohere/rerank-4-fast. ATTENZIONE ai nomi: la serie 4 su
+# OpenRouter si chiama "rerank-4-pro", NON "rerank-v4.0-pro" (che da 400).
+OR_KEY = ENV["OPENROUTER_API_KEY"] || read_user_env("OPENROUTER_API_KEY")
+
+# I modelli litellm-sdk arrivano da due vendor diversi: la chiave si sceglie dal prefisso.
+def sdk_key_for(model)
+  model.to_s.start_with?("jina") ? JINA_KEY : VOYAGE_KEY
+end
 
 # ---------- HTTP helpers ----------
 
@@ -116,7 +144,7 @@ end
 # Avvia il server forzando SOLO LLM + reranker. L'embedder NON viene toccato: deve
 # arrivare dall'[env] del .mise.toml (Gemini). Process.spawn fonde env sopra l'ambiente
 # ereditato, quindi le HINDSIGHT_API_EMBEDDINGS_* di mise restano attive.
-def start_hindsight(reranker_provider, log_path)
+def start_hindsight(reranker_provider, log_path, model = nil)
   env = {
     "PYTHONUTF8" => "1",
     "PATH" => "#{SCRIPTS_DIR}#{File::PATH_SEPARATOR}#{ENV["PATH"]}",
@@ -128,6 +156,16 @@ def start_hindsight(reranker_provider, log_path)
   if reranker_provider == "zeroentropy"
     env["HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY"] = ZE_KEY.to_s
     env["HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL"] = "zerank-2"
+  end
+  if reranker_provider == "openrouter"
+    env["HINDSIGHT_API_RERANKER_OPENROUTER_API_KEY"] = OR_KEY.to_s
+    env["HINDSIGHT_API_RERANKER_OPENROUTER_MODEL"] = model || "cohere/rerank-v3.5"
+    env["HINDSIGHT_API_RERANKER_OPENROUTER_TIMEOUT"] = "8"
+  end
+  if reranker_provider == "litellm-sdk"
+    env["HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY"] = sdk_key_for(model).to_s
+    env["HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL"] = model.to_s
+    env["HINDSIGHT_API_RERANKER_LITELLM_SDK_TIMEOUT"] = "8"
   end
   pid = Process.spawn(env, HINDSIGHT_EXE, "--port", PORT.to_s, "--log-level", "info",
                       out: log_path, err: log_path)
@@ -262,9 +300,11 @@ begin
   # FASE 1 — retain una sola volta (il reranker non influenza il retain).
   puts "\n== FASE 1: retain corpus nel bank #{bank} =="
   stop_hindsight
-  start_hindsight("local", "#{LOG_DIR}/setup.log")
+  # Setup con 'rrf': il retain non usa il reranker, e cosi' si evita il cold-start
+  # (~50s) del cross-encoder locale anche quando 'local' non e' tra gli sfidanti.
+  start_hindsight("rrf", "#{LOG_DIR}/setup.log")
   abort "Server non healthy in fase di setup." unless wait_healthy(HEALTH_TIMEOUT)
-  _, detail, embedder = verify_config("#{LOG_DIR}/setup.log", "local")
+  _, detail, embedder = verify_config("#{LOG_DIR}/setup.log", "rrf")
   puts "  config: #{detail}"
   if embedder == "local"
     abort "ABORT: embedder='local' (default inglese 384d), non Gemini.\n" \
@@ -283,10 +323,20 @@ begin
       results[rk[:slug]] = { label: rk[:label], error: "missing api key" }
       next
     end
+    if rk[:provider] == "openrouter" && OR_KEY.to_s.empty?
+      puts "\n== #{rk[:label]} == SALTATO (OPENROUTER_API_KEY assente)"
+      results[rk[:slug]] = { label: rk[:label], error: "missing api key" }
+      next
+    end
+    if rk[:provider] == "litellm-sdk" && sdk_key_for(rk[:model]).to_s.empty?
+      puts "\n== #{rk[:label]} == SALTATO (chiave del vendor assente)"
+      results[rk[:slug]] = { label: rk[:label], error: "missing api key" }
+      next
+    end
     puts "\n== #{rk[:label]} =="
     log = "#{LOG_DIR}/#{rk[:slug]}.log"
     stop_hindsight
-    start_hindsight(rk[:provider], log)
+    start_hindsight(rk[:provider], log, rk[:model])
     unless wait_healthy(HEALTH_TIMEOUT)
       puts "  FALLITO (health timeout)"
       results[rk[:slug]] = { label: rk[:label], error: "health timeout" }
