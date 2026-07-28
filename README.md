@@ -229,6 +229,8 @@ progetto (sono file del plugin, non del singolo progetto):
 | `ticktick` | http (remoto, `mcp.ticktick.com`) | task, liste, abitudini, focus record e countdown di TickTick |
 | `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — attivo, richiede l'app Obsidian in ascolto su :3002 |
+| `debugger` | stdio (node, exe-free) | debug **autonomo** di Claude (mcp-debugger): breakpoint, step, variabili su Python/Ruby/JavaScript, 21 tool |
+| `neovim` | stdio (node, exe-free) | pair-debugging sulla sessione **nvim-dap dell'utente** (fork `sphynx79/mcp-neovim-server`): 21 tool `dap_*` + 18 `vim_*` |
 
 Il server `hindsight` (memoria persistente, vedi §9) dal 2026-07-10 **non** sta più nel
 `.mcp.json`: è registrato a **scope user** (`claude mcp add-json hindsight --scope user`)
@@ -255,6 +257,31 @@ Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
 restano il *cervello*, il runtime sta sul sistema (vedi §1). Il solo `excalidraw` è
 marcato `disabled: true` nel file. Oltre a questi, Claude Code
 espone i propri MCP **built-in** (es. `claude-in-chrome`), non gestiti da Trinity.
+
+### I due server di debug (dal 2026-07-28)
+
+Sono **complementari**, con ruoli precisi:
+
+- **`debugger`** — [mcp-debugger](https://github.com/debugmcp/mcp-debugger) 0.23.0,
+  runtime exe-free in `${MCP_DEBUGGER_DIR}` (tarball npm estratto **escludendo**
+  `dist/vendor/codelldb` che contiene .exe; debugpy in `pylib/` senza i binari di
+  injection — si perde solo l'attach-per-PID Python). Claude debugga **in autonomia**:
+  "trovami il bug in questo script" senza che l'utente abbia nulla di aperto. Ruby usa
+  la gem `debug`/rdbg del ruby mise del progetto (primo avvio a freddo: può servire un
+  retry su `ECONNREFUSED`). Dettagli e procedura di aggiornamento nel
+  `README.md` dentro `${MCP_DEBUGGER_DIR}`.
+- **`neovim`** — fork [`sphynx79/mcp-neovim-server`](https://github.com/sphynx79/mcp-neovim-server)
+  dell'upstream [`bigcodegen/mcp-neovim-server`](https://github.com/bigcodegen/mcp-neovim-server)
+  (dev in `E:/Sviluppo`, runtime in `${MCP_NEOVIM_DIR}`): **pair-debugging** sulla
+  sessione nvim-dap che guida l'utente — Claude ispeziona variabili, muove step e
+  breakpoint attraverso l'RPC di Neovim, nvim-dap resta l'unico client DAP (zero
+  conflitti). Si collega alla named pipe per-progetto
+  `\\.\pipe\claude-debug-<basename cwd>` che la config nvim dell'utente crea con un
+  autocmd (`VimEnter`+`DirChanged`); nel `.mcp.json` la pipe usa la forma `//./pipe/...`
+  (i backslash si perdono al confine MSYS). Gotcha Windows: cwd di nvim, buffer e file
+  debuggati devono stare **sullo stesso drive**, altrimenti i breakpoint restano
+  pending; se rdbg muore con exit 1 controllare che `HOME` non punti a un drive
+  assente (override WezTerm→chiavetta).
 
 **Per esempio di utilizzo vedere il videp youtube**
 https://youtu.be/cEPzAwb1ldU?si=YX44a7rfZnbnXM7q
@@ -415,7 +442,9 @@ da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude
     "NOTEBOOKLM_DATA": "E:/AI/tools/notebooklm-data",
     "NOTEBOOKLM_LIB": "E:/AI/tools/notebooklm",
     "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw",
-    "ADHD_LIB": "E:/AI/tools/adhd"
+    "ADHD_LIB": "E:/AI/tools/adhd",
+    "MCP_DEBUGGER_DIR": "E:/AI/tools/mcp-debugger",
+    "MCP_NEOVIM_DIR": "E:/AI/tools/mcp-neovim-server"
   }
 }
 ```
@@ -443,6 +472,8 @@ una variabile separata.
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
 | CLI adhd (§12.3) | `${ADHD_LIB}` — **da definire per-macchina** (root dell'installazione di `adhd-agent`, non del repo); se manca, `scripts/bin/adhd` esce con errore esplicito |
+| server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
+| server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `E:/Sviluppo`) |
 
 > Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
 > Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
