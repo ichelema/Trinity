@@ -37,14 +37,6 @@
         }
       ]
     }],
-    "PreToolUse": [{
-      "matcher": "Bash",
-      "hooks": [{
-          "type": "command",
-          "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if [ \"$(printf '%s' \"$CMD\" | wc -l)\" -eq 0 ] && printf '%s' \"$CMD\" | grep -qE '^git( -C [^ ]+)? commit([[:space:]]|$)' && ! printf '%s' \"$CMD\" | grep -qE '[;&|<>$`(){}\\\\]|[[:cntrl:]]'; then jq -n '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"git commit consentito automaticamente\"}}'; fi"
-        }
-      ]
-    }],
     "PostToolUse": [{
       "matcher": "mcp__plugin_trinity_excalidraw__export_scene",
       "hooks": [{
