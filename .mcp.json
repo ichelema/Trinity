@@ -38,6 +38,30 @@
         "NOTEBOOKLM_HOME": "${NOTEBOOKLM_DATA}/nbhome"
       }
     },
+    "debugger": {
+      "type": "stdio",
+      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
+      "args": [
+        "${MCP_DEBUGGER_DIR}/package/dist/cli.mjs",
+        "stdio",
+        "--log-file",
+        "${TRINITY_PLUGIN_DIR}/logs/mcp-debugger.log"
+      ],
+      "env": {
+        "PYTHONPATH": "${MCP_DEBUGGER_DIR}/pylib",
+        "PYTHONUTF8": "1"
+      }
+    },
+    "neovim": {
+      "type": "stdio",
+      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
+      "args": [
+        "${MCP_NEOVIM_DIR}/build/index.js"
+      ],
+      "env": {
+        "NVIM_SOCKET_PATH": "//./pipe/claude-debug-trinity"
+      }
+    },
     "ticktick": {
       "type": "http",
       "url": "https://mcp.ticktick.com/",
