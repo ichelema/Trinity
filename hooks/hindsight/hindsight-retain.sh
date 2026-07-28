@@ -5,12 +5,15 @@
 # quindi anche internamente non aspetta l'estrazione LLM dei fatti.
 set -uo pipefail
 
-export HOOK_INPUT="$(cat)"
+# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); il redirect e' interno a bash.
+export HOOK_INPUT="$(</dev/stdin)"
 # API_URL e tutti gli altri parametri sono in hindsight.config.json (li carica il
 # worker via hindsight_config.py). HINDSIGHT_API_URL resta come override opzionale.
 
 # Path del worker relativo a questo script (robusto a spostamenti della cartella).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
+# %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"; [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR="."
 . "$SCRIPT_DIR/lib/hs-python.sh"
 # Log in HS_CACHE_DIR (esportata da hs-python.sh) e non in /tmp: contiene l'output
 # del worker, cioe' pezzi di transcript e memorie — su Linux /tmp e' leggibile da tutti.

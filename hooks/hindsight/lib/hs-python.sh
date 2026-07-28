@@ -12,7 +12,12 @@
 # verrebbe eseguito coi nostri privilegi) o leggere quelli che scriviamo.
 # Stesso path calcolato da cache_dir() in lib/hindsight_config.py per il lato Python.
 HS_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
-mkdir -p "$HS_CACHE_DIR" 2>/dev/null && chmod 700 "$HS_CACHE_DIR" 2>/dev/null
+# La dir esiste gia' da dopo il primo hook: `[ -d ]` e' un builtin (~0ms), mentre
+# mkdir e chmod sono due fork da ~400ms l'uno su Windows/MSYS (misurato 2026-07-28).
+# Paghiamoli solo alla creazione.
+[ -d "$HS_CACHE_DIR" ] || {
+  mkdir -p "$HS_CACHE_DIR" 2>/dev/null && chmod 700 "$HS_CACHE_DIR" 2>/dev/null
+}
 export HS_CACHE_DIR
 #
 # Root del plugin (lib/ -> hindsight/ -> hooks/ -> plugin): serve per `mise -C` cosi'
@@ -39,9 +44,11 @@ _hs_mise_python() {
   [ -x "$real" ] && printf '%s' "$real"
 }
 
-# Ordine di risoluzione, dipendente dall'OS:
-case "$(uname -s)" in
-Linux | Darwin)
+# Ordine di risoluzione, dipendente dall'OS. $OSTYPE e' una variabile di bash (zero
+# fork); `uname -s` costava ~475ms su MSYS/Windows (misurato 2026-07-28). Valori:
+# linux-gnu / darwin* / cygwin (bash MSYS2) / msys.
+case "$OSTYPE" in
+linux* | darwin*)
   # Il python di sistema (spesso 3.9) precede quello di mise nel PATH e NON e' quello
   # con cui il plugin e' testato (3.13): i moduli sono scritti 3.9-safe (future
   # annotations, niente sintassi 3.10+ runtime), ma un domani un match/case romperebbe

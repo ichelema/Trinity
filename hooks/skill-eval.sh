@@ -10,7 +10,9 @@
 #
 # Configuration is in skill-rules.json
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
+# %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
+SCRIPT_DIR="${BASH_SOURCE[0]%/*}"; [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR="."
 NODE_SCRIPT="$SCRIPT_DIR/skill-eval.js"
 
 # Check if Node.js is available
@@ -34,7 +36,11 @@ case "$NODE_BIN" in
 		# eseguibile — il check -x qui sotto lo promuoverebbe a interprete e lo
 		# eseguirebbe coi nostri privilegi. In una dir 0700 sotto $HOME non entra nessuno.
 		_se_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
-		mkdir -p "$_se_cache_dir" 2>/dev/null && chmod 700 "$_se_cache_dir" 2>/dev/null
+		# La dir esiste gia' dal primo hook: `[ -d ]` e' un builtin (~0ms), mkdir e
+		# chmod sono due fork da ~400ms l'uno su Windows/MSYS. Solo alla creazione.
+		[ -d "$_se_cache_dir" ] || {
+			mkdir -p "$_se_cache_dir" 2>/dev/null && chmod 700 "$_se_cache_dir" 2>/dev/null
+		}
 		_se_cache="$_se_cache_dir/hs-node-real.path"
 		_se_real=""
 		[[ -f "$_se_cache" ]] && IFS= read -r _se_real <"$_se_cache"
@@ -48,8 +54,9 @@ case "$NODE_BIN" in
 		;;
 esac
 
-# Pipe stdin to the Node.js script (suppress stderr noise from nvm/shell init)
-cat | "$NODE_BIN" "$NODE_SCRIPT" 2>/dev/null
+# Node eredita gia' lo stdin dell'hook: il `cat` era un fork inutile (~400ms su MSYS).
+# (stderr soppresso per il rumore di init di nvm/shell)
+"$NODE_BIN" "$NODE_SCRIPT" 2>/dev/null
 
 # Always exit 0 to allow the prompt through
 exit 0

@@ -12,8 +12,11 @@
 # DB locale). De-dup via state file: ogni evento e' notificato una sola volta.
 set -uo pipefail
 
-HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK_INPUT="$(cat)"
+# `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
+# %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
+HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
+# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); il redirect e' interno a bash.
+HOOK_INPUT="$(</dev/stdin)"
 export HOOK_INPUT HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
