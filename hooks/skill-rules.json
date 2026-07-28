@@ -678,6 +678,62 @@
         ]
       },
       "relatedSkills": ["mise"]
+    },
+    "pragmatic-functional-ruby": {
+      "description": "Stile Ruby funzionale pragmatico con FunctionalLightService: action Organizer+steps, contratti expects/promises, try!/fail_and_return!, immutabilità selettiva",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "functional-light-service",
+          "functional light service",
+          "light service",
+          "fail_and_return",
+          "organizer",
+          "railway oriented",
+          "ice_nine",
+          "hamster",
+          "previsionesteg"
+        ],
+        "keywordPatterns": [
+          "\\bfunctional[-_\\s]?light[-_\\s]?service\\b",
+          "\\bfail_and_return!?\\b",
+          "\\btry!\\b",
+          "\\bexpects\\b.{0,30}\\bpromises\\b",
+          "\\bice[_\\s]?nine\\b",
+          "\\brailway\\b"
+        ],
+        "pathPatterns": [
+          "**/app/actions/**/*.rb",
+          "**/app/controllers/**/*.rb",
+          "**/concerns/*_concern.rb",
+          "**/skills/pragmatic-functional-ruby/**"
+        ],
+        "intentPatterns": [
+          "(?:crea|scrivi|aggiungi|modifica|rifattorizza|analizza|rivedi).{0,40}\\baction\\b",
+          "(?:aggiungi|inserisci|crea).{0,30}(?:step|pipeline).{0,40}(?:controller|organizer|steps)",
+          "(?:come|dove).{0,40}(?:propag|gestisc|gestire).{0,30}(?:errore|failure|fallimento)",
+          "(?:refactor|rifattorizza|riscrivi).{0,40}(?:ruby|action|controller|concern|model)",
+          "(?:stile|metodo|approccio).{0,30}(?:funzionale|pragmatico).{0,30}ruby"
+        ],
+        "contentPatterns": [
+          "FunctionalLightService",
+          "extend FunctionalLightService::Action",
+          "fail_and_return!",
+          "expects :",
+          "promises :",
+          "IceNine\\.deep_freeze!",
+          "Hamster::",
+          "reduce\\(steps\\)",
+          "map_err"
+        ],
+        "contextPatterns": [
+          "functional light service",
+          "pipeline di action",
+          "stile funzionale",
+          "railway"
+        ]
+      },
+      "relatedSkills": ["ruby", "lsp-enable"]
     }
   }
 }
