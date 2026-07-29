@@ -46,7 +46,10 @@
           "\\bflow\\s?chart\\b",
           "\\bmind\\s?map\\b"
         ],
-        "pathPatterns": ["**/*.excalidraw", "**/*.excalidraw.md"],
+        "pathPatterns": [
+          "**/*.excalidraw",
+          "**/*.excalidraw.md"
+        ],
         "intentPatterns": [
           "(?:crea|disegna|fai|modifica|aggiorna|rifai).*(?:diagramma|schema|disegno|flowchart|architettura|schizzo)",
           "(?:draw|create|make|update).*(?:diagram|chart|flow|sketch|architecture)",
@@ -59,7 +62,9 @@
           "describe_scene"
         ]
       },
-      "relatedSkills": ["obsidian"]
+      "relatedSkills": [
+        "obsidian"
+      ]
     },
     "obsidian": {
       "description": "Obsidian vault PKM integration and note management",
@@ -105,7 +110,9 @@
           "obsidian vault"
         ]
       },
-      "relatedSkills": ["excalidraw-skill"]
+      "relatedSkills": [
+        "excalidraw-skill"
+      ]
     },
     "excel-data-analyst": {
       "description": "Excel data analysis with pandas, matplotlib, and openpyxl",
@@ -138,7 +145,12 @@
           "\\bdat[io]\\b",
           "\\bchart\\b"
         ],
-        "pathPatterns": ["**/*.xlsx", "**/*.xls", "**/*.csv", "data/**"],
+        "pathPatterns": [
+          "**/*.xlsx",
+          "**/*.xls",
+          "**/*.csv",
+          "data/**"
+        ],
         "intentPatterns": [
           "(?:analizza|apri|carica|leggi|elabora|esplora).*(?:dati|excel|file|tabella|dataset|foglio)",
           "(?:crea|fai|genera|costruisci).*(?:grafico|\\bchart\\b|dashboard|report|pivot|istogramma)",
@@ -339,7 +351,9 @@
           "ruby gem"
         ]
       },
-      "relatedSkills": ["excel-data-analyst"]
+      "relatedSkills": [
+        "excel-data-analyst"
+      ]
     },
     "book-to-skill": {
       "description": "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, RTF, MOBI/AZW) into structured agent skills — extracting frameworks, mental models, principles, techniques, and anti-patterns",
@@ -677,7 +691,9 @@
           "la pull request"
         ]
       },
-      "relatedSkills": ["mise"]
+      "relatedSkills": [
+        "mise"
+      ]
     },
     "pragmatic-functional-ruby": {
       "description": "Stile Ruby funzionale pragmatico con FunctionalLightService: action Organizer+steps, contratti expects/promises, try!/fail_and_return!, immutabilità selettiva",
@@ -733,7 +749,72 @@
           "railway"
         ]
       },
-      "relatedSkills": ["ruby", "lsp-enable"]
+      "relatedSkills": [
+        "ruby",
+        "lsp-enable"
+      ]
+    },
+    "skill-creator": {
+      "description": "Create new skills from scratch, modify and improve existing skills, run evals and benchmark skill performance, and optimize skill descriptions for better triggering",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "skill-creator",
+          "crea skill",
+          "creare una skill",
+          "create skill",
+          "nuova skill",
+          "new skill",
+          "scrivi una skill",
+          "migliora skill",
+          "improve skill",
+          "ottimizza skill",
+          "optimize skill",
+          "valuta skill",
+          "eval skill",
+          "skill eval",
+          "benchmark skill",
+          "SKILL.md",
+          "skill description",
+          "skill-rules.json"
+        ],
+        "keywordPatterns": [
+          "\\bskill[-\\s]creator\\b",
+          "\\bcrea(?:re)?\\s+(?:una\\s+)?(?:nuova\\s+)?skill\\b",
+          "\\bcreate\\s+(?:a\\s+)?(?:new\\s+)?skill\\b",
+          "\\b(?:migliora|ottimizza|improve|optimize)\\s+.*\\bskill\\b",
+          "\\b(?:eval|benchmark)\\w*\\s+.*\\bskill\\b",
+          "\\bSKILL\\.md\\b"
+        ],
+        "pathPatterns": [
+          ".claude/skills/skill-creator/**",
+          "**/skills/*/SKILL.md"
+        ],
+        "intentPatterns": [
+          "(?:crea|creare|scrivi|genera|costruisci).*(?:nuova\\s+)?skill(?!.*(?:da|from|libro|book|documento|pdf|epub))",
+          "(?:create|write|build|make).*skill(?!.*(?:from|book|document|pdf|epub))",
+          "(?:migliora|ottimizza|testa|valuta|misura).*skill",
+          "(?:improve|optimize|test|eval|benchmark|measure).*skill",
+          "(?:crea|modifica|edita).*SKILL\\.md"
+        ],
+        "contentPatterns": [
+          "SKILL\\.md",
+          "quick_validate\\.py",
+          "run_eval\\.py",
+          "package_skill\\.py",
+          "allowed-tools"
+        ],
+        "contextPatterns": [
+          "crea una skill",
+          "nuova skill",
+          "migliora la skill",
+          "ottimizza la skill",
+          "testa la skill",
+          "create a skill",
+          "improve the skill",
+          "skill description"
+        ]
+      }
     }
   }
 }
