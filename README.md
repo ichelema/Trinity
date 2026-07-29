@@ -181,7 +181,7 @@ Conseguenze pratiche:
 
 ## 5. Skill incluse
 
-In `skills/` (13), attivate per rilevanza dall'hook skill-eval o a richiesta:
+In `skills/` (15), attivate per rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |
 |---|---|
@@ -197,6 +197,8 @@ In `skills/` (13), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
 | `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming; variante CLI in §12.3 |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
+| `pragmatic-functional-ruby` | stile funzionale pragmatico per Ruby (FunctionalLightService): pipeline dichiarative di action, contratti `expects`/`promises`, errori come valori con `try!`/`fail_and_return!`, immutabilità selettiva |
+| `skill-creator` | crea, modifica e ottimizza skill: eval del triggering, benchmark degli output con variance analysis, ottimizzazione delle `description` |
 
 ---
 
@@ -991,7 +993,7 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── skills/                  12 skill
+├── skills/                  15 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval.*         suggerimento skill
