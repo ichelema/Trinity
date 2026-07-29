@@ -12,11 +12,19 @@ set -uo pipefail
 case "$(uname -s)" in
 MINGW* | MSYS* | CYGWIN*)
 	TASKKILL="/c/Windows/System32/taskkill.exe"
-	# Postgres embedded sotto la home Windows (.pg0) del profilo corrente; il drive del
-	# profilo (C:/D:/...) è dinamico via $HOMEDRIVE$HOMEPATH (USERPROFILE è redirezionato
-	# alla chiavetta, quindi inutile qui); la versione è risolta via glob.
-	WINHOME_U="$(cygpath -u "$HOMEDRIVE$HOMEPATH")"
-	WINHOME_M="$(cygpath -m "$HOMEDRIVE$HOMEPATH")"
+	# Postgres embedded sotto il profilo LOCALE (.pg0). pg0.exe usa LOCALAPPDATA come
+	# base (C:\Users\<user>\AppData\Local → risaliamo di 2 livelli per la home).
+	# HOMEDRIVE/HOMEPATH punta al drive di rete (V:\) su PC aziendali ENINET e NON
+	# contiene .pg0 → pg_ctl non veniva trovato e Postgres era ucciso dal taskkill
+	# senza arresto pulito, causando WAL recovery lento (o crash pg0) al riavvio.
+	if [ -n "${LOCALAPPDATA:-}" ]; then
+		_local="$(cygpath -u "$LOCALAPPDATA")"
+		WINHOME_U="$(cd "$_local/../.." && pwd)"
+		WINHOME_M="$(cygpath -m "$WINHOME_U")"
+	else
+		WINHOME_U="$(cygpath -u "$HOMEDRIVE$HOMEPATH")"
+		WINHOME_M="$(cygpath -m "$HOMEDRIVE$HOMEPATH")"
+	fi
 	PG_CTL="$(ls "$WINHOME_U"/.pg0/installation/*/bin/pg_ctl.exe 2>/dev/null | sort -V | tail -1)"
 	PGDATA="$WINHOME_M/.pg0/instances/hindsight-mcp/data"
 

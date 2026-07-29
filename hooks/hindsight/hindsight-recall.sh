@@ -12,8 +12,12 @@ set -uo pipefail
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
-# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); il redirect e' interno a bash.
-HOOK_INPUT="$(</dev/stdin)"
+# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
+# NON usare $(</dev/stdin): claude.exe e' un processo Windows nativo e la pipe che
+# crea non e' esposta come /dev/stdin al bash MSYS2 -> HOOK_INPUT vuoto, json.loads
+# fallisce e l'except esce muto (guasto silenzioso 2026-07-28/29, nessun recall per
+# ~23h). `read -d ''` legge lo stdin ereditato (fd 0) fino a EOF ed esce 1: `|| true`.
+IFS= read -r -d '' HOOK_INPUT || true
 export HOOK_INPUT HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
@@ -38,7 +42,13 @@ if not cfg.get("recall_enabled", True):
 
 try:
     hook = json.loads(os.environ["HOOK_INPUT"])
-except Exception:
+except Exception as e:
+    # Uscire muti qui rende invisibile un hook che parte ma non riceve lo stdin:
+    # e' cosi' che il recall e' rimasto morto ~23h il 2026-07-28 ($(</dev/stdin)
+    # vuoto con claude.exe). input_len=0 nel log identifica subito quel caso.
+    debug_log(cfg, "recall_error", reason="bad_hook_input",
+              error=f"{type(e).__name__}: {e}",
+              input_len=len(os.environ.get("HOOK_INPUT", "")))
     sys.exit(0)
 
 prompt = (hook.get("prompt") or "").strip()
