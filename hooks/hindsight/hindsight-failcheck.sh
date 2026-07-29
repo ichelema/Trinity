@@ -37,16 +37,24 @@ except Exception:
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
 from hindsight_config import cache_dir, load_config, retain_bank_url, recall_bank_urls
+from hindsight_debug import debug_log
 
 cfg = load_config()
 
 # Interruttore master dedicato: non dipende da recall/retain_enabled.
 if not cfg.get("failcheck_enabled", True):
+    debug_log(cfg, "failcheck_skip", reason="disabled")
     sys.exit(0)
 
 try:
     hook = json.loads(os.environ["HOOK_INPUT"])
-except Exception:
+except Exception as e:
+    # Uscire muti qui rende invisibile un hook che parte ma non riceve lo stdin,
+    # e questo hook e' silenzioso per natura (nessun output quando non ha nulla da
+    # segnalare): senza log, morto e "niente da dire" sono indistinguibili.
+    debug_log(cfg, "failcheck_error", reason="bad_hook_input",
+              error=f"{type(e).__name__}: {e}",
+              input_len=len(os.environ.get("HOOK_INPUT", "")))
     sys.exit(0)
 cwd = hook.get("cwd") or None
 
