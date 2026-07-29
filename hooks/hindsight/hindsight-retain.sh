@@ -5,8 +5,11 @@
 # quindi anche internamente non aspetta l'estrazione LLM dei fatti.
 set -uo pipefail
 
-# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); il redirect e' interno a bash.
-export HOOK_INPUT="$(</dev/stdin)"
+# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
+# NON usare $(</dev/stdin): con stdin da claude.exe (processo Windows nativo) il bash
+# MSYS2 non lo risolve -> variabile vuota. Vedi hindsight-recall.sh per il dettaglio.
+IFS= read -r -d '' HOOK_INPUT || true
+export HOOK_INPUT
 # API_URL e tutti gli altri parametri sono in hindsight.config.json (li carica il
 # worker via hindsight_config.py). HINDSIGHT_API_URL resta come override opzionale.
 

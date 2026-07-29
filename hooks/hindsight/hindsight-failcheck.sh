@@ -15,8 +15,10 @@ set -uo pipefail
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
-# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); il redirect e' interno a bash.
-HOOK_INPUT="$(</dev/stdin)"
+# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
+# NON usare $(</dev/stdin): con stdin da claude.exe (processo Windows nativo) il bash
+# MSYS2 non lo risolve -> variabile vuota. Vedi hindsight-recall.sh per il dettaglio.
+IFS= read -r -d '' HOOK_INPUT || true
 export HOOK_INPUT HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
