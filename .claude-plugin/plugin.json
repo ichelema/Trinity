@@ -1,7 +1,7 @@
 {
   "name": "trinity",
   "description": "Core dell'agente Trinity: memoria persistente Hindsight (recall/retain/reflect), skill, comandi, hook di notifica e comportamento condiviso tra progetti.",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "author": {
     "name": "Sphynx"
   }
