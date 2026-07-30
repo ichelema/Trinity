@@ -57,10 +57,16 @@ linux* | darwin*)
   [ -z "$HS_PY" ] && HS_PY="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
   ;;
 *)
-  # Windows/MSYS: dentro Trinity il .mise.toml mette gia' il python giusto nel PATH e
-  # fuori non c'e' un python di sistema che inquini -> PATH-first (veloce, nessun
-  # python eseguito), poi mise per i progetti fuori-Trinity, infine MSYS UCRT64.
+  # Windows/MSYS: PATH-first (dentro Trinity il .mise.toml mette gia' il python
+  # giusto nel PATH; veloce, nessun python eseguito), poi mise per i progetti
+  # fuori-Trinity, infine MSYS UCRT64.
   HS_PY="$(command -v python 2>/dev/null || command -v python3 2>/dev/null || true)"
+  # Scarta il python MSYS (/usr/bin/python, flavor cygwin): tratta i path
+  # drive-letter (E:/...) come RELATIVI -> ModuleNotFoundError sui moduli in
+  # HOOKS_DIR/lib e hook morti con exit 1 muto (visto 2026-07-30, quando
+  # `pacman -S git-filter-repo` lo ha portato come dipendenza). Il pattern non
+  # tocca /ucrt64/bin/python (nativo, va bene).
+  case "$HS_PY" in */usr/bin/python*) HS_PY="" ;; esac
   [ -z "$HS_PY" ] && HS_PY="$(_hs_mise_python)"
   [ -z "$HS_PY" ] && [ -x /ucrt64/bin/python ] && HS_PY="/ucrt64/bin/python"
   ;;
