@@ -1,17 +1,17 @@
 # Trinity — comportamento core
 
-Queste regole valgono in OGNI progetto in cui il plugin trinity è attivo. Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza in caso di conflitto.
+Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 
 ## Principi generali
 
-Queste linee guida riducono gli errori di coding comuni degli LLM. Privilegiano la cautela rispetto alla velocità; per task banali usa il buon senso.
+Privilegia la cautela rispetto alla velocità; per task banali usa il buon senso.
 
 - Rispondi sempre in italiano.
 - Prima di implementare, esplicita le assunzioni rilevanti.
 - Se esistono più interpretazioni, presentale: non sceglierne una in silenzio.
 - Se esiste un approccio più semplice, segnalalo e preferiscilo.
 - Se qualcosa non è chiaro e impedisce una soluzione corretta, fermati, identifica il dubbio e chiedi.
-- Non dare nulla per scontato, non nascondere la confusione, porta in evidenza i tradeoff.
+- Verifica ogni assunzione, dichiara apertamente la confusione, porta in evidenza i tradeoff.
 
 ## Prima la semplicità
 
@@ -28,23 +28,22 @@ Scrivi il minimo codice che risolve il problema. Niente di speculativo.
 
 Tocca solo ciò che devi. Ripulisci solo il tuo disordine.
 
-- Non migliorare codice, commenti o formattazione adiacenti.
-- Non fare refactoring di cose che non sono rotte.
+- Lascia intatti codice, commenti e formattazione adiacenti.
+- Rifattorizza solo ciò che è rotto.
 - Rispetta lo stile esistente, anche se lo faresti diversamente.
-- Se noti dead code non correlato, segnalalo: non cancellarlo.
+- Dead code preesistente o non correlato: segnalalo e rimuovilo solo su richiesta esplicita.
 - Rimuovi import, variabili o funzioni che le tue modifiche hanno reso inutilizzati.
-- Non rimuovere dead code preesistente a meno che non venga chiesto.
 - Ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
 
 ## Esecuzione guidata dagli obiettivi
 
 Definisci criteri di successo verificabili e itera fino alla verifica.
 
-| Richiesta | Criterio operativo |
-|---|---|
+| Richiesta               | Criterio operativo                                  |
+| ----------------------- | --------------------------------------------------- |
 | Aggiungi la validazione | Scrivi test per input non validi, poi falli passare |
-| Correggi il bug | Scrivi un test che lo riproduce, poi fallo passare |
-| Fai il refactoring di X | Assicurati che i test passino prima e dopo |
+| Correggi il bug         | Scrivi un test che lo riproduce, poi fallo passare  |
+| Fai il refactoring di X | Assicurati che i test passino prima e dopo          |
 
 Per task multi-step, enuncia un breve piano:
 
@@ -59,31 +58,40 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 ## Ambiente di lavoro
 
 <!-- OS:windows -->
+
 - OS: Windows 11 Enterprise.
 - Shell: bash MSYS2 UCRT64 (`/usr/bin/bash`), `MSYSTEM=UCRT64`.
 - Vault principale Obsidian: `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`). Versione MSYS del path: ricavala con `cygpath -u "${OBSIDIAN_VAULT}"`.
+
 <!-- /OS:windows -->
+
 <!-- OS:linux -->
+
 - OS: Linux.
 - Shell: bash.
 - Vault principale Obsidian (se presente su questa macchina): `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`).
+
 <!-- /OS:linux -->
 
 ## Regole operative
 
 - Usa sintassi Unix compatibile bash/zsh: forward slash, `/dev/null`, pipe Unix.
 - Non usare PowerShell o CMD.
+
 <!-- OS:windows -->
+
 - Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo con `pacman -S --noconfirm <pacchetto>`.
+
 <!-- /OS:windows -->
+
 <!-- OS:linux -->
+
 - Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo col package manager della distro (es. `sudo apt-get install -y <pacchetto>`).
+
 <!-- /OS:linux -->
+
 - Mostra sempre l'output completo `stdout`/`stderr` dopo ogni comando.
-- Se un comando fallisce, mostra l'errore completo prima di tentare un fix.
-- Non silenziare mai gli errori.
-- Mostra sempre feedback all'utente in caso di errore.
-- Logga gli errori per debug.
+- Se un comando fallisce, mostra l'errore completo all'utente prima di tentare un fix, e loggalo per il debug.
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 - Non cancellare file senza conferma esplicita.
@@ -110,13 +118,18 @@ Per il workflow completo (analisi d'impatto prima di un refactor, diagnostica do
 ## Regole path
 
 <!-- OS:windows -->
+
 - I path MSYS2 (`/c/...`, `/e/...`) funzionano solo in bash.
 - Ruby e Python girano nativamente su Windows e non riconoscono path MSYS.
 - Negli script Python usa sempre path Windows: `C:/Appl/...`, `E:/doublecmd/...` oppure backslash.
 - Negli script Python non usare mai path MSYS come `/c/...` o `/e/...`.
+
 <!-- /OS:windows -->
+
 <!-- OS:linux -->
+
 - Usa sempre path POSIX assoluti: niente lettere di unità, niente `cygpath`, nessuna conversione necessaria.
+
 <!-- /OS:linux -->
 
 ## Nushell per data processing
@@ -128,23 +141,26 @@ $HOME/.local/bin/nu -c "..."
 ```
 
 <!-- OS:windows -->
+
 Nushell è un binario Windows nativo, non MSYS2: usa path Windows, non `/c/...` o `/e/...`.
 
 - Corretto: `nu -c "open 'C:/Desktop/Claude/Main/data.json'"`
 - Errato: `nu -c "open '/c/Desktop/Claude/Main/data.json'"`
+
 <!-- /OS:windows -->
+
 <!-- OS:linux -->
+
 Se `nu` non è in `~/.local/bin`, usa quello nel PATH; i path sono POSIX normali.
+
 <!-- /OS:linux -->
 
 ### Casi d'uso Nushell
 
-| Caso | Preferisci |
-|---|---|
-| Elencare file con filtri | `nu -c "ls | where size > 1mb | sort-by size"` invece di `ls -la | awk ...` |
-| Leggere e filtrare JSON/CSV/YAML | `nu -c "open data.json | where status == 'active' | select name email"` invece di `cat data.json | jq ...` |
-| Aggregazioni/report | `nu -c "ls | group-by type | transpose type files | insert count { |r| $r.files | length }"` |
-| Conversione formati | `nu -c "open data.csv | to json"` |
+- Elencare file con filtri: `nu -c "ls | where size > 1mb | sort-by size"` invece di `ls -la | awk ...`
+- Leggere e filtrare JSON/CSV/YAML: `nu -c "open data.json | where status == 'active' | select name email"` invece di `cat data.json | jq ...`
+- Aggregazioni/report: `nu -c "ls | group-by type | transpose type files | insert count { |r| $r.files | length }"`
+- Conversione formati: `nu -c "open data.csv | to json"`
 
 ### Quando non usare Nushell
 
@@ -154,13 +170,12 @@ Resta su bash per orchestrazione processi, pipe testuali semplici, scripting di 
 
 Salvo indicazioni diverse del progetto, usa queste posizioni relative alla root del progetto corrente:
 
-| Uso | Path |
-|---|---|
-| File di dati | `<root>/data` |
-| Log | `<root>/logs` |
-| Test | `<root>/test` |
-| Script | `<root>/script` |
-| File di test temporanei (`test_*.py`, `test_*.rb`, script di prova non di progetto) | `<root>/test` |
+| Uso                                                                                        | Path            |
+| ------------------------------------------------------------------------------------------ | --------------- |
+| File di dati                                                                               | `<root>/data`   |
+| Log                                                                                        | `<root>/logs`   |
+| Test e file di test temporanei (`test_*.py`, `test_*.rb`, script di prova non di progetto) | `<root>/test`   |
+| Script                                                                                     | `<root>/script` |
 
 ## Indicatore di qualità
 
