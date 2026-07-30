@@ -17,6 +17,26 @@ Activate when:
 - Processing JSON, CSV, YAML, or other structured data
 - Creating custom commands or modules
 
+## Environment (this setup)
+
+- Binary: `$HOME/.local/bin/nu` — not in the MSYS2 shell PATH, always use the full path.
+- On Windows it is a **native Windows binary**, not MSYS2: pass Windows paths (`C:/...`), never MSYS paths (`/c/...`, `/e/...`).
+  - Correct: `nu -c "open 'C:/Desktop/Claude/Main/data.json'"`
+  - Wrong: `nu -c "open '/c/Desktop/Claude/Main/data.json'"`
+- On Linux, if `nu` is not in `~/.local/bin`, use the one in PATH; paths are plain POSIX.
+- Do not pipe MSYS2 process output into `nu` (stdin issues) — read files with `open` and Windows paths instead.
+
+### Quick one-liner use cases
+
+- List files with filters: `nu -c "ls | where size > 1mb | sort-by size"` instead of `ls -la | awk ...`
+- Read and filter JSON/CSV/YAML: `nu -c "open data.json | where status == 'active' | select name email"` instead of `cat data.json | jq ...`
+- Aggregations/reports: `nu -c "ls | group-by type | transpose type files | insert count { |r| $r.files | length }"`
+- Format conversion: `nu -c "open data.csv | to json"`
+
+### When NOT to use Nushell
+
+Stay on bash for process orchestration, simple text pipes, system scripting, and commands without structured data (`git`, `pacman`, `curl` without parsing).
+
 ## What is Nushell?
 
 Current stable: 0.111.0 (pre-1.0, breaking changes possible between minor versions)

@@ -6,7 +6,6 @@ Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 
 Privilegia la cautela rispetto alla velocità; per task banali usa il buon senso.
 
-- Rispondi sempre in italiano.
 - Prima di implementare, esplicita le assunzioni rilevanti.
 - Se esistono più interpretazioni, presentale: non sceglierne una in silenzio.
 - Se esiste un approccio più semplice, segnalalo e preferiscilo.
@@ -37,23 +36,12 @@ Tocca solo ciò che devi. Ripulisci solo il tuo disordine.
 
 ## Esecuzione guidata dagli obiettivi
 
-Definisci criteri di successo verificabili e itera fino alla verifica.
-
-| Richiesta               | Criterio operativo                                  |
-| ----------------------- | --------------------------------------------------- |
-| Aggiungi la validazione | Scrivi test per input non validi, poi falli passare |
-| Correggi il bug         | Scrivi un test che lo riproduce, poi fallo passare  |
-| Fai il refactoring di X | Assicurati che i test passino prima e dopo          |
-
-Per task multi-step, enuncia un breve piano:
-
-```text
-1. [Step] → verifica: [check]
-2. [Step] → verifica: [check]
-3. [Step] → verifica: [check]
-```
-
-Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli richiedono chiarimenti prima dell'implementazione.
+Definisci criteri di successo verificabili e itera fino alla verifica: per una
+validazione o un bug, scrivi prima il test che fallisce; per un refactoring,
+assicurati che i test passino prima e dopo. Per task multi-step enuncia un piano
+numerato in cui ogni step porta la sua verifica. Criteri di successo solidi
+permettono di iterare in autonomia; criteri deboli vanno chiariti prima di
+implementare, non dopo gli errori.
 
 ## Ambiente di lavoro
 
@@ -75,8 +63,7 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 
 ## Regole operative
 
-- Usa sintassi Unix compatibile bash/zsh: forward slash, `/dev/null`, pipe Unix.
-- Non usare PowerShell o CMD.
+- Usa sintassi Unix compatibile bash/zsh (forward slash, `/dev/null`, pipe Unix): mai PowerShell o CMD.
 
 <!-- OS:windows -->
 
@@ -90,8 +77,7 @@ Criteri di successo solidi permettono di iterare in autonomia. Criteri deboli ri
 
 <!-- /OS:linux -->
 
-- Mostra sempre l'output completo `stdout`/`stderr` dopo ogni comando.
-- Se un comando fallisce, mostra l'errore completo all'utente prima di tentare un fix, e loggalo per il debug.
+- Mostra sempre l'output completo `stdout`/`stderr`. Se un comando fallisce, mostra l'errore completo all'utente prima di tentare un fix, e loggalo per il debug.
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 - Non cancellare file senza conferma esplicita.
@@ -134,18 +120,12 @@ Per il workflow completo (analisi d'impatto prima di un refactor, diagnostica do
 
 ## Nushell per data processing
 
-Usa Nushell quando l'output beneficia di formattazione tabulare, aggregazione o filtraggio:
-
-```bash
-$HOME/.local/bin/nu -c "..."
-```
+Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
+Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
 <!-- OS:windows -->
 
-Nushell è un binario Windows nativo, non MSYS2: usa path Windows, non `/c/...` o `/e/...`.
-
-- Corretto: `nu -c "open 'C:/Desktop/Claude/Main/data.json'"`
-- Errato: `nu -c "open '/c/Desktop/Claude/Main/data.json'"`
+È un binario Windows nativo: passagli path Windows (`C:/...`), mai MSYS (`/c/...`).
 
 <!-- /OS:windows -->
 
@@ -155,28 +135,9 @@ Se `nu` non è in `~/.local/bin`, usa quello nel PATH; i path sono POSIX normali
 
 <!-- /OS:linux -->
 
-### Casi d'uso Nushell
-
-- Elencare file con filtri: `nu -c "ls | where size > 1mb | sort-by size"` invece di `ls -la | awk ...`
-- Leggere e filtrare JSON/CSV/YAML: `nu -c "open data.json | where status == 'active' | select name email"` invece di `cat data.json | jq ...`
-- Aggregazioni/report: `nu -c "ls | group-by type | transpose type files | insert count { |r| $r.files | length }"`
-- Conversione formati: `nu -c "open data.csv | to json"`
-
-### Quando non usare Nushell
-
-Resta su bash per orchestrazione processi, pipe testuali semplici, scripting di sistema e comandi senza dati strutturati (`git`, `pacman`, `curl` senza parsing).
-
 ## Struttura directory dei progetti
 
-Salvo indicazioni diverse del progetto, usa queste posizioni relative alla root del progetto corrente:
-
-| Uso                                                                                        | Path            |
-| ------------------------------------------------------------------------------------------ | --------------- |
-| File di dati                                                                               | `<root>/data`   |
-| Log                                                                                        | `<root>/logs`   |
-| Test e file di test temporanei (`test_*.py`, `test_*.rb`, script di prova non di progetto) | `<root>/test`   |
-| Script                                                                                     | `<root>/script` |
-
-## Indicatore di qualità
-
-Queste linee guida funzionano se producono meno modifiche non necessarie nei diff, meno riscritture dovute a complicazioni eccessive e domande di chiarimento prima dell'implementazione anziché dopo gli errori.
+Salvo indicazioni diverse del progetto, relative alla root del progetto corrente:
+`<root>/data` per i dati, `<root>/logs` per i log, `<root>/script` per gli script,
+`<root>/test` per i test e per i file di prova temporanei (`test_*.py`, `test_*.rb`,
+script di prova non di progetto).
