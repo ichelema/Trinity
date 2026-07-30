@@ -714,7 +714,7 @@ videos:
 
 Contributor reference. End-users never read this section.
 
-- **Full conventions:** see `CLAUDE.md` at the repo root — it is the source of truth for the orchestration contract between this skill and `scripts/yt-extract.py`.
+- **Full conventions:** see `CLAUDE.md` in this skill's folder (next to this file) — it is the source of truth for the orchestration contract between this skill and `scripts/yt-extract.py`.
 - **Adding a user-facing flag:** extend the parser in Step 0.4, wire its translation into the `--output-base`/script-flag block in Step 1 (both the summary-mode and `--full-transcript` subagent prompts), and document it in `README.md` and `argument-hint`.
 - **Adding a new install target:** update the Step 0.2 matrix AND the matching matrix in `CLAUDE.md`. Every new command must be non-interactive (no license prompts, no sudo password prompts, no stdin reads) — the Bash tool has no stdin channel.
 - **Adding a sentinel or orchestration trailer:** the current registry is `FFMPEG_MISSING`, `SCREENSHOTS_ASK_USER`, `FOLDER_EXISTS:` (stderr, exit 2), and `OUTPUT_FOLDER:` (trailing stdout). Adding a new one requires coordinated changes in the script, both subagent prompts (Step 1), the skill's post-processing (Step 2/3), and the `CLAUDE.md` registry. (v1.8.0 scene detection deliberately added none — overflow/zero-detection conditions travel as WARNING lines inside `### Screenshot Status`.)

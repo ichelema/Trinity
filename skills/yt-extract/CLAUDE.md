@@ -11,12 +11,6 @@ subagent per URL for transcript summarization.
 
 ## Components
 
-| Type   | Path                          | Purpose                                                        |
-|--------|-------------------------------|----------------------------------------------------------------|
-| Skill  | `skills/yt-extract/SKILL.md`  | User-invocable workflow (`/yt-extract`)                        |
-| Script | `scripts/yt-extract.py`       | Python backend — yt-dlp + ffmpeg + VTT                         |
-| Agent  | `agents/extract-worker.md`    | Restricted leaf worker the skill dispatches per URL (see below) |
-
 Current version: **1.8.2** — see [CHANGELOG.md](CHANGELOG.md).
 
 > **Nota (incorporato in Trinity):** questo file è il contratto skill↔script portato dal repo
@@ -55,49 +49,6 @@ User-facing flags (`--comments`, `--screenshots [scenes[=t]|chapters|timestamps]
 
 - **No hooks, no MCP servers, no other skills.** Keep the plugin to one skill + one script + the one internal `extract-worker` agent (added in 1.8.1 as the recursion guard — see Architectural conventions). If functionality must grow beyond that, propose splitting into a separate plugin.
 - **Do not rename output folder schemes** (`yt-extract_DATE_slug/` for single-URL, `yt-extract_DATE_N-videos/` parent with nested per-video folders for multi-URL) without a migration note in CHANGELOG — downstream users may grep their filesystem for these. The multi-URL layout changed in v1.2.0 (per-video folders instead of flat `screenshots/slug/`); any further change is a breaking change.
-
-## Testing
-
-A small automated test layer covers the deterministic helper functions in
-`scripts/yt-extract.py` — `slugify`, the timestamp formatters and parser,
-the `render_*` helpers that build the fixed section headers, and the
-scene-detection helpers (`parse_screenshots_mode`, `parse_scene_timestamps`,
-`apply_min_gap`, `thin_evenly`). Since 1.8.1, `tests/test_skill_contract.py`
-also covers the **skill ↔ worker-agent orchestration contract** by static file
-parsing: it asserts Step 1 dispatches `trinity:extract-worker` (never
-`general-purpose`) and that `agents/extract-worker.md` declares a `tools`
-allowlist excluding `Skill`/`Agent`/`Task` — the invariant whose absence caused
-the recursion loop. The tests are **pure Python**: they do not spawn `yt-dlp`,
-`ffmpeg`, or any subprocess, and do not hit the network — so nothing beyond
-`pytest` is required to run them.
-
-**Requirements:** Python 3.8+. Dev dependency: `pytest` only.
-
-```bash
-pip install -r requirements-dev.txt
-python -m pytest tests/
-```
-
-On Windows, `pip install` may place the `pytest` binary outside `PATH` (e.g. `%APPDATA%\Python\Python3XX\Scripts\`). Using `python -m pytest` avoids that — it works everywhere without requiring a PATH update.
-
-Expected output: all tests pass in well under a second.
-
-**Not covered by this unit suite:** subprocess invocations (`yt-dlp`,
-`ffmpeg`), file I/O, network calls, VTT parsing, and the full `main()`
-assembly with the trailing `OUTPUT_FOLDER:` marker. The orchestration layer is
-covered only *statically* (the contract test parses files; it does not run a
-real subagent dispatch) — whether a dispatched worker actually obeys "run the
-Bash command, don't delegate" is LLM behavior that only an end-to-end run can
-confirm. The 1.8.1 recursion lived precisely in this gap: a frontmatter/agent
-wiring defect that no pure-Python test exercised. Broadening the automated
-surface (subprocess fakes, a VTT fixture, golden-file tests for `main()`) is a
-reasonable follow-up.
-
-Manual verification still matters for the full integration path: install
-the plugin locally and run `/yt-extract <real-youtube-url>` with and
-without `--screenshots`, `--comments`, `--full-transcript`. Confirm the
-auto-save folder layout and Markdown headers match the documented output
-structure.
 
 ## Cross-platform invocation
 
