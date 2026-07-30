@@ -15,6 +15,12 @@ set -uo pipefail
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
+# claude.exe invoca l'hook con path stile Windows (E:/...): bash lo digerisce,
+# ma un python non-nativo lo tratterebbe come RELATIVO (vedi hindsight-retain.sh).
+# Normalizza drive-letter -> POSIX con sola espansione bash, zero fork.
+case "$HOOKS_DIR" in
+[A-Za-z]:/*) _hs_drive="${HOOKS_DIR%%:*}"; HOOKS_DIR="/${_hs_drive,,}${HOOKS_DIR#?:}" ;;
+esac
 # $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
 # NON usare $(</dev/stdin): con stdin da claude.exe (processo Windows nativo) il bash
 # MSYS2 non lo risolve -> variabile vuota. Vedi hindsight-recall.sh per il dettaglio.
@@ -23,7 +29,8 @@ export HOOK_INPUT HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
 
-"$HS_PY" <<'PY' 2>/dev/null
+# stderr su file (sovrascritto a ogni run) e NON /dev/null: vedi hindsight-recall.sh.
+"$HS_PY" <<'PY' 2>"$HS_CACHE_DIR/hs-failcheck-stderr.log"
 import json, os, sys, urllib.request
 from datetime import datetime, timezone, timedelta
 
