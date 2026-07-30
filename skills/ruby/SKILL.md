@@ -50,6 +50,23 @@ uso (ad esempio `Data.define` richiede Ruby 3.2+).
 
 ---
 
+## Reference API (leggi al bisogno)
+
+In `references/` c'è l'API completa di Switchyard, estratta dalla
+documentazione YARD e verificata sull'implementazione reale (ogni file annota
+anche le discrepanze fra docstring e codice). Questo SKILL.md basta per il
+lavoro quotidiano; apri il reference quando esci dal sentiero:
+
+| File                                       | Contenuto                                                                                                          | Leggilo quando                                                                                                                                 |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `references/result-option.md`              | API completa di `Result` e `Option` (+ `Maybe`/`Null` deprecati), `try!`, costruttori del Prelude, gotcha            | scrivi o debuggi una pipeline `Result`, converti `nil` in `Option`, o ti serve un metodo oltre `map`/`map_err`/`pipe`                            |
+| `references/enum-monad-match.md`           | `Switchyard.enum`/EnumBuilder, DSL `match` con guardie `where`, `deconstruct`/`case/in`, modulo `Monad`              | definisci un enum custom, usi `match` con guardie, o devi scegliere fra `match` e `case/in`                                                      |
+| `references/action-context.md`             | DSL `Action` (default di `expects`, `rolled_back`), API completa `Context`, chiavi riservate, eccezioni della gem    | una action va oltre il template (default, rollback, `skip_remaining!`, alias) o incontri `ExpectedKeys…`/`PromisedKeys…`/`ReservedKeys…`/`KeyError` |
+| `references/organizer.md`                  | `with`/`reduce`, macro `reduce_if/_if_else/_case/_until/_while`, `execute`, `iterate`, `with_callback`, before/after_actions, `around_each`, log decorator | l'organizer va oltre la lista piatta di step: condizioni, loop, callback, logging, organizer annidati, rollback                                  |
+| `references/sequencer-testing-config.md`   | `in_sequence` (do-notation), `Testing::ContextFactory`, `Configuration`, localizzazione dei messaggi                 | uno step ha bisogno di più valori intermedi per nome, testi una action isolata con context pre-popolato, o configuri logger/i18n                 |
+
+---
+
 ## API reali di `Result` (leggi prima di scrivere una pipeline)
 
 Questo è il punto in cui è più facile sbagliare: Switchyard **non** segue la
@@ -57,7 +74,7 @@ convenzione `dry-monads`.
 
 | Metodo su `Result`      | Semantica reale                                                         | Alias                    |
 | ----------------------- | ----------------------------------------------------------------------- | ------------------------ |
-| `map`                   | **monadico** — il blocco DEVE restituire un `Result`                    | `>>`, `and_then`, `bind` |
+| `map`                   | **monadico** — il blocco DEVE restituire un `Result`                    | `>>`, `and_then`         |
 | `map_err`               | monadico sul ramo di errore — il blocco DEVE restituire un `Result`     | `or_else`                |
 | `pipe`                  | esegue il blocco per effetto collaterale e restituisce `self` invariato | `<<`                     |
 | `fmap`                  | funtoriale (da `Monad`), riavvolge il valore                            | —                        |
@@ -67,8 +84,10 @@ convenzione `dry-monads`.
 
 Regole che ne discendono:
 
-1. **Su `Result` usa `map` / `>>`, non `bind`.** Sono lo stesso metodo; `map`
-   e `>>` sono la forma idiomatica.
+1. **Su `Result` usa `map` / `>>`, mai `bind`.** `bind` NON è un alias di
+   `map`: è il bind grezzo di `Monad` ed esegue il blocco anche su un
+   `Failure` (`Failure(1).bind { |v| Success(v - 1) } # => Success(0)`),
+   quindi la pipeline non short-circuita.
 2. **Non usare `fmap` su `Result`.** Se il blocco restituisce un `Failure`,
    `fmap` lo incapsula in `Success(Failure(...))` e la pipeline non
    short-circuita. `fmap` è sicuro solo su `Option`.
@@ -97,10 +116,16 @@ Non aggiungere controlli manuali intermedi: il `Result` short-circuita da solo.
 
 ## Pattern matching
 
-Le enum di Switchyard **non definiscono `deconstruct` / `deconstruct_keys`**: il
-pattern matching nativo di Ruby (`case ... in Success(value)`) **non funziona**.
+Le enum di Switchyard definiscono `deconstruct` / `deconstruct_keys`, quindi
+funzionano sia il DSL `match` sia il `case/in` nativo di Ruby. Criterio:
 
-Usa il DSL `match`, che è esaustivo (solleva `NoMatchError` se manca un ramo):
+- **default**: DSL `match` — è esaustivo (solleva `Switchyard::Enum::MatchError`
+  se manca un ramo), quindi i casi dimenticati emergono subito;
+- **hot path misurato**: `case/in` nativo (~100x più veloce, il DSL ricostruisce
+  i rami a ogni chiamata), rinunciando all'esaustività garantita. Dettagli in
+  `references/enum-monad-match.md`.
+
+Forma base del DSL:
 
 ```ruby
 result.match do
@@ -469,7 +494,7 @@ Altri anti-pattern:
 - `rescue` nudo dentro un'action al posto di `try!`;
 - errore passato a `fail_and_return!` come stringa quando serve l'hash a tre chiavi;
 - `fmap` su un `Result`;
-- `case/in` su `Success`/`Failure` (le enum Switchyard non hanno `deconstruct`);
+- `bind` su un `Result` (non è alias di `map`: esegue il blocco anche su `Failure`);
 - dato messo nel `ctx` che nessuno step successivo legge;
 - action che restituisce a volte un valore, a volte `nil`, a volte un `Result`.
 
@@ -512,7 +537,7 @@ Quando generi o modifichi codice:
 
 - non sostituire tutto con monadi;
 - non imporre immutabilità totale;
-- non usare `fmap` su `Result`, né `case/in` sulle enum Switchyard;
+- non usare `fmap` né `bind` su `Result`;
 - non toccare commenti o formattazione adiacenti alla modifica;
 - non dichiarare miglioramenti prestazionali senza misurarli.
 
