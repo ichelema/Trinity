@@ -17,6 +17,14 @@ export HOOK_INPUT
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 SCRIPT_DIR="${BASH_SOURCE[0]%/*}"; [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR="."
+# Claude Code (claude.exe nativo) invoca l'hook con path stile Windows (E:/...):
+# bash lo digerisce, ma il python MSYS tratta "E:/..." come RELATIVO (lo concatena
+# al cwd) e il worker non parte -> retain perso a ogni Stop. Normalizza
+# drive-letter -> POSIX (/e/...) con sola espansione bash, zero fork (niente
+# cygpath). Su Linux/macOS il pattern non matcha mai.
+case "$SCRIPT_DIR" in
+[A-Za-z]:/*) _hs_drive="${SCRIPT_DIR%%:*}"; SCRIPT_DIR="/${_hs_drive,,}${SCRIPT_DIR#?:}" ;;
+esac
 . "$SCRIPT_DIR/lib/hs-python.sh"
 # Log in HS_CACHE_DIR (esportata da hs-python.sh) e non in /tmp: contiene l'output
 # del worker, cioe' pezzi di transcript e memorie — su Linux /tmp e' leggibile da tutti.
