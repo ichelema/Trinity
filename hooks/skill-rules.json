@@ -288,73 +288,6 @@
       },
       "relatedSkills": []
     },
-    "ruby": {
-      "description": "Gem Ruby per analisi dati: DataFrame (polars-df), ML (rumale), statistiche, Excel/CSV (roo)",
-      "priority": 6,
-      "triggers": {
-        "keywords": [
-          "polars",
-          "polars-df",
-          "rumale",
-          "numo-narray",
-          "enumerable-statistics",
-          "rover-df",
-          "ruby gem",
-          "gemfile"
-        ],
-        "keywordPatterns": [
-          "\\bpolars\\b",
-          "\\brumale\\b",
-          "\\bnumo\\b",
-          "\\bgemfile\\b",
-          "gem\\s+[\"']polars",
-          "gem\\s+[\"']rumale",
-          "gem\\s+[\"']roo[\"']",
-          "require\\s+[\"']polars[\"']",
-          "require\\s+[\"']rumale[\"']",
-          "require\\s+[\"']numo"
-        ],
-        "pathPatterns": [
-          "**/Gemfile",
-          "**/Gemfile.lock",
-          ".claude/skills/ruby/**"
-        ],
-        "intentPatterns": [
-          "(?:analisi|analizza|elabora|processa).*(?:dati|data|csv|excel).*ruby",
-          "ruby.*(?:analisi|dataframe|statistiche|machine learning)",
-          "(?:dataframe|ml|machine learning).*(?:in|con|usando)\\s+ruby",
-          "(?:gem|libreria|library).*(?:ruby|rb).*(?:dati|data|analisi|statistiche)",
-          "(?:polars|rumale|numo|roo).*(?:ruby|rb)"
-        ],
-        "contentPatterns": [
-          "require [\"']polars[\"']",
-          "require [\"']rumale[\"']",
-          "require [\"']numo",
-          "require [\"']roo[\"']",
-          "gem [\"']polars-df[\"']",
-          "gem [\"']rumale[\"']",
-          "gem [\"']roo[\"']",
-          "gem [\"']numo-narray[\"']",
-          "gem [\"']enumerable-statistics[\"']",
-          "Polars\\.read_csv",
-          "Polars\\.col",
-          "Rumale::",
-          "Numo::"
-        ],
-        "contextPatterns": [
-          "in ruby",
-          "con ruby",
-          "usando ruby",
-          "ruby script",
-          "script ruby",
-          "gem ruby",
-          "ruby gem"
-        ]
-      },
-      "relatedSkills": [
-        "excel-data-analyst"
-      ]
-    },
     "book-to-skill": {
       "description": "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, RTF, MOBI/AZW) into structured agent skills — extracting frameworks, mental models, principles, techniques, and anti-patterns",
       "priority": 7,
@@ -695,23 +628,21 @@
         "mise"
       ]
     },
-    "pragmatic-functional-ruby": {
-      "description": "Stile Ruby funzionale pragmatico con FunctionalLightService: action Organizer+steps, contratti expects/promises, try!/fail_and_return!, immutabilità selettiva",
+    "ruby": {
+      "description": "Stile Ruby funzionale pragmatico con Switchyard: action Organizer+steps, contratti expects/promises, try!/fail_and_return!, immutabilità selettiva",
       "priority": 7,
       "triggers": {
         "keywords": [
-          "functional-light-service",
-          "functional light service",
-          "light service",
+          "switchyard",
           "fail_and_return",
           "organizer",
           "railway oriented",
           "ice_nine",
           "hamster",
-          "previsionesteg"
+          "ruby"
         ],
         "keywordPatterns": [
-          "\\bfunctional[-_\\s]?light[-_\\s]?service\\b",
+          "\\bswitchyard\\b",
           "\\bfail_and_return!?\\b",
           "\\btry!\\b",
           "\\bexpects\\b.{0,30}\\bpromises\\b",
@@ -722,18 +653,21 @@
           "**/app/actions/**/*.rb",
           "**/app/controllers/**/*.rb",
           "**/concerns/*_concern.rb",
-          "**/skills/pragmatic-functional-ruby/**"
+          "**/*.rb",
+          "**/Gemfile",
+          "**/skills/ruby/**"
         ],
         "intentPatterns": [
           "(?:crea|scrivi|aggiungi|modifica|rifattorizza|analizza|rivedi).{0,40}\\baction\\b",
           "(?:aggiungi|inserisci|crea).{0,30}(?:step|pipeline).{0,40}(?:controller|organizer|steps)",
           "(?:come|dove).{0,40}(?:propag|gestisc|gestire).{0,30}(?:errore|failure|fallimento)",
           "(?:refactor|rifattorizza|riscrivi).{0,40}(?:ruby|action|controller|concern|model)",
-          "(?:stile|metodo|approccio).{0,30}(?:funzionale|pragmatico).{0,30}ruby"
+          "(?:stile|metodo|approccio).{0,30}(?:funzionale|pragmatico).{0,30}ruby",
+          "(?:crea|scrivi|modifica|correggi).{0,40}\\.rb\\b"
         ],
         "contentPatterns": [
-          "FunctionalLightService",
-          "extend FunctionalLightService::Action",
+          "Switchyard",
+          "extend Switchyard::Action",
           "fail_and_return!",
           "expects :",
           "promises :",
@@ -743,14 +677,16 @@
           "map_err"
         ],
         "contextPatterns": [
-          "functional light service",
+          "switchyard",
           "pipeline di action",
           "stile funzionale",
-          "railway"
+          "railway",
+          "in ruby",
+          "con ruby",
+          "usando ruby"
         ]
       },
       "relatedSkills": [
-        "ruby",
         "lsp-enable"
       ]
     },
