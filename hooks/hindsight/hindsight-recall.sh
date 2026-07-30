@@ -12,6 +12,12 @@ set -uo pipefail
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
+# claude.exe invoca l'hook con path stile Windows (E:/...): bash lo digerisce,
+# ma un python non-nativo lo tratterebbe come RELATIVO (vedi hindsight-retain.sh).
+# Normalizza drive-letter -> POSIX con sola espansione bash, zero fork.
+case "$HOOKS_DIR" in
+[A-Za-z]:/*) _hs_drive="${HOOKS_DIR%%:*}"; HOOKS_DIR="/${_hs_drive,,}${HOOKS_DIR#?:}" ;;
+esac
 # $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
 # NON usare $(</dev/stdin): claude.exe e' un processo Windows nativo e la pipe che
 # crea non e' esposta come /dev/stdin al bash MSYS2 -> HOOK_INPUT vuoto, json.loads
@@ -22,7 +28,10 @@ export HOOK_INPUT HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
 
-PYTHONUTF8=1 "$HS_PY" <<'PY' 2>/dev/null
+# stderr su file (sovrascritto a ogni run) e NON /dev/null: tre guasti silenziosi
+# in due mesi (NameError 06-18, stdin vuoto 07-28, python MSYS 07-30) diagnosticati
+# alla cieca perche' il traceback spariva. 0 byte = run pulita.
+PYTHONUTF8=1 "$HS_PY" <<'PY' 2>"$HS_CACHE_DIR/hs-recall-stderr.log"
 import hashlib, json, os, sys, time, urllib.request, urllib.error
 from datetime import datetime, timezone
 
