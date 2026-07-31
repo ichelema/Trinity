@@ -1,4 +1,0 @@
-upstream: https://github.com/abullard1/claude-bionify
-versione: 1.0.2 (copiata dalla cache plugin il 2026-07-31)
-contenuto: skills/ commands/ hooks/ scripts/ themes/ .claude-plugin/plugin.json LICENSE
-aggiornamento: ricopiare queste dir dal repo upstream
