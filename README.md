@@ -313,18 +313,21 @@ per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`, `claude-b
 | Plugin | Versione | Cosa fa | Upstream |
 |---|---|---|---|
 | `ui-craft` | 1.0.0 | design engineering per agenti: anti-slop UI, spec-driven design (`/sddesign`), agent design-review + a11y, MCP quality gates | [educlopez/ui-craft](https://github.com/educlopez/ui-craft) |
-| `claude-bionify` | 1.0.2 | bionic reading: hook `MessageDisplay` (script Python) che grasseta la parte iniziale delle parole nelle risposte | [abullard1/claude-bionify](https://github.com/abullard1/claude-bionify) |
+| `claude-bionify` | 1.0.3 | bionic reading: hook `MessageDisplay` (script Python) che grasseta la parte iniziale delle parole nelle risposte | [abullard1/claude-bionify](https://github.com/abullard1/claude-bionify) |
 | `mattpocock-skills` | 1.2.0 | 22 skill di ingegneria curate dal plugin.json upstream (grilling, TDD, code review, domain modelling, spec/ticket flow) | [mattpocock/skills](https://github.com/mattpocock/skills) |
 
 Com'è fatta una cartella `vendor/<nome>/`:
 
 - **copia snella** dell'upstream: solo `skills/`, `commands/`, `agents/`, `hooks/`,
   `.claude-plugin/plugin.json`, `.mcp.json`, `LICENSE` — niente CLI, e2e, asset;
-- **`VENDOR.txt`**: upstream, versione/commit copiati e procedura di aggiornamento
-  (ri-copiare le stesse dir dall'upstream — non c'è più `claude plugin update`);
-  eccezione `mattpocock-skills`: repo upstream snello, vendorizzato **intero via
-  `git subtree --squash`** — si aggiorna con
-  `git subtree pull --prefix vendor/mattpocock-skills https://github.com/mattpocock/skills main --squash`;
+- **`VENDOR.txt`**: upstream, versione/commit e procedura di aggiornamento. Due metodi:
+  gli upstream **snelli** (`mattpocock-skills`, `claude-bionify`) sono vendorizzati interi
+  via **`git subtree --squash`** e si aggiornano con
+  `git subtree pull --prefix vendor/<nome> <url upstream> main --squash`;
+  `ui-craft` (upstream pesante: CLI Go, e2e — e subtree non sa prendere una
+  sottocartella) resta a **copia manuale** delle sole dir utili.
+  NB `claude-bionify`: l'upstream è un repo-marketplace, il plugin root è
+  `vendor/claude-bionify/plugins/claude-bionify` — junction e `link_skill` puntano lì;
 - il server MCP di `ui-craft` (`npx -y ui-craft-mcp`) è dichiarato nel suo `.mcp.json`
   e viene caricato anche via skills-dir;
 - l'hook di `claude-bionify` richiede `python3` nel PATH (su Linux: verificare).
