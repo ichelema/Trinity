@@ -27,29 +27,36 @@ bash scripts/setup/bootstrap-linux.sh
 ```
 
 Il bootstrap e' **idempotente** (rieseguibile). Fa: mise + runtime del repo,
-`hindsight-api` via pip, `mcp-remote` via npm, symlink
-`~/.claude/skills/trinity -> ~/ai/trinity`, `TRINITY_PLUGIN_DIR` in
-`~/.claude/settings.json`, `core.hooksPath .githooks`, registrazione MCP
+`hindsight-api` via pip, `mcp-remote` via npm, i symlink skills-dir
+(`~/.claude/skills/trinity -> ~/ai/trinity` **piu' uno per ogni plugin
+vendorizzato** in `vendor/`: `ui-craft`, `claude-bionify` — funzione
+`link_skill`, README §8), la generazione di `~/.claude/settings.json` da
+`config/claude/` (shared + overlay `settings.linux.json`, con
+`TRINITY_PLUGIN_DIR` calcolata dal path del repo — stesso script del task
+`mise run sync-settings`), `core.hooksPath .githooks`, registrazione MCP
 `hindsight` a scope user, `~/backups/hindsight`.
+
+> L'hook `MessageDisplay` di `claude-bionify` invoca `python3` dal PATH: su un
+> server Linux standard c'e' gia'; se manca, installalo con il package manager.
 
 ## 3. Chiavi API (mai nel repo)
 
 In `~/.profile` (o un env file caricato da mise):
 
 ```bash
-export OPENAI_API_KEY="sk-..."        # retain/recall/reflect (gpt-4.1-nano/mini)
-export ZEROENTROPY_API_KEY="ze-..."   # OBBLIGATORIA: embedding (zembed-1) + rerank
+export OPENAI_API_KEY="sk-..."        # retain/recall/reflect + consolidation (gpt-4.1-mini)
+export GEMINI_API_KEY="..."           # OBBLIGATORIA: embedding (gemini-embedding-001, 1536 dim, dal 2026-07-27)
+export VOYAGE_API_KEY="..."           # reranker voyage/rerank-2.5 (senza: fallback senza rerank, qualita' recall peggiore)
 export TICKTICK_API_KEY="..."         # MCP TickTick (opzionale; web TickTick: Settings > Account > API Token)
 ```
 
-`ZEROENTROPY_API_KEY` NON e' opzionale: `mise.toml` imposta
-`HINDSIGHT_API_EMBEDDINGS_PROVIDER = "zeroentropy"`, quindi senza chiave il server
-muore all'avvio (`ValueError: ...ZEROENTROPY_API_KEY is required when
-HINDSIGHT_API_EMBEDDINGS_PROVIDER is 'zeroentropy'`). Non aggirarla cambiando
-provider: il DB ha colonne `vector(1280)` (zembed-1) e gli altri hanno dimensioni
-diverse (gemini 1536, bge-m3 1024), quindi i vettori nuovi non entrerebbero. Per il
-solo rerank la chiave sarebbe invece opzionale (fallback a interleaving), ma il
-provider e' lo stesso.
+`GEMINI_API_KEY` NON e' opzionale: `mise.toml` imposta
+`HINDSIGHT_API_EMBEDDINGS_PROVIDER = "google"` (gemini-embedding-001, dal
+2026-07-27) e il DB ha vettori a 1536 dimensioni. Non aggirarla cambiando
+provider: dimensioni diverse (zembed-1 1280/2560, bge-m3 1024) richiederebbero
+un rebuild del bank. Usare un progetto Google con **billing attivo** (sul free
+tier i contenuti inviati possono essere usati per addestrare i modelli).
+Il task `start-hindsight` fa fail-fast su `OPENAI_API_KEY` e `GEMINI_API_KEY`.
 
 Il server MCP `ticktick` e' remoto (`https://mcp.ticktick.com/`): niente da installare,
 si autentica col Bearer token letto da questa variabile. E' l'unico MCP che funziona
@@ -91,9 +98,10 @@ Su un host Linux appena bootstrappato lo stato e' questo:
 |---|---|---|
 | `hindsight` | registrato dal bootstrap (§2 + rilancio in §4) | niente da fare |
 | `ticktick` | funziona identico (server remoto) | solo `TICKTICK_API_KEY` (§3) |
-| `notebooklm` | non parte, con un warning innocuo: `NOTEBOOKLM_DATA`/`NOTEBOOKLM_LIB` non sono definite | installa notebooklm-py su questo host e definisci le 2 variabili in `~/.claude/settings.json` → `env` coi path dell'installazione **Linux** (vedi README §10) |
+| `notebooklm` | non parte, con un warning innocuo: `NOTEBOOKLM_DATA`/`NOTEBOOKLM_LIB` non sono definite | installa notebooklm-py su questo host e definisci le 2 variabili in `config/claude/settings.linux.json` → `env` coi path dell'installazione **Linux**, poi `mise run sync-settings` (vedi README §10) |
 | `playwright` | parte ma muore subito: il bootstrap non installa `@playwright/mcp` | `mise -C ~/ai/trinity x -- npm install -g @playwright/mcp` **piu'** un browser: il `--browser chrome` in `.mcp.json` presuppone Google Chrome installato; su un server headless conviene disabilitarlo |
 | `obsidian_semantic_notes_vault` | in errore a ogni sessione: punta a `http://localhost:3002/mcp`, servito dal plugin MCP dentro Obsidian | ha senso solo dove gira Obsidian con quel plugin; su un server disabilitalo |
+| `ui-craft` (dal plugin vendorizzato, non da questo `.mcp.json`) | dichiarato nel `.mcp.json` di `vendor/ui-craft`: `npx -y ui-craft-mcp` | serve un `node`/`npx` raggiungibile nel PATH (quello di mise del bootstrap basta); se non vuoi il server, disabilitalo come gli altri |
 
 Per spegnere i server che non vuoi su questo host usa il layer per-macchina
 (`~/.claude/settings.json`), NON `.mcp.json` (versionato, condiviso tra gli OS):
@@ -101,6 +109,10 @@ Per spegnere i server che non vuoi su questo host usa il layer per-macchina
 ```json
 { "disabledMcpjsonServers": ["playwright", "notebooklm", "obsidian_semantic_notes_vault"] }
 ```
+
+Chiavi come questa sopravvivono al sync del bootstrap: il merge di
+`sync-claude-settings.py` preserva le chiavi presenti solo nel file locale e
+sovrascrive soltanto quelle definite in `config/claude/` (README §10).
 
 ## 5. Primo avvio del server e import della memoria
 

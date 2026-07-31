@@ -52,12 +52,23 @@ Claude Code dopo ogni modifica al repo.
 > `~/.claude/skills/trinity` punta a una directory che Claude Code ignora
 > silenziosamente — il plugin non si carica in nessun progetto.
 
-**Ricreare la junction** (su un nuovo PC o dopo averla rimossa):
+Con lo stesso meccanismo si caricano anche i **plugin di terze parti vendorizzati** in
+`vendor/` (§8): una junction per ciascuno, così ogni plugin mantiene il proprio namespace
+(`ui-craft:*`, `claude-bionify:*`) separato da `trinity:*`.
+
+**Ricreare le junction** (su un nuovo PC o dopo averle rimosse; su Linux le crea
+`scripts/setup/bootstrap-linux.sh` come symlink, funzione `link_skill`):
 
 ```bash
 MSYS_NO_PATHCONV=1 cmd /c mklink /J \
   "%USERPROFILE%\.claude\skills\trinity" \
   "E:\AI\Claude\Trinity"
+MSYS_NO_PATHCONV=1 cmd /c mklink /J \
+  "%USERPROFILE%\.claude\skills\ui-craft" \
+  "E:\AI\Claude\Trinity\vendor\ui-craft"
+MSYS_NO_PATHCONV=1 cmd /c mklink /J \
+  "%USERPROFILE%\.claude\skills\claude-bionify" \
+  "E:\AI\Claude\Trinity\vendor\claude-bionify"
 ```
 
 ---
@@ -291,16 +302,32 @@ https://youtu.be/cEPzAwb1ldU?si=YX44a7rfZnbnXM7q
 
 ---
 
-## 8. Plugin esterni usati con Trinity
+## 8. Plugin di terze parti vendorizzati (`vendor/`)
 
-Plugin Claude Code di **terze parti**, abilitati a livello **utente**
-(`~/.claude/settings.json` → `enabledPlugins`), quindi attivi in ogni progetto accanto a
-Trinity. Non sono codice di questo repo: il loro sorgente vive fuori e va installato
-per-macchina.
+Dal 2026-07-31 i plugin Claude Code di **terze parti** non passano più dal marketplace
+(`enabledPlugins` è vuoto): sono **vendorizzati** dentro il repo in `vendor/<nome>/` e
+caricati con lo stesso meccanismo skills-dir di Trinity (§2), una junction/symlink per
+plugin. Così viaggiano con `git push/pull` e ogni macchina è allineata senza install
+per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`, `claude-bionify:*`).
 
-| Plugin | Versione | Cosa fa | Sorgente | Note |
-|---|---|---|---|---|
-| `yt-extract` | 1.8.2 | transcript, summary, screenshot e metadati da video YouTube | `E:/AI/tools/claude-code-youtube-extract` | install exe-free; la patch `run_ytdlp` (`python -m yt_dlp`) va riapplicata dopo ogni update; richiede yt-dlp + ffmpeg |
+| Plugin | Versione | Cosa fa | Upstream |
+|---|---|---|---|
+| `ui-craft` | 1.0.0 | design engineering per agenti: anti-slop UI, spec-driven design (`/sddesign`), agent design-review + a11y, MCP quality gates | [educlopez/ui-craft](https://github.com/educlopez/ui-craft) |
+| `claude-bionify` | 1.0.2 | bionic reading: hook `MessageDisplay` (script Python) che grasseta la parte iniziale delle parole nelle risposte | [abullard1/claude-bionify](https://github.com/abullard1/claude-bionify) |
+
+Com'è fatta una cartella `vendor/<nome>/`:
+
+- **copia snella** dell'upstream: solo `skills/`, `commands/`, `agents/`, `hooks/`,
+  `.claude-plugin/plugin.json`, `.mcp.json`, `LICENSE` — niente CLI, e2e, asset;
+- **`VENDOR.txt`**: upstream, versione/commit copiati e procedura di aggiornamento
+  (ri-copiare le stesse dir dall'upstream — non c'è più `claude plugin update`);
+- il server MCP di `ui-craft` (`npx -y ui-craft-mcp`) è dichiarato nel suo `.mcp.json`
+  e viene caricato anche via skills-dir;
+- l'hook di `claude-bionify` richiede `python3` nel PATH (su Linux: verificare).
+
+> `yt-extract` non è più in questo elenco: dal 2026-07-03 è una **skill** di Trinity
+> (`/trinity:yt-extract`, §5); il suo runtime esterno resta in
+> `E:/AI/tools/claude-code-youtube-extract` (aggiornamenti: job `yt-check`, §11).
 
 ---
 
@@ -431,15 +458,24 @@ controllano quali vengono caricati. Il token budget è `mental_model_max_tokens`
 ## 10. Setup per-macchina (valori machine-specific)
 
 Il plugin non contiene path hardcoded: i valori che cambiano da macchina a macchina vengono 
-da **variabili d'ambiente**. Su un nuovo PC, definiscile una volta in `~/.claude/settings.json` 
-(env utente, non versionata col plugin):
+da **variabili d'ambiente** nell'env utente di `~/.claude/settings.json`.
+
+Dal 2026-07-31 quel file **non si edita più a mano**: è generato dai file versionati in
+`config/claude/` — `settings.shared.json` (preferenze portabili, uguali ovunque) +
+`settings.windows.json` / `settings.linux.json` (env e path per OS) — con un merge a tre
+strati (locale → shared → overlay OS) che preserva le chiavi solo locali e fa backup `.bak`.
+Flusso: modifica in `config/claude/` → push/pull → **`mise run sync-settings`** su ogni
+macchina (su Linux lo esegue anche `bootstrap-linux.sh`, sezione 6). `TRINITY_PLUGIN_DIR`
+è calcolata dallo script dalla posizione del repo, mai scritta negli overlay.
+
+Le variabili qui sotto vanno quindi nell'**overlay dell'OS** (es.
+`config/claude/settings.windows.json`):
 
 ```json
 {
   "env": {
     "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
     "OBSIDIAN_VAULT_NAME": "Sinapsi",
-    "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity",
     "NOTEBOOKLM_DATA": "E:/AI/tools/notebooklm-data",
     "NOTEBOOKLM_LIB": "E:/AI/tools/notebooklm",
     "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw",
@@ -468,7 +504,7 @@ una variabile separata.
 | root del progetto | `${CLAUDE_PROJECT_DIR}` (gli hook la ricevono da Claude Code) — già automatico |
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
-| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **da definire per-macchina** |
+| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **automatica**: la scrive `sync-settings` dalla posizione del repo |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
@@ -992,6 +1028,9 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
+├── config/
+│   └── claude/              settings.shared.json + overlay per OS → genera ~/.claude/settings.json (mise run sync-settings, §10)
+├── vendor/                  plugin terzi vendorizzati: ui-craft · claude-bionify (junction/symlink in ~/.claude/skills/, §8)
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
@@ -1001,6 +1040,7 @@ Trinity/
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 │       └── hindsight-dashboard/  dashboard log Roda/Puma :9292 (sviluppo)
+├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh, sync-claude-settings.py) · bin/adhd · deploy litellm
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```
