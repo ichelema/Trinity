@@ -112,6 +112,7 @@ link_skill() {
 link_skill trinity "$ROOT"
 link_skill ui-craft "$ROOT/vendor/ui-craft"
 link_skill claude-bionify "$ROOT/vendor/claude-bionify"
+link_skill mattpocock-skills "$ROOT/vendor/mattpocock-skills"
 
 sect "6. Sync ~/.claude/settings.json (config/claude/ shared + overlay linux)"
 # Merge idempotente: shared + settings.linux.json vincono sulle chiavi che
