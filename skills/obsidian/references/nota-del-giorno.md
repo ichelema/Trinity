@@ -6,9 +6,12 @@ note) nel Vault Obsidian, partendo dal Template `templates/Template-Daily.md`.
 La daily serve come **storico del lavoro svolto** in giornata: cosa è stato fatto,
 come, e con quali dettagli tecnici, in forma interrogabile da un LLM in futuro.
 
-- Cartella: `🌅Daily/`
-- Nome file: `YYYY-MM-DD.md` (es. `2026-06-25.md`)
+- Cartella: `🌅Daily/YYYY-MM/` (sottocartella mensile, es. `🌅Daily/2026-07/`)
+- Nome file: `YYYY-MM-DD.md` (es. `🌅Daily/2026-06/2026-06-25.md`)
 - Template base: `templates/Template-Daily.md`
+
+> Prima di concludere che la daily di oggi non esiste, cerca nel vault
+> `file:YYYY-MM-DD`: il path passa per la sottocartella mensile.
 
 ---
 
@@ -27,7 +30,7 @@ come, e con quali dettagli tecnici, in forma interrogabile da un LLM in futuro.
 7. **Formatta** la nota con Prettier prima della verifica finale:
 
    ```bash
-   prettier --write "🌅Daily/<YYYY-MM-DD>.md" --print-width 130 --prose-wrap always
+   prettier --write "🌅Daily/<YYYY-MM>/<YYYY-MM-DD>.md" --print-width 130 --prose-wrap always
    ```
 
 8. **Verifica** che i link interni `[[#...]]` risolvano e che i contenuti siano

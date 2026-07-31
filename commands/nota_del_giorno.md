@@ -9,7 +9,8 @@ registrando il lavoro svolto in **questa sessione**.
 
 Usa la skill `obsidian` e segui la sua reference operativa
 `references/nota-del-giorno.md` come **unica fonte** per struttura, frontmatter,
-path (`🌅Daily/YYYY-MM-DD.md`), template e regole. Non reinventare il formato.
+path (`🌅Daily/YYYY-MM/YYYY-MM-DD.md`, sottocartella mensile), template e regole.
+Non reinventare il formato.
 
 ## Procedura
 
