@@ -458,7 +458,7 @@ def resolve_bank(name: str, cfg: dict, cwd: str | None = None) -> str:
     # spaccherebbe le sue memorie dal core).
     # NON basta lo slug: un repo QUALSIASI chiamato Trinity (nome comune: su GitHub
     # ce ne sono molti) verrebbe scambiato per il plugin e riverserebbe le sue
-    # memorie nel core. L'identita' completa distingue github.com/sphynx79/Trinity
+    # memorie nel core. L'identita' completa distingue github.com/ichelema/Trinity
     # da chiunque altro.
     here = os.path.dirname(os.path.abspath(__file__))
     plugin_dir = os.path.abspath(os.path.join(here, "..", "..", ".."))

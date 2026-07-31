@@ -242,7 +242,7 @@ progetto (sono file del plugin, non del singolo progetto):
 | `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — attivo, richiede l'app Obsidian in ascolto su :3002 |
 | `debugger` | stdio (node, exe-free) | debug **autonomo** di Claude (mcp-debugger): breakpoint, step, variabili su Python/Ruby/JavaScript, 21 tool |
-| `neovim` | stdio (node, exe-free) | pair-debugging sulla sessione **nvim-dap dell'utente** (fork `sphynx79/mcp-neovim-server`): 21 tool `dap_*` + 18 `vim_*` |
+| `neovim` | stdio (node, exe-free) | pair-debugging sulla sessione **nvim-dap dell'utente** (fork `ichelema/mcp-neovim-server`): 21 tool `dap_*` + 18 `vim_*` |
 
 Il server `hindsight` (memoria persistente, vedi §9) dal 2026-07-10 **non** sta più nel
 `.mcp.json`: è registrato a **scope user** (`claude mcp add-json hindsight --scope user`)
@@ -282,7 +282,7 @@ Sono **complementari**, con ruoli precisi:
   la gem `debug`/rdbg del ruby mise del progetto (primo avvio a freddo: può servire un
   retry su `ECONNREFUSED`). Dettagli e procedura di aggiornamento nel
   `README.md` dentro `${MCP_DEBUGGER_DIR}`.
-- **`neovim`** — fork [`sphynx79/mcp-neovim-server`](https://github.com/sphynx79/mcp-neovim-server)
+- **`neovim`** — fork [`ichelema/mcp-neovim-server`](https://github.com/ichelema/mcp-neovim-server)
   dell'upstream [`bigcodegen/mcp-neovim-server`](https://github.com/bigcodegen/mcp-neovim-server)
   (dev in `E:/Sviluppo`, runtime in `${MCP_NEOVIM_DIR}`): **pair-debugging** sulla
   sessione nvim-dap che guida l'utente — Claude ispeziona variabili, muove step e
@@ -954,7 +954,7 @@ DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due mod
 
 CCR (`@musistudio/claude-code-router`, comando `ccr`) è un proxy con pipeline di **transformer**
 che converte le richieste Claude Code nel formato di ciascun provider. Il fork usato è
-`sphynx79/claude-code-router` (upstream: `musistudio/claude-code-router`), con patch custom
+`ichelema/claude-code-router` (upstream: `musistudio/claude-code-router`), con patch custom
 mantenute nel branch `trinity-patches`.
 
 **Path di configurazione.** Su Windows, `os.homedir()` di Node.js segue `USERPROFILE`

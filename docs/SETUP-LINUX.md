@@ -21,7 +21,7 @@ sudo apt-get install -y ffmpeg                    # opzionale: yt-extract, suoni
 ## 2. Clone e bootstrap
 
 ```bash
-git clone git@github.com:sphynx79/Trinity.git ~/ai/trinity
+git clone git@github.com:ichelema/Trinity.git ~/ai/trinity
 cd ~/ai/trinity
 bash scripts/setup/bootstrap-linux.sh
 ```
