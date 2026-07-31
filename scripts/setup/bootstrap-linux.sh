@@ -82,30 +82,36 @@ else
 	warn "npm install -g mcp-remote fallito — lo shim MCP hindsight non partira'"
 fi
 
-sect "5. Skills-dir: symlink ~/.claude/skills/trinity -> repo"
+sect "5. Skills-dir: symlink ~/.claude/skills/* -> repo"
 mkdir -p "$HOME/.claude/skills"
-LINK="$HOME/.claude/skills/trinity"
-if [ -L "$LINK" ]; then
-	# readlink -f su ENTRAMBI i lati: se il path del repo contiene un componente
-	# symlink, il $ROOT logico non combacia mai col target risolto del link e il
-	# symlink verrebbe "ricreato" a ogni run pur essendo corretto.
-	if [ "$(readlink -f "$LINK")" = "$(readlink -f "$ROOT")" ]; then
-		ok "symlink gia' corretto"
+# link_skill NOME TARGET: crea/ripara ~/.claude/skills/NOME -> TARGET
+link_skill() {
+	local link="$HOME/.claude/skills/$1" target="$2"
+	if [ -L "$link" ]; then
+		# readlink -f su ENTRAMBI i lati: se il path del repo contiene un componente
+		# symlink, il target logico non combacia mai col target risolto del link e il
+		# symlink verrebbe "ricreato" a ogni run pur essendo corretto.
+		if [ "$(readlink -f "$link")" = "$(readlink -f "$target")" ]; then
+			ok "symlink $1 gia' corretto"
+		else
+			# Symlink presente ma verso il target sbagliato o PENDENTE (clone rimosso/spostato).
+			# Il ramo -e sotto NON lo intercetta: su un link pendente -e e' falso, quindi si
+			# finiva nell'else dove `ln -s` fallisce ("File exists") -> nessuna riparazione,
+			# nessun avviso, plugin non caricato. Rimuovere un symlink e' sicuro: cancella il
+			# puntatore, non il target.
+			rm -f "$link" && ln -s "$target" "$link" \
+				&& ok "symlink $1 ricreato (era verso un target errato/pendente): $link -> $target" \
+				|| warn "impossibile ricreare il symlink $link"
+		fi
+	elif [ -e "$link" ]; then
+		warn "$link esiste ma e' una dir/file reale, non un symlink — sistemalo a mano (rm e rilancia)"
 	else
-		# Symlink presente ma verso il target sbagliato o PENDENTE (clone rimosso/spostato).
-		# Il ramo -e sotto NON lo intercetta: su un link pendente -e e' falso, quindi si
-		# finiva nell'else dove `ln -s` fallisce ("File exists") -> nessuna riparazione,
-		# nessun avviso, plugin non caricato. Rimuovere un symlink e' sicuro: cancella il
-		# puntatore, non il target.
-		rm -f "$LINK" && ln -s "$ROOT" "$LINK" \
-			&& ok "symlink ricreato (era verso un target errato/pendente): $LINK -> $ROOT" \
-			|| warn "impossibile ricreare il symlink $LINK"
+		ln -s "$target" "$link" && ok "symlink $1 creato: $link -> $target"
 	fi
-elif [ -e "$LINK" ]; then
-	warn "$LINK esiste ma e' una dir/file reale, non un symlink — sistemalo a mano (rm e rilancia)"
-else
-	ln -s "$ROOT" "$LINK" && ok "symlink creato: $LINK -> $ROOT"
-fi
+}
+link_skill trinity "$ROOT"
+link_skill ui-craft "$ROOT/vendor/ui-craft"
+link_skill claude-bionify "$ROOT/vendor/claude-bionify"
 
 sect "6. Env utente in ~/.claude/settings.json"
 SETTINGS="$HOME/.claude/settings.json"

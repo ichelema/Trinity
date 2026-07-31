@@ -1,0 +1,4 @@
+upstream: https://github.com/educlopez/ui-craft
+commit: 773c3ee4673fde3f7ff6f61bda3b2c5741221865 (2026-07-31)
+contenuto: skills/ commands/ agents/ .claude-plugin/plugin.json .mcp.json
+aggiornamento: ricopiare queste dir dal clone upstream
