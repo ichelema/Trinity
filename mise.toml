@@ -258,7 +258,7 @@ description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:999
 # Bind su "localhost" fa combaciare gli origin. NON tornare a --hostname 127.0.0.1:
 # il loop riappare (e con bind localhost l'URL http://127.0.0.1:9999 non risponde).
 shell = "bash -c"
-run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane@0.8.5 --hostname localhost --api-url http://localhost:8888"
+run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane --hostname localhost --api-url http://localhost:8888"
 
 [tasks.stop-control-plane]
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
