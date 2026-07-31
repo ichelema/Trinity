@@ -1,4 +1,5 @@
-upstream: https://github.com/abullard1/claude-bionify
-versione: 1.0.2 (copiata dalla cache plugin il 2026-07-31)
-contenuto: skills/ commands/ hooks/ scripts/ themes/ .claude-plugin/plugin.json LICENSE
-aggiornamento: ricopiare queste dir dal repo upstream
+upstream: https://github.com/abullard1/claude-bionify (branch main)
+metodo: git subtree con --squash (repo intero, snello)
+NB: il plugin root e' plugins/claude-bionify (repo-marketplace): junction e link_skill puntano li'
+aggiornamento: git subtree pull --prefix vendor/claude-bionify https://github.com/abullard1/claude-bionify main --squash
+nota: non cancellare file locali dentro questa dir (confliggerebbero coi pull)

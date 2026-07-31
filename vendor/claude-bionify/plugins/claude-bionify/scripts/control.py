@@ -22,7 +22,8 @@ import settings
 
 def _apply_set(state: dict, rest: list) -> tuple[dict, str]:
     if len(rest) < 2:
-        return state, "claude-bionify: set <fixation|boundary|minlen|acronyms|urls|headings> <value>"
+        return state, ("claude-bionify: set "
+                       "<fixation|boundary|minlen|acronyms|urls|headings> <value>")
     key, value = rest[0].lower(), rest[1]
     setting = settings.by_cli_key(key)
     if setting is None:
@@ -62,7 +63,8 @@ def main(argv: list) -> None:
         overrides.clear()
     else:
         overrides.save(new_state)
-    print(message)
+    # Output is read as UTF-8; print() would apply the locale encoding.
+    sys.stdout.buffer.write(message.encode("utf-8") + b"\n")
 
 
 if __name__ == "__main__":
