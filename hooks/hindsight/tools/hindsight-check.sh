@@ -833,8 +833,8 @@ sys.path.insert(0, sys.argv[1])
 import hindsight_config as hc
 
 # stesso repo via SSH e via HTTPS -> stessa identita'; host diverso -> identita' diversa
-ssh = hc._remote_identity("git@github.com:sphynx79/Trinity.git")
-https = hc._remote_identity("https://github.com/sphynx79/Trinity.git")
+ssh = hc._remote_identity("git@github.com:ichelema/Trinity.git")
+https = hc._remote_identity("https://github.com/ichelema/Trinity.git")
 other = hc._remote_identity("https://impostor.example/Trinity.git")
 norm_ok = bool(ssh) and ssh == https and ssh != other
 

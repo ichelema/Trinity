@@ -1,0 +1,4 @@
+upstream: https://github.com/mattpocock/skills (branch main)
+metodo: git subtree con --squash (repo intero, snello) — diverso da ui-craft/claude-bionify (copia manuale)
+aggiornamento: git subtree pull --prefix vendor/mattpocock-skills https://github.com/mattpocock/skills main --squash
+nota: le skill caricate (22) sono curate dal plugin.json upstream; non cancellare file locali dentro questa dir (confliggerebbero coi pull)
