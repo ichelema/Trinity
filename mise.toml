@@ -343,6 +343,18 @@ description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla 
 shell = "bash -c"
 run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
 
+# --- Sync settings utente Claude -------------------------------------------
+# ~/.claude/settings.json e' generato da config/claude/settings.shared.json +
+# overlay per OS (settings.windows.json / settings.linux.json). Flusso: modifica
+# nel repo -> push/pull -> questo task su ogni macchina (su Linux lo lancia
+# anche bootstrap-linux.sh, sezione 6). Backup .bak prima di scrivere.
+[tasks.sync-settings]
+description = "Rigenera ~/.claude/settings.json da config/claude/ (shared + overlay OS). Idempotente, backup .bak."
+shell = "bash -c"
+# cygpath: il Python mise su Windows e' nativo e non capisce i path MSYS di $HOME;
+# su Linux cygpath non esiste e resta il path POSIX.
+run = 'python scripts/setup/sync-claude-settings.py "$(cygpath -w "$HOME/.claude/settings.json" 2>/dev/null || echo "$HOME/.claude/settings.json")"'
+
 # --- Git hooks -------------------------------------------------------------
 # Attiva gli hook versionati in .githooks/ (non tracciati in .git/hooks/).
 # Da rilanciare una volta per ogni clone nuovo del repo.

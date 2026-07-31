@@ -113,29 +113,13 @@ link_skill trinity "$ROOT"
 link_skill ui-craft "$ROOT/vendor/ui-craft"
 link_skill claude-bionify "$ROOT/vendor/claude-bionify"
 
-sect "6. Env utente in ~/.claude/settings.json"
-SETTINGS="$HOME/.claude/settings.json"
-"$MISE" -C "$ROOT" x -- python - "$SETTINGS" "$ROOT" <<'PY'
-import json, os, sys
-path, root = sys.argv[1], sys.argv[2]
-data = {}
-if os.path.exists(path):
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-env = data.setdefault("env", {})
-changed = False
-if env.get("TRINITY_PLUGIN_DIR") != root:
-    env["TRINITY_PLUGIN_DIR"] = root
-    changed = True
-if changed:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    print("  [OK ] TRINITY_PLUGIN_DIR impostata in", path)
-else:
-    print("  [OK ] TRINITY_PLUGIN_DIR gia' corretta")
-print("  [i  ] OBSIDIAN_VAULT/OBSIDIAN_VAULT_NAME: impostale qui solo se il vault esiste su questa macchina")
-PY
+sect "6. Sync ~/.claude/settings.json (config/claude/ shared + overlay linux)"
+# Merge idempotente: shared + settings.linux.json vincono sulle chiavi che
+# definiscono, le chiavi solo locali restano, backup .bak prima di scrivere.
+# Stesso script del task `mise run sync-settings` usato su Windows.
+"$MISE" -C "$ROOT" x -- python "$ROOT/scripts/setup/sync-claude-settings.py" "$HOME/.claude/settings.json" \
+	|| warn "sync di settings.json fallito"
+echo "  [i  ] OBSIDIAN_VAULT/OBSIDIAN_VAULT_NAME: aggiungile a config/claude/settings.linux.json solo se il vault esiste su questa macchina"
 
 sect "7. Git hooks del repo"
 if [ "$(git -C "$ROOT" config core.hooksPath 2> /dev/null)" = ".githooks" ]; then

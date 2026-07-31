@@ -1,0 +1,23 @@
+{
+  "env": {
+    "CLAUDE_CODE_GIT_BASH_PATH": "e:\\msys64\\usr\\bin\\bash.exe",
+    "MSYSTEM": "UCRT64",
+    "CHERE_INVOKING": "1",
+    "MSYS2_PATH_TYPE": "strict",
+    "HOME": "e:\\msys64\\home\\sphynx",
+    "OBSIDIAN_VAULT": "e:/obsidian/sinapsi",
+    "OBSIDIAN_VAULT_NAME": "sinapsi",
+    "NOTEBOOKLM_DATA": "e:/ai/tools/notebooklm-data",
+    "NOTEBOOKLM_LIB": "e:/ai/tools/notebooklm",
+    "ADHD_LIB": "e:/ai/tools/adhd",
+    "MCP_EXCALIDRAW_DIR": "e:/msys64/home/sphynx/.local/opt/mcp_excalidraw",
+    "MCP_DEBUGGER_DIR": "e:/ai/tools/mcp-debugger",
+    "MCP_NEOVIM_DIR": "e:/ai/tools/mcp-neovim-server",
+    "EDITOR": "gvim",
+    "CLAUDE_ENV_FILE": "e:/msys64/home/sphynx/.local/bin/claude-msys2-env.sh"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "/e/msys64/home/sphynx/.claude/statusline_new.sh"
+  }
+}
