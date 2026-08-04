@@ -8,7 +8,7 @@ This page explains each operation type, when it fires, and how to inspect or man
 {/* Import raw source files */}
 
 > **💡 Prerequisites**
-> 
+>
 Make sure you've completed the [Quick Start](./quickstart) and understand [how retain works](./retain).
 ## How operations work
 
@@ -27,6 +27,8 @@ By default, every operation runs in-process: no external queue, no extra process
 | `cancelled` | The operation was cancelled via `DELETE /…/operations/{id}` before a worker picked it up. Cancelling a `processing` operation is not supported. |
 
 The worker retries failed operations up to `HINDSIGHT_API_WORKER_MAX_RETRIES` times before settling on `failed`. Deterministic failures (e.g., invalid embedding dimensions, integrity violations) skip retries — they won't succeed by re-running.
+
+Completed, failed, and cancelled operations are kept indefinitely by default. Set `HINDSIGHT_API_OPERATION_RETENTION_DAYS` to a positive number of days to bound that history: the background maintenance loop then prunes expired terminal rows in bounded batches, on its own schedule rather than as a side effect of task processing. PostgreSQL only — the maintenance loop does not run on Oracle, so operation history is unbounded there. The full row shares that TTL, so while an operation is retained its payload stays available — failed and cancelled operations can be retried, and completed ones inspected with `include_payload=true`. Pending and processing operations are never removed by retention cleanup.
 
 ## Operation types
 
@@ -188,6 +190,30 @@ hindsight operation get my-bank "$OPERATION_ID"
 # Section 'operations-get' not found in api/operations.go
 ```
 
+Query parameters:
+
+| Param | Description |
+|-------|-------------|
+| `include_payload` | Include the raw task payload (the submission params) in the response as `task_payload`. Default `false`; may be large. |
+
+A few response fields are worth calling out:
+
+| Field | Description |
+|-------|-------------|
+| `updated_at` | When the operation's row last changed — claim, progress heartbeat, or completion. |
+| `progress` | Last-known progress snapshot for a running operation, or `null` if none was recorded (completed-instantly or pre-feature rows). |
+| `task_payload` | The raw submission params; only populated when `include_payload=true`. |
+
+`progress` is written at coarse phase/batch boundaries (consolidation, batch retain) and lets you tell a healthy long-running job from a frozen one: if `processed` keeps advancing across polls the job is alive; identical numbers with no movement in `at` mean it's stuck. Its shape:
+
+| Field | Description |
+|-------|-------------|
+| `stage` | Coarse phase the operation last reported (e.g. `processing_batch`). |
+| `at` | ISO-8601 timestamp when this snapshot was written. |
+| `processed` | Units of work finished so far (sub-batches, memories), when known. |
+| `total` | Total units of work for the operation, when known. |
+| `detail` | Operation-specific counters (e.g. `observations_created`, `round`, `items_in_sub_batch`). |
+
 ### Cancel a pending operation
 
 Returns `409` if the operation is already in `processing`, `completed`, or `failed` state.
@@ -316,7 +342,7 @@ done
 
 ## Worker tuning
 
-Each worker has a single concurrency budget (`HINDSIGHT_API_WORKER_MAX_SLOTS`, default 10) shared across all operation types. Per-type slot reservations (`HINDSIGHT_API_WORKER_<TYPE>_MAX_SLOTS`) carve out guaranteed capacity within that budget; remaining slots form a shared pool any type can use. See [Configuration → Worker Configuration](../configuration#worker-configuration) for the full table.
+Each worker has a single concurrency budget (`HINDSIGHT_API_WORKER_MAX_SLOTS`, default 10) shared across all operation types. Per-type slot reservations (`HINDSIGHT_API_WORKER_<TYPE>_MAX_SLOTS`) carve out guaranteed capacity within that budget; remaining slots form a shared pool any type can use. See [Configuration → Worker Configuration](../configuration#distributed-workers) for the full table.
 
 For most deployments the defaults are fine. Reserve slots for an operation type if you've seen it starved by a flood of another type (e.g., a long file_convert_retain blocking graph_maintenance on a deletion-heavy workload).
 

@@ -55,13 +55,19 @@ This means search results include the full context, not disconnected fragments.
 
 ## Two Types of Facts
 
-Hindsight distinguishes between **world** facts (about others) and **experience** (conversations and events):
+Every fact is classified by **whose perspective it captures** — the agent that owns the bank, or the outside world:
 
-| Type            | Description                       | Example |
-|-----------------|-----------------------------------|---------|
-| **world**       | Facts about people, places, things | "Alice works at Google" |
-| **experience** | Conversations and events         | "I recommended Python to Alice" |
+| Type           | What it captures                                                              | Example |
+|----------------|------------------------------------------------------------------------------|---------|
+| **experience** | The bank's own agent acting, observing, or interacting — its first-person history | "I recommended Python to Alice" |
+| **world**      | Facts about other people, places, things, and events                          | "Alice works at Google" |
 
+The split is decided by **who is speaking**, not by grammar. A first-person statement is an `experience` only when the speaker *is* the bank's agent. The same words said by someone else are a `world` fact about that person:
+
+- Agent's own log — "I patched the auth bug" → **experience** (the agent did it).
+- A user talking to the agent — "I bought a Tesla" → **world** (a fact about the *user*, not the agent).
+
+**Describe the speaker in each item's `context`** to steer this correctly. When retaining transcripts or third-party content, a context like *"Customer Maria is speaking"* ensures her first-person statements are stored as `world` facts about Maria rather than mistaken for the agent's own experiences. For the agent's own logs, a context like *"The assistant is speaking"* attributes its first-person statements to the agent as `experience` facts.
 
 **Note:** Observations are consolidated automatically in the background after `retain()` operations complete. This consolidation process synthesizes patterns from new facts into the bank's knowledge base.
 
@@ -80,9 +86,10 @@ Hindsight automatically identifies and tracks **entities** — the people, organ
 
 ### Entity Resolution
 
-The same entity mentioned different ways gets unified:
+The same entity mentioned different ways gets unified through **fuzzy name matching**, reinforced by co-occurrence and temporal proximity:
 - "Alice" + "Alice Chen" + "Alice C." → one person
-- "Bob" + "Robert Chen" → one person (nickname resolution)
+
+Because resolution keys off name similarity, close variants merge automatically. Names that do not resemble each other (a nickname and an unrelated formal name, for example) are not unified on the name alone, though shared co-occurring entities can still link them.
 
 **Why it matters:** You can ask "What do I know about Alice?" and get everything, even if she was mentioned as "Alice Chen" in some conversations.
 
@@ -203,6 +210,27 @@ For finer control, you can also change the **extraction mode**:
 
 Set `retain_mission` and `retain_extraction_mode` via the [bank config API](api/memory-banks.md#retain-configuration) or the [`HINDSIGHT_API_RETAIN_MISSION`](configuration.md#retain) environment variable.
 
+### When a mission excludes everything in a document
+
+A mission narrows what becomes a memory — and content that produces no facts produces no memories at all. The document itself is still stored, but `recall` and `reflect` search memories, so a document with zero memories cannot be found by either. Tightening a mission therefore trades away retrieval of the raw source, not just fact creation.
+
+This is a normal outcome, not an error: the retain succeeds and the operation is reported as completed. Two signals tell you it happened:
+
+| Where | What to look for |
+|-------|------------------|
+| [`retain.completed` webhook](api/webhooks.md#retaincompleted) | `data.memory_unit_count: 0` |
+| [Metrics](monitoring.md#retain-metrics) | `hindsight.retain.documents.total{outcome="no_facts"}` |
+
+You can also audit after the fact: `GET /documents` returns `memory_unit_count` per document, so filtering for `0` lists everything currently unreachable.
+
+Extraction is not fully deterministic — a borderline document can yield facts on one run and none on the next. Treat a zero as "this document needs another pass" rather than as a permanent verdict.
+
+To recover a document, widen the mission and reprocess it — the stored text is re-extracted, and no re-upload is needed:
+
+```
+POST /v1/default/banks/{bank_id}/documents/{document_id}/reprocess
+```
+
 ---
 
 ## Observation Consolidation
@@ -217,6 +245,34 @@ After `retain()` completes, Hindsight automatically triggers **observation conso
 This happens asynchronously — your `retain()` call returns immediately while consolidation runs in the background.
 
 See [Observations](./observations) for details on how consolidation works.
+
+---
+
+## Memory Defense and Source Provenance
+
+### receipt_uri (optional)
+
+Type: `string`.
+
+Optional pointer into an external receipt or co-signature system. Stored as-is and surfaced in `security_events.receipt_uri` for any Memory Defense decision on this item.
+
+### 422 — Memory Defense violation
+
+When Memory Defense is enabled on the target bank and **every** item in the batch is blocked by policy, the request returns 422 with a violation list:
+
+```json
+{
+  "detail": {
+    "violations": [
+      { "index": 0, "detector": "prompt_injection", "severity": "high", "message": "..." }
+    ]
+  }
+}
+```
+
+Partial-block batches return 200 with the un-blocked items processed; blocked items are silently dropped from the result with their decisions recorded in `security_events`.
+
+See [Memory Defense](./memory-defense/index.md) for the full guide.
 
 ---
 

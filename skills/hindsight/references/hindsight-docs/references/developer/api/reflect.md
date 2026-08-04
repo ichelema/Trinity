@@ -7,10 +7,11 @@ When you call **reflect**, Hindsight runs an agentic loop that autonomously sear
 
 {/* Import raw source files */}
 
-:::info How Reflect Works
+> **ℹ️ How Reflect Works**
+>
 Learn about disposition-driven reasoning in the [Reflect Architecture](../reflect.md) guide.
 > **💡 Prerequisites**
-> 
+>
 Make sure you've completed the [Quick Start](./quickstart) to install the client and start the server.
 ## Basic Usage
 
@@ -87,7 +88,7 @@ Limits the length of the final generated response. Defaults to `4096`. This does
 
 ### response_schema
 
-An optional JSON Schema object. When provided, the LLM generates a response that conforms to the schema and the response includes a `structured_output` field with the result parsed accordingly. The `text` field will be empty since only a single structured LLM call is made. Use this when you need to process the response programmatically rather than display it as prose.
+An optional JSON Schema **object** with a non-empty `properties` map (nested objects and arrays are supported). When provided, the response includes a `structured_output` field **in addition to** the markdown `text`: the agent reasons to its answer, then a second pass extracts that answer into JSON matching your schema. `structured_output` is therefore a faithful projection of `text` — you get the readable answer *and* a typed object to program against, never one instead of the other. Invalid schemas (not an object, or no properties) are rejected before the call runs.
 
 ### Python
 
@@ -173,7 +174,7 @@ rm -f schema.json
 
 ### tags
 
-Filters which memories the agent can access during reflection. Works identically to [recall tags](./recall#tags) — only memories matching the specified tags are considered. The `tags_match` parameter controls the matching logic (`any`, `all`, `any_strict`, `all_strict`) with the same semantics as recall.
+Filters which memories the agent can access during reflection. Works identically to [recall tags](./recall#tags) — only memories matching the specified tags are considered. The `tags_match` parameter controls the matching logic (`any`, `all`, `any_strict`, `all_strict`, `exact`) with the same semantics as recall.
 
 ### Python
 
@@ -270,7 +271,7 @@ When enabled, the response includes a `trace` object with the full execution log
 
 ### text
 
-The synthesized answer as a well-formatted markdown string. This is the primary output of reflect. Empty when `response_schema` is provided (use `structured_output` instead in that case).
+The synthesized answer as a well-formatted markdown string. This is the primary output of reflect. Still returned when `response_schema` is provided — `structured_output` is derived from it, not a replacement for it.
 
 ### structured_output
 
