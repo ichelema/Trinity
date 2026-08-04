@@ -10,6 +10,9 @@ hooks/hindsight/benchmark/bench_results_rerank/
 data/playwright-mcp/
 /scratchpad.md
 
+# Stato locale di Claude Code nel progetto (generato, non si versiona).
+/.claude/settings.json
+
 # Log, alert e contatori di runtime, in QUALUNQUE cartella (2026-07-27).
 # Sostituisce le regole una-per-file degli scheduler: ogni nuovo job porta i suoi
 # artefatti accanto allo script e non deve piu' essere aggiunto qui a mano.
