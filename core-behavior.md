@@ -36,12 +36,23 @@ Tocca solo ciò che devi. Ripulisci solo il tuo disordine.
 
 ## Esecuzione guidata dagli obiettivi
 
-Definisci criteri di successo verificabili e itera fino alla verifica: per una
-validazione o un bug, scrivi prima il test che fallisce; per un refactoring,
-assicurati che i test passino prima e dopo. Per task multi-step enuncia un piano
-numerato in cui ogni step porta la sua verifica. Criteri di successo solidi
-permettono di iterare in autonomia; criteri deboli vanno chiariti prima di
-implementare, non dopo gli errori.
+**Definire i criteri di successo. Ripetere il ciclo fino alla verifica.**
+
+Trasformare le attività in obiettivi verificabili:
+
+- “Aggiungere la convalida” → “Scrivere test per input non validi, quindi farli superare”
+- “Correggere il bug” → “Scrivere un test che lo riproduca, quindi farlo superare”
+- “Rifattorizzare X” → “Assicurarsi che i test passino sia prima che dopo”
+
+Per le attività in più fasi, definire un breve piano:
+
+```
+1. [Fase] → verificare: [controllo]
+2. [Fase] → verificare: [controllo]
+3. [Fase] → verificare: [controllo]
+```
+
+Criteri di successo ben definiti consentono di ripetere il ciclo in modo indipendente. Criteri vaghi (“farlo funzionare”) richiedono continui chiarimenti.
 
 ## Ambiente di lavoro
 

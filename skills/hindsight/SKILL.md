@@ -25,7 +25,7 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 
 - Pacchetto Python: `hindsight-api` (puro Python, installato via `mise run install-hindsight`)
 - Entry-point: `hindsight-local-mcp` (in `Scripts/` del Python gestito da mise — esposto nel PATH via `[env]` di `.mise.toml`)
-- LLM per retain/recall: **OpenAI `gpt-4.1-nano`** (chiave da `$OPENAI_API_KEY`)
+- LLM per retain/recall: **OpenAI `gpt-4.1-mini`** (chiave da `$OPENAI_API_KEY`; scelto con A/B test 2026-06-02, vedi commenti in `mise.toml`)
 - Storage: embedded PostgreSQL in `~/.pg0/hindsight-mcp/`
 - Endpoint MCP: `http://localhost:8888/mcp/trinity-project/` (bank statico per-progetto)
 - Registrato a **scope user** come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (bank risolto per-progetto; vedi sotto)
@@ -103,7 +103,7 @@ Quando il server è up, in una sessione Claude Code questo progetto espone 26 to
 
 | Tool                | Quando usarlo                                                                                                                                                                                                  | Esempio di invocazione                                                                                                                          |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hindsight/retain`  | Memorizzare informazioni nuove (preferenze, decisioni, lezioni). Passa **contesto ricco e crudo**, non frasi pre-digerite: l'LLM estrae meglio i fatti dal testo originale. Asincrono: ritorna `operation_id`. | `retain(content="L'utente Sphynx preferisce Ruby per gli script e usa MSYS2 su Windows 11. Ha appena configurato Hindsight con gpt-4.1-nano.")` |
+| `hindsight/retain`  | Memorizzare informazioni nuove (preferenze, decisioni, lezioni). Passa **contesto ricco e crudo**, non frasi pre-digerite: l'LLM estrae meglio i fatti dal testo originale. Asincrono: ritorna `operation_id`. | `retain(content="L'utente Sphynx preferisce Ruby per gli script e usa MSYS2 su Windows 11. Ha appena configurato Hindsight con gpt-4.1-mini.")` |
 | `hindsight/recall`  | Recuperare memorie semanticamente rilevanti per una query. Sincrono.                                                                                                                                           | `recall(query="quali preferenze ha Sphynx per gli script?")`                                                                                    |
 | `hindsight/reflect` | Sintesi disposition-aware su una domanda usando le memorie come contesto.                                                                                                                                      | `reflect(query="Come dovrei impostare un nuovo script per Sphynx?")`                                                                            |
 
@@ -121,7 +121,7 @@ Tool ausiliari più usati:
 
 1. Il client (Claude Code) chiama `retain(content=...)`
 2. Il server accetta sincrono → `{status: "accepted", operation_id: "..."}` e mette in coda
-3. Worker async chiama OpenAI gpt-4.1-nano per estrarre:
+3. Worker async chiama OpenAI gpt-4.1-mini per estrarre:
    - **observation facts** (fatti atomici, es. "Sphynx prefers Ruby for scripting")
    - **world facts** (versione timestamped + entity-linked, es. "Sphynx prefers Ruby for scripting | When: 2026-05-23 | Involving: Sphynx")
 4. Entrambi i tipi vengono indicizzati con embeddings nel bank `trinity-project`

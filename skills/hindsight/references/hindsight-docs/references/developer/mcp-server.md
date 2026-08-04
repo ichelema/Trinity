@@ -100,12 +100,27 @@ The MCP server operates in two modes depending on the URL:
 
 | Mode | URL | Tools | bank_id |
 |------|-----|-------|---------|
-| **Single-bank** | `/mcp/{bank_id}/` | 26 tools (memory, mental models, directives, documents, operations, tags, bank management) | Implicit from URL |
-| **Multi-bank** | `/mcp/` | All 29 tools including `list_banks`, `create_bank`, `get_bank_stats` | Explicit `bank_id` parameter on each tool |
+| **Single-bank** | `/mcp/{bank_id}/` | 27 tools (memory, mental models, directives, documents, operations, tags, bank management) | Implicit from URL |
+| **Multi-bank** | `/mcp/` | All 30 tools including `list_banks`, `create_bank`, `get_bank_stats` | Explicit `bank_id` parameter on each tool |
 
 **Single-bank mode** (recommended) scopes all operations to the bank in the URL. Tools don't expose a `bank_id` parameter.
 
 **Multi-bank mode** exposes all tools with an optional `bank_id` parameter, plus bank management tools (`list_banks`, `create_bank`, `get_bank_stats`).
+
+## Tool Metadata and Instructions
+
+Hindsight can append deployment-specific guidance to the `retain` and `recall` MCP tool descriptions. Set `HINDSIGHT_API_MCP_INSTRUCTIONS` on the API server when clients should see local rules, such as which tags to use or which memories should be retained.
+
+```bash
+export HINDSIGHT_API_MCP_INSTRUCTIONS="Use project:<name> tags for project-specific memories."
+```
+
+MCP clients that read tool annotations also receive safety hints from the built-in tools:
+
+- Read-only operations such as `recall`, `reflect`, `list_*`, and `get_*` are marked with `readOnlyHint: true`.
+- Delete, clear, and invalidate operations are marked with `destructiveHint: true`.
+- `openWorldHint` is `false` for the built-in tools because Hindsight operates on its configured memory store rather than the open internet.
+- Write operations such as `retain`, `create_*`, `update_*`, `refresh_mental_model`, and `cancel_operation` are not marked destructive.
 
 ---
 
@@ -144,6 +159,38 @@ Store information to long-term memory.
 
 ---
 
+### sync_retain
+
+Store information to long-term memory and wait for completion. Unlike [`retain`](#retain) (which is asynchronous), `sync_retain` blocks until the memory is fully stored and immediately available for recall — useful for read-after-write flows where you query right after storing.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `content` | string | Yes | The fact or memory to store |
+| `context` | string | No | Category for the memory (default: `general`) |
+| `timestamp` | string | No | ISO 8601 timestamp for when the event occurred |
+| `tags` | list[string] | No | Tags for organizing and filtering this memory |
+| `metadata` | object | No | Key-value metadata to attach (e.g., `{"source": "slack"}`) |
+| `document_id` | string | No | Associate this memory with an existing document |
+
+**Example:**
+```json
+{
+  "name": "sync_retain",
+  "arguments": {
+    "content": "User prefers Python over JavaScript for backend development",
+    "context": "programming_preferences",
+    "tags": ["user:alice", "preferences"]
+  }
+}
+```
+
+**When to use:**
+- You need the memory queryable immediately after storing (read-after-write)
+- A workflow step depends on the stored memory being available before continuing
+- Otherwise prefer `retain` (asynchronous) to avoid blocking on storage
+
+---
+
 ### recall
 
 Search memories to provide personalized responses.
@@ -153,10 +200,11 @@ Search memories to provide personalized responses.
 | `query` | string | Yes | Natural language search query |
 | `max_tokens` | integer | No | Maximum tokens to return (default: 4096) |
 | `budget` | string | No | Search thoroughness: `low`, `mid`, or `high` (default: `high`) |
-| `types` | list[string] | No | Filter by fact type: `world`, `experience`, `opinion`. Defaults to all |
+| `types` | list[string] | No | Filter by fact type: `world`, `experience`, `observation`. Defaults to all |
 | `tags` | list[string] | No | Filter memories by tags |
 | `tags_match` | string | No | Tag matching mode: `any` (default) or `all` |
 | `query_timestamp` | string | No | ISO 8601 timestamp — recall as if asking at this point in time; anchors relative temporal expressions and recency scoring |
+| `min_scores` | object | No | Optional per-stage score floors, e.g. `{"reranker": 0.5}`. Keys: `semantic`/`keyword` (retrieval-level cutoffs), `reranker`/`final` (post-ranking). All inclusive and AND-ed; omit for no filtering. Reranker scores aren't calibrated across queries — calibrate before use |
 
 **Example:**
 ```json
@@ -191,6 +239,7 @@ Generate thoughtful analysis by synthesizing stored memories with the bank's per
 | `response_schema` | object | No | JSON Schema for structured output. When provided, the response includes a `structured_output` field |
 | `tags` | list[string] | No | Filter memories by tags before reflecting |
 | `tags_match` | string | No | Tag matching mode: `any` (default) or `all` |
+| `include_trace` | boolean | No | Include `tool_trace` and `llm_trace` debugging output. Defaults to `false` to keep responses small |
 
 **Example:**
 ```json
@@ -221,8 +270,27 @@ Create a mental model — a living document that stays current with your memorie
 | `source_query` | string | Yes | The query used to generate and refresh the model |
 | `mental_model_id` | string | No | Custom ID (alphanumeric lowercase with hyphens). Auto-generated if not provided |
 | `tags` | list[string] | No | Tags for organizing and filtering models |
+| `tags_match` | string | No | How the model's tags are matched against memories on refresh: `any`, `all`, `any_strict`, `all_strict`, or `exact`. See the note below on the default |
 | `max_tokens` | integer | No | Maximum tokens for model content (default: 2048) |
 | `trigger_refresh_after_consolidation` | boolean | No | Auto-refresh this model after memory consolidation (default: `false`) |
+
+:::warning Tagged models default to `all_strict`
+When a mental model has `tags` but no explicit `tags_match`, its refresh matches memories with **`all_strict`** — a memory must carry **every** one of the model's tags to be included. If your memories use narrow, single-topic tags (e.g. `["project:status"]`) while the model is tagged broadly (e.g. `["projects", "mental-model"]`), the refresh filters out everything and the content comes back empty.
+
+Pass `tags_match: "any"` (the same default that `recall` and `reflect` use) to match memories that carry *any* of the model's tags:
+
+```json
+{
+  "name": "create_mental_model",
+  "arguments": {
+    "name": "Current projects",
+    "source_query": "Which projects is the user currently working on?",
+    "tags": ["projects", "mental-model"],
+    "tags_match": "any"
+  }
+}
+```
+:::
 
 **Example:**
 ```json
@@ -231,7 +299,8 @@ Create a mental model — a living document that stays current with your memorie
   "arguments": {
     "name": "Team Directory",
     "source_query": "Who works here and what do they do?",
-    "tags": ["team", "people"]
+    "tags": ["team", "people"],
+    "tags_match": "any"
   }
 }
 ```
@@ -364,7 +433,7 @@ Browse stored memories with optional filtering and pagination.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `type` | string | No | Filter by fact type: `world`, `experience`, or `opinion` |
+| `type` | string | No | Filter by fact type: `world`, `experience`, or `observation` |
 | `q` | string | No | Search query to filter memories |
 | `limit` | integer | No | Maximum number of results (default: 100) |
 | `offset` | integer | No | Number of results to skip for pagination (default: 0) |
@@ -482,7 +551,8 @@ The `config_updates` object accepts any bank-configurable field by its Python fi
 - `retain_mission` — steers what gets extracted during `retain()`
 - `retain_extraction_mode` — `concise` (default), `verbose`, or `custom`
 - `retain_custom_instructions` — custom extraction prompt (active when mode is `custom`)
-- `retain_chunk_size` — maximum token size for each content chunk
+- `retain_chunk_size` — target maximum characters for each content chunk
+- `retain_structured_chunk_size` — maximum characters for a single JSONL line or conversation turn to keep whole
 - `retain_chunk_batch_size` — number of chunks to process in parallel
 - `enable_observations` — toggle observation consolidation after `retain()`
 - `observations_mission` — controls observation synthesis rules
@@ -509,7 +579,7 @@ Clear all memories from a bank without deleting the bank itself. Optionally filt
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `type` | string | No | Fact type to clear: `world`, `experience`, or `opinion`. If not specified, clears all |
+| `type` | string | No | Fact type to clear: `world`, `experience`, or `observation`. If not specified, clears all |
 
 ---
 
