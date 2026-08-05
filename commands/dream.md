@@ -138,9 +138,17 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 Flagga `[x]` le azioni che approvi, poi lancia `/trinity:dream apply`.
 Le azioni non flaggate saranno considerate respinte.
 
+Legenda tipi: hs-invalidate = il fatto resta archiviato ma non verrà più
+richiamato · hs-update = corregge il testo di un fatto · hs-correct-doc =
+riscrive un documento errato · hs-retain = salva un fatto nuovo ·
+file-update/-delete/-create = modifica/cancella/crea un file memoria (sempre
+con backup .bak) · policy-migrate = sposta un file memoria in Hindsight ·
+mm-refresh = rigenera i mental model
+
 ## Obsolete
 
 - [ ] **A1** · hs-invalidate · bank `<bank>` · fatto `<memory_id>`
+  - Cosa fa: <una frase semplice: di cosa parla la memoria e perché non vale più>
   - Attuale: "<claim della memoria>"
   - Motivo: daily YYYY-MM-DD §"<sezione ###>" — "<citazione breve>"
   - Verifica: `hindsight.config.json` — reranker effettivo: zerank-2 ✓
@@ -148,6 +156,7 @@ Le azioni non flaggate saranno considerate respinte.
 ## Da aggiornare
 
 - [ ] **A2** · file-update · `~/.claude/projects/<slug>/memory/<file>.md`
+  - Cosa fa: <una frase semplice: quale memoria viene corretta e come>
   - Attuale: "<claim attuale>"
   - Proposta (testo esatto che verrà scritto):
     ```
@@ -159,6 +168,7 @@ Le azioni non flaggate saranno considerate respinte.
 ## Nuove da salvare
 
 - [ ] **A3** · hs-retain · bank `<bank>`
+  - Cosa fa: <una frase semplice: quale fatto nuovo viene salvato e a che serve>
   - Proposta (testo esatto): "<contenuto del retain>"
   - Tags: claude-code (+ repo:<nome> solo se già presente nel bank)
   - Fonte: daily YYYY-MM-DD §"<sezione>"
@@ -167,6 +177,7 @@ Le azioni non flaggate saranno considerate respinte.
 ## Violazioni policy MEMORY.md
 
 - [ ] **A4** · policy-migrate · `~/.claude/projects/<slug>/memory/<file>.md` → bank `<bank>`
+  - Cosa fa: <una frase semplice: quale memoria viene spostata e perché>
   - Motivo: dettaglio tecnico non usato a ogni sessione → per policy va in Hindsight
   - Proposta: hs-retain del contenuto (testo esatto sotto) + delete del file + rimozione riga indice
     ```
@@ -185,6 +196,10 @@ Regole del formato:
 - ID stabili `A1..An`, sequenziali, mai rinumerati.
 - Un solo checkbox per azione, sulla stessa riga dell'ID (parsing in apply:
   `- [x] **A<n>**`).
+- Ogni azione deve essere comprensibile DA SOLA, senza aprire altri file: la
+  riga `Cosa fa` spiega in una frase di cosa parla la memoria, cosa cambierà
+  e perché — linguaggio semplice, niente sigle o ID non spiegati. Chi legge
+  deve poter decidere il flag leggendo solo il blocco.
 - Per update/create riporta sempre il contenuto proposto ESATTO: l'utente
   approva ciò che verrà scritto, non un'intenzione vaga.
 - Ogni azione cita la Fonte (daily + sezione) che la giustifica; per fatti
