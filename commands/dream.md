@@ -82,7 +82,9 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 5. **Hindsight (audit completo, via REST)**: `GET /banks` per l'elenco dei
    bank; per ogni bank `GET /banks/<bank>/memories/list` e
    `GET /banks/<bank>/documents` paginando fino a esaurimento (percent-encode
-   il nome del bank negli URL). Se il server non risponde: prosegui in audit
+   il nome del bank negli URL). ESCLUDI i bank il cui nome contiene
+   `obsidian`: sono in sola lettura, li sincronizza il plugin di Obsidian —
+   non vanno né auditati né modificati. Se il server non risponde: prosegui in audit
    parziale solo file-based e marca il degrado nell'intestazione del report
    ("Server Hindsight: NON RAGGIUNGIBILE — audit parziale").
 6. **Confronto semantico** (le daily vincono sempre sulle memorie):
@@ -263,6 +265,9 @@ nome bank sempre percent-encoded negli URL.
 ## Regole
 
 - Le daily note sono READ-ONLY: mai Edit/Write nel vault durante dream.
+- I bank Hindsight `obsidian` sono OFF-LIMITS: li sincronizza il plugin di
+  Obsidian e sono in sola lettura — mai proporre né eseguire azioni su di essi
+  (né retain, né update, né delete, né come destinazione di policy-migrate).
 - Apply tocca SOLO: directory memoria, report, state file e bank Hindsight.
   Mai codice sorgente, config o test dei progetti.
 - Mai eseguire un'azione non flaggata; mai flaggare al posto dell'utente
