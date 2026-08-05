@@ -226,6 +226,33 @@ collidono con i comandi locali del progetto:
 | `/trinity:ccr_model` | elenca i modelli configurati in ccr e le route attuali |
 | `/trinity:release` | versiona il plugin (bump, commit, tag) e push dopo conferma |
 | `/trinity:adhd-cli` | lancia la CLI `adhd-agent` (§12.3) con parametri formali (`--frames`, `--ideas`, `--top`, `--json`, …) |
+| `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
+
+### `/trinity:dream` — audit della memoria
+
+Command in due fasi che verifica se le memorie persistenti sono ancora valide,
+usando le daily note Obsidian come fonte di verità (a loro volta verificate
+sullo stato reale: config, file, comandi) e le trascrizioni delle sessioni
+come fonte ausiliaria. Copre TUTTI i progetti: ogni directory
+`~/.claude/projects/*/memory/` e ogni bank Hindsight (via REST, mai tool MCP).
+Gira in modalità multi-agente: subagent Opus 5 per i task, Fable orchestratore
+e controllore finale.
+
+Uso:
+
+1. `/trinity:dream` — genera `logs/dream/report-YYYY-MM-DD.md` con le azioni
+   proposte (obsolete / da aggiornare / nuove da salvare / violazioni policy /
+   mental model), ciascuna con checkbox, fonte e verifica sul campo.
+2. Flagga `[x]` nel report le azioni che approvi (le non flaggate = respinte).
+3. `/trinity:dream apply` — esegue SOLO le flaggate, marca gli esiti nel
+   report (`→ FATTO` / `→ ERRORE`, rilanciabile senza duplicati), rigenera i
+   mental model se ha toccato Hindsight e avanza la finestra in
+   `logs/dream/state.json` (la finestra parte dall'ultimo audit applicato;
+   primo giro: ultimi 14 giorni).
+
+> **TODO**: creare un job schedulato (§11, System Scheduler su Windows) che
+> lanci l'audit tutte le notti in headless (`claude -p "/trinity:dream"`),
+> così al mattino il report è pronto da rivedere e flaggare.
 
 ---
 
