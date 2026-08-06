@@ -12,6 +12,8 @@ Correct. Forgettable. The interesting answers live past number three, in
 the awkward middle nobody walks into. This skill makes the model walk
 there.
 
+
+
 ## Pre-flight (run before Phase 1)
 
 This skill is expensive. About 10 Agent calls, 30 to 90 seconds wall clock,
