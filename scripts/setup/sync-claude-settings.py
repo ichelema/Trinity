@@ -7,8 +7,12 @@ Merge in tre strati, l'ultimo vince:
   3. settings.<os>.json (env/path specifici: windows o linux)
 I dict si fondono ricorsivamente; liste e scalari vengono sostituiti (le
 permissions vivono per intero nello shared, niente union che resusciterebbe
-voci rimosse dal repo). TRINITY_PLUGIN_DIR viene impostata dalla posizione
-del repo, mai dagli overlay. Prima di scrivere crea settings.json.bak.
+voci rimosse dal repo). Il blocco env fa eccezione al punto 1: e' posseduto
+per intero dal repo (unione shared+overlay), cosi' una variabile tolta dai
+file versionati sparisce davvero invece di sopravvivere sulla macchina; le
+chiavi rimosse vengono elencate a schermo. TRINITY_PLUGIN_DIR viene impostata
+dalla posizione del repo, mai dagli overlay. Prima di scrivere crea
+settings.json.bak.
 
 Uso: sync-claude-settings.py <path di settings.json>
 (su Windows passare il path in formato Windows: il Python mise è nativo)
@@ -58,9 +62,19 @@ def main() -> int:
         old_text = settings_path.read_text(encoding="utf-8")
         data = json.loads(old_text)
 
+    # env non puo' stare in REPLACE_KEYS: i merge sono due, e il secondo farebbe
+    # sostituire allo shared l'env dell'overlay. Si compone qui l'unione dei due
+    # e la si assegna dopo, sostituendo per intero quella locale.
+    repo_env = {**shared.get("env", {}), **overlay.get("env", {})}
+
     deep_merge(data, shared, REPLACE_KEYS)
     deep_merge(data, overlay, REPLACE_KEYS)
-    data.setdefault("env", {})["TRINITY_PLUGIN_DIR"] = root.as_posix()
+
+    dropped = sorted(set(data.get("env", {})) - set(repo_env) - {"TRINITY_PLUGIN_DIR"})
+    data["env"] = repo_env
+    data["env"]["TRINITY_PLUGIN_DIR"] = root.as_posix()
+    for key in dropped:
+        print(f"  [DEL ] env.{key}: non e' piu' in config/claude/, rimossa")
 
     new_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if new_text == old_text:
