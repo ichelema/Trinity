@@ -9,6 +9,24 @@
 # NON fa retain: è solo lo stop dei processi.
 set -uo pipefail
 
+# Guardia anti-race col boot: sotto si uccide per NOME PROCESSO (taskkill //IM su
+# Windows, pkill -f su Linux), quindi si colpirebbe anche un server ancora in boot
+# — nessun bind su :8888, invisibile a un check per porta — appena lanciato da una
+# sessione nuova. hindsight-ensure-up.sh scrive questo lock prima di lanciarlo e lo
+# rimuove a readiness. Exit 1 = stop abortito: la sentinella lo legge e torna a
+# dormire invece di terminare, restando a sorvegliare la sessione entrante.
+START_LOCK="${TMPDIR:-/tmp}/hindsight-starting.lock"
+if [ -f "$START_LOCK" ]; then
+	_ts="$(<"$START_LOCK")"
+	_ts="${_ts//[!0-9]/}"
+	_age=$(($(date +%s) - ${_ts:-0}))
+	if [ "$_age" -lt 60 ]; then
+		echo "[hindsight-stop] avvio in corso da ${_age}s: stop abortito (rm $START_LOCK per forzare)" >&2
+		exit 1
+	fi
+	rm -f "$START_LOCK" # lock stantio: l'avvio e' fallito, procedi
+fi
+
 case "$(uname -s)" in
 MINGW* | MSYS* | CYGWIN*)
 	TASKKILL="/c/Windows/System32/taskkill.exe"
