@@ -61,6 +61,10 @@ while :; do
 	# Spegnerle il server sotto i piedi la lascerebbe senza MCP (il suo ensure-up
 	# ha gia' visto la porta occupata e non rilancia).
 	[ "$(claude_alive)" -gt 0 ] && continue
-	bash "$SCRIPT_DIR/ops/hindsight-stop-services.sh"
+	# Secondo livello anti-race: la sessione entrante puo' non essere ancora
+	# visibile a claude_alive ma avere gia' lanciato il server (lock di boot) —
+	# lo stop esce 1 e noi torniamo a dormire invece di morire, perche' il suo
+	# ensure-up ha visto il nostro pidfile vivo e non spawnera' una sentinella.
+	bash "$SCRIPT_DIR/ops/hindsight-stop-services.sh" || continue
 	exit 0
 done

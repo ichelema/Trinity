@@ -24,8 +24,16 @@ PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # mise non è nel PATH ristretto degli hook → cercalo nel PATH, poi ricadi sul
 # launcher standard ~/.local/bin/mise (su MSYS2 risolve da solo il .exe).
 MISE="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
-DEADLINE_SECS=25 # budget readiness; l'hook ha timeout 30 in settings.json
+# Budget readiness; l'hook ha timeout 50 in hooks.json. Alzato da 25 il 2026-08-07:
+# un boot da FREDDO (Postgres embedded incluso) misura ~33s e sforava, lasciando la
+# sessione senza MCP anche senza race. Costo: con server irrecuperabile si aspettano
+# 45s a vuoto a ogni SessionStart, invece di 25.
+DEADLINE_SECS=45
 POLL_INTERVAL=1
+# Lock anti-race con la sentinella (vedi la guardia in ops/hindsight-stop-services.sh):
+# segnala "server in boot" a chi spegne, che uccide per nome processo e colpirebbe
+# anche un server non ancora in bind. Scritto da start_server, rimosso a readiness.
+START_LOCK="${TMPDIR:-/tmp}/hindsight-starting.lock"
 
 # Esito 0 se l'endpoint MCP accetta un initialize e restituisce serverInfo
 # (= il client Claude Code potra' registrare i tool). E' la readiness "vera",
@@ -46,6 +54,7 @@ port_listening() {
 }
 
 start_server() {
+    date +%s > "$START_LOCK"
     # Trust idempotente: ogni update del plugin cambia il path della copia installata
     # (cache versionata ~/.claude/plugins/cache/...) e mise rifiuterebbe il config.
     "$MISE" trust "$PLUGIN_ROOT/mise.toml" > /dev/null 2>&1 || true
@@ -68,6 +77,7 @@ fi
 
 # 1. gia' pronto: esci subito (nessun costo di avvio)
 if mcp_ready; then
+    rm -f "$START_LOCK"
     exit 0
 fi
 
@@ -82,6 +92,7 @@ fi
 elapsed=0
 while [ "$elapsed" -lt "$DEADLINE_SECS" ]; do
     if mcp_ready; then
+        rm -f "$START_LOCK"
         exit 0
     fi
     # Anti-race con lo shutdown detached della sessione precedente: la porta era
