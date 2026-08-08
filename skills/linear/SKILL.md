@@ -55,5 +55,10 @@ Ci finiscono i campi `description`, i commenti e anche **titolo e descrizione
 delle Pull Request**: Linear aggancia la PR alla issue come attachment e ne usa
 il titolo, che diventa così testo del workspace a tutti gli effetti.
 
+Vale lo stesso per i **messaggi di commit**, per la stessa ragione allargata al
+repository: la history la leggono `git blame`, le release notes e chi arriva
+dopo, e sopravvive alla sessione che l'ha prodotta. Se lo storico del repo è in
+un'altra lingua, la discontinuità è voluta: non tornare indietro per uniformarti.
+
 La conversazione con l'utente resta in italiano: riepiloghi, domande e output a
 schermo non seguono questa regola.

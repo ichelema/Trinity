@@ -109,6 +109,8 @@ Prima dell'implementazione mostra:
 Mantieni tutte le modifiche entro lo scope delle issue richieste.
 
 Sono consentiti più commit quando rappresentano modifiche logiche distinte.
+I messaggi di commit vanno scritti in inglese, come il resto di ciò che resta
+nel repository e su Linear.
 
 Quando l'implementazione è terminata:
 

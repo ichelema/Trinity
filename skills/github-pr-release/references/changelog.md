@@ -4,6 +4,18 @@ Il changelog è una lista **curata** dei cambiamenti rilevanti per utenti e
 integratori del progetto. Non è una copia di `git log`: il lettore vuole
 sapere cosa cambia per lui, non come è stato implementato.
 
+## Lingua
+
+Il CHANGELOG si scrive **sempre in inglese**, anche quando la conversazione con
+l'utente è in un'altra lingua. È il documento che raggiunge il pubblico più
+ampio del progetto: finisce nelle GitHub Release, lo leggono integratori che non
+hanno partecipato allo sviluppo, e resta la traccia consultabile a distanza di
+anni. Vale per le voci, per i titoli di sezione e per le note di migrazione.
+
+Stessa regola per i messaggi di commit (vedi
+[commit-triage.md](commit-triage.md)) e per titolo e descrizione delle Pull
+Request. La conversazione con l'utente resta invece nella sua lingua.
+
 ## Struttura
 
 ```markdown

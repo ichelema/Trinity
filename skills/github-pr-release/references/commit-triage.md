@@ -25,6 +25,15 @@ Un singolo intervento logico per commit. Per ogni gruppo prepara un messaggio
 `style`) coerente con lo storico del repository — guardalo con
 `git log --oneline -20` invece di assumere una convenzione.
 
+I messaggi di commit si scrivono **sempre in inglese**, anche quando la
+conversazione con l'utente è in un'altra lingua: la history è un artefatto
+pubblico del repository, la leggono `git blame`, le release notes e chiunque
+arrivi dopo, e sopravvive alla sessione in cui è stata prodotta.
+
+Dallo storico prendi la convenzione dei prefissi e degli scope, **non la
+lingua**: se i commit precedenti sono in un'altra lingua, la discontinuità è
+voluta e va nella direzione giusta. Non tornare indietro per uniformarti.
+
 ## 3. Mostra il piano e fermati
 
 Presenta una tabella e attendi l'OK:
