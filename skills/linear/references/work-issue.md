@@ -148,8 +148,10 @@ La Pull Request deve contenere:
 - test eseguiti
 - riferimenti alle issue Linear
 
-La descrizione della Pull Request deve essere sempre in inglese, come i
-commenti aggiunti alle issue Linear durante il lavoro.
+Titolo e descrizione della Pull Request devono essere sempre in inglese, come i
+commenti aggiunti alle issue Linear durante il lavoro. Il titolo conta quanto il
+corpo: Linear lo usa come titolo dell'attachment che aggancia alla issue, quindi
+finisce dentro il workspace esattamente come una description.
 
 Dopo aver creato la PR mostra:
 

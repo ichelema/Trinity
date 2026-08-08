@@ -47,10 +47,13 @@ omettilo per creare. Non cercare un `create_issue`, non esiste.
 
 ## Lingua
 
-Il contenuto che finisce **dentro** Linear — campi `description` e commenti — va
-sempre scritto in inglese, anche quando l'utente scrive in italiano: le issue
-sono lette da altri e restano nel tempo, quindi la lingua del workspace prevale
-su quella della conversazione.
+Il contenuto che finisce **dentro** Linear va sempre scritto in inglese, anche
+quando l'utente scrive in italiano: le issue sono lette da altri e restano nel
+tempo, quindi la lingua del workspace prevale su quella della conversazione.
+
+Ci finiscono i campi `description`, i commenti e anche **titolo e descrizione
+delle Pull Request**: Linear aggancia la PR alla issue come attachment e ne usa
+il titolo, che diventa così testo del workspace a tutti gli effetti.
 
 La conversazione con l'utente resta in italiano: riepiloghi, domande e output a
 schermo non seguono questa regola.
