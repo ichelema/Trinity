@@ -1,200 +1,131 @@
 ---
 name: github-pr-release
-version: "1.0.0"
+version: "2.0.0"
 description: >
-  Lightweight Git/GitHub workflow for personal projects: feature branches, atomic
-  commits, pull requests merged with a merge commit, curated CHANGELOG.md, SemVer
-  releases with annotated tags and GitHub Releases via the gh CLI. Use whenever the
-  user wants to start a feature/fix/hotfix branch, open, update, check or merge a PR,
-  bring a branch back into main, prepare or publish a release, bump a version, update
-  a changelog, or create a tag — any "release", "rilascio", "apri la PR", "merge in
-  main", "prepara la versione" request on a project. Trigger even for short requests
-  like "facciamo la release" or "chiudi la PR" without further detail. Do NOT use for
-  releasing the Trinity plugin itself — that has its own /trinity:release command.
+  Release e versionamento di un progetto: scelta della versione SemVer, curatela
+  del CHANGELOG.md, triage delle modifiche pendenti in commit atomici, tag annotato
+  e GitHub Release via gh CLI. Usala per "facciamo la release", "prepara la versione",
+  "bump di versione", "aggiorna il changelog", "crea il tag", "pubblica la release",
+  anche su richieste brevi e senza dettagli. Copre anche il rilascio del plugin Trinity.
+  Non usarla per lavorare su una issue o per aprire e mergiare una PR di feature:
+  quello è della skill linear.
 ---
 
-# GitHub PR e Release
+# Release e versionamento
 
-Flusso leggero per gestire un progetto personale con Git, GitHub CLI (`gh`) e `mise`:
-`main` stabile, branch brevi, commit atomici, PR quando utile, release taggate.
+Porta un progetto da "ci sono modifiche" a "esiste una versione pubblicata":
+commit atomici → changelog curato → bump → tag → GitHub Release.
 
-## Come usare questa skill
+## Confine con la skill `linear`
 
-1. Identifica cosa chiede l'utente: **feature/fix** (branch → commit → PR),
-   **merge** di una PR, oppure **release**. Segui la sezione corrispondente.
-2. Prima di iniziare controlla lo stato del repository (`git status`, branch corrente):
-   sessioni parallele o file staged altrui finiscono nei commit per sbaglio.
-3. Chiedi sempre conferma all'utente prima delle operazioni che escono dal repo
-   locale: `git push`, `gh pr create`, `gh pr merge`, `gh release create`.
-   Tutto il resto (branch, commit, check) procede senza conferma.
+| Richiesta | Skill |
+| --- | --- |
+| Lavorare su una issue, aprire o mergiare la PR di una feature | `linear` |
+| Rilasciare una versione, bump, changelog, tag | questa |
 
-## Regole del flusso
+Le due si incontrano in un punto solo: il changelog cita le issue rilasciate.
+Vedi "Non disallineare Linear" sotto.
 
-* `main` è sempre stabile e rilasciabile.
-* Branch brevi: `feature/*`, `fix/*`, `hotfix/*`. Niente branch `develop`
-  permanente salvo una reale necessità del progetto.
-* I commit sono atomici e descrivono passi tecnici coerenti: un cambiamento
-  logico per commit, così history, revert e review restano leggibili.
-* La PR rappresenta una modifica funzionale; può contenere più commit.
-* Il merge usa un **merge commit**: conserva tutti i commit e li raggruppa
-  visibilmente sotto la loro PR nella history.
+## Flusso
 
-## Feature e PR
+1. **Working tree pulito.** Se ci sono modifiche pendenti, trasformale prima in
+   commit atomici seguendo [references/commit-triage.md](references/commit-triage.md).
+2. **Parti dal branch di default aggiornato.** Rilevalo, non assumerlo:
 
-Partire sempre da `main` aggiornato:
+   ```bash
+   BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
+   git switch "$BASE"
+   git pull --ff-only origin "$BASE"
+   ```
 
-```bash
-git switch main
-git pull --ff-only origin main
-git switch -c feature/<nome-feature>
-```
+3. **Verifica.** `mise run check`, o il comando di test del progetto. Se non
+   esiste alcun check, dillo all'utente invece di saltarlo in silenzio.
+4. **Changelog.** Leggi [references/changelog.md](references/changelog.md) per
+   struttura, curatela e scelta della versione. In sintesi: raccogli i commit
+   dall'ultimo tag (`git log <ultimo-tag>..HEAD --oneline`), aggiorna le voci di
+   `[Unreleased]`, trasformalo in `## [x.y.z] - YYYY-MM-DD`, ricrea un
+   `[Unreleased]` vuoto in cima.
+5. **Bump come commit a sé.** Aggiorna il file di versione del progetto e
+   committa separatamente dai commit della feature: chi legge la history deve
+   distinguere "cosa è cambiato" da "quando è stato rilasciato".
 
-Creare commit atomici, uno per passo logico:
+   ```bash
+   git add <file-di-versione> CHANGELOG.md
+   git commit -m "chore: bump 1.2.0"
+   git tag -a v1.2.0 -m "Release v1.2.0"
+   ```
 
-```bash
-git add lib/result.rb
-git commit -m "Add Result#try"
+6. **Push, con conferma.** Un solo push per tutti i commit e il tag. Mostra cosa
+   verrebbe pubblicato e attendi un OK esplicito:
 
-git add test/result_test.rb
-git commit -m "Cover Result#try failure paths"
+   ```bash
+   git push --follow-tags origin "$BASE"
+   ```
 
-git add README.md
-git commit -m "Document Result#try migration"
-```
+7. **GitHub Release**, usando **solo** la sezione della versione come note, mai
+   l'intero CHANGELOG.md:
 
-Prima di pubblicare, verificare diff, history e test:
+   ```bash
+   VERSION=1.2.0
+   awk -v ver="$VERSION" '$0 ~ "^## \\["ver"\\]" {flag=1; next} /^## \[/ {flag=0} flag' \
+     CHANGELOG.md > "$TMPDIR/release-notes.md"
 
-```bash
-git log --oneline --graph main..HEAD
-git diff --stat main...HEAD
-git diff main...HEAD
-mise run check
-```
+   gh release create "v$VERSION" \
+     --title "v$VERSION" \
+     --notes-file "$TMPDIR/release-notes.md"
+   ```
 
-Se il progetto non ha un task `mise`, usare il comando di test del progetto
-(per esempio `bundle exec rake`). Se non esiste alcun check, segnalarlo
-all'utente invece di saltare la verifica in silenzio.
+## Conferme
 
-Pubblicare il branch e creare la PR (con conferma dell'utente):
+Tutto ciò che resta nel repository locale (commit, tag, branch) procede senza
+chiedere. Tutto ciò che esce — `git push`, `gh release create` — richiede una
+conferma esplicita: è il confine oltre il quale un errore diventa pubblico e si
+corregge solo con un'altra release.
 
-```bash
-git push -u origin feature/<nome-feature>
+## Non disallineare Linear
 
-gh pr create \
-  --base main \
-  --head feature/<nome-feature> \
-  --title "Add Result#try" \
-  --body "## Summary
-- Add Result#try
-- Add tests and documentation
+Una release **non passa da una issue**: è lavoro di repository, non di prodotto.
+Non creare un'issue Linear per il bump, non aprire una PR di release, non usare
+magic words. Non c'è niente da tenere allineato perché non c'è niente di
+parallelo, e la tracciabilità esiste già in entrambe le direzioni — da Linear
+vedi la PR come attachment, dal changelog vedi l'ID issue.
 
-## Verification
-- mise run check"
-```
+Il punto in cui si rompe è il testo: `Fixes ICH-14` dentro il changelog o nel
+messaggio del commit di release fa ricollegare a Linear issue già chiuse,
+attaccandole al rilascio invece che alla PR che le ha risolte. Nel changelog gli
+ID vanno **nudi** (`ICH-14`). Dettagli in
+[references/changelog.md](references/changelog.md).
 
-Una PR si aggiorna con normali commit e `git push`. Prima del merge:
+Se il workspace Linear ha una release pipeline configurata, esiste anche
+l'allineamento esplicito via `save_release`; senza pipeline (il caso di default)
+non serve e non va simulato con issue finte.
 
-```bash
-gh pr checks <numero-pr>
-gh pr view <numero-pr>
-```
+## Progetti con release automatizzata
 
-## Merge della PR
-
-Usare il merge commit per conservare tutti i commit e mostrare che
-appartengono alla stessa PR:
-
-```bash
-gh pr merge <numero-pr> --merge
-```
-
-Non usare `--squash`: distrugge la storia dei commit atomici. Non usare
-`--rebase`: conserva i commit ma non crea il nodo di merge che raggruppa la PR.
-
-Dopo il merge, riallineare il locale e pulire:
+Alcuni progetti hanno già una task che fa bump, commit e tag insieme: usala
+invece di rifare i passi a mano, così la versione resta coerente ovunque il
+progetto la scriva.
 
 ```bash
-git switch main
-git pull --ff-only origin main
-git branch -d feature/<nome-feature>
-git fetch --prune
+mise run release <NUOVA_VERSIONE>
 ```
 
-## Release
+**Plugin Trinity** (`E:/AI/Claude/Trinity`): la versione sta in
+`.claude-plugin/plugin.json`, la task `mise run release <X.Y.Z>` fa bump +
+commit `chore(plugin): bump X.Y.Z` + tag `vX.Y.Z` in locale. La "API pubblica"
+su cui giudicare il SemVer sono gli hook, i comandi, le skill, i tool MCP e lo
+schema di `hindsight.config.json`. Il numero in `plugin.json` deve combaciare
+col tag. Dopo il bump il manifest cambia, ma Claude Code lo rilegge solo al
+riavvio.
 
-Prima di preparare il changelog leggi [references/changelog.md](references/changelog.md):
-contiene struttura, regole di curatela e la guida per scegliere la versione SemVer.
+Su Windows/MSYS2 il push via SSH dal Bash tool può fallire perché msys2 ignora
+`HOME`/config: in quel caso usa i percorsi SSH assoluti e ripeti.
 
-Partire da `main` aggiornato e verificato:
+## Checklist pre-release
 
-```bash
-git switch main
-git pull --ff-only origin main
-mise run check
-```
+Verifica e mostra l'esito:
 
-Preparare il changelog:
-
-1. leggere commit e PR dall'ultima release (`git log <ultimo-tag>..HEAD --oneline`);
-2. aggiornare le voci in `[Unreleased]`, eliminando il rumore tecnico;
-3. trasformare `[Unreleased]` in `## [x.y.z] - YYYY-MM-DD`;
-4. aggiungere in cima un nuovo `## [Unreleased]` vuoto.
-
-Scegliere la versione con Semantic Versioning: `MAJOR` per breaking change,
-`MINOR` per funzionalità compatibili, `PATCH` per bug fix compatibili
-(dettagli nel reference). Aggiornare il file di versione del progetto
-(per esempio `lib/<package>/version.rb`) e creare il commit di release:
-
-```bash
-git add lib/<package>/version.rb CHANGELOG.md
-git commit -m "Release v1.2.0"
-```
-
-Creare il tag annotato e pubblicare (con conferma dell'utente):
-
-```bash
-git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin main --follow-tags
-```
-
-Pubblicare la GitHub Release usando **solo la sezione della versione** come
-note — mai l'intero CHANGELOG.md:
-
-```bash
-VERSION=1.2.0
-awk -v ver="$VERSION" '$0 ~ "^## \\["ver"\\]" {flag=1; next} /^## \[/ {flag=0} flag' \
-  CHANGELOG.md > "$TMPDIR/release-notes.md"
-
-gh release create "v$VERSION" \
-  --title "v$VERSION" \
-  --notes-file "$TMPDIR/release-notes.md"
-```
-
-### Checklist pre-release
-
-Verificare, mostrando l'esito all'utente:
-
-- [ ] `main` pulito (`git status` senza modifiche pendenti);
-- [ ] test passati (`mise run check` o equivalente);
-- [ ] versione nel codice = versione nel changelog = tag;
-- [ ] changelog che descrive tutti i cambiamenti importanti, senza rumore.
-
-## Automazione con mise
-
-Usare `mise` come punto di ingresso per i task ricorrenti. Un `Rakefile` solo
-per task che richiedono logica Ruby; `Procfile`/`overmind` solo per processi
-persistenti.
-
-```toml
-[tasks.check]
-run = "bundle exec rake"
-
-[tasks.pr]
-run = "git diff --stat main...HEAD && git log --oneline --graph main..HEAD && mise run check"
-
-[tasks.release]
-run = "mise run check && git status --short"
-```
-
-Se il progetto non ha ancora questi task, proporli all'utente invece di
-crearli d'ufficio.
+- [ ] working tree pulito
+- [ ] test passati
+- [ ] versione nel codice = versione nel changelog = tag
+- [ ] changelog che descrive i cambiamenti importanti, senza rumore
