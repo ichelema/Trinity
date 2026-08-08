@@ -628,6 +628,58 @@
         "mise"
       ]
     },
+    "linear": {
+      "description": "Workflow issue Linear via MCP: creare, elencare, implementare su branch dedicato con PR collegata, merge dopo revisione",
+      "priority": 7,
+      "triggers": {
+        "keywords": [
+          "linear",
+          "issue",
+          "backlog",
+          "triage",
+          "magic word",
+          "sub-issue"
+        ],
+        "keywordPatterns": [
+          "\\blinear\\b",
+          "\\bICH-\\d+\\b",
+          "(?:issue|ticket|task)\\s+[A-Z]{2,5}-\\d+",
+          "\\bin\\s?progress\\b",
+          "\\bin\\s?review\\b"
+        ],
+        "pathPatterns": [
+          "**/skills/linear/**"
+        ],
+        "intentPatterns": [
+          "(?:lavor|implement|inizi|part|sistem|risolv).{0,30}(?:issue|ICH-\\d+)",
+          "(?:crea|apri|aggiungi|scrivi).{0,25}(?:issue|ticket)",
+          "(?:che|quali|quante|quante\\s+sono).{0,30}issue",
+          "(?:elenca|mostra|lista|riepiloga|cerca|filtra).{0,30}(?:issue|backlog|ticket)",
+          "(?:cosa|che\\s+cosa).{0,30}(?:in\\s?progress|in\\s?review|da\\s+fare|aperte)",
+          "(?:collega|linka|assegna|sposta|chiudi).{0,30}(?:issue|ICH-\\d+)",
+          "(?:mergia|merge|chiudi).{0,40}(?:pr|pull\\s?request).{0,40}(?:issue|linear|ICH-\\d+)"
+        ],
+        "contentPatterns": [
+          "mcp__linear__",
+          "list_issues",
+          "save_issue",
+          "gitBranchName",
+          "linear\\.app/",
+          "(?:Fixes|Closes|Resolves|Refs)\\s+[A-Z]{2,5}-\\d+"
+        ],
+        "contextPatterns": [
+          "su linear",
+          "da linear",
+          "la issue",
+          "le issue",
+          "questa issue",
+          "sulla issue"
+        ]
+      },
+      "relatedSkills": [
+        "github-pr-release"
+      ]
+    },
     "ruby": {
       "description": "Stile Ruby funzionale pragmatico con Switchyard: action Organizer+steps, contratti expects/promises, try!/fail_and_return!, immutabilità selettiva",
       "priority": 7,

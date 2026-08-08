@@ -68,6 +68,10 @@
       "headers": {
         "Authorization": "Bearer ${TICKTICK_API_KEY}"
       }
+    },
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp"
     }
   }
 }

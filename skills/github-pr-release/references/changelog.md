@@ -4,6 +4,18 @@ Il changelog è una lista **curata** dei cambiamenti rilevanti per utenti e
 integratori del progetto. Non è una copia di `git log`: il lettore vuole
 sapere cosa cambia per lui, non come è stato implementato.
 
+## Lingua
+
+Il CHANGELOG si scrive **sempre in inglese**, anche quando la conversazione con
+l'utente è in un'altra lingua. È il documento che raggiunge il pubblico più
+ampio del progetto: finisce nelle GitHub Release, lo leggono integratori che non
+hanno partecipato allo sviluppo, e resta la traccia consultabile a distanza di
+anni. Vale per le voci, per i titoli di sezione e per le note di migrazione.
+
+Stessa regola per i messaggi di commit (vedi
+[commit-triage.md](commit-triage.md)) e per titolo e descrizione delle Pull
+Request. La conversazione con l'utente resta invece nella sua lingua.
+
 ## Struttura
 
 ```markdown
@@ -99,5 +111,33 @@ Decidere guardando le voci accumulate in `[Unreleased]`:
 | Solo `Fixed`/`Changed`/`Security` compatibili | `PATCH` (1.2.1) |
 
 In caso di dubbio tra MINOR e PATCH, chiedersi: "un utente deve cambiare
-qualcosa o può fare qualcosa di nuovo?" Se sì → MINOR. Prima della 1.0.0 le
-regole sono più lasche, ma restare coerenti dentro il progetto.
+qualcosa o può fare qualcosa di nuovo?" Se sì → MINOR.
+
+In caso di dubbio tra due livelli, proponi quello più alto e chiedi conferma:
+una versione sovrastimata non rompe nulla, una sottostimata fa arrivare un
+breaking change a chi si aspettava un fix.
+
+### Prima della 1.0.0
+
+In `0.y.z` il progetto è per convenzione "in sviluppo iniziale" e l'API non è
+stabile. I breaking change si segnano bumpando il **MINOR** (`0.6.x` → `0.7.0`),
+tenendo `1.0.0` per la prima release davvero stabile — altrimenti si arriverebbe
+a `1.0.0` per un cambiamento qualsiasi, svuotando il significato della prima
+major. Nel dubbio, breaking change in 0.x → bump MINOR.
+
+## Citare le issue Linear nel changelog
+
+Gli ID issue rendono il changelog navigabile, ma vanno scritti **nudi**:
+
+```markdown
+### Fixed
+- Corretto il parsing dei token scaduti (ICH-14).
+```
+
+Non anteporre `Fixes`, `Closes`, `Resolves`, `Refs` o le altre magic words:
+Linear le riconosce nei commit e nelle PR, e su una release finirebbe per
+ricollegare o richiudere issue già chiuse, attaccandole alla PR di release
+invece che a quella che le ha davvero risolte.
+
+Se un ID nel changelog viene comunque interpretato, `skip ICH-14` o
+`ignore ICH-14` impedisce esplicitamente il collegamento automatico.
