@@ -23,6 +23,15 @@ data_modifica: "{{date:YYYY-MM-DD}}T{{time:HH:mm:ss}}"
 
 ---
 
+## ✅ Issue chiuse
+
+```linear
+ids:
+  - 
+```
+
+---
+
 ## ⚡ Inbox rapida
 
 > Cose che mi vengono in mente mentre sto facendo altro.
