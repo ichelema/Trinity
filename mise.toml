@@ -156,12 +156,16 @@ HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES = "it,en"
 # Con Jina il taglio di recall_min_rerank_score andrebbe infilato in 3 centesimi, e la
 # carbonara prende 0.50 contro lo 0.59 di una domanda vera. Soglie tarate su questa
 # scala in hindsight.config.json: recall_min_rerank_score 0.60, recall_min_reranker 0.40.
-# Rollback fino al 2026-09-04: provider "zeroentropy" + le due righe sotto.
+# Rollback fino al 2026-09-04: provider "zeroentropy" + le tre righe sotto.
 #   HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
 #   HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2"
+#   HINDSIGHT_API_RERANKER_ZEROENTROPY_TIMEOUT = "8"
 HINDSIGHT_API_RERANKER_PROVIDER = "litellm-sdk"
 HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL = "voyage/rerank-2.5"
 HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY = "{{ env.VOYAGE_API_KEY | default(value='') }}"
+# Timeout del rerank sotto il recall_timeout(10s) dell'hook (2026-06-12 su zerank-2,
+# default 60): se il provider remoto si appende, il rerank fallisce in fretta e il
+# recall ripiega sull'ordine RRF dentro il budget dell'hook, invece di lavorare per nessuno.
 HINDSIGHT_API_RERANKER_LITELLM_SDK_TIMEOUT = "8"
 # Gate del braccio semantico (default fabbrica 0.3). Alzato a 0.4 il 2026-06-12 sulla scala
 # di zembed-1 (i vincenti stavano >= 0.47; il pool 0.33-0.45 non vinceva mai).
@@ -176,12 +180,9 @@ HINDSIGHT_API_RERANKER_LITELLM_SDK_TIMEOUT = "8"
 # 0.55+ escluderebbe dal braccio semantico il gold piu' debole (q09, 0.5439), che oggi
 # sopravvive solo grazie a BM25/graph: dipendenza fragile in cambio di zero guadagno.
 HINDSIGHT_API_SEMANTIC_MIN_SIMILARITY = "0.4"
-# Timeout zerank-2 sotto il recall_timeout(10s) dell'hook (2026-06-12, default 60):
-# se ZeroEntropy si appende, il rerank fallisce in fretta e il recall ripiega
-# sull'ordine RRF dentro il budget dell'hook, invece di lavorare per nessuno.
-HINDSIGHT_API_RERANKER_ZEROENTROPY_TIMEOUT = "8"
 # Cap dei candidati passati al reranker per recall (2026-06-12, default 300): meno
-# payload/latenza/costo verso zerank-2. VALIDATO col benchmark gold (18 query, k=3):
+# payload/latenza/costo verso il reranker remoto (misure su zerank-2, oggi
+# voyage/rerank-2.5). VALIDATO col benchmark gold (18 query, k=3):
 # top-3 identici rank per rank a 300; unico costo un fatto gold che era in posizione
 # 17 e sparisce dalla coda (found_any 15→14/18). Rivalutare se recall_max_results >= 10.
 HINDSIGHT_API_RERANKER_MAX_CANDIDATES = "100"
