@@ -391,10 +391,10 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   **auto-crea al primo retain**, zero provisioning.
 - **`recall_banks`** (array, la lettura aggrega): fan-out **parallelo** sui bank risolti, fino
   a `recall_per_bank_candidates` candidati per bank (plugin: 6), poi dedup, rerank globale
-  **zerank-2** via ZeroEntropy (gli score di bank diversi non sono confrontabili tra loro),
+  **voyage/rerank-2.5** via API Voyage (gli score di bank diversi non sono confrontabili tra loro),
   filtro sotto la soglia `recall_min_rerank_score` (0.5 nel plugin, solo percorso multi-bank),
   taglio finale a `recall_max_results_multibank` risultati iniettati (5 nel plugin). Se
-  ZeroEntropy non risponde, fallback a interleaving senza rerank (la soglia non viene
+  Voyage non risponde, fallback a interleaving senza rerank (la soglia non viene
   applicata). Il core entra **solo se listato**: `["auto"]` da solo = progetto totalmente
   isolato. Con un solo bank risolto il percorso è la singola POST di sempre, zero overhead
   multi-bank; la soglia client non si applica, ma i floor `min_scores` server-side sì

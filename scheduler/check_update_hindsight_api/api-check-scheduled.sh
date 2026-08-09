@@ -56,8 +56,7 @@ if [[ "$RC" -eq 10 || "${API_FORCE_ALERT:-0}" == "1" ]]; then
 		echo "Prossimo passo — aggiorna entrambi i pacchetti:"
 		echo "    mise -C \"\$TRINITY_PLUGIN_DIR\" run install-hindsight"
 		echo
-		echo "(install-hindsight fa: pip install --upgrade hindsight-api. Dalla 0.7.1 il"
-		echo " provider ZeroEntropy è nativo: non serve ri-applicare patch dopo l'upgrade.)"
+		echo "(install-hindsight fa: pip install --upgrade hindsight-api-slim[embedded-db].)"
 	} >"$ALERT"
 
 	WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"

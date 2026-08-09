@@ -232,9 +232,9 @@ Il rollback è il restore del dump di sicurezza creato automaticamente al Passo 
 del proprio backup precedente. Attenzione: tornare a un dump a **1280 dimensioni**
 richiede anche di rimettere la configurazione vecchia nel `mise.toml`
 (`HINDSIGHT_API_EMBEDDINGS_PROVIDER = "zeroentropy"`), altrimenti il server non parte —
-le due cose vanno insieme. Il rollback del reranker invece è indipendente e funziona a
-caldo fino al 4 settembre 2026 (le righe ZeroEntropy sono lasciate commentate nel
-`mise.toml`, con le istruzioni).
+le due cose vanno insieme. NB: la configurazione ZeroEntropy (embedding e reranker) è
+stata rimossa del tutto dal `mise.toml` (ICH-64): un rollback richiederebbe di
+recuperarla dalla history git, e dopo il 4 settembre 2026 il servizio non esiste più.
 
 ## Nota sulle soglie
 
