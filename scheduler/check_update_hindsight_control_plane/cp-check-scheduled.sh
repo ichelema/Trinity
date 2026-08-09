@@ -4,8 +4,8 @@
 #
 # Viene invocato dal launcher cp-check-scheduled.cmd via `bash -lc`, quindi gira
 # già dentro MSYS2 UCRT64. Esegue `mise run cp-check`, registra l'esito in
-# logs/cp-check-scheduled.log e, se è uscita una versione del Control Plane più
-# recente di quella pinnata, lascia un file di alert ben visibile (e lo apre).
+# logs/cp-check-scheduled.log e, se su npm è uscita una release nuova del
+# Control Plane, lascia un file di alert ben visibile (e lo apre).
 #
 # Exit:  0  = nessuna novità   |   10 = update disponibile   |   altro = errore
 
@@ -44,16 +44,18 @@ printf '[%s] rc=%s %s\n' "$TS" "$RC" "$OUT" | tr -d '\r' >>"$LOG"
 if [[ "$RC" -eq 10 ]]; then
 	# Estrai le versioni dal JSON senza jq (evita il quirk named-capture/CRLF su MSYS).
 	latest="$(printf '%s' "$OUT" | grep -oE '"latest"[^,]*' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-	pinned="$(printf '%s' "$OUT" | grep -oE '"pinned"[^,]*' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+	last_seen="$(printf '%s' "$OUT" | grep -oE '"last_seen"[^,]*' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 	{
-		echo "Control Plane Hindsight — NUOVA VERSIONE DISPONIBILE"
+		echo "Control Plane Hindsight — NUOVA RELEASE SU NPM"
 		echo
-		echo "  pinnata (in .mise.toml): ${pinned:-?}"
-		echo "  ultima su npm:           ${latest:-?}"
-		echo "  rilevato il:             $TS"
+		echo "  ultima vista:  ${last_seen:-?}"
+		echo "  ultima su npm: ${latest:-?}"
+		echo "  rilevato il:   $TS"
 		echo
-		echo "Prossimo passo — se vuoi aggiornare, alza il pin nel task control-plane"
-		echo "del mise.toml (riga con hindsight-control-plane@...)."
+		echo "Il task control-plane è sempre-latest via npx: al prossimo avvio userà"
+		echo "da solo la ${latest:-nuova versione}. Prossimi passi consigliati:"
+		echo "  1. leggi i breaking changes della release su GitHub (vectorize-io/hindsight)"
+		echo "  2. valuta 'mise run install-hindsight' per allineare hindsight-api-slim"
 	} >"$ALERT"
 
     WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"

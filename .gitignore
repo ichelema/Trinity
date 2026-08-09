@@ -19,6 +19,7 @@ data/playwright-mcp/
 *.log
 *-ALERT.txt
 *.count
+*.state
 
 # Documentazione locale: appunti di setup e procedure una tantum, non fanno parte
 # del plugin. Le eccezioni sono i documenti che devono viaggiare su altre macchine.
