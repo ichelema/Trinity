@@ -18,8 +18,8 @@ come, e con quali dettagli tecnici, in forma interrogabile da un LLM in futuro.
 ## Workflow: estrazione informazioni dalla sessione → vault Obsidian
 
 1. **Raccogli** dalla sessione corrente: obiettivi, cosa è stato fatto, risultati,
-   dettagli tecnici (commit, file, comandi, numeri esatti). Non inventare nulla:
-   usa solo ciò che è realmente avvenuto nella sessione.
+   issue Linear chiuse, dettagli tecnici (commit, file, comandi, numeri esatti).
+   Non inventare nulla: usa solo ciò che è realmente avvenuto nella sessione.
 2. **Carica il template** `templates/Template-Daily.md` come scheletro.
 3. **Mappa un task = una sessione**: ogni task significativo della giornata diventa
    un blocco `###` dentro `## 🤖 Riassunto sessione Agente AI`.
@@ -78,6 +78,44 @@ loro sessione nel riassunto. Forma obbligatoria: `[[#<header esatto>|<alias>]]`,
 - [x] [[#Commit di pulizia del repository Trinity|Commited - di pulizia del repository Trinity]]
 - [x] [[#Comando nota del giorno per il plugin Trinity|Aggiunto - Comando nota del giorno per il plugin Trinity]]
 ```
+
+### `## ✅ Issue chiuse`
+
+Le issue Linear portate a **Done** durante la giornata, in un blocco che il
+plugin Linear di Obsidian rende come card:
+
+````markdown
+## ✅ Issue chiuse
+
+```linear
+ids:
+  - ICH-16
+  - ICH-22
+```
+````
+
+Per una sola issue si usa la forma singolare:
+
+````markdown
+```linear
+id: ICH-16
+```
+````
+
+Il blocco contiene **solo l'ID**, mai titolo o stato copiati a mano: la card
+mostra sempre il valore corrente della issue, mentre un titolo incollato
+invecchia dal giorno dopo. Un agente che legge il markdown grezzo vede l'ID e
+può interrogare Linear per il resto — il rendering avviene solo dentro Obsidian.
+
+Regole di compilazione:
+
+- Elenca solo le issue **effettivamente chiuse** quel giorno, non quelle su cui
+  hai lavorato: quelle stanno in 🎯 Obiettivi e nel riassunto.
+- Verifica lo stato reale su Linear prima di inserirle (`get_issue`), invece di
+  dedurlo dal fatto che la PR è stata mergiata.
+- Se non hai chiuso nulla, lascia il blocco vuoto come nel template.
+- Gli ID vanno **nudi**, senza magic words (`Fixes`, `Closes`): nella daily non
+  servono, e altrove farebbero richiudere a Linear issue già chiuse.
 
 ### `## 🤖 Riassunto sessione Agente AI`
 
@@ -160,6 +198,8 @@ Dopo aver creato/aggiornato la nota, controlla che:
 
 - ogni task in 🎯 Obiettivi abbia un header `###` corrispondente (link risolto) e usi
   la forma aliasata `[[#header|alias]]` con l'ancora identica all'header;
+- le issue in ✅ Issue chiuse risultino davvero in stato Done su Linear, e il blocco
+  contenga solo ID, senza titoli copiati né magic words;
 - ogni sessione `###` abbia i quattro `####` (Obiettivo, Cosa è stato fatto,
   Risultato, Dettagli tecnici);
 - tra un blocco `###` e il successivo ci sia un `---` su riga propria;
