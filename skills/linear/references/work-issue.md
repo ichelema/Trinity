@@ -27,6 +27,26 @@ Se vengono indicate più issue:
 Più branch per un lavoro unitario producono PR che si sovrappongono e vanno
 riconciliate a mano: è la ragione per cui qui si tiene tutto insieme.
 
+## Dipendenze
+
+Prima di iniziare qualsiasi issue:
+
+1. Recuperare le relazioni `blocked by` tramite Linear MCP.
+2. Se una issue è bloccata da una o più issue non completate, NON iniziare
+   l'implementazione.
+3. Mostrare quali issue la stanno bloccando e il loro stato.
+4. Attendere una decisione esplicita dell'utente prima di procedere comunque.
+
+`get_issue` restituisce le relazioni **solo** se lo chiami con
+`includeRelations: true`. Senza quel flag il campo `relations` non compare
+affatto, e una issue con dei blocker è indistinguibile da una libera: è un
+falso negativo silenzioso, non un errore.
+
+Un blocco non è un divieto: l'utente può avere ragioni per procedere lo stesso —
+il lavoro bloccante è quasi finito, o la parte da fare non dipende davvero da
+quella. Per questo la decisione resta sua, e il compito della skill è renderla
+informata invece di scoprire a metà implementazione che mancava un pezzo.
+
 ## Preparazione Git
 
 Prima di modificare il codice:
