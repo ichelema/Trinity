@@ -60,6 +60,15 @@ CONFIGS = [
   { slug: "openai-nano",     label: "OpenAI gpt-4.1-nano",        provider: "openai",
     base_url: nil,                               model: "gpt-4.1-nano",
     key: OPENAI_KEY, price_in: 0.10, price_out: 0.40 },
+  # Produzione attuale (controllo) e candidato ICH-62. Luna e' un reasoning model:
+  # gira sul provider openai-responses (Responses API, nativo da hindsight 0.9.0),
+  # effort di default "low"; su chat/completions rifiuterebbe reasoning+tools (400).
+  { slug: "openai-mini",     label: "OpenAI gpt-4.1-mini",        provider: "openai",
+    base_url: nil,                               model: "gpt-4.1-mini",
+    key: OPENAI_KEY, price_in: 0.40, price_out: 1.60 },
+  { slug: "openai-luna",     label: "OpenAI gpt-5.6-luna (responses)", provider: "openai-responses",
+    base_url: nil,                               model: "gpt-5.6-luna",
+    key: OPENAI_KEY, price_in: 0.20, price_out: 1.20 },
   # Groq e OpenRouter sono provider NATIVI in Hindsight: conoscono gia' il loro endpoint,
   # quindi base_url resta nil. La chiave arriva via HINDSIGHT_API_LLM_API_KEY.
   # max_ctok: tetto max_completion_tokens. Il default Hindsight (64000) supera il cap
@@ -182,10 +191,14 @@ end
 # ---------- metriche ----------
 
 def bank_node_count(bank)
-  code, body = http_get("/v1/default/banks/#{bank}/stats", 10)
+  # /memories/list espone un `total` sincrono (COUNT sul DB): affidabile subito
+  # dopo un retain sync. /stats total_nodes invece si popola con la graph
+  # maintenance asincrona e subito dopo il retain vale ancora 0 (bug del run
+  # 20260809: fatti/doc = 0.0 con recall al 100%).
+  code, body = http_get("/v1/default/banks/#{bank}/memories/list?limit=1", 10)
   return 0 unless code == 200
 
-  JSON.parse(body)["total_nodes"].to_i
+  JSON.parse(body)["total"].to_i
 rescue StandardError
   0
 end
@@ -328,10 +341,12 @@ begin
     File.write("#{OUT_DIR}/#{cfg[:slug]}.json", JSON.pretty_generate(r))
   end
 ensure
-  # Ripristina la config di PRODUZIONE (openai gpt-4.1-nano) e riavvia hindsight,
-  # cosi' la memoria reale non resta su un provider di test.
-  puts "\n--- ripristino config di produzione (openai gpt-4.1-nano) ---"
-  prod = { slug: "prod-restore", provider: "openai", base_url: nil, model: "gpt-4.1-nano", key: OPENAI_KEY }
+  # Ripristina la config di PRODUZIONE (openai gpt-4.1-mini, mise.toml:44-45) e
+  # riavvia hindsight, cosi' la memoria reale non resta su un provider di test.
+  # NB: questo restore imposta solo le variabili LLM; per l'env completo di
+  # produzione rilanciare poi: mise run stop-hindsight && mise run start-hindsight.
+  puts "\n--- ripristino config di produzione (openai gpt-4.1-mini) ---"
+  prod = { slug: "prod-restore", provider: "openai", base_url: nil, model: "gpt-4.1-mini", key: OPENAI_KEY }
   stop_hindsight
   start_hindsight(prod, "#{LOG_DIR}/prod-restore.log")
   puts(wait_healthy(HEALTH_TIMEOUT) ? "  hindsight riavviato in produzione: ok" : "  ATTENZIONE: hindsight non risponde, riavvialo con: mise run start-hindsight (dalla root del repo)")
