@@ -158,7 +158,45 @@ except FileNotFoundError:
 except Exception:
     pass  # marker illeggibile: best-effort, non deve rompere il prompt
 
-if not raw and not local_fails:
+# Degrado del reranker (ICH-65): marker scritti da hindsight-recall.sh quando il
+# recall risponde ma senza rerank neurale (failover chain server-side su RRF, o
+# rerank globale client-side fallito). NON e' una operation failed — il recall
+# funziona, degradato — quindi il fan-out qui sopra non lo vede mai: il canale
+# e' il marker locale. Notifica con cooldown (una volta per finestra, non a ogni
+# prompt: il degrado persiste finche' Voyage non torna) e il file si tronca solo
+# quando la notifica parte davvero.
+rr_file = os.path.join(cache_dir(), "hs-reranker-degraded.log")
+rr_events = []
+try:
+    with open(rr_file, encoding="utf-8") as f:
+        for line in f:
+            ts, _, msg = line.strip().partition("\t")
+            if not ts:
+                continue
+            when = _parse(ts.replace("Z", "+00:00"))
+            if when is not None and when < cutoff:
+                continue
+            rr_events.append((ts, msg))
+except FileNotFoundError:
+    pass
+except Exception:
+    pass  # marker illeggibile: best-effort, non deve rompere il prompt
+
+rr_notify = False
+rr_ts_file = os.path.join(cache_dir(), "hs-reranker-notified.ts")
+if rr_events:
+    last_notified = None
+    try:
+        with open(rr_ts_file, encoding="utf-8") as f:
+            last_notified = _parse(f.read().strip())
+    except Exception:
+        pass
+    # Cooldown = la stessa finestra del failcheck: primo avviso immediato, poi
+    # al massimo uno per finestra finche' il degrado persiste.
+    if last_notified is None or last_notified < cutoff:
+        rr_notify = True
+
+if not raw and not local_fails and not rr_notify:
     sys.exit(0)
 
 # Collassa parent/child dello stesso evento: un batch_retain fallito genera 2 entry
@@ -185,7 +223,7 @@ except Exception:
     notified = set()
 
 fresh = {k: v for k, v in groups.items() if k not in notified}
-if not fresh and not local_fails:
+if not fresh and not local_fails and not rr_notify:
     sys.exit(0)
 
 # Gravita' per famiglia di task: retain = perdita di memoria (critico); il resto =
@@ -209,7 +247,7 @@ for ts, msg in local_fails:
     hhmm = ts[11:16] if len(ts) >= 16 else ts
     crit.append(f"- retain [locale, {hhmm}] — {msg[:160]}")
 
-parts = ["## ⚠️ Hindsight — operazioni di memoria fallite\n"]
+parts = ["## ⚠️ Hindsight — anomalie rilevate\n"]
 if crit:
     parts.append(
         "**Retain falliti: memoria NON salvata.** Questi contenuti non sono stati "
@@ -220,6 +258,15 @@ if maint:
     parts.append(
         "\n**Task di mantenimento falliti** (di norma si auto-recuperano, nessuna "
         "perdita di dati utente):\n" + "\n".join(maint)
+    )
+if rr_notify:
+    first_ts = rr_events[0][0]
+    last_ts, last_msg = rr_events[-1]
+    parts.append(
+        f"\n**Reranker degradato (fail-open attivo):** {len(rr_events)} recall senza "
+        f"rerank neurale tra le {first_ts[11:16]} e le {last_ts[11:16]} UTC — ultimo "
+        f"evento: {last_msg[:160]}. Il recall funziona ma in ordine RRF (qualita' "
+        "ridotta). Controlla stato/crediti Voyage (VOYAGE_API_KEY) e /tmp/hs.log."
     )
 context = "\n".join(parts)
 
@@ -239,6 +286,16 @@ print(json.dumps({
 if local_fails:
     try:
         open(local_file, "w").close()
+    except Exception:
+        pass
+
+# Marker del reranker: tronca e registra l'orario di notifica (cooldown) solo se
+# l'avviso e' partito; senza notifica il file resta e riprova al prompt successivo.
+if rr_notify:
+    try:
+        open(rr_file, "w").close()
+        with open(rr_ts_file, "w", encoding="utf-8") as f:
+            f.write(datetime.now(timezone.utc).isoformat())
     except Exception:
         pass
 
