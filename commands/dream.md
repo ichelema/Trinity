@@ -153,7 +153,7 @@ mm-refresh = rigenera i mental model
   - Cosa fa: <una frase semplice: di cosa parla la memoria e perché non vale più>
   - Attuale: "<claim della memoria>"
   - Motivo: daily YYYY-MM-DD §"<sezione ###>" — "<citazione breve>"
-  - Verifica: `hindsight.config.json` — reranker effettivo: zerank-2 ✓
+  - Verifica: `hindsight.config.json` — reranker effettivo: voyage/rerank-2.5 ✓
 
 ## Da aggiornare
 

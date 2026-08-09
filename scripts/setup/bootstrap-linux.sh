@@ -196,7 +196,7 @@ echo "Prossimi passi (vedi docs/SETUP-LINUX.md):"
 # aprirebbe una stringa quotata e romperebbe l'espansione (bad substitution).
 [ -n "$MCP_SKIPPED" ] && echo "  0. registra l'MCP hindsight:   installa claude, poi rilancia  bash scripts/setup/bootstrap-linux.sh"
 cat <<EOF
-  1. chiavi API in ~/.profile:  export OPENAI_API_KEY=... ZEROENTROPY_API_KEY=...
+  1. chiavi API in ~/.profile:  export OPENAI_API_KEY=... GEMINI_API_KEY=... VOYAGE_API_KEY=...
   2. primo avvio:               mise -C "$ROOT" run start-hindsight
   3. importa la memoria:        mise -C "$ROOT" run db-restore  (dump dalla chiavetta o via scp)
   4. timer schedulati:          vedi scheduler/systemd/README.md

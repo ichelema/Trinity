@@ -6,9 +6,8 @@
 #   - LLM di extraction: gpt-4.1-nano (openai)
 #   - Embedder: Gemini 1536d  (EREDITATO dall'[env] del .mise.toml, NON impostato qui)
 # Reranker variati:
-#   - local       -> bge-reranker-v2-m3 (baseline reale di produzione)
-#   - zeroentropy -> zerank-2
-#   - voyage      -> voyage/rerank-2.5 via litellm-sdk (candidato al sunset di ZeroEntropy)
+#   - local       -> bge-reranker-v2-m3 (baseline locale)
+#   - voyage      -> voyage/rerank-2.5 via litellm-sdk (produzione dal 2026-07-26)
 #   - voyage-lite -> voyage/rerank-2.5-lite via litellm-sdk
 #   - jina-v3     -> jina_ai/jina-reranker-v3 via litellm-sdk (131k ctx, multilingue)
 #   - jina-v2     -> jina_ai/jina-reranker-v2-base-multilingual via litellm-sdk
@@ -63,7 +62,6 @@ LLM_MODEL = "gpt-4.1-nano"
 
 RERANKERS = [
   { slug: "local", label: "Local bge-reranker-v2-m3", provider: "local" },
-  { slug: "zeroentropy", label: "ZeroEntropy zerank-2", provider: "zeroentropy" },
   { slug: "voyage", label: "Voyage rerank-2.5", provider: "litellm-sdk", model: "voyage/rerank-2.5" },
   { slug: "voyage-lite", label: "Voyage rerank-2.5-lite", provider: "litellm-sdk", model: "voyage/rerank-2.5-lite" },
   { slug: "jina-v3", label: "Jina reranker-v3", provider: "litellm-sdk", model: "jina_ai/jina-reranker-v3" },
@@ -86,7 +84,6 @@ def read_user_env(name)
 end
 
 OPENAI_KEY = ENV["OPENAI_API_KEY"] || read_user_env("OPENAI_API_KEY")
-ZE_KEY = ENV["ZEROENTROPY_API_KEY"] || read_user_env("ZEROENTROPY_API_KEY")
 VOYAGE_KEY = ENV["VOYAGE_API_KEY"] || read_user_env("VOYAGE_API_KEY")
 JINA_KEY = ENV["JINA_AI_API_KEY"] || read_user_env("JINA_AI_API_KEY") ||
            ENV["JINA_API_KEY"] || read_user_env("JINA_API_KEY")
@@ -153,10 +150,6 @@ def start_hindsight(reranker_provider, log_path, model = nil)
     "HINDSIGHT_API_LLM_API_KEY" => OPENAI_KEY.to_s,
     "HINDSIGHT_API_RERANKER_PROVIDER" => reranker_provider,
   }
-  if reranker_provider == "zeroentropy"
-    env["HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY"] = ZE_KEY.to_s
-    env["HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL"] = "zerank-2"
-  end
   if reranker_provider == "openrouter"
     env["HINDSIGHT_API_RERANKER_OPENROUTER_API_KEY"] = OR_KEY.to_s
     env["HINDSIGHT_API_RERANKER_OPENROUTER_MODEL"] = model || "cohere/rerank-v3.5"
@@ -290,7 +283,6 @@ end
 
 puts "Benchmark RERANKER Hindsight — run #{RUN_ID}#{DRY ? "  [DRY-RUN]" : ""}"
 puts "Corpus: #{corpus["documents"].length} doc, #{corpus["queries"].length} query"
-puts "ZeroEntropy key: #{ZE_KEY && !ZE_KEY.empty? ? "presente (len=#{ZE_KEY.length})" : "ASSENTE -> zerank-2 verra saltato"}"
 puts "Output: #{OUT_DIR}"
 
 bank = "rerank-bench-#{RUN_ID}"
@@ -315,14 +307,9 @@ begin
   sleep 10
 
   # FASE 2 — un reranker alla volta, sullo STESSO bank.
-  only = (ENV["BENCH_ONLY"] || (DRY ? "local,zeroentropy" : "")).split(",").map(&:strip).reject(&:empty?)
+  only = (ENV["BENCH_ONLY"] || (DRY ? "local,voyage" : "")).split(",").map(&:strip).reject(&:empty?)
   selected = only.empty? ? RERANKERS : RERANKERS.select { |rk| only.include?(rk[:slug]) }
   selected.each do |rk|
-    if rk[:provider] == "zeroentropy" && (ZE_KEY.nil? || ZE_KEY.empty?)
-      puts "\n== #{rk[:label]} == SALTATO (ZEROENTROPY_API_KEY assente)"
-      results[rk[:slug]] = { label: rk[:label], error: "missing api key" }
-      next
-    end
     if rk[:provider] == "openrouter" && OR_KEY.to_s.empty?
       puts "\n== #{rk[:label]} == SALTATO (OPENROUTER_API_KEY assente)"
       results[rk[:slug]] = { label: rk[:label], error: "missing api key" }

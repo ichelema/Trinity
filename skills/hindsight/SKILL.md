@@ -52,8 +52,8 @@ blocco `bank` di `hindsight.config.json`:
   corrente (slug dal remote `origin`, fallback basename; fuori da git o nel
   repo Trinity stesso → core). Il bank si auto-crea al primo retain.
 - `recall_banks: ["auto", "core"]` → il recall fa fan-out parallelo su
-  progetto+core e fonde i risultati con un rerank globale zerank-2 (fallback
-  interleaving se ZeroEntropy non risponde). Il core entra solo se listato.
+  progetto+core e fonde i risultati con un rerank globale voyage/rerank-2.5
+  (fallback interleaving se Voyage non risponde). Il core entra solo se listato.
 - URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
 
 **Tool MCP `hindsight/*` — quale bank vedono** (dal 2026-07-10, MCP per-progetto):

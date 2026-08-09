@@ -37,7 +37,7 @@ PYTHONUTF8 = "1"
 # presente) + proxy.env aziendale (solo sui PC dietro il proxy MITM ENINET, lo sovrascrive
 # perche' viene DOPO). mise ignora un _.file mancante senza errori, quindi a casa (niente
 # proxy.env) resta il default. Serve perche' alcuni PC hanno un SSL_CERT_FILE globale Windows
-# a un bundle incompleto → CERTIFICATE_VERIFY_FAILED su ZeroEntropy/LiteLLM/Node.
+# a un bundle incompleto → CERTIFICATE_VERIFY_FAILED su LiteLLM/Node.
 _.file = ["{{ get_env(name='HOME', default='') }}/certs/default.env", "C:/certs/proxy.env"]
 
 # Provider LLM per le operazioni retain/recall/reflect di hindsight.
@@ -111,6 +111,9 @@ HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT = "low"
 #    ma spiega perche' zembed-1 usato senza asimmetria crolla a MRR 0.571.
 # ⚠️ Usare un progetto Google con BILLING ATTIVO: sul free tier Google dichiara di usare i
 #    contenuti inviati per addestrare i propri modelli; sul tier a pagamento no.
+# ⚠️ Cambiare provider embedding IMPONE un REBUILD del bank (spazi vettoriali diversi).
+#    Procedura: export (hindsight_export.py) → cambia provider → riavvia → re-retain
+#    (hindsight_import.py). Tool in hooks/hindsight/tools/.
 HINDSIGHT_API_EMBEDDINGS_PROVIDER = "google"
 # default(''): non deve abortire il lancio del server se la chiave manca nell'ambiente.
 HINDSIGHT_API_EMBEDDINGS_GEMINI_API_KEY = "{{ env.GEMINI_API_KEY | default(value='') }}"
@@ -156,12 +159,12 @@ HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES = "it,en"
 # Con Jina il taglio di recall_min_rerank_score andrebbe infilato in 3 centesimi, e la
 # carbonara prende 0.50 contro lo 0.59 di una domanda vera. Soglie tarate su questa
 # scala in hindsight.config.json: recall_min_rerank_score 0.60, recall_min_reranker 0.40.
-# Rollback fino al 2026-09-04: provider "zeroentropy" + le due righe sotto.
-#   HINDSIGHT_API_RERANKER_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
-#   HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL = "zerank-2"
 HINDSIGHT_API_RERANKER_PROVIDER = "litellm-sdk"
 HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL = "voyage/rerank-2.5"
 HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY = "{{ env.VOYAGE_API_KEY | default(value='') }}"
+# Timeout del rerank sotto il recall_timeout(10s) dell'hook (2026-06-12 su zerank-2,
+# default 60): se il provider remoto si appende, il rerank fallisce in fretta e il
+# recall ripiega sull'ordine RRF dentro il budget dell'hook, invece di lavorare per nessuno.
 HINDSIGHT_API_RERANKER_LITELLM_SDK_TIMEOUT = "8"
 # Gate del braccio semantico (default fabbrica 0.3). Alzato a 0.4 il 2026-06-12 sulla scala
 # di zembed-1 (i vincenti stavano >= 0.47; il pool 0.33-0.45 non vinceva mai).
@@ -176,12 +179,9 @@ HINDSIGHT_API_RERANKER_LITELLM_SDK_TIMEOUT = "8"
 # 0.55+ escluderebbe dal braccio semantico il gold piu' debole (q09, 0.5439), che oggi
 # sopravvive solo grazie a BM25/graph: dipendenza fragile in cambio di zero guadagno.
 HINDSIGHT_API_SEMANTIC_MIN_SIMILARITY = "0.4"
-# Timeout zerank-2 sotto il recall_timeout(10s) dell'hook (2026-06-12, default 60):
-# se ZeroEntropy si appende, il rerank fallisce in fretta e il recall ripiega
-# sull'ordine RRF dentro il budget dell'hook, invece di lavorare per nessuno.
-HINDSIGHT_API_RERANKER_ZEROENTROPY_TIMEOUT = "8"
 # Cap dei candidati passati al reranker per recall (2026-06-12, default 300): meno
-# payload/latenza/costo verso zerank-2. VALIDATO col benchmark gold (18 query, k=3):
+# payload/latenza/costo verso il reranker remoto (misure su zerank-2, oggi
+# voyage/rerank-2.5). VALIDATO col benchmark gold (18 query, k=3):
 # top-3 identici rank per rank a 300; unico costo un fatto gold che era in posizione
 # 17 e sparisce dalla coda (found_any 15→14/18). Rivalutare se recall_max_results >= 10.
 HINDSIGHT_API_RERANKER_MAX_CANDIDATES = "100"
@@ -206,14 +206,6 @@ HINDSIGHT_API_RERANKER_MAX_CANDIDATES = "100"
 # bank-configurable: vale anche per core e obsidian); richiede restart server.
 HINDSIGHT_API_RECENCY_DECAY_FUNCTION = "exponential"
 HINDSIGHT_API_RECENCY_DECAY_HALFLIFE_DAYS = "60"
-
-# --- Embedding zembed-1 ZeroEntropy (PRODUZIONE, nativo da hindsight-api 0.7.1) -------
-# ⚠️ Cambiare provider IMPONE un REBUILD del bank: zembed-1 usa dim Matryoshka
-#    [2560,1280,640,...], non 1536. Procedura: export (hindsight_export.py) → cambia
-#    provider → riavvia → re-retain (hindsight_import.py). Tool in hooks/hindsight/tools/.
-HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_API_KEY = "{{ env.ZEROENTROPY_API_KEY | default(value='') }}"
-HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_MODEL = "zembed-1"
-HINDSIGHT_API_EMBEDDINGS_ZEROENTROPY_DIMENSIONS = 1280 # Matryoshka: 2560/1280/640/320/160/80/40
 
 # --- Audit log (2026-06-12) --------------------------------------------------
 # Traccia ogni operazione (recall/retain/reflect/consolidation/…) nella tabella
@@ -242,8 +234,8 @@ shell = "bash -c"
 run = [
   # NON usare il meta-pacchetto "hindsight-api": e' un alias di hindsight-api-slim[all],
   # e [all] tira dentro l'extra local-ml (torch + stack CUDA + sentence-transformers +
-  # mlx) per ~3,5 GB che qui non servono mai: embeddings e reranker sono su ZeroEntropy
-  # (provider remoto, vedi HINDSIGHT_API_EMBEDDINGS_PROVIDER) e l'LLM e' OpenAI. Con
+  # mlx) per ~3,5 GB che qui non servono mai: embeddings e reranker sono su provider
+  # remoti (Gemini/Voyage, vedi HINDSIGHT_API_EMBEDDINGS_PROVIDER) e l'LLM e' OpenAI. Con
   # provider != "local" il server non importa nemmeno torch al boot. Serve solo l'extra
   # embedded-db (pg0-embedded) per il Postgres in ~/.pg0. Se un giorno si torna ai
   # modelli locali: reinstallare "hindsight-api-slim[all]".
@@ -274,8 +266,8 @@ shell = "bash -c"
 # Le guardie ${...:?} sono il fail-fast sulle chiavi: qui e non nel blocco [env] (vedi
 # HINDSIGHT_API_LLM_API_KEY). OpenAI: SKIP_LLM_VERIFICATION=true salta il check al boot,
 # senza guardia il server partirebbe con chiave vuota e il danno emergerebbe al primo
-# retain. Gemini (provider embedding "google" dal 2026-07-27, al posto della guardia
-# ZeroEntropy dell'era zembed-1): il server detached parte anche con chiave vuota
+# retain. Gemini (provider embedding "google" dal 2026-07-27): il server detached
+# parte anche con chiave vuota
 # (default('') sul template) e gli errori di embed finirebbero solo in /tmp/hs.log,
 # mentre il task uscirebbe comunque con 0. VOYAGE_API_KEY resta senza guardia: senza
 # chiave il recall degrada (niente rerank), non muore.
@@ -348,7 +340,7 @@ run = "bash hooks/hindsight/ops/kill-port.sh 9292 dashboard"
 # Script rilocabili (corpora via __dir__/__file__). hindsight_bench.rb (bench LLM provider)
 # e hindsight_recall_quality_bench.py restano lanciabili a mano da hooks/hindsight/benchmark/.
 [tasks.embed-bench]
-description = "Confronta gli embedding (zembed-1 vs Gemini vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Foreground (~minuti, scarica bge-m3 al primo run)."
+description = "Confronta gli embedding (Gemini vs candidati remoti vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Foreground (~minuti, scarica bge-m3 al primo run)."
 shell = "bash -c"
 run = "python hooks/hindsight/benchmark/hindsight_embed_bench.py"
 
