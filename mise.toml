@@ -67,6 +67,23 @@ HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-4.1-mini"
 HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 
+# --- LLM dedicato a REFLECT via Responses API (ICH-60, adottato 2026-08-09) --
+# openai-responses parla solo con /v1/responses: reasoning + function tools
+# convivono (su chat/completions un reasoning model rifiuta reasoning_effort
+# con tools, HTTP 400 — upstream #2983). Override SOLO per reflect: retain,
+# recall e consolidation restano su openai/gpt-4.1-mini.
+# A/B a 3 vie su 4 query reali (mediane): mini/chat 13.0s $0.006/call risposte
+# corte e generiche; luna/responses+low 25.7s $0.0095 risposte ancorate e
+# operative (legge ~3x memorie via loop con reasoning); luna/chat senza
+# reasoning 23.5s ma $0.011 (input più gonfio) e niente reasoning → dominata.
+# Reflect è invocata deliberatamente (volume basso): la sintesi migliore vale
+# il 2x di latenza. Luna: $0.20/$1.20 per Mtok (metà di gpt-4.1-mini per-token;
+# per-call costa ~1.6x perché lavora di più).
+HINDSIGHT_API_REFLECT_LLM_PROVIDER = "openai-responses"
+HINDSIGHT_API_REFLECT_LLM_MODEL = "gpt-5.6-luna"
+HINDSIGHT_API_REFLECT_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
+HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT = "low"
+
 # PRODUZIONE: gemini-embedding-001 (1536 dim) dal 2026-07-27, di nuovo dopo la parentesi
 # zembed-1 (2026-05-27 → 2026-07-27), chiusa perche' ZeroEntropy spegne tutto il 2026-09-04.
 # Scelto su benchmark vettoriale (bench_results/embed_20260727_000525.json, corpus ostico
