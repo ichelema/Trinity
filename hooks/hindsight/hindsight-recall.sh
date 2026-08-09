@@ -36,6 +36,9 @@ import hashlib, json, os, sys, time, urllib.request, urllib.error
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
+# cache_dir con alias: piu' sotto il nome `cache_dir` viene riassegnato alla
+# STRINGA cfg["recall_cache_dir"] — senza alias la sentinella chiamerebbe una str.
+from hindsight_config import cache_dir as _hs_state_dir
 from hindsight_config import load_config, recall_bank_urls
 from hindsight_debug import debug_log
 from hindsight_recall_lib import build_recall_payload
@@ -158,6 +161,39 @@ else:
 
 results = data.get("results") or []
 source = "cache" if cached is not None else "fresh"
+
+# --- Sentinella del degrado reranker (ICH-65) ---
+# Il fail-open rende il guasto invisibile: con Voyage giu' il recall risponde
+# comunque 200 (failover chain server-side su RRF; interleave client-side),
+# quindi qui non arriva nessun errore. Il segnale sta nei dati: col fallback
+# RRF il server NON emette scores.reranker (misurato, ICH-65); il fallimento
+# del rerank globale client-side lo porta merge_meta.rerank_error. Marker su
+# file, notifica (con dedup/cooldown) in hindsight-failcheck.sh.
+# Solo sui fetch freschi: un cache-hit ri-registrerebbe l'evento gia' visto.
+if cached is None:
+    _degraded = []
+    if merge_meta.get("rerank_error"):
+        _degraded.append(
+            f"rerank globale multi-bank fallito ({merge_meta['rerank_error']})"
+        )
+    if results and not any(
+        isinstance(r.get("scores"), dict) and r["scores"].get("reranker") is not None
+        for r in results
+    ):
+        _degraded.append(
+            "risultati senza scores.reranker: reranker del server in fallback RRF"
+        )
+    if _degraded:
+        try:
+            _ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with open(
+                os.path.join(_hs_state_dir(), "hs-reranker-degraded.log"),
+                "a", encoding="utf-8",
+            ) as _f:
+                for _m in _degraded:
+                    _f.write(f"{_ts}\t{_m}\n")
+        except Exception:
+            pass  # best-effort: la sentinella non deve mai rompere il recall
 # Cap sui risultati iniettati: il multi-bank puo' mostrarne di piu' (piu' fonti).
 _max_results = int(cfg.get("recall_max_results_multibank") or cfg["recall_max_results"]) if len(bank_urls) > 1 else cfg["recall_max_results"]
 debug_log(
