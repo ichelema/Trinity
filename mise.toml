@@ -60,12 +60,27 @@ HINDSIGHT_API_SKIP_LLM_VERIFICATION = "true"
 #   nano       → 0 observation: sul cold-start emette UPDATE su id inesistenti, mai CREATE
 #   gpt-4.1-mini → 16 observation, con update incrementale corretto tra i batch
 #   gpt-5-mini (reasoning, effort low) → 15 observation, qualità simile ma ~1.5-2x latenza
-# Scelto gpt-4.1-mini. NB: la consolidation è server-level (no override per-bank);
-# cambiarla richiede restart.
-HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER = "openai"
-HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-4.1-mini"
+# Scelto gpt-4.1-mini allora. AGGIORNATO 2026-08-09 (ICH-62): gpt-5.6-luna via
+# openai-responses supera il cold-start che bruciò nano — 15 observation da 10 doc
+# (mini: 11 sullo stesso corpus), 0 failed, ~61s, campioni corretti. Metà prezzo
+# per-token ($0.20/$1.20 vs $0.40/$1.60). NB: la consolidation è server-level
+# (no override per-bank); cambiarla richiede restart.
+HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER = "openai-responses"
+HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-5.6-luna"
 HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
+
+# --- LLM dedicato al RETAIN (estrazione fatti) via Responses API (ICH-62) ----
+# Bench estrazione 2026-08-09 (hindsight_bench.rb, 10 doc / 6 query gold),
+# gpt-4.1-mini vs gpt-5.6-luna su openai-responses, effort default "low":
+#   retain avg 4.77s → 3.23s, retain max 9.14s → 6.06s
+#   fatti estratti 25 → 34 (stesso corpus), recall hit-rate 100% = 100% (6/6)
+#   costo corpus $0.0142 → $0.0074 (metà, qui il per-call segue il per-token)
+# Il globale (riga 44) resta gpt-4.1-mini per il query-analyzer del recall,
+# non coperto da questo bench. Risultati in bench_results/20260809-063429/.
+HINDSIGHT_API_RETAIN_LLM_PROVIDER = "openai-responses"
+HINDSIGHT_API_RETAIN_LLM_MODEL = "gpt-5.6-luna"
+HINDSIGHT_API_RETAIN_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 
 # --- LLM dedicato a REFLECT via Responses API (ICH-60, adottato 2026-08-09) --
 # openai-responses parla solo con /v1/responses: reasoning + function tools
