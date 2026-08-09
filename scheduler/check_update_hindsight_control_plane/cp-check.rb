@@ -1,19 +1,26 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 #
-# cp-check.rb — Confronta la versione del Control Plane Hindsight pinnata nel
-# .mise.toml (task `control-plane`) con l'ultima pubblicata su npm.
+# cp-check.rb — Segnala quando esce una NUOVA release del Control Plane
+# Hindsight su npm.
 #
-# La versione pinnata è la single source of truth: la leggiamo dal .mise.toml
-# (pattern `hindsight-control-plane@X.Y.Z`) invece di duplicarla qui, così non
-# può divergere dal task che effettivamente avvia il Control Plane.
+# Il pin di versione nel mise.toml non esiste più (rimosso il 2026-07-31,
+# commit 5723fd0): il task `control-plane` lancia sempre l'ultima via
+# `npx --yes`, quindi non c'è niente da "alzare" a mano. Questo check serve
+# solo ad accorgersi che una release nuova esiste — per leggerne i breaking
+# changes e valutare `mise run install-hindsight` per allineare l'API.
+#
+# La baseline è l'ultima versione già vista, salvata in cp-last-seen.state
+# accanto a questo script (gitignored via *.state). Si auto-avanza a ogni
+# rilevamento: una release nuova viene segnalata una volta sola.
+# Primo run (file di stato assente): seed silenzioso alla latest, exit 0.
 #
 # Uso:   mise run cp-check
-# Exit:  0  = sei già all'ultima (o avanti)
-#        10 = è disponibile un aggiornamento  (comodo da testare in script/cron)
-#        1  = errore (rete, parsing, pin non trovato)
+# Exit:  0  = nessuna novità rispetto all'ultima vista
+#        10 = è uscita una release nuova (segnalata ora, poi silenzio)
+#        1  = errore (rete, parsing)
 #
-# Stampa sempre un blocco JSON con pinned/latest/update_available.
+# Stampa sempre un blocco JSON con last_seen/latest/update_available.
 
 require "json"
 require "net/http"
@@ -21,20 +28,13 @@ require "uri"
 require "rubygems" # Gem::Version
 
 PKG = "@vectorize-io/hindsight-control-plane"
-# Il task control-plane (e quindi il pin) vive nel mise.toml alla root di questo repo.
-# Path da TRINITY_PLUGIN_DIR se presente (env utente), altrimenti risoluzione relativa:
-# scheduler/check_update_*/ -> ../.. = root del repo.
-PLUGIN_DIR = ENV.fetch("TRINITY_PLUGIN_DIR") { File.expand_path("../..", __dir__) }
-MISE_TOML = File.join(PLUGIN_DIR, "mise.toml")
+STATE_FILE = File.join(__dir__, "cp-last-seen.state")
 
-def pinned_version
-  raise "‹.mise.toml› non trovato in #{MISE_TOML}" unless File.exist?(MISE_TOML)
+def last_seen_version
+  return nil unless File.exist?(STATE_FILE)
 
-  toml = File.read(MISE_TOML)
-  m = toml.match(/hindsight-control-plane@(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/)
-  raise "pin `hindsight-control-plane@X.Y.Z` non trovato nel .mise.toml" unless m
-
-  m[1]
+  v = File.read(STATE_FILE).strip
+  v.empty? ? nil : v
 end
 
 def latest_version
@@ -51,20 +51,25 @@ def latest_version
 end
 
 begin
-  pinned = pinned_version
+  last_seen = last_seen_version
   latest = latest_version
 
-  # C'è un update se npm pubblica una versione più recente del pin (la versione
-  # che il task control-plane lancia via npx). Il pin è la "versione in uso".
-  update = Gem::Version.new(latest) > Gem::Version.new(pinned)
+  # Primo run senza stato: la latest è già quella che npx userebbe comunque,
+  # segnalarla non avrebbe senso → seed silenzioso.
+  update = !last_seen.nil? && Gem::Version.new(latest) > Gem::Version.new(last_seen)
 
   puts JSON.pretty_generate(
     "package" => PKG,
-    "pinned" => pinned,
+    "last_seen" => last_seen,
     "latest" => latest,
     "update_available" => update,
     "checked_at" => Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
   )
+
+  # Stato aggiornato DOPO la stampa: se la scrittura fallisce l'output resta
+  # comunque completo (lezione da hindsight-failcheck.sh).
+  File.write(STATE_FILE, "#{latest}\n") if last_seen.nil? || update
+
   exit(update ? 10 : 0)
 rescue StandardError => e
   warn "cp-check: ERRORE — #{e.class}: #{e.message}"

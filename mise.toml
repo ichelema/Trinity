@@ -308,15 +308,15 @@ run = "ruby hooks/hindsight/benchmark/hindsight_rerank_bench.rb"
 # --- Check aggiornamenti (scheduler) ---------------------------------------
 # Lanciabili a mano o da System Scheduler (Splinterware) via scheduler/*/*-scheduled.cmd
 # (i job vanno registrati con i path di questo repo — vedi i README in scheduler/).
-# cp-check.rb trova la root del repo via TRINITY_PLUGIN_DIR
-# (env utente) con fallback relativo: scheduler/check_update_*/ -> ../..
+# cp-check.rb tiene lo stato (ultima release vista) in un file .state accanto
+# allo script; api-check.rb legge la versione installata dal Python di mise.
 [tasks.api-check]
 description = "Controlla se su PyPI è uscita una versione di hindsight-api/hindsight-api-slim più recente di quella installata. Exit 10 se sì."
 shell = "bash -c"
 run = "ruby scheduler/check_update_hindsight_api/api-check.rb"
 
 [tasks.cp-check]
-description = "Controlla se è uscita una versione del Control Plane più recente di quella pinnata nel mise.toml. Exit 10 se sì."
+description = "Segnala (una volta sola) una nuova release del Control Plane su npm; il task control-plane è sempre-latest via npx. Exit 10 se sì."
 shell = "bash -c"
 run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
 

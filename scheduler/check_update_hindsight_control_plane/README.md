@@ -1,25 +1,29 @@
 # Reminder aggiornamenti — Hindsight Control Plane
 
-Sistema che **avvisa quando esce su npm una versione del Control Plane di
-Hindsight più recente di quella in uso**, così puoi valutare se aggiornarla.
+Sistema che **avvisa (una volta sola) quando esce su npm una nuova release del
+Control Plane di Hindsight**, così puoi leggerne i breaking changes e valutare
+l'allineamento dell'API.
 
 ## Perché esiste
 
 Il Control Plane (Web UI di Hindsight, `@vectorize-io/hindsight-control-plane`)
-è avviato dal task `control-plane` nel `mise.toml` via `npx ...@<versione>`.
-A differenza di `hindsight-api` (installato con `pip install --upgrade`, quindi
-sempre all'ultima), il Control Plane **non si installa**: `npx` lo scarica al
-volo alla **versione fissata** nel `mise.toml` (il "pin"). Quella è quindi la
-"versione in uso", e l'unico riferimento con cui confrontare l'ultima su npm.
+è avviato dal task `control-plane` nel `mise.toml` via `npx --yes` **senza pin**
+(rimosso il 2026-07-31, commit 5723fd0): al prossimo avvio `npx` scarica da solo
+l'ultima versione. Non c'è quindi nulla da aggiornare a mano — ma conviene
+*accorgersi* che una release nuova esiste, per leggerne i breaking changes e
+valutare `mise run install-hindsight` per allineare `hindsight-api-slim`
+(un CP più nuovo dell'API può chiamare endpoint che l'API non espone ancora).
 
-Il check serve ad accorgerti quando upstream pubblica qualcosa di più nuovo, per
-deciderne tu l'adozione (il pin non si alza da solo).
+La baseline è l'**ultima release vista**, salvata in `cp-last-seen.state`
+accanto allo script: si auto-avanza a ogni rilevamento, quindi ogni release
+viene segnalata una volta sola. Al primo run (stato assente) fa un seed
+silenzioso alla latest, senza alert.
 
 ## File in questa cartella
 
 | File | Ruolo |
 | ---- | ----- |
-| `cp-check.rb` | **Il check vero.** Ruby. Legge il pin dal `mise.toml`, interroga npm, confronta. Esce `0` (niente) / `10` (novità) / `1` (errore). |
+| `cp-check.rb` | **Il check vero.** Ruby. Confronta l'ultima su npm con l'ultima vista (`cp-last-seen.state`). Esce `0` (niente) / `10` (novità) / `1` (errore). |
 | `cp-check-scheduled.cmd` | **Il ponte Windows→MSYS.** Lanciato da System Scheduler; imposta l'ambiente MSYS2 ed esegue lo script con `bash --noprofile --norc`. |
 | `cp-check-scheduled.sh` | **Il wrapper schedulato.** Esegue il check, scrive il log e, se c'è novità, crea/apre il file di alert. |
 | `README.md` | Questo file. |
@@ -39,7 +43,7 @@ cp-check-scheduled.sh                   ← cd root, log, gestione alert
 mise run cp-check (mise.toml)           ← dà Ruby giusto + env (TLS proxy)
         │  ruby cp-check.rb
         ▼
-cp-check.rb                             ← confronto pin vs ultima npm, exit 0/10
+cp-check.rb                             ← confronto ultima vista vs ultima npm, exit 0/10
 ```
 
 L'exit code risale: `cp-check.rb` esce `10` → `mise` lo propaga → lo `.sh` vede `10` e scrive l'alert.
@@ -66,19 +70,21 @@ mise run cp-check          # c'è una versione nuova da valutare? (exit 10 = sì
 
 ## Cosa succede quando esce una versione nuova
 
-Quando `cp-check` trova `latest > pin`, lo `.sh` schedulato:
+Quando `cp-check` trova `latest > ultima vista`, lo `.sh` schedulato:
 
-1. scrive l'alert con versione pinnata, ultima su npm e i prossimi passi;
+1. scrive l'alert con ultima vista, ultima su npm e i prossimi passi
+   (breaking changes + eventuale `mise run install-hindsight`);
 2. apre quel file in primo piano (Notepad).
 
-Quando non c'è nulla, **rimuove** un eventuale alert vecchio: la sola presenza
-dell'alert è quindi un segnale affidabile. Per aggiornare: alza la versione nel
-task `control-plane` del `mise.toml` (riga `... hindsight-control-plane@X.Y.Z`).
+Lo stato si auto-avanza al rilevamento, quindi il run successivo esce `0` e
+**rimuove** l'alert: la notifica vera è il Notepad in primo piano, il file è
+solo traccia. Non c'è nulla da aggiornare a mano per il CP (npx è sempre-latest).
 
 File prodotti (accanto a questo script):
 
 - `cp-check-scheduled.log` — storico di ogni run (una riga, con JSON).
-- `cp-update-ALERT.txt` — presente **solo** quando c'è una versione da valutare.
+- `cp-update-ALERT.txt` — presente tra un rilevamento e il run successivo.
+- `cp-last-seen.state` — ultima release vista (baseline del confronto).
 
 Sono esclusi da git nel `.gitignore` principale del repo.
 
