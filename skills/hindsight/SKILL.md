@@ -23,9 +23,13 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 
 **Stack:**
 
-- Pacchetto Python: `hindsight-api` (puro Python, installato via `mise run install-hindsight`)
+- Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
 - Entry-point: `hindsight-local-mcp` (in `Scripts/` del Python gestito da mise — esposto nel PATH via `[env]` di `.mise.toml`)
-- LLM per retain/recall: **OpenAI `gpt-4.1-mini`** (chiave da `$OPENAI_API_KEY`; scelto con A/B test 2026-06-02, vedi commenti in `mise.toml`)
+- Versione: **0.9.0** (dal 2026-08-09); query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
+- LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
+- Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
+- Reranker: **`voyage/rerank-2.5`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
+- Altre feature 0.9.0 attive: recency decay esponenziale (halflife 60 giorni), audit log server-side (retention 30 giorni), `HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS=true` (estrazione fallita dopo i retry → operation `failed`, intercettata da `hindsight-failcheck.sh`)
 - Storage: embedded PostgreSQL in `~/.pg0/hindsight-mcp/`
 - Endpoint MCP: `http://localhost:8888/mcp/trinity-project/` (bank statico per-progetto)
 - Registrato a **scope user** come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (bank risolto per-progetto; vedi sotto)
@@ -77,6 +81,30 @@ automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei
 (`--scan/--triage/--move/--reject/--status`); job settimanale
 `scheduler/promote_scan/` che genera `logs/promote-candidates.json`.
 
+### Mental model: knowledge page iniettate a inizio sessione
+
+Tre mental model definiti nel blocco `mental_models` di `hindsight.config.json` —
+`user-profile`, `project-conventions`, `recurring-learnings` — vengono iniettati
+come `additionalContext` a ogni SessionStart dall'hook `hindsight-mm-inject.sh`
+(gated da `mental_models_inject_on_start: true`, ids in `mental_models_inject_ids`).
+
+- **refresh** rigenera il contenuto dal bank; **inject** mostra solo il contenuto già esistente.
+- Refresh manuale immediato (necessario dopo aver cancellato/corretto un fatto):
+  `bash hooks/hindsight/ops/hindsight-mental-models.sh refresh --all`
+
+### Hook di sessione e strumenti operativi
+
+| Componente | Trigger/uso | Cosa fa |
+| ---------- | ----------- | ------- |
+| `hindsight-ensure-up.sh` | SessionStart | Avvia il server se giù e attende la readiness dell'endpoint MCP (elimina la race "tool `hindsight/*` non registrati") |
+| `hindsight-mm-inject.sh` | SessionStart | Inietta i mental model (vedi sopra) |
+| `hindsight-failcheck.sh` | UserPromptSubmit | Segnala operation async `failed` lato server (retain accettato ma estrazione fallita) e la degradazione del reranker; de-dup via state file |
+| `hindsight-sentinel.sh` | detached da ensure-up | Sostituisce l'hook SessionEnd (che Claude Code cancella, issue #32712): quando l'ultimo processo claude termina fa drain dei retain pendenti e spegne server + Postgres |
+| `ops/hindsight-drain-retain.py` | pre-stop | Attende che i retain in volo raggiungano stato terminale prima dello shutdown (mediana estrazione 32s: uno stop cieco perderebbe la memoria senza errori) |
+| `mise run db-dump` / `db-restore` | manuale | `pg_dump`/restore del DB Hindsight per il sync tra macchine (`tools/hs-db-dump.sh`, `hs-db-restore.sh` con guardrail anti-perdita) |
+| `tools/hindsight_export.py` / `hindsight_import.py` | cambio provider embedding | Export dei documenti → re-retain sul nuovo embedding (il cambio di dimensione obbliga al rebuild del bank) |
+| `mise run api-check` / `cp-check` | scheduler | Segnalano nuove release di `hindsight-api(-slim)` su PyPI e del Control Plane su npm (exit 10 se disponibili; cp-check usa lo state file `cp-last-seen.state`) |
+
 ### Interfacce web: Control Plane e dashboard log
 
 Due UI **opzionali**, indipendenti dal server MCP, entrambe via task mise e **in foreground** (Ctrl-C per fermarle, a differenza di `start-hindsight` che è daemon):
@@ -99,11 +127,11 @@ mise run dashboard         # → http://localhost:9292
 
 ### Operazioni di memoria via MCP
 
-Quando il server è up, in una sessione Claude Code questo progetto espone 26 tool MCP con prefisso `hindsight/`. I tre principali sono:
+Quando il server è up, in una sessione Claude Code questo progetto espone 29 tool MCP con prefisso `hindsight/`. I tre principali sono:
 
 | Tool                | Quando usarlo                                                                                                                                                                                                  | Esempio di invocazione                                                                                                                          |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hindsight/retain`  | Memorizzare informazioni nuove (preferenze, decisioni, lezioni). Passa **contesto ricco e crudo**, non frasi pre-digerite: l'LLM estrae meglio i fatti dal testo originale. Asincrono: ritorna `operation_id`. | `retain(content="L'utente Sphynx preferisce Ruby per gli script e usa MSYS2 su Windows 11. Ha appena configurato Hindsight con gpt-4.1-mini.")` |
+| `hindsight/retain`  | Memorizzare informazioni nuove (preferenze, decisioni, lezioni). Passa **contesto ricco e crudo**, non frasi pre-digerite: l'LLM estrae meglio i fatti dal testo originale. Asincrono: ritorna `operation_id`. | `retain(content="L'utente Sphynx preferisce Ruby per gli script e usa MSYS2 su Windows 11. Ha appena configurato Hindsight con gpt-5.6-luna.")` |
 | `hindsight/recall`  | Recuperare memorie semanticamente rilevanti per una query. Sincrono.                                                                                                                                           | `recall(query="quali preferenze ha Sphynx per gli script?")`                                                                                    |
 | `hindsight/reflect` | Sintesi disposition-aware su una domanda usando le memorie come contesto.                                                                                                                                      | `reflect(query="Come dovrei impostare un nuovo script per Sphynx?")`                                                                            |
 
@@ -121,7 +149,7 @@ Tool ausiliari più usati:
 
 1. Il client (Claude Code) chiama `retain(content=...)`
 2. Il server accetta sincrono → `{status: "accepted", operation_id: "..."}` e mette in coda
-3. Worker async chiama OpenAI gpt-4.1-mini per estrarre:
+3. Worker async chiama `gpt-5.6-luna` (provider `openai-responses`) per estrarre:
    - **observation facts** (fatti atomici, es. "Sphynx prefers Ruby for scripting")
    - **world facts** (versione timestamped + entity-linked, es. "Sphynx prefers Ruby for scripting | When: 2026-05-23 | Involving: Sphynx")
 4. Entrambi i tipi vengono indicizzati con embeddings nel bank `trinity-project`

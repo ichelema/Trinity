@@ -1,7 +1,7 @@
 # Hindsight hooks — note di sessione
 
 Riepilogo di quanto appreso/modificato lavorando sugli hook Hindsight di Claude Code
-in `E:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sostituisce
+in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 `SKILL.md` (che resta la guida alle operazioni MCP retain/recall/reflect).
 
 > Sessione del 2026-05-25.
@@ -28,13 +28,14 @@ in `E:\AI\Claude\Trinity\.claude\hooks\hindsight\`. Documento operativo, non sos
 
 ```jsonc
 "recall_budget": "mid",          // sforzo retrieval server: low | mid | high
-"recall_max_tokens": 1024,       // tetto token dei fatti restituiti (governa il CONTEGGIO)
+"recall_max_tokens": 2048,       // tetto token dei fatti restituiti (governa il CONTEGGIO)
 "recall_max_results": 3,         // slice CLIENT: quanti fatti iniettati nel prompt
-"recall_types": ["observation"], // filtro CATEGORIA: world | experience | observation ([] = tutti)
+"recall_types": ["observation", "world", "experience"], // filtro CATEGORIA ([] = tutti)
 "recall_timeout": 10,            // timeout sincrono della chiamata di rete (s)
 "recall_min_prompt_chars": 20,   // gate: prompt più corti saltano il recall
 "recall_cache_ttl": 300,         // validità cache client (s)
-"retain_every_n_turns": 3        // throttling retain: salva 1 Stop ogni N
+"retain_enabled": false,         // MASTER SWITCH: retain automatico (hook Stop) SPENTO — si salva solo via retain MCP
+"retain_every_n_turns": 3        // throttling retain: salva 1 Stop ogni N (inattivo finché retain_enabled è false)
 ```
 
 ---
@@ -90,7 +91,7 @@ nel log non significa ricevere 35 fatti.
 
 ## 5. Timeout (`recall_error: "timed out"`)
 
-- Il recall è **LLM-backed** (OpenAI `gpt-4.1-nano`): latenza variabile, ~3,9s per query brevi,
+- Il recall è **LLM-backed** (query-analyzer sul LLM globale, oggi `gpt-4.1-mini`): latenza variabile, ~3,9s per query brevi,
   **~8,5s per query lunghe/dense** (misurato).
 - Con `recall_timeout: 6` quelle query sforavano in modo riproducibile → `recall_error`,
   prompt gestito senza memoria (fail-soft).
@@ -141,6 +142,10 @@ silenziosamente (no 400 dal server).
 
 ## 9. Retain — throttling
 
+> ⚠️ Oggi il retain automatico è **spento** (`retain_enabled: false` in `hindsight.config.json`):
+> l'hook Stop esce subito e si salva solo via retain MCP. Il resto della sezione descrive la
+> meccanica quando l'interruttore è attivo.
+
 `should_retain_now()` salva 1 Stop ogni `retain_every_n_turns` (3): turni 1-2 → `retain_skip`
 `reason=throttling`, turno 3 → salva. Contatore `stop_count` per sessione in
 `%TEMP%\hs-retain-state.json`. **Eccezione**: `SessionEnd` (e `HS_RETAIN_FORCE`) forzano sempre
@@ -188,8 +193,8 @@ PYTHONUTF8=1 python "$TRINITY_PLUGIN_DIR/hooks/hindsight/lib/hindsight_config.py
 rm -f /e/tmp/hs-recall-cache/*.json
 
 # Benchmark provider LLM (retain+recall su corpus dedicato) — vedi §13
-ruby .claude/hooks/hindsight/benchmark/hindsight_bench.rb
-BENCH_ONLY=openai-nano,groq-gptoss20b ruby .claude/hooks/hindsight/benchmark/hindsight_bench.rb
+ruby hooks/hindsight/benchmark/hindsight_bench.rb
+BENCH_ONLY=openai-nano,groq-gptoss20b ruby hooks/hindsight/benchmark/hindsight_bench.rb
 ```
 
 ---
@@ -200,33 +205,36 @@ Nel bank `trinity-project`:
 
 - **(procedures)** Il file di test è `hindsight-check.sh`, non un `test_*.py`.
 - **(learnings)** La cache recall è in `E:\tmp\hs-recall-cache`, non nel `/tmp` di MSYS.
-- **(procedures)** Il benchmark provider è in `.claude/hooks/hindsight/benchmark/` (spostato da `test/` il 2026-05-25).
+- **(procedures)** Il benchmark provider è in `hooks/hindsight/benchmark/` (spostato da `test/` il 2026-05-25).
 
 ---
 
 ## 13. Benchmark provider LLM (velocità/qualità)
 
-**Posizione**: `E:\AI\Claude\Trinity\.claude\hooks\hindsight\benchmark\` — spostato da `test/` il 2026-05-25. I path interni sono relativi a `__dir__`, quindi lo script è rilocabile (corpus e risultati vivono accanto al `.rb`).
+**Posizione**: `E:\AI\Claude\Trinity\hooks\hindsight\benchmark\` — spostato da `test/` il 2026-05-25. I path interni sono relativi a `__dir__`, quindi lo script è rilocabile (corpus e risultati vivono accanto al `.rb`).
 
 | File                     | Ruolo                                                                                                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hindsight_bench.rb`     | Orchestratore: per ogni provider riavvia il server, fa retain del corpus, recall delle query, misura latenza/token/fatti/hit-rate. Verifica il provider attivo dal log (`verify_active_provider`) e ripristina la produzione a fine run |
 | `bench_corpus.json`      | 10 documenti + 6 query (con `expected`/`min_hits` per l'hit-rate)                                                                                                                                                                       |
 | `bench_results/<runid>/` | JSON per provider + `summary.csv` + `server_logs/`                                                                                                                                                                                      |
+| `hindsight_embed_bench.py` | Benchmark **embedding** (Gemini vs candidati remoti vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Lancio: `mise run embed-bench`                              |
+| `hindsight_rerank_bench.rb` | Benchmark **reranker** su corpus rank-aware (MRR, recall@k). Ferma/riavvia il server :8888 più volte e lo ripristina alla fine (~5-10 min). Lancio: `mise run rerank-bench`                                                          |
+| `hindsight_recall_quality_bench.py` | **Qualità del recall** end-to-end su un bank reale con gold set (`gold_questions.json`): MRR, R@1, R@3. Lancio a mano da `hooks/hindsight/benchmark/`                                                                       |
 
 **Lancio**:
 
 ```bash
-cd .claude/hooks/hindsight/benchmark && ruby hindsight_bench.rb
+cd hooks/hindsight/benchmark && ruby hindsight_bench.rb
 # o limitato ad alcuni provider:
 BENCH_ONLY=openai-nano,groq-gptoss20b ruby hindsight_bench.rb
 ```
 
-Ripristina automaticamente la produzione (`openai gpt-4.1-nano`) alla fine.
+Ripristina automaticamente la produzione alla fine (`openai gpt-4.1-mini`, il LLM globale — solo le variabili LLM; per l'env completo rilanciare `mise run stop-hindsight && mise run start-hindsight`).
 
 **Config Groq nel benchmark** (free tier 8000 TPM): `max_ctok: 4000` — **deve** essere > `RETAIN_CHUNK_SIZE` (default 3000) o il server non parte; `pace_s: 10` — attesa tra chiamate per simulare un uso ravvicinato (sul free tier riattiva di proposito il rate-limit). Su **Dev Tier** rimuovere `pace_s`; `max_ctok` resta 4000.
 
-**Esito chiave (2026-05-25)** — resta `gpt-4.1-nano` in produzione:
+**Esito chiave (2026-05-25)** — all'epoca restò `gpt-4.1-nano` in produzione (storico: dal 2026-08-09 il retain di produzione è `gpt-5.6-luna` via `openai-responses`, A/B ICH-62):
 
 | Metrica                         | gpt-4.1-nano | Groq gpt-oss-20b (free tier) |
 | ------------------------------- | ------------ | ---------------------------- |
@@ -251,7 +259,7 @@ HINDSIGHT_API_EMBEDDINGS_GEMINI_OUTPUT_DIMENSIONALITY = 1536
 HINDSIGHT_API_RERANKER_LOCAL_MODEL                    = "BAAI/bge-reranker-v2-m3"
 ```
 
-Gemini (1536d, cloud, multilingue) evita il modello di embedding pesante in locale; richiede `GEMINI_API_KEY` nell'env. Il reranker resta locale. L'embedding multilingue permette comunque il match cross-lingua (query IT → fatti EN/IT). Verificato end-to-end.
+Gemini (1536d, cloud, multilingue) evita il modello di embedding pesante in locale; richiede `GEMINI_API_KEY` nell'env. Il reranker all'epoca era locale; dal 2026-07-27 (sunset ZeroEntropy) in produzione è **`voyage/rerank-2.5`** via provider `litellm-sdk` (`VOYAGE_API_KEY`), con failover RRF (`HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"`); la riga `RERANKER_LOCAL_MODEL` resta in `mise.toml` ma non è il provider attivo. L'embedding multilingue permette comunque il match cross-lingua (query IT → fatti EN/IT). Verificato end-to-end.
 
 ### 14a. Lingua dei fatti generati — servono DUE mission (verificato 2026-05-25)
 
@@ -283,7 +291,7 @@ Il rebuild **azzera il bank Hindsight** (la memoria file-based è separata e res
 
 ## 15. Command `/hindsight-create-agent` — subagent con memoria isolata
 
-**File**: `.claude/commands/hindsight-create-agent.md` (slash command, accanto a `reflect.md`).
+**File**: `commands/hindsight-create-agent.md` (slash command, accanto a `reflect.md`).
 Crea un subagent in `.claude/agents/<nome>.md` con memoria persistente Hindsight sul bank
 `trinity-project`. Adattato dalla skill esterna `create-agent` del plugin marketplace, traducendo
 i tool `agent_knowledge_*` nei tool locali `mcp__hindsight__*`.
@@ -349,7 +357,7 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
 
 2. **Bind di Next.js sull'hostname.** Il Control Plane eredita la env `HOSTNAME` (sotto MSYS2 = nome
    macchina, es. `ENWS27719997`) e vi si lega → risponde su `http://ENWS27719997:9999` ma non su
-   `localhost`. → Il task forza `HOSTNAME=127.0.0.1 ... --hostname 127.0.0.1` (anche per non esporlo
+   `localhost`. → Il task forza `HOSTNAME=localhost ... --hostname localhost` (anche per non esporlo
    in LAN: la UI non ha API key di default, vedi `HINDSIGHT_CP_ACCESS_KEY`).
 
 3. **Trappola doppio-Ruby.** `bundle install` lanciato a mano (shell senza mise attivo) usa il Ruby
