@@ -11,7 +11,7 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
-| `hindsight-recall.sh`        | UserPromptSubmit   | inietta come `additionalContext` le memorie rilevanti al prompt (con cache client-side) |
+| `hindsight-recall.sh`        | UserPromptSubmit   | esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate |
 | `hindsight-ensure-up.sh`     | SessionStart       | se il server :8888 è giù, lo avvia (`mise run start-hindsight`) e attende il boot; spawna la sentinella |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
 | `hindsight-retain.sh`        | Stop               | lancia il worker async che memorizza la coda della sessione                             |
@@ -28,8 +28,25 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | `hindsight_config.py`     | loader della config a strati: DEFAULTS → `<plugin_root>/hindsight.config.json` → `<progetto>/hindsight.config.json` (override) → env |
 | `hindsight_debug.py`      | logging strutturato JSONL su `logs/hindsight-debug.log`                          |
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
+| `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
 
 > `hindsight.config.json` (i parametri: api_url, budget, tag, mental model, …) vive nella **root del plugin**, non più in `lib/`. Un progetto può sovrascrivere singole chiavi con un proprio `hindsight.config.json` nella sua root (merge a strati).
+
+## Filtro post-recall e consenso
+
+Ogni prompt normale esegue un recall fresco: non esiste una cache dei risultati o delle classificazioni.
+I risultati con `scores.reranker >= 0.8` sono iniettati direttamente; gli altri sono
+classificati in una sola chiamata a `gpt-5.6-luna`:
+
+- `high`: iniezione automatica;
+- `low`: scarto;
+- `medium`: se non esiste alcun high, salvataggio temporaneo isolato per `session_id + cwd`
+  e domanda “Ho delle memorie che potrebbero essere utili, le vuoi usare?”. Un consenso naturale
+  nel turno successivo le consuma e inietta una sola volta; qualsiasi altro prompt le elimina.
+
+Il classificatore è fail-open: chiave mancante, timeout o output invalido iniettano i risultati
+originali. `recall_debug_in_context: true` sostituisce il blocco normale con una diagnostica che
+mostra route, conteggi e testo completo delle sole memorie effettivamente iniettate.
 
 ## 📁 `ops/` — script operativi e utility
 

@@ -121,15 +121,12 @@ for s in hindsight-recall.sh hindsight-retain.sh hindsight-retain-worker.py; do
 	fi
 done
 
-# --- 6. CACHE RECALL ---
-sect "6. Cache client-side"
-# Letta dalla config invece di cablarla: il default vive in hindsight_config.py.
-CACHE_DIR="${HINDSIGHT_CACHE_DIR:-$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get recall_cache_dir 2>/dev/null)}"
-if [ -d "$CACHE_DIR" ]; then
-	N_CACHE=$(ls -1 "$CACHE_DIR"/*.json 2>/dev/null | wc -l)
-	ok "cache dir esiste ($CACHE_DIR, $N_CACHE entries)"
+# --- 6. RECALL SEMPRE FRESCO ---
+sect "6. Recall sempre fresco"
+if grep -qE 'recall_cache_(dir|ttl)|HINDSIGHT_CACHE_(DIR|TTL)' "$HOOKS_DIR/hindsight-recall.sh" "$HOOKS_DIR/lib/hindsight_config.py"; then
+	ko "cache dei risultati recall ancora presente nel codice di produzione"
 else
-	note "cache dir non ancora creata (verra' creata al primo recall)"
+	ok "nessuna cache dei risultati recall o delle classificazioni"
 fi
 
 # --- 7. HOOKS.JSON DEL PLUGIN ---
@@ -437,7 +434,7 @@ try:
     with open(os.path.join(proj, "hindsight.config.json"), "w", encoding="utf-8") as f:
         json.dump({
             "api_url": EVIL,
-            "recall_cache_dir": "/tmp/evil-cache",
+            "recall_pending_dir": "/tmp/evil-pending",
             "debug_log_file": "/tmp/evil.log",
             "bank": {"api_base": EVIL, "retain_bank": "proj-legittimo"},
             "recall_max_results": 42,
@@ -452,7 +449,7 @@ finally:
 blocked_ok = (
     EVIL not in cfg["api_url"]
     and EVIL not in cfg["bank"]["api_base"]
-    and cfg["recall_cache_dir"] != "/tmp/evil-cache"
+    and cfg["recall_pending_dir"] != "/tmp/evil-pending"
     and cfg["debug_log_file"] != "/tmp/evil.log"
     and cfg["bank"]["retain_bank"] != "proj-legittimo"
     and all(EVIL not in u for u in hc.recall_bank_urls(cfg))
@@ -578,9 +575,14 @@ block = (
     "### User Profile\n\nSphynx usa MSYS2.\n\n"
     "Use as consultative context. Verify mutable facts against the repo."
 )
+debug_block = (
+    "## Hindsight recall debug\n\nModel: gpt-5.6-luna\n\n"
+    "Memorie effettivamente iniettate:\n- [bypass] fatto\n\n"
+    "Use as consultative context. Verify mutable facts against the repo."
+)
 legit = "Ho aggiunto le knowledge page al sistema."
-out = w.strip_memory_block(block + "\n\n" + legit)
-print("OK" if ("knowledge pages" not in out) and (legit in out) else "KO")
+out = w.strip_memory_block(block + "\n\n" + debug_block + "\n\n" + legit)
+print("OK" if ("knowledge pages" not in out) and ("recall debug" not in out) and (legit in out) else "KO")
 PY
 )
 if [ "$KP_STRIP" = "OK" ]; then
@@ -989,11 +991,11 @@ else
 	ko "budget recall multi-bank fuori scala ($MB_BUDGET)"
 fi
 
-# recall hook usa il fan-out e la cache key tiene conto dei bank
-if grep -q "recall_bank_urls" "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'bank_urls)' "$HOOKS_DIR/hindsight-recall.sh"; then
-	ok "recall hook risolve i bank e li include nella cache key"
+# recall hook usa il fan-out; ogni prompt normale esegue un fetch fresco.
+if grep -q "recall_bank_urls" "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'multi_recall' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "recall hook integra resolver e fan-out multi-bank senza cache risultati"
 else
-	ko "recall hook non integra recall_bank_urls/cache key multi-bank"
+	ko "recall hook non integra correttamente il multi-bank"
 fi
 
 # recall hook logga i punteggi per-stadio del server (RecallScores, api >=0.8.4)
@@ -1001,6 +1003,42 @@ if grep -q '"scores"' "$HOOKS_DIR/hindsight-recall.sh" && grep -q 'min_score_fil
 	ok "recall hook logga scores per-stadio e meta min_score nel debug log"
 else
 	ko "recall hook non logga RecallScores/meta min_score"
+fi
+
+# --- 20. FILTRO POST-RECALL E CONSENSO MEDIUM ---
+sect "20. Filtro post-recall e consenso medium"
+FILTER_TEST=$(cd "$HOOKS_DIR" && PYTHONUTF8=1 python test_hindsight_recall_filter.py 2>&1)
+if [ "$?" -eq 0 ]; then
+	ok "test unitari filtro/routing/consenso/pending passati"
+else
+	ko "test unitari filtro recall falliti"
+	note "$FILTER_TEST"
+fi
+
+FILTER_CFG=$(PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+cfg = hc.load_config()
+keys = (
+    "recall_result_filter_enabled", "recall_result_filter_model",
+    "recall_result_filter_timeout", "recall_result_filter_threshold",
+    "recall_pending_dir", "recall_pending_ttl", "recall_debug_in_context",
+)
+valid = all(key in cfg for key in keys) and cfg["recall_result_filter_threshold"] == 0.8
+print("OK" if valid else "KO")
+PY
+)
+if [ "$FILTER_CFG" = "OK" ]; then
+	ok "config filtro/pending/debug completa e soglia 0.8"
+else
+	ko "config filtro post-recall incompleta ($FILTER_CFG)"
+fi
+
+if grep -q 'from hindsight_recall_filter import' "$HOOKS_DIR/benchmark/hindsight_recall_result_filter_bench.py"; then
+	ok "benchmark e produzione condividono prompt/schema/logica score"
+else
+	ko "benchmark filtro diverge dalla libreria di produzione"
 fi
 
 # retain worker scrive sul bank risolto da retain_bank

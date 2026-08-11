@@ -22,7 +22,7 @@ import re
 # nel path caldo del recall hook.
 _MEMORY_BLOCK_RE = re.compile(
     r"<hindsight_memories>.*?</hindsight_memories>"
-    r"|## Hindsight (?:persistent memory|knowledge pages).*?Verify mutable facts against the repo\.",
+    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug).*?Verify mutable facts against the repo\.",
     re.DOTALL,
 )
 

@@ -106,7 +106,7 @@ Esempio — un hook del plugin (da `hooks/hooks.json`):
 {
   "type": "command",
   "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
-  "timeout": 20
+  "timeout": 40
 }
 ```
 
@@ -390,24 +390,40 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   stesso — ricade sul core); `core` = il core; altro valore = nome bank letterale. Il bank si
   **auto-crea al primo retain**, zero provisioning.
 - **`recall_banks`** (array, la lettura aggrega): fan-out **parallelo** sui bank risolti, fino
-  a `recall_per_bank_candidates` candidati per bank (plugin: 6), poi dedup, rerank globale
+  a `recall_per_bank_candidates` candidati per bank (plugin: 6), poi dedup e rerank globale
   **voyage/rerank-2.5** via API Voyage (gli score di bank diversi non sono confrontabili tra loro),
-  filtro sotto la soglia `recall_min_rerank_score` (0.5 nel plugin, solo percorso multi-bank),
-  taglio finale a `recall_max_results_multibank` risultati iniettati (5 nel plugin). Se
-  Voyage non risponde, fallback a interleaving senza rerank (la soglia non viene
-  applicata). Il core entra **solo se listato**: `["auto"]` da solo = progetto totalmente
-  isolato. Con un solo bank risolto il percorso è la singola POST di sempre, zero overhead
-  multi-bank; la soglia client non si applica, ma i floor `min_scores` server-side sì
-  (bullet successivo).
+  filtro sotto `recall_min_rerank_score` (**0.6** nel plugin, solo percorso multi-bank) e
+  taglio a `recall_max_results_multibank` candidati (5 nel plugin). Se Voyage non risponde,
+  il multi-bank segue la failover chain configurata; la sentinella segnala i risultati senza
+  `scores.reranker`. Il core entra **solo se listato**: `["auto"]` da solo = progetto totalmente
+  isolato. Con un solo bank risolto il percorso è la singola POST di sempre; la soglia globale
+  client non si applica, ma i floor `min_scores` server-side sì (bullet successivo).
 - **Floor per-stadio `min_scores`** (hindsight-api ≥ 0.8.4): le chiavi
   `recall_min_semantic` / `recall_min_keyword` (cutoff retrieval-level, dentro i bracci SQL:
   un risultato tagliato da un braccio può rientrare dall'altro) e `recall_min_reranker` /
   `recall_min_final` (filtri post-rerank applicati dal server) viaggiano nel payload di
   recall e valgono per **entrambi** i percorsi, single- e multi-bank. Tutte `null` = nessun
-  filtro; il plugin attiva `recall_min_reranker: 0.15`, tarato su dati reali del bank core
-  (rumore fuori dominio < 0.08, risultati legittimi ≥ 0.27). Il debug log riporta per ogni
+  filtro; il plugin attiva `recall_min_reranker: 0.4`. Il debug log riporta per ogni
   memoria i punteggi per-stadio del server (`scores.{final,reranker,semantic,keyword}`)
   accanto allo `score` del rerank client multi-bank.
+- **Filtro semantico post-recall**: ogni prompt normale esegue un recall **fresco**; non esiste
+  una cache dei risultati né delle classificazioni. Dopo il cap dei candidati, i risultati con
+  `scores.reranker >= recall_result_filter_threshold` (plugin: **0.8**) bypassano il classificatore.
+  Gli altri vengono valutati insieme, in una sola chiamata a `gpt-5.6-luna`, come `high`, `medium`
+  o `low`: gli `high` vengono iniettati automaticamente, i `low` scartati. Se ci sono sia `high`
+  sia `medium`, entrano solo gli `high` e non viene fatta alcuna domanda.
+- **Consenso per i `medium`**: quando non esistono `high`, i `medium` vengono salvati temporaneamente
+  in un file isolato per hash di `session_id + cwd` (`recall_pending_ttl`: **900s**, directory
+  per-utente protetta). Claude chiede: “Ho delle memorie che potrebbero essere utili, le vuoi usare?”.
+  Un consenso naturale nel turno successivo le consuma e inietta una sola volta; una negazione o un
+  nuovo prompt non consensuale elimina il pending. Il prompt breve di consenso viene gestito prima
+  di `recall_min_prompt_chars` e non avvia un secondo recall.
+- **Fail-open e debug**: se il classificatore non è disponibile (chiave mancante, timeout, errore HTTP
+  o JSON/schema invalido), i candidati originali vengono iniettati con route `fail_open`, così un
+  guasto del filtro non causa perdita silenziosa di memoria. Con `recall_debug_in_context: true`, il
+  normale blocco memoria è sostituito da una diagnostica visibile nella conversazione con modello,
+  conteggi, route e testo completo delle **sole memorie effettivamente iniettate**; `low` e `medium`
+  non autorizzati non vengono mostrati. `debug_log_enabled` resta invece il log JSONL su disco.
 - **Freshness del ranking**: il server applica una curva di recency exponential con emivita
   60 giorni (`HINDSIGHT_API_RECENCY_DECAY_*` in `mise.toml`, config server-globale): boost
   cappato a ±10%, fatti a 60 giorni neutri — i near-duplicate superati perdono contro la
@@ -435,6 +451,13 @@ python hooks/hindsight/lib/hindsight_config.py --banks   # URL retain + recall r
 | progetto totalmente isolato (non legge nemmeno il core) | `{ "bank": { "recall_banks": ["auto"] } }` |
 | progetto che scrive direttamente sul core (niente bank proprio) | `{ "bank": { "retain_bank": "core" } }` |
 | leggere anche il bank di un altro progetto | `{ "bank": { "recall_banks": ["auto", "NomeAltroBank", "core"] } }` |
+| disattivare temporaneamente il filtro post-recall | `{ "recall_result_filter_enabled": false }` |
+| mostrare in conversazione route e memorie iniettate | `{ "recall_debug_in_context": true }` |
+
+Parametri principali del filtro: `recall_result_filter_model`,
+`recall_result_filter_threshold`, `recall_result_filter_timeout`, `recall_pending_ttl`.
+`recall_pending_dir` è un path trust-sensitive e non può essere sovrascritto dalla config di un
+progetto; si configura solo nella base fidata del plugin o tramite env amministrata dall'utente.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (gpt-4.1-nano: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →

@@ -1,253 +1,279 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: recupera memorie rilevanti da Hindsight via REST.
-# Cache client-side filesystem-based con TTL 5 min: HIT ~500ms (Python startup +
-# read file), MISS ~2.7s (Python + server). Cache key = SHA256(prompt
-# normalizzato + bank risolti + fingerprint del payload di filtro), dettagli
-# al blocco "Cache lookup" sotto.
-# Vedi https://hindsight.vectorize.io/developer/performance — "client-side cache
-# raccomandata", hit rate atteso 50-70% su prompt simili.
+# UserPromptSubmit hook: recupera memorie rilevanti da Hindsight via REST e
+# filtra semanticamente i risultati prima di iniettarli.
 set -uo pipefail
 
-# Config centralizzata in hindsight.config.json (vedi hindsight_config.py).
-# `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
-# %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
-# claude.exe invoca l'hook con path stile Windows (E:/...): bash lo digerisce,
-# ma un python non-nativo lo tratterebbe come RELATIVO (vedi hindsight-retain.sh).
-# Normalizza drive-letter -> POSIX con sola espansione bash, zero fork.
 case "$HOOKS_DIR" in
 [A-Za-z]:/*) _hs_drive="${HOOKS_DIR%%:*}"; HOOKS_DIR="/${_hs_drive,,}${HOOKS_DIR#?:}" ;;
 esac
-# $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
-# NON usare $(</dev/stdin): claude.exe e' un processo Windows nativo e la pipe che
-# crea non e' esposta come /dev/stdin al bash MSYS2 -> HOOK_INPUT vuoto, json.loads
-# fallisce e l'except esce muto (guasto silenzioso 2026-07-28/29, nessun recall per
-# ~23h). `read -d ''` legge lo stdin ereditato (fd 0) fino a EOF ed esce 1: `|| true`.
 IFS= read -r -d '' HOOK_INPUT || true
 export HOOK_INPUT HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
 
-# stderr su file (sovrascritto a ogni run) e NON /dev/null: tre guasti silenziosi
-# in due mesi (NameError 06-18, stdin vuoto 07-28, python MSYS 07-30) diagnosticati
-# alla cieca perche' il traceback spariva. 0 byte = run pulita.
 PYTHONUTF8=1 "$HS_PY" <<'PY' 2>"$HS_CACHE_DIR/hs-recall-stderr.log"
-import hashlib, json, os, sys, time, urllib.request, urllib.error
+import json
+import os
+import sys
+import time
+import urllib.request
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
-# cache_dir con alias: piu' sotto il nome `cache_dir` viene riassegnato alla
-# STRINGA cfg["recall_cache_dir"] — senza alias la sentinella chiamerebbe una str.
 from hindsight_config import cache_dir as _hs_state_dir
 from hindsight_config import load_config, recall_bank_urls
 from hindsight_debug import debug_log
-from hindsight_recall_lib import build_recall_payload
 from hindsight_multibank import multi_recall
+from hindsight_recall_filter import (
+    consent_decision,
+    consume_pending,
+    discard_pending_if_present,
+    read_with_deadline,
+    route_results,
+    save_pending,
+)
+from hindsight_recall_lib import build_recall_payload
 
 cfg = load_config()
-
-# Interruttore master: se il recall automatico e' disattivato in config, esci
-# prima di toccare cache o rete. Nessun additionalContext iniettato.
 if not cfg.get("recall_enabled", True):
     debug_log(cfg, "recall_skip", reason="disabled")
     sys.exit(0)
 
 try:
     hook = json.loads(os.environ["HOOK_INPUT"])
-except Exception as e:
-    # Uscire muti qui rende invisibile un hook che parte ma non riceve lo stdin:
-    # e' cosi' che il recall e' rimasto morto ~23h il 2026-07-28 ($(</dev/stdin)
-    # vuoto con claude.exe). input_len=0 nel log identifica subito quel caso.
-    debug_log(cfg, "recall_error", reason="bad_hook_input",
-              error=f"{type(e).__name__}: {e}",
-              input_len=len(os.environ.get("HOOK_INPUT", "")))
+except Exception as exc:
+    debug_log(
+        cfg,
+        "recall_error",
+        reason="bad_hook_input",
+        error=f"{type(exc).__name__}: {exc}",
+        input_len=len(os.environ.get("HOOK_INPUT", "")),
+    )
     sys.exit(0)
 
-prompt = (hook.get("prompt") or "").strip()
-# Skip prompt brevi: "ok", "si", "continua" ecc. — non valgono il costo del recall.
-if len(prompt) < cfg["recall_min_prompt_chars"]:
-    debug_log(cfg, "recall_skip", reason="prompt_too_short", prompt_len=len(prompt))
-    sys.exit(0)
+original_prompt = (hook.get("prompt") or "").strip()
+session_id = str(hook.get("session_id") or "")
+cwd = str(hook.get("cwd") or "")
+pending_dir = cfg["recall_pending_dir"]
+pending_ttl = float(cfg["recall_pending_ttl"])
 
-# Clamp MAX: il recall-embedder rifiuta query > 500 token (HTTP 400). Tronca la
-# query (solo quella usata per il recall, non il prompt inviato a Claude) alla
-# parte iniziale, che di norma contiene l'istruzione/intento; il resto è incollato.
-_max_chars = cfg["recall_max_prompt_chars"]
-if len(prompt) > _max_chars:
-    debug_log(cfg, "recall_truncate", orig_len=len(prompt), max_chars=_max_chars)
-    prompt = prompt[:_max_chars]
 
-# --- Bank di lettura (multi-bank) ---
-# Risolti da bank.recall_banks ("auto" = slug del repo del cwd della sessione).
-# Con un solo bank il percorso resta la singola POST di sempre; con piu' bank
-# si fa fan-out parallelo + fusione (vedi hindsight_multibank.py).
-bank_urls = recall_bank_urls(cfg, hook.get("cwd") or None)
+def emit_context(memories, route_counts, model, latency_ms=0.0, error=None):
+    lines = []
+    for memory in memories:
+        text = (memory.get("text") or "").strip()
+        if not text:
+            continue
+        kind = memory.get("type", "?")
+        route = memory.get("route", "unknown")
+        entities = ", ".join(memory.get("entities") or [])
+        if cfg.get("recall_debug_in_context"):
+            lines.append(f"- [{route}] ({kind}) {text}" + (f"  [entities: {entities}]" if entities else ""))
+        else:
+            lines.append(f"- ({kind}) {text}" + (f"  [entities: {entities}]" if entities else ""))
+    if not lines:
+        return
 
-# --- Payload di recall (serve anche per la cache key) ---
-# Costruito PRIMA della key: i parametri di filtro (types, tags, min_scores,
-# budget, cap...) devono entrare nella chiave, altrimenti un loro cambio in
-# config entro il TTL riuserebbe una risposta calcolata con la config vecchia.
-query_ts = datetime.now(timezone.utc).isoformat()
-payload = build_recall_payload(prompt, cfg, query_ts)
-
-# --- Cache lookup ---
-cache_dir = cfg["recall_cache_dir"]
-cache_ttl = int(cfg["recall_cache_ttl"])
-os.makedirs(cache_dir, exist_ok=True)
-# Key: prompt normalizzato (case-insensitive, whitespace collassato) + set dei
-# bank risolti + fingerprint del payload di filtro. Dal payload si escludono
-# 'query' (gia' coperta dal prompt normalizzato) e 'query_timestamp' (volatile:
-# romperebbe ogni cache hit). Cosi' un cambio di recall_types/min_scores/tags/
-# budget entro il TTL produce una key diversa.
-payload_fp = json.dumps(
-    {k: v for k, v in payload.items() if k not in ("query", "query_timestamp")},
-    sort_keys=True,
-    ensure_ascii=False,
-)
-key_src = " ".join(prompt.lower().split()) + "|" + ",".join(bank_urls) + "|" + payload_fp
-cache_key = hashlib.sha256(key_src.encode("utf-8")).hexdigest()[:32]
-cache_file = os.path.join(cache_dir, cache_key + ".json")
-
-cached = None
-if os.path.exists(cache_file):
-    age = time.time() - os.path.getmtime(cache_file)
-    if age < cache_ttl:
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                cached = json.load(f)
-        except Exception:
-            cached = None
-
-# --- Network call (solo se cache miss) ---
-merge_meta = {}  # sempre definito: il debug_log lo usa anche sul ramo cache-hit
-if cached is None:
-    # Cleanup laziness al miss: rimuovi file scaduti per evitare crescita illimitata.
-    # Costa pochi ms (listdir + stat), si paga solo sui miss.
-    try:
-        cutoff = time.time() - cache_ttl
-        for fn in os.listdir(cache_dir):
-            fp = os.path.join(cache_dir, fn)
-            if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
-                os.remove(fp)
-    except Exception:
-        pass
-    if len(bank_urls) == 1:
-        # Bank singolo: stessa singola POST di sempre, zero overhead multi-bank.
-        req = urllib.request.Request(
-            bank_urls[0] + "/memories/recall",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+    if cfg.get("recall_debug_in_context"):
+        counts = ", ".join(f"{key}={value}" for key, value in route_counts.items())
+        context = (
+            "## Hindsight recall debug\n\n"
+            f"Model: {model}\n"
+            f"Routing: {counts}\n"
+            f"Classifier latency: {latency_ms:.1f} ms"
+            + (f"\nClassifier error: {error}" if error else "")
+            + "\n\nMemorie effettivamente iniettate:\n"
+            + "\n".join(lines)
+            + "\n\nUse as consultative context. Verify mutable facts against the repo."
         )
-        try:
-            with urllib.request.urlopen(req, timeout=cfg["recall_timeout"]) as res:
-                data = json.loads(res.read().decode("utf-8", errors="replace"))
-        except Exception as e:
-            debug_log(cfg, "recall_error", query=prompt, error=str(e)[:200])
-            sys.exit(0)
     else:
-        # Multi-bank: fan-out parallelo -> dedup -> rerank globale voyage/rerank-2.5
-        # (fallback interleave). multi_recall non solleva mai.
-        merged, merge_meta = multi_recall(prompt, cfg, bank_urls, payload)
-        data = {"results": merged}
-    # Salva in cache (best-effort, ignora errori).
+        context = (
+            "## Hindsight persistent memory (advisory, source: fresh)\n\n"
+            + "\n".join(lines)
+            + "\n\nUse as consultative context. Verify mutable facts against the repo."
+        )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        }
+    }, ensure_ascii=False))
+
+
+# Il pending viene gestito prima del gate sui prompt corti: "sì" deve poter
+# autorizzare memorie conservate dal turno precedente. La decisione e il consumo
+# avvengono sotto lo stesso lock per evitare che due submit concorrenti iniettino
+# due volte lo stesso pending; anche verifica+scarto è una singola operazione atomica.
+consent = consent_decision(original_prompt)
+if consent == "positive":
+    consumed = consume_pending(pending_dir, session_id, cwd, pending_ttl) or []
+    if consumed:
+        injected = [{**memory, "route": "pending_medium"} for memory in consumed]
+        debug_log(cfg, "recall_pending", action="consumed", n_results=len(injected))
+        emit_context(
+            injected,
+            {"pending_medium": len(injected)},
+            cfg["recall_result_filter_model"],
+        )
+        sys.exit(0)
+elif discard_pending_if_present(pending_dir, session_id, cwd, pending_ttl):
+    debug_log(
+        cfg,
+        "recall_pending",
+        action="discarded",
+        reason="negative" if consent == "negative" else "new_prompt",
+    )
+
+if len(original_prompt) < cfg["recall_min_prompt_chars"]:
+    debug_log(cfg, "recall_skip", reason="prompt_too_short", prompt_len=len(original_prompt))
+    sys.exit(0)
+
+prompt = original_prompt
+max_chars = cfg["recall_max_prompt_chars"]
+if len(prompt) > max_chars:
+    debug_log(cfg, "recall_truncate", orig_len=len(prompt), max_chars=max_chars)
+    prompt = prompt[:max_chars]
+
+bank_urls = recall_bank_urls(cfg, cwd or None)
+payload = build_recall_payload(prompt, cfg, datetime.now(timezone.utc).isoformat())
+merge_meta = {}
+if len(bank_urls) == 1:
+    request = urllib.request.Request(
+        bank_urls[0] + "/memories/recall",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-    except Exception:
-        pass
+        recall_timeout = float(cfg["recall_timeout"])
+        deadline = time.monotonic() + recall_timeout
+        with urllib.request.urlopen(request, timeout=recall_timeout) as response:
+            data = json.loads(
+                read_with_deadline(response, deadline).decode("utf-8", errors="replace")
+            )
+    except Exception as exc:
+        debug_log(cfg, "recall_error", query=prompt, error=str(exc)[:200])
+        sys.exit(0)
 else:
-    data = cached
+    merged, merge_meta = multi_recall(prompt, cfg, bank_urls, payload)
+    data = {"results": merged}
 
 results = data.get("results") or []
-source = "cache" if cached is not None else "fresh"
 
-# --- Sentinella del degrado reranker (ICH-65) ---
-# Il fail-open rende il guasto invisibile: con Voyage giu' il recall risponde
-# comunque 200 (failover chain server-side su RRF; interleave client-side),
-# quindi qui non arriva nessun errore. Il segnale sta nei dati: col fallback
-# RRF il server NON emette scores.reranker (misurato, ICH-65); il fallimento
-# del rerank globale client-side lo porta merge_meta.rerank_error. Marker su
-# file, notifica (con dedup/cooldown) in hindsight-failcheck.sh.
-# Solo sui fetch freschi: un cache-hit ri-registrerebbe l'evento gia' visto.
-if cached is None:
-    _degraded = []
-    if merge_meta.get("rerank_error"):
-        _degraded.append(
-            f"rerank globale multi-bank fallito ({merge_meta['rerank_error']})"
-        )
-    if results and not any(
-        isinstance(r.get("scores"), dict) and r["scores"].get("reranker") is not None
-        for r in results
-    ):
-        _degraded.append(
-            "risultati senza scores.reranker: reranker del server in fallback RRF"
-        )
-    if _degraded:
-        try:
-            _ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            with open(
-                os.path.join(_hs_state_dir(), "hs-reranker-degraded.log"),
-                "a", encoding="utf-8",
-            ) as _f:
-                for _m in _degraded:
-                    _f.write(f"{_ts}\t{_m}\n")
-        except Exception:
-            pass  # best-effort: la sentinella non deve mai rompere il recall
-# Cap sui risultati iniettati: il multi-bank puo' mostrarne di piu' (piu' fonti).
-_max_results = int(cfg.get("recall_max_results_multibank") or cfg["recall_max_results"]) if len(bank_urls) > 1 else cfg["recall_max_results"]
+# Sentinella del degrado reranker: il failover RRF non emette scores.reranker.
+degraded = []
+if merge_meta.get("rerank_error"):
+    degraded.append(f"rerank globale multi-bank fallito ({merge_meta['rerank_error']})")
+if results and not any(
+    isinstance(result.get("scores"), dict)
+    and result["scores"].get("reranker") is not None
+    for result in results
+):
+    degraded.append("risultati senza scores.reranker: reranker del server in fallback RRF")
+if degraded:
+    try:
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with open(
+            os.path.join(_hs_state_dir(), "hs-reranker-degraded.log"),
+            "a",
+            encoding="utf-8",
+        ) as handle:
+            for message in degraded:
+                handle.write(f"{timestamp}\t{message}\n")
+    except Exception:
+        pass
+
+max_results = (
+    int(cfg.get("recall_max_results_multibank") or cfg["recall_max_results"])
+    if len(bank_urls) > 1
+    else int(cfg["recall_max_results"])
+)
+results = results[:max_results]
+
+if cfg.get("recall_result_filter_enabled", True) and results:
+    routed = route_results(
+        prompt,
+        results,
+        cfg["recall_result_filter_model"],
+        float(cfg["recall_result_filter_threshold"]),
+        float(cfg["recall_result_filter_timeout"]),
+    )
+else:
+    routed = {
+        "automatic": [{**result, "route": "filter_disabled", "confidence": "high"} for result in results],
+        "optional": [],
+        "discarded": [],
+        "latency_ms": 0.0,
+        "classifier_called": False,
+        "model": cfg["recall_result_filter_model"],
+    }
+
+counts = {
+    "bypass": sum(item.get("route") == "bypass" for item in routed["automatic"]),
+    "high": sum(item.get("route") == "classifier_high" for item in routed["automatic"]),
+    "medium": len(routed["optional"]),
+    "low": len(routed["discarded"]),
+    "fail_open": sum(item.get("route") == "fail_open" for item in routed["automatic"]),
+}
 debug_log(
     cfg,
     "recall",
     query=prompt,
-    cache=source,
-    banks=[u.rsplit("/", 1)[-1] for u in bank_urls],
-    **{k: v for k, v in merge_meta.items()
-       if k in ("merge", "rerank_error", "min_score", "min_score_filtered", "per_bank_counts")
-       and v not in (None, "")},
+    source="fresh",
+    banks=[url.rsplit("/", 1)[-1] for url in bank_urls],
+    **{
+        key: value
+        for key, value in merge_meta.items()
+        if key in ("merge", "rerank_error", "min_score", "min_score_filtered", "per_bank_counts")
+        and value not in (None, "")
+    },
     n_results=len(results),
-    memories=[
+    routing=counts,
+    classifier_model=routed["model"],
+    classifier_latency_ms=routed["latency_ms"],
+    classifier_error=routed.get("error"),
+    injected=[
         {
-            "type": r.get("type", "?"),
-            "text": (r.get("text") or "").strip()[:300],
-            "entities": r.get("entities") or [],
-            # punteggio del rerank GLOBALE client-side (solo ramo multi-bank)
-            **({"score": round(r["_rerank_score"], 3)}
-               if r.get("_rerank_score") is not None else {}),
-            # punteggi per-stadio del server (hindsight-api >=0.8.4); presenti
-            # in entrambi i rami perche' arrivano dalla response del bank
-            **({"scores": {k: (round(v, 3) if isinstance(v, (int, float)) else v)
-                           for k, v in r["scores"].items()}}
-               if isinstance(r.get("scores"), dict) else {}),
+            "route": item.get("route"),
+            "type": item.get("type", "?"),
+            "text": (item.get("text") or "").strip()[:300],
         }
-        for r in results[:_max_results]
+        for item in routed["automatic"]
     ],
 )
-if not results:
+
+if routed["automatic"]:
+    # Decisione esplicita: se esiste almeno un high, i medium non vengono proposti.
+    emit_context(
+        routed["automatic"],
+        counts,
+        routed["model"],
+        routed["latency_ms"],
+        routed.get("error"),
+    )
     sys.exit(0)
 
-lines = []
-for r in results[:_max_results]:
-    text = (r.get("text") or "").strip()
-    if not text:
-        continue
-    kind = r.get("type", "?")
-    ents = ", ".join(r.get("entities") or [])
-    lines.append(f"- ({kind}) {text}" + (f"  [entities: {ents}]" if ents else ""))
-
-if not lines:
-    sys.exit(0)
-
-context = (
-    f"## Hindsight persistent memory (advisory, source: {source})\n\n"
-    + "\n".join(lines)
-    + "\n\nUse as consultative context. Verify mutable facts against the repo."
-)
-
-print(json.dumps({
-    "hookSpecificOutput": {
-        "hookEventName": "UserPromptSubmit",
-        "additionalContext": context,
-    }
-}, ensure_ascii=False))
+if routed["optional"]:
+    if save_pending(pending_dir, session_id, cwd, routed["optional"]):
+        debug_log(cfg, "recall_pending", action="saved", n_results=len(routed["optional"]))
+        instruction = (
+            "## Hindsight: consenso richiesto\n\n"
+            "Non usare ancora alcuna memoria. Chiedi esattamente all’utente: "
+            "“Ho delle memorie che potrebbero essere utili, le vuoi usare?”"
+        )
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": instruction,
+            }
+        }, ensure_ascii=False))
+    else:
+        # Senza session_id o se lo stato non è scrivibile non si può ottenere un
+        # consenso sicuro: fail-open per non perdere una memoria potenzialmente utile.
+        fallback = [
+            {**memory, "route": "fail_open", "confidence": "high"}
+            for memory in routed["optional"]
+        ]
+        emit_context(fallback, {**counts, "fail_open": len(fallback)}, routed["model"])
 PY

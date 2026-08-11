@@ -46,7 +46,7 @@ def cache_dir() -> str:
     expanduser("~") e' Python-safe anche su Windows; $HOME in forma MSYS ("/e/...")
     non lo sarebbe."""
     base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    # Slash avanti: il path finisce anche in bash (es. --get recall_cache_dir), dove
+    # Slash avanti: il path può finire anche in bash, dove
     # i backslash di os.path.join sarebbero escape. Windows accetta entrambi.
     d = os.path.join(base, "trinity").replace("\\", "/")
     try:
@@ -135,8 +135,16 @@ DEFAULTS = {
     "recall_max_prompt_chars": 1500,
     "recall_tags": ["claude-code"],
     "recall_tags_match": "any",
-    "recall_cache_ttl": 300,
-    "recall_cache_dir": cache_dir() + "/hs-recall-cache",
+    # Filtro semantico post-recall: gli score reranker sopra soglia entrano
+    # direttamente; gli altri risultati vengono classificati in una sola chiamata.
+    "recall_result_filter_enabled": True,
+    "recall_result_filter_model": "gpt-5.6-luna",
+    "recall_result_filter_timeout": 10,
+    "recall_result_filter_threshold": 0.8,
+    # Stato temporaneo delle memorie medium in attesa di consenso. È separato dalla
+    # cache tecnica del resolver Git e non contiene risultati riutilizzabili.
+    "recall_pending_dir": cache_dir() + "/hs-recall-pending",
+    "recall_pending_ttl": 900,
     "recall_timeout": 6,
     # Budget separato per il rerank globale (Voyage REST, vedi hindsight_multibank.py)
     # in multi_recall: gira IN SERIE dopo il fan-out sui bank, quindi recall_timeout
@@ -224,14 +232,15 @@ DEFAULTS = {
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
     "debug_log_enabled": False,
     "debug_log_file": "",
+    # Se attivo, il blocco additionalContext mostra route e testo completo delle sole
+    # memorie effettivamente iniettate. Non mostra medium non autorizzati o low.
+    "recall_debug_in_context": False,
 }
 
 # Nomi env legacy gia' usati nel codebase -> chiave di config. Mantengono il
 # comportamento esistente (hanno precedenza sul file JSON).
 ENV_OVERRIDES = {
     "HINDSIGHT_API_URL": "api_url",
-    "HINDSIGHT_CACHE_DIR": "recall_cache_dir",
-    "HINDSIGHT_CACHE_TTL": "recall_cache_ttl",
     "HS_RETAIN_EVERY_N": "retain_every_n_turns",
 }
 
@@ -284,7 +293,24 @@ def _project_config_path() -> str | None:
 # leggere il core o i bank di altri progetti (info-leak), api_base di dirottare
 # l'endpoint. Restano impostabili da config plugin/utente e da env
 # (HINDSIGHT_API_URL, HS_CFG_*).
-PROJECT_BLOCKED_KEYS = {"api_url", "recall_cache_dir", "debug_log_file", "bank"}
+PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank"}
+
+
+def _valid_override(key: str, value) -> bool:
+    """Valida i valori che il recall converte o usa come timeout/soglia."""
+    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout"}:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    if key == "recall_result_filter_threshold":
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and 0 <= value <= 1
+        )
+    if key in {"recall_result_filter_enabled", "recall_debug_in_context"}:
+        return isinstance(value, bool)
+    if key == "recall_result_filter_model":
+        return isinstance(value, str) and bool(value.strip())
+    return True
 
 
 def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
@@ -303,10 +329,14 @@ def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
             data = json.load(f)
     except (OSError, ValueError):
         return set()
+    if not isinstance(data, dict):
+        return set()
     applied: set[str] = set()
     for k, v in data.items():
         if k in cfg and v is not None:
             if not trusted and k in PROJECT_BLOCKED_KEYS:
+                continue
+            if not _valid_override(k, v):
                 continue
             if isinstance(cfg[k], dict) and isinstance(v, dict):
                 cfg[k] = {**cfg[k], **v}

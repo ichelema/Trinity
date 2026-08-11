@@ -28,7 +28,7 @@
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
-          "timeout": 30
+          "timeout": 40
         },
         {
           "type": "command",
