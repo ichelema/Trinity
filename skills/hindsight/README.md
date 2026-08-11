@@ -137,6 +137,9 @@ Le memorie `medium` non sono una cache: durano soltanto in attesa del consenso e
 riutilizzate da altri prompt. Il file è identificato da hash di `session_id + cwd`, vive nella
 directory per-utente `recall_pending_dir`, ha TTL configurabile e viene consumato una sola volta.
 La directory e i file usano rispettivamente permessi `0700` e `0600` sui sistemi POSIX.
+Su Windows/NTFS `chmod` è un no-op: la riservatezza dei testi salvati nel pending
+dipende dalle ACL della directory cache per-utente (`%LOCALAPPDATA%`-equivalente),
+che di default non è leggibile da altri utenti della macchina.
 
 ---
 
