@@ -140,9 +140,18 @@ class RoutingTests(unittest.TestCase):
 
 class ConsentTests(unittest.TestCase):
     def test_natural_positive_and_mixed_task(self):
-        for prompt in ("sì", "Si, usale e correggi il bug", "mostramele", "va bene"):
+        for prompt in ("sì", "Si, usale e correggi il bug", "mostramele", "va bene", "certo, mostramele"):
             with self.subTest(prompt=prompt):
                 self.assertEqual(consent_decision(prompt), "positive")
+
+    def test_unrelated_clitics_do_not_consent(self):
+        for prompt in (
+            "genera le metriche e mostrale in tabella",
+            "prendi le chiavi e usale nel client",
+            "apri i log e mostrale",
+        ):
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(consent_decision(prompt))
 
     def test_negative_precedes_positive(self):
         for prompt in ("no", "sì ma non usarle", "ignorale e continua", "non usale", "non mostramele"):
