@@ -7,6 +7,7 @@ hooks/hindsight/data/
 *.bak
 hooks/hindsight/benchmark/bench_results/
 hooks/hindsight/benchmark/bench_results_rerank/
+hooks/hindsight/benchmark/artifacts/
 data/playwright-mcp/
 /scratchpad.md
 
