@@ -162,6 +162,15 @@ DEFAULTS = {
     "retain_max_files": 15,
     "retain_max_cmds": 10,
     "retain_text_truncate": 2000,
+    # Gate semantico pre-retain (ICH-67): valuta la finestra PRIMA della POST.
+    #   off     comportamento storico (nessuna chiamata gate)
+    #   shadow  valuta e logga (debug_log "retain_gate"), POST invariata
+    #   enforce solo action "retain" prosegue, e la scrittura passa a Claude
+    #           via MCP (decision:block dall'hook Stop); skip/uncertain = niente
+    # Vedi hindsight_retain_gate.py; attivo solo se anche retain_enabled e' true.
+    "retain_gate_mode": "off",
+    "retain_gate_model": "gpt-5.6-luna",
+    "retain_gate_timeout": 15,
     # context: dominio/i del task da mettere nel campo `context` del retain
     # (schema "claude-code/<dom1>[/<dom2>][/<dom3>]"). NB: in Hindsight il context
     # e' descrittivo (frame per l'LLM estrattore), NON strutturale: relazioni ed
@@ -298,7 +307,7 @@ PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank
 
 def _valid_override(key: str, value) -> bool:
     """Valida i valori che il recall converte o usa come timeout/soglia."""
-    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout"}:
+    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout"}:
         return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
     if key == "recall_result_filter_threshold":
         return (
@@ -308,8 +317,10 @@ def _valid_override(key: str, value) -> bool:
         )
     if key in {"recall_result_filter_enabled", "recall_debug_in_context"}:
         return isinstance(value, bool)
-    if key == "recall_result_filter_model":
+    if key in {"recall_result_filter_model", "retain_gate_model"}:
         return isinstance(value, str) and bool(value.strip())
+    if key == "retain_gate_mode":
+        return value in ("off", "shadow", "enforce")
     return True
 
 
