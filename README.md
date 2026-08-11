@@ -96,7 +96,6 @@ Eventi registrati dal plugin:
 | `UserPromptSubmit` | — | skill-eval · Hindsight **recall** · failcheck |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
 | `Stop` | — | suono di fine · Hindsight **retain** (worker in background; con gate `enforce` può bloccare lo stop per il retain via MCP) |
-| `SessionEnd` | — | shutdown servizi Hindsight |
 | `Notification` | `permission_prompt` | suono + toast Windows |
 
 Esempio — un hook del plugin (da `hooks/hooks.json`):
