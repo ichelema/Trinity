@@ -26,7 +26,11 @@
   "recall_max_prompt_chars": 1500,
   "recall_tags": ["claude-code"],
   "recall_tags_match": "any",
-  "recall_cache_ttl": 300,
+  "recall_result_filter_enabled": true,
+  "recall_result_filter_model": "gpt-5.6-luna",
+  "recall_result_filter_timeout": 10,
+  "recall_result_filter_threshold": 0.8,
+  "recall_pending_ttl": 900,
   "recall_timeout": 10,
   "recall_rerank_timeout": 6,
 
@@ -53,6 +57,7 @@
 
   "debug_log_enabled": true,
   "debug_log_file": "",
+  "recall_debug_in_context": false,
 
   "recall_compose_enabled": false,
   "recall_compose_max_chars": 60,

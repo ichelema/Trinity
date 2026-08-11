@@ -33,7 +33,10 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 "recall_types": ["observation", "world", "experience"], // filtro CATEGORIA ([] = tutti)
 "recall_timeout": 10,            // timeout sincrono della chiamata di rete (s)
 "recall_min_prompt_chars": 20,   // gate: prompt più corti saltano il recall
-"recall_cache_ttl": 300,         // validità cache client (s)
+"recall_result_filter_model": "gpt-5.6-luna", // classificatore post-recall
+"recall_result_filter_threshold": 0.8,          // bypass su scores.reranker >= soglia
+"recall_pending_ttl": 900,                      // validità del consenso medium (s)
+"recall_debug_in_context": false,               // mostra route + memorie iniettate
 "retain_enabled": false,         // MASTER SWITCH: retain automatico (hook Stop) SPENTO — si salva solo via retain MCP
 "retain_every_n_turns": 3        // throttling retain: salva 1 Stop ogni N (inattivo finché retain_enabled è false)
 ```
@@ -57,7 +60,7 @@ Sono ricostruite dai campi JSONL; vuote se l'evento non ha quel campo.
 | -------- | ---------------------------------------------------------------- | -------------------- |
 | `event`  | tipo evento                                                      | tutti                |
 | `status` | codice HTTP della POST                                           | solo `retain_result` |
-| `cache`  | `cache` (hit) / `fresh` (miss)                                   | solo `recall`        |
+| `source` | `fresh` (ogni recall normale interroga il server)                 | solo `recall`        |
 | `n`      | `n_results` (conteggio GREZZO del server, **prima** dello slice) | solo `recall`        |
 | `doc`    | `doc_id`                                                         | `retain*`            |
 | `level`  | derivata (ERROR/SKIP/OK/INFO), non è un campo del log            | tutti                |
@@ -69,17 +72,20 @@ Sono ricostruite dai campi JSONL; vuote se l'evento non ha quel campo.
 Flusso di un prompt:
 
 ```
-prompt → [min_prompt_chars?] → [cache fresh?] ──hit──→ riusa (~500ms)
-                                     │ miss
-                                     ↓
-   POST {query, budget, max_tokens, tags, tags_match, [types]}  (timeout=10s)
-                                     ↓ salva in cache
-                      inietta primi [recall_max_results] risultati
+prompt → [pending medium?] → consenso sì: consuma e inietta una volta
+                    │ nessun pending / nuovo prompt
+                    ↓
+   POST recall fresco {query, budget, max_tokens, tags, tags_match, [types]}
+                    ↓
+   scores.reranker >= 0.8 → high; altri → Luna low/medium/high
+                    ↓
+   high: inietta │ low: scarta │ solo medium: salva e chiede consenso
 ```
 
 - **Server-side** (nel payload): `budget`, `max_tokens`, `tags`, `tags_match`, `types`.
-- **Client-side**: `min_prompt_chars` (gate), `cache_ttl`/`cache_dir`, `timeout`, `recall_max_results` (slice).
-- **Fail-soft**: timeout/errore/cache corrotta → nessun contesto iniettato, il prompt prosegue.
+- **Client-side**: `min_prompt_chars`, `timeout`, `recall_max_results`, filtro post-recall e pending medium.
+- **Nessuna cache**: ogni prompt normale richiama il server e riclassifica i risultati.
+- **Fail-open del filtro**: timeout, chiave mancante o JSON invalido → risultati originali iniettati.
 
 ### `n_results` ≠ risultati iniettati
 
@@ -125,18 +131,12 @@ silenziosamente (no 400 dal server).
 
 ---
 
-## 8. Cache del recall — GOTCHA path
+## 8. Stato pending delle memorie medium
 
-- **Posizione reale**: `E:\tmp\hs-recall-cache` (MSYS: `/e/tmp/hs-recall-cache`), **non** il
-  `/tmp` di MSYS (`E:\msys64\tmp`).
-- **Perché**: la config dice `recall_cache_dir: "/tmp/hs-recall-cache"`, ma il Python del hook è
-  nativo Windows (ucrt64): `os.path.abspath("/tmp/...")` risolve sul **drive corrente** → `E:`.
-  È drive-dependent.
-- **Conseguenza pratica**: per svuotarla da bash, `rm /tmp/hs-recall-cache/*` NON funziona;
-  usare `rm -f /e/tmp/hs-recall-cache/*.json`.
-- **Chiave**: SHA-256 (primi 32 char) del prompt normalizzato (lowercase, whitespace collassato).
-  **Non** include `budget`/`max_tokens`/`tags`/`types` → dopo un cambio di questi parametri la
-  cache può servire risultati stale fino a `cache_ttl` (300s).
+Le memorie `medium` non sono una cache: durano soltanto in attesa del consenso e non vengono
+riutilizzate da altri prompt. Il file è identificato da hash di `session_id + cwd`, vive nella
+directory per-utente `recall_pending_dir`, ha TTL configurabile e viene consumato una sola volta.
+La directory e i file usano rispettivamente permessi `0700` e `0600` sui sistemi POSIX.
 
 ---
 
@@ -157,7 +157,8 @@ Altri `retain_skip.reason`: `no_transcript`, `no_content`.
 
 ## 10. Test — `hindsight-check.sh`
 
-**Questa è la suite di test** (non ci sono `test_*.py`). Diagnostica completa, 18 sezioni / 45 check.
+La suite diagnostica è `hindsight-check.sh`; `test_hindsight_recall_filter.py` copre inoltre
+routing, fail-open, consenso e stato pending senza richiedere il server.
 
 ```bash
 PYTHONUTF8=1 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/tools/hindsight-check.sh"
@@ -189,9 +190,6 @@ nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip
 # Leggere un valore di config
 PYTHONUTF8=1 python "$TRINITY_PLUGIN_DIR/hooks/hindsight/lib/hindsight_config.py" --get recall_timeout
 
-# Svuotare la cache recall (path Windows-resolved!)
-rm -f /e/tmp/hs-recall-cache/*.json
-
 # Benchmark provider LLM (retain+recall su corpus dedicato) — vedi §13
 ruby hooks/hindsight/benchmark/hindsight_bench.rb
 BENCH_ONLY=openai-nano,groq-gptoss20b ruby hooks/hindsight/benchmark/hindsight_bench.rb
@@ -203,8 +201,7 @@ BENCH_ONLY=openai-nano,groq-gptoss20b ruby hooks/hindsight/benchmark/hindsight_b
 
 Nel bank `trinity-project`:
 
-- **(procedures)** Il file di test è `hindsight-check.sh`, non un `test_*.py`.
-- **(learnings)** La cache recall è in `E:\tmp\hs-recall-cache`, non nel `/tmp` di MSYS.
+- **(procedures)** La diagnostica end-to-end è `hindsight-check.sh`; i test puri del filtro sono in `test_hindsight_recall_filter.py`.
 - **(procedures)** Il benchmark provider è in `hooks/hindsight/benchmark/` (spostato da `test/` il 2026-05-25).
 
 ---
