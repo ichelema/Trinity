@@ -430,7 +430,7 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   un risultato tagliato da un braccio può rientrare dall'altro) e `recall_min_reranker` /
   `recall_min_final` (filtri post-rerank applicati dal server) viaggiano nel payload di
   recall e valgono per **entrambi** i percorsi, single- e multi-bank. Tutte `null` = nessun
-  filtro; il plugin attiva `recall_min_reranker: 0.4`. Il debug log riporta per ogni
+  filtro; il plugin attiva `recall_min_reranker: 0.45`. Il debug log riporta per ogni
   memoria i punteggi per-stadio del server (`scores.{final,reranker,semantic,keyword}`)
   accanto allo `score` del rerank client multi-bank.
 - **Filtro semantico post-recall**: ogni prompt normale esegue un recall **fresco**; non esiste

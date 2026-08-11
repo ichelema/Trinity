@@ -76,7 +76,7 @@ class RoutingTests(unittest.TestCase):
         self.assertIsNone(result_score({"scores": {"reranker": float("inf")}}))
         self.assertEqual(
             result_score({"_rerank_score": 0.61, "scores": {"reranker": 0.95}}),
-            0.61,
+            0.95,
         )
 
         calls = []

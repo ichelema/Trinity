@@ -72,11 +72,9 @@ ApiCall = Callable[[str, str, str, str, dict, float], tuple[dict, float]]
 
 
 def result_score(result: dict) -> float | None:
-    """Score del rerank globale se presente, altrimenti reranker server-side."""
-    value = result.get("_rerank_score")
-    if value is None:
-        scores = result.get("scores")
-        value = scores.get("reranker") if isinstance(scores, dict) else None
+    """Restituisce scores.reranker; forme malformate e valori non finiti sono assenti."""
+    scores = result.get("scores")
+    value = scores.get("reranker") if isinstance(scores, dict) else None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     score = float(value)
