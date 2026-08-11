@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Stop hook (async:true in hooks/hooks.json): salva un riassunto strutturato del turno
-# appena completato in Hindsight. Non blocca nulla perche' eseguito in background da
-# Claude Code; ha timeout 60s in hooks/hooks.json. La POST e' async:true sul server,
-# quindi anche internamente non aspetta l'estrazione LLM dei fatti.
+# Stop hook (SINCRONO in hooks/hooks.json, timeout 60s): salva un riassunto
+# strutturato del turno appena completato in Hindsight. Dispatch (ICH-67):
+#   - retain_gate_mode off/shadow -> worker in BACKGROUND e risposta immediata
+#     '{}': per Claude Code e' identico al vecchio "async": true (zero attesa).
+#   - retain_gate_mode enforce    -> worker in foreground; se il gate decide
+#     "retain" il worker scrive una riga 'HSGATE {json}' nel log e questo
+#     wrapper la inoltra su stdout (decision:block -> Claude mostra la notifica
+#     e chiama il retain MCP prima di fermarsi).
+# La POST del worker resta async:true lato server, quindi anche in foreground
+# non si aspetta l'estrazione LLM dei fatti.
 set -uo pipefail
 
 # $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
@@ -10,8 +16,16 @@ set -uo pipefail
 # MSYS2 non lo risolve -> variabile vuota. Vedi hindsight-recall.sh per il dettaglio.
 IFS= read -r -d '' HOOK_INPUT || true
 export HOOK_INPUT
-# API_URL e tutti gli altri parametri sono in hindsight.config.json (li carica il
-# worker via hindsight_config.py). HINDSIGHT_API_URL resta come override opzionale.
+
+# Guardia anti-loop: al Stop successivo a un decision:block Claude Code manda
+# stop_hook_active=true; senza uscita immediata il gate ribloccherebbe in loop.
+# Match testuale puro (zero fork), copre JSON compatto e con spazio dopo i due punti.
+case "$HOOK_INPUT" in
+*'"stop_hook_active":true'* | *'"stop_hook_active": true'*)
+	echo '{}'
+	exit 0
+	;;
+esac
 
 # Path del worker relativo a questo script (robusto a spostamenti della cartella).
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
@@ -26,30 +40,56 @@ case "$SCRIPT_DIR" in
 [A-Za-z]:/*) _hs_drive="${SCRIPT_DIR%%:*}"; SCRIPT_DIR="/${_hs_drive,,}${SCRIPT_DIR#?:}" ;;
 esac
 . "$SCRIPT_DIR/lib/hs-python.sh"
-# Log in HS_CACHE_DIR (esportata da hs-python.sh) e non in /tmp: contiene l'output
-# del worker, cioe' pezzi di transcript e memorie — su Linux /tmp e' leggibile da tutti.
-"$HS_PY" "$SCRIPT_DIR/hindsight-retain-worker.py" >"$HS_CACHE_DIR/hs-retain.log" 2>&1
-rc=$?
 
-# Il worker torna !=0 quando la POST non arriva al server (server giu', rete, bank
-# irraggiungibile): in quel caso NON esiste nessuna async operation da interrogare,
-# quindi hindsight-failcheck.sh — che fa GET operations?status=failed — e' cieco
-# proprio qui. Lascia una traccia DUREVOLE che il failcheck raccoglie al prossimo
-# prompt: il log qui sopra non basta, viene azzerato dal retain successivo ('>').
-# File separato e append: una riga per fallimento, tab-separated (ts \t messaggio).
-# Il messaggio dice da se' cosa e' successo: nello stesso file scrive anche
-# hindsight-drain-retain.py (retain arrivato al server ma non estratto in tempo),
-# quindi l'etichetta non puo' stare cablata nel failcheck.
-if [ "$rc" -ne 0 ]; then
-	printf '%s\t%s\n' \
-		"$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-		"non arrivato al server — $(tail -2 "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tr '\n\t' '  ')" \
-		>> "$HS_CACHE_DIR/hs-retain-failed.log"
+# run_worker: log in HS_CACHE_DIR (esportata da hs-python.sh) e non in /tmp:
+# contiene l'output del worker, cioe' pezzi di transcript e memorie — su Linux
+# /tmp e' leggibile da tutti. Il worker torna !=0 quando la POST non arriva al
+# server (server giu', rete, bank irraggiungibile): in quel caso NON esiste
+# nessuna async operation da interrogare, quindi hindsight-failcheck.sh — che fa
+# GET operations?status=failed — e' cieco proprio qui. Lascia una traccia
+# DUREVOLE che il failcheck raccoglie al prossimo prompt: il log qui sopra non
+# basta, viene azzerato dal retain successivo ('>'). File separato e append:
+# una riga per fallimento, tab-separated (ts \t messaggio). Il messaggio dice
+# da se' cosa e' successo: nello stesso file scrive anche
+# hindsight-drain-retain.py (retain arrivato al server ma non estratto in
+# tempo), quindi l'etichetta non puo' stare cablata nel failcheck.
+run_worker() {
+	"$HS_PY" "$SCRIPT_DIR/hindsight-retain-worker.py" >"$HS_CACHE_DIR/hs-retain.log" 2>&1
+	local rc=$?
+	if [ "$rc" -ne 0 ]; then
+		printf '%s\t%s\n' \
+			"$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+			"non arrivato al server — $(tail -2 "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tr '\n\t' '  ')" \
+			>>"$HS_CACHE_DIR/hs-retain-failed.log"
+	fi
+	return "$rc"
+}
+
+# Modalita' del gate dalla config centralizzata: e' l'unico costo sincrono del
+# percorso comune (un avvio Python). Il worker vero resta fuori dal percorso
+# critico salvo enforce.
+GATE_MODE="$("$HS_PY" "$SCRIPT_DIR/lib/hindsight_config.py" --get retain_gate_mode 2>/dev/null)"
+
+if [ "$GATE_MODE" = "enforce" ]; then
+	run_worker
+	# In enforce+retain il worker non fa la POST: emette la riga HSGATE col JSON
+	# gia' pronto per Claude Code. Riga assente => nessun blocco: '{}'.
+	GATE_LINE=$(grep '^HSGATE ' "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tail -1)
+	if [ -n "$GATE_LINE" ]; then
+		printf '%s\n' "${GATE_LINE#HSGATE }"
+	else
+		echo '{}'
+	fi
+	# exit 0 sempre: l'esito vero e' nel JSON su stdout; su un hook sincrono un
+	# exit!=0 mostrerebbe un warning a ogni problema di rete, mentre la
+	# visibilita' dei fallimenti e' gia' garantita da hs-retain-failed.log +
+	# failcheck.
+	exit 0
 fi
 
-# exit "$rc" e non "exit 0": l'hook e' async, quindi per Claude Code il codice
-# finisce solo nel debug log (non blocca e non risveglia nessuno — servirebbe
-# asyncRewake, che qui NON vogliamo: il retain gira a ogni Stop e con il server giu'
-# sveglierebbe Claude in loop). La visibilita' vera la da' il failcheck sopra; questo
-# exit onesto serve a chi legge il debug log e a chi invoca lo script a mano.
-exit "$rc"
+# off/shadow: worker in background e risposta immediata — comportamento
+# equivalente al vecchio hook async. </dev/null stacca stdin; stdout/stderr del
+# figlio vanno nel log, quindi nessun fd tiene in vita l'hook per Claude Code.
+run_worker </dev/null &
+echo '{}'
+exit 0

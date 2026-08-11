@@ -61,8 +61,7 @@
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-retain.sh",
-          "timeout": 60,
-          "async": true
+          "timeout": 60
         }
       ]
     }],

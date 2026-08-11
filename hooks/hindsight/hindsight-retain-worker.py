@@ -16,6 +16,7 @@ Filtri rumore: niente output di tool, niente codice raw, niente env dump.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -28,8 +29,9 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from hindsight_config import cache_dir, load_config, retain_bank_url
+from hindsight_config import cache_dir, load_config, recall_bank_urls, retain_bank_url
 from hindsight_debug import debug_log
+from hindsight_retain_gate import evaluate_retain
 
 CFG = load_config()
 
@@ -430,7 +432,8 @@ def build_content(hook: dict, summary: dict) -> str | None:
 # Modalita' "chunked" (sliding window) — ispirata al plugin ufficiale Hindsight.
 # Invece di sovrascrivere un unico documento-sessione con l'ultimo scambio
 # (lossy: vedi build_content/summarize), salva FETTE immutabili della
-# conversazione, ognuna con un document_id timestamped univoco. La finestra
+# conversazione, ognuna con un document_id derivato dal contenuto (univoco tra
+# fette diverse, stabile sui replay della stessa finestra). La finestra
 # copre gli ultimi (retain_every_n_turns + retain_overlap_turns) turni: l'overlap
 # ricuce i confini tra fette consecutive cosi' nessun ragionamento a cavallo va
 # perso. La ridondanza tra fette viene assorbita dalla consolidation del server
@@ -777,6 +780,35 @@ def main() -> int:
         debug_log(CFG, "retain_skip", reason="throttling", session=session_id[:8])
         return 0
 
+    # Gate semantico pre-retain (ICH-67), DOPO il throttling cosi' paga solo sui
+    # turni che salverebbero davvero. "shadow" valuta e logga senza toccare il
+    # flusso; "enforce" prosegue solo su action "retain" e sposta la scrittura su
+    # Claude via MCP (ramo HSGATE piu' sotto). Fail-closed: un gate in errore
+    # risponde "skip" (error nel debug log), quindi in enforce non si salva nulla.
+    gate_mode = str(CFG.get("retain_gate_mode", "off"))
+    gate = None
+    if gate_mode in ("shadow", "enforce"):
+        gate = evaluate_retain(
+            content, summary, recall_bank_urls(CFG, hook.get("cwd") or None), CFG
+        )
+        debug_log(
+            CFG,
+            "retain_gate",
+            mode=gate_mode,
+            action=gate.action,
+            reason=gate.reason,
+            duplicates=len(gate.duplicate_of),
+            latency_ms=gate.latency_ms,
+            error=gate.error,
+            preview=gate.preview[:300],
+        )
+        if gate_mode == "enforce" and gate.action != "retain":
+            print(f"[retain] skip: gate {gate.action} ({gate.reason})")
+            debug_log(
+                CFG, "retain_skip", reason=f"gate_{gate.action}", session=session_id[:8]
+            )
+            return 0
+
     git = git_info(hook.get("cwd") or "")
     tags = build_tags(hook, git)
 
@@ -799,17 +831,59 @@ def main() -> int:
         if v:
             metadata[k] = str(v)
 
-    # document_id: in chunked ogni fetta e' un documento IMMUTABILE con id
-    # timestamped (niente upsert distruttivo, niente perdita tra retain). In legacy
+    # document_id: in chunked ogni fetta e' un documento con id derivato dal
+    # CONTENUTO (fette diverse = documenti diversi, niente perdita tra retain;
+    # fetta identica ri-presentata = stesso id, il server fa upsert invece di
+    # duplicare — dedup replay esatto, ICH-67). La riga "Timestamp:" va esclusa
+    # dall'hash: cambia a ogni build e renderebbe l'id sempre nuovo. In legacy
     # resta l'id stabile per-sessione con guardia compaction (compute_document_id,
     # che fa upsert — verificato lossy sul testo non-ultimo).
     if retain_mode == "chunked":
-        doc_id = f"{session_id}-{int(time.time() * 1000)}" if session_id else None
+        if session_id:
+            stable = "\n".join(
+                l for l in content.splitlines() if not l.startswith("Timestamp:")
+            )
+            digest = hashlib.sha256(stable.encode("utf-8")).hexdigest()[:12]
+            doc_id = f"{session_id}-{digest}"
+        else:
+            doc_id = None
     else:
         doc_id = compute_document_id(
             session_id,
             count_transcript_lines(hook.get("transcript_path", "")),
         )
+
+    # Enforce + retain: la POST non parte da qui — l'hook risponde a Claude Code
+    # con decision:block e Claude esegue il retain via MCP (percorso di scrittura
+    # unificato, nessun doppio salvataggio). La riga HSGATE e' il canale di
+    # ritorno verso hindsight-retain.sh, che la inoltra su stdout. context e tags
+    # appena calcolati viaggiano nell'istruzione cosi' il retain MCP resta
+    # coerente con quello che il worker avrebbe scritto.
+    if gate is not None and gate_mode == "enforce":
+        notice = gate.preview
+        additional = (
+            "The pre-retain semantic gate decided this session window contains "
+            f"durable knowledge. Before ending the turn: tell the user in ONE short "
+            f"sentence what is being stored, based on: {notice!r}. Then call "
+            "mcp__hindsight__retain once with a short self-contained fact derived "
+            f"from it (favour the WHY over the what), using context {context!r} and "
+            f"tags {json.dumps(tags)}. Then end the turn. Do not ask for confirmation."
+        )
+        out = {
+            "decision": "block",
+            "reason": (
+                "Pre-retain gate: durable knowledge detected; persist it via MCP "
+                "before stopping."
+            ),
+            "hookSpecificOutput": {
+                "hookEventName": "Stop",
+                "additionalContext": additional,
+            },
+            "systemMessage": f"Hindsight retain gate: {notice}",
+        }
+        print("HSGATE " + json.dumps(out, ensure_ascii=False))
+        debug_log(CFG, "retain_gate_block", doc_id=doc_id, preview=notice[:300])
+        return 0
 
     item = {
         "content": content,
