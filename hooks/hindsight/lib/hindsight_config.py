@@ -150,7 +150,9 @@ DEFAULTS = {
     # in multi_recall: gira IN SERIE dopo il fan-out sui bank, quindi recall_timeout
     # + recall_rerank_timeout deve stare sotto il timeout dell'hook recall
     # (hooks.json). Senza budget suo il rerank riusava recall_timeout e la somma
-    # sforava il tetto dell'hook.
+    # sforava il tetto dell'hook. NB: i timeout urllib NON coprono la risoluzione
+    # DNS (getaddrinfo, bloccante fino al timeout OS): con DNS in stallo il
+    # backstop resta il kill dell'hook, fail-safe per il prompt.
     "recall_rerank_timeout": 6,
     # Parametri di chunking del retain, consumati da hindsight-retain-worker.py.
     # Devono stare nei DEFAULTS o load_config li scarta dalla whitelist (riga "if
@@ -361,7 +363,7 @@ _REPO_CACHE: dict[str, tuple[str, str, str]] = {}
 # ~360ms su MSYS (fork lento) e _REPO_CACHE vive solo nel processo: ma ogni hook
 # recall e' un processo nuovo, quindi senza questa cache il git si ripaga a OGNI
 # prompt. TTL lungo: il remote origin (da cui deriva lo slug) cambia praticamente mai.
-_REPO_CACHE_TTL = 3600
+_REPO_CACHE_TTL = 86400
 
 
 def _repo_cache_file(cwd: str) -> str:
@@ -423,7 +425,7 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str, str]:
         ha potuto rispondere (timeout, git assente) -> esito ignoto, da non cachare."""
         try:
             return subprocess.check_output(
-                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=5, text=True
+                ["git", *args], cwd=cwd, stderr=subprocess.DEVNULL, timeout=3, text=True
             ).strip()
         except subprocess.CalledProcessError:
             return ""
