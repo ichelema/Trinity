@@ -12,7 +12,7 @@ import time
 import unicodedata
 import urllib.request
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -153,16 +153,17 @@ def api_json(
 
 def route_results(
     prompt: str,
-    results: list[dict],
+    results: Sequence[object],
     model: str,
     threshold: float,
     timeout: float,
     api_call: ApiCall = api_json,
 ) -> dict:
     """Instrada i risultati. Qualsiasi errore del classificatore è fail-open."""
+    valid_results = [result for result in results if isinstance(result, dict)]
     automatic: list[dict] = []
     candidates: list[tuple[int, dict]] = []
-    for index, result in enumerate(results):
+    for index, result in enumerate(valid_results):
         score = result_score(result)
         if score is not None and score >= threshold:
             automatic.append({**result, "route": "bypass", "confidence": "high"})
@@ -234,7 +235,7 @@ def route_results(
         return {
             "automatic": [
                 {**result, "route": "fail_open", "confidence": "high"}
-                for result in results
+                for result in valid_results
             ],
             "optional": [],
             "discarded": [],
