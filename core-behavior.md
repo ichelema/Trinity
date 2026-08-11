@@ -1,5 +1,3 @@
-# Trinity — comportamento core
-
 Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 
 ## Principi generali
@@ -20,18 +18,16 @@ Scrivi il minimo codice che risolve il problema. Niente di speculativo.
 - Nessuna astrazione per codice usato una sola volta.
 - Nessuna flessibilità o configurabilità non richiesta.
 - Nessuna gestione degli errori per scenari impossibili.
-- Se scrivi 200 righe e potrebbero essere 50, riscrivile.
-- Se un senior engineer direbbe che è troppo complicato, semplifica.
+- Scrivi codice minimale e segui un approcio pragmatico.
 
 ## Modifiche chirurgiche
 
-Tocca solo ciò che devi. Ripulisci solo il tuo disordine.
+Tocca solo ciò che devi
 
 - Lascia intatti codice, commenti e formattazione adiacenti.
 - Rifattorizza solo ciò che è rotto.
-- Rispetta lo stile esistente, anche se lo faresti diversamente.
+- Rispetta lo stile esistente.
 - Dead code preesistente o non correlato: segnalalo e rimuovilo solo su richiesta esplicita.
-- Rimuovi import, variabili o funzioni che le tue modifiche hanno reso inutilizzati.
 - Ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
 
 ## Esecuzione guidata dagli obiettivi
@@ -52,110 +48,42 @@ Per le attività in più fasi, definire un breve piano:
 3. [Fase] → verificare: [controllo]
 ```
 
-Criteri di successo ben definiti consentono di ripetere il ciclo in modo indipendente. Criteri vaghi (“farlo funzionare”) richiedono continui chiarimenti.
-
-## Ambiente di lavoro
-
-<!-- OS:windows -->
-
-- OS: Windows 11 Enterprise.
-- Shell: bash MSYS2 UCRT64 (`/usr/bin/bash`), `MSYSTEM=UCRT64`.
-- Vault principale Obsidian: `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`). Versione MSYS del path: ricavala con `cygpath -u "${OBSIDIAN_VAULT}"`.
-
-<!-- /OS:windows -->
-
-<!-- OS:linux -->
-
-- OS: Linux.
-- Shell: bash.
-- Vault principale Obsidian (se presente su questa macchina): `${OBSIDIAN_VAULT}` (nome vault: `${OBSIDIAN_VAULT_NAME}`).
-
-<!-- /OS:linux -->
-
 ## Regole operative
 
 - Usa sintassi Unix compatibile bash/zsh (forward slash, `/dev/null`, pipe Unix): mai PowerShell o CMD.
 
-<!-- OS:windows -->
+- Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi
+  installalo con `pacman -S --noconfirm <pacchetto>`.
 
-- Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo con `pacman -S --noconfirm <pacchetto>`.
+- Quando esplori codice preferisci il tool `LSP` agli strumenti testuali.
 
-<!-- /OS:windows -->
-
-<!-- OS:linux -->
-
-- Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo col package manager della distro (es. `sudo apt-get install -y <pacchetto>`).
-
-<!-- /OS:linux -->
-
-- Minimizza l'output shell per preservare il contesto: sopprimi stdout/stderr
-  quando non serve, preferisci flag quiet (`-q`, `--quiet`), filtra i comandi
-  verbosi con `tail`/`head`/`grep`, e non riportare mai output voluminosi di
-  build/test/install se non servono alla diagnosi.
-- Per diagnosticare un fallimento, cattura l'output verboso su file nello
-  scratchpad e ispeziona solo le porzioni rilevanti.
-- Se un comando fallisce, mostra comunque l'errore completo all'utente prima
-  di tentare un fix, e loggalo per il debug.
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
+
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
-- Non cancellare file senza conferma esplicita.
+
 
 ## Linguaggi e strumenti
 
 - Usa Ruby come default per script.
 - Per script Bash usa sempre shebang `#!/usr/bin/env bash`.
 - Preferisci `curl` a `wget` per richieste HTTP.
-- Per Git non fare push automatici: chiedi sempre conferma.
 - Per Python, Node e Ruby usa sempre `mise` per installare pacchetti/runtime.
 
-## Navigazione del codice
 
-Quando esplori codice in un linguaggio con LSP attivo (oggi Python, TypeScript, Ruby, Lua), preferisci il tool `LSP` agli strumenti testuali:
+## Output
 
-- Trovare dove un simbolo è definito o usato → `LSP goToDefinition` / `findReferences`, non `grep` del nome.
-- Tipi, firme, documentazione → `LSP hover`; struttura di un file → `LSP documentSymbol`.
-- `grep`/`Grep` resta giusto per ricerca testuale (TODO, stringhe, config); `glob`/`Glob` per trovare file per nome.
-- Se per il linguaggio non c'è un server LSP, usa `grep`/`glob`.
+- Minimizza l'output shell: sopprimi stdout/stderr quando non serve,
+  preferisci flag quiet (`-q`, `--quiet`), filtra i comandi verbosi con
+  `tail`/`head`/`grep`, e non riportare mai output voluminosi di
+  build/test/install se non servono alla diagnosi.
 
-Per il workflow completo (analisi d'impatto prima di un refactor, diagnostica dopo gli edit) vedi la skill `lsp-enable`.
+- Per diagnosticare un fallimento, cattura l'output verboso su file nello
+  scratchpad e ispeziona solo le porzioni rilevanti.
 
-## Regole path
+- Se un comando fallisce, mostra comunque l'errore completo all'utente prima
+  di tentare un fix, e loggalo per il debug.
 
-<!-- OS:windows -->
+- Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
+  Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
-- I path MSYS2 (`/c/...`, `/e/...`) funzionano solo in bash.
-- Ruby e Python girano nativamente su Windows e non riconoscono path MSYS.
-- Negli script Python usa sempre path Windows: `C:/Appl/...`, `E:/doublecmd/...` oppure backslash.
-- Negli script Python non usare mai path MSYS come `/c/...` o `/e/...`.
 
-<!-- /OS:windows -->
-
-<!-- OS:linux -->
-
-- Usa sempre path POSIX assoluti: niente lettere di unità, niente `cygpath`, nessuna conversione necessaria.
-
-<!-- /OS:linux -->
-
-## Nushell per data processing
-
-Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
-Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
-
-<!-- OS:windows -->
-
-È un binario Windows nativo: passagli path Windows (`C:/...`), mai MSYS (`/c/...`).
-
-<!-- /OS:windows -->
-
-<!-- OS:linux -->
-
-Se `nu` non è in `~/.local/bin`, usa quello nel PATH; i path sono POSIX normali.
-
-<!-- /OS:linux -->
-
-## Struttura directory dei progetti
-
-Salvo indicazioni diverse del progetto, relative alla root del progetto corrente:
-`<root>/data` per i dati, `<root>/logs` per i log, `<root>/script` per gli script,
-`<root>/test` per i test e per i file di prova temporanei (`test_*.py`, `test_*.rb`,
-script di prova non di progetto).
