@@ -51,6 +51,12 @@ class ConfigTests(unittest.TestCase):
                 hindsight_config.DEFAULTS["recall_result_filter_timeout"],
             )
 
+    def test_env_float_override_casts_or_falls_back(self):
+        sample = hindsight_config.DEFAULTS["recall_result_filter_threshold"]
+        self.assertEqual(hindsight_config._cast("0.9", sample), 0.9)
+        # stringa invalida -> default, non la stringa grezza (l'hook fa float(cfg[...]))
+        self.assertEqual(hindsight_config._cast("abc", sample), sample)
+
 
 class DeadlineTests(unittest.TestCase):
     def test_read_deadline_stops_slow_stream(self):

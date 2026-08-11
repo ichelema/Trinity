@@ -255,6 +255,8 @@ def _cast(value: str, sample):
             return value.lower() in ("1", "true", "yes")
         if isinstance(sample, int):
             return int(value)
+        if isinstance(sample, float):
+            return float(value)
         if isinstance(sample, list):
             value = value.strip()
             if value.startswith("["):
