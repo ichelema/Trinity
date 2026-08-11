@@ -145,7 +145,7 @@ class ConsentTests(unittest.TestCase):
                 self.assertEqual(consent_decision(prompt), "positive")
 
     def test_negative_precedes_positive(self):
-        for prompt in ("no", "sì ma non usarle", "ignorale e continua"):
+        for prompt in ("no", "sì ma non usarle", "ignorale e continua", "non usale", "non mostramele"):
             with self.subTest(prompt=prompt):
                 self.assertEqual(consent_decision(prompt), "negative")
         self.assertIsNone(consent_decision("correggi il bug"))
