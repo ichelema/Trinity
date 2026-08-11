@@ -88,7 +88,14 @@ Criteri di successo ben definiti consentono di ripetere il ciclo in modo indipen
 
 <!-- /OS:linux -->
 
-- Mostra sempre l'output completo `stdout`/`stderr`. Se un comando fallisce, mostra l'errore completo all'utente prima di tentare un fix, e loggalo per il debug.
+- Minimizza l'output shell per preservare il contesto: sopprimi stdout/stderr
+  quando non serve, preferisci flag quiet (`-q`, `--quiet`), filtra i comandi
+  verbosi con `tail`/`head`/`grep`, e non riportare mai output voluminosi di
+  build/test/install se non servono alla diagnosi.
+- Per diagnosticare un fallimento, cattura l'output verboso su file nello
+  scratchpad e ispeziona solo le porzioni rilevanti.
+- Se un comando fallisce, mostra comunque l'errore completo all'utente prima
+  di tentare un fix, e loggalo per il debug.
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 - Non cancellare file senza conferma esplicita.
