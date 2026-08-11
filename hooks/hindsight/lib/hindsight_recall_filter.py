@@ -258,7 +258,8 @@ def consent_decision(prompt: str) -> str | None:
     if not text:
         return None
     standalone_negative = {"no", "no grazie"}
-    standalone_positive = {"si", "sì", "si grazie", "sì grazie", "va bene", "d accordo", "certo"}
+    standalone_positive = {"si", "sì", "si grazie", "sì grazie", "va bene", "d accordo", "certo",
+                           "ok", "okay", "vai", "procedi", "yes", "perfetto"}
     explicit_negative = (
         r"\bnon\s+(?:le\s+)?(?:usare|usarle|mostrare|mostrarle|iniettare|iniettarle)\b",
         r"\b(?:ignorale|scartale|dimenticale)\b",
