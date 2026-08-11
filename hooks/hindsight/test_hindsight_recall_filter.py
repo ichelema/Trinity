@@ -120,6 +120,21 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(routed["discarded"][0]["route"], "classifier_low")
         self.assertEqual(routed["latency_ms"], 5.5)
 
+    def test_non_dict_results_are_dropped(self):
+        def api(*_args):
+            raise RuntimeError("boom")
+
+        routed = route_results(
+            "prompt", [None, "junk", {"text": "bypass", "scores": {"reranker": 0.9}}],
+            "model", 0.8, 3, api,
+        )
+        self.assertEqual([r["text"] for r in routed["automatic"]], ["bypass"])
+        self.assertFalse(routed["classifier_called"])
+
+        routed = route_results("prompt", [None, {"text": "a"}], "model", 0.8, 3, api)
+        self.assertEqual([r["route"] for r in routed["automatic"]], ["fail_open"])
+        self.assertEqual([r["text"] for r in routed["automatic"]], ["a"])
+
     def test_classifier_errors_fail_open(self):
         failures = [
             RuntimeError("timeout"),

@@ -153,13 +153,14 @@ def api_json(
 
 def route_results(
     prompt: str,
-    results: list[dict],
+    results: list[object],
     model: str,
     threshold: float,
     timeout: float,
     api_call: ApiCall = api_json,
 ) -> dict:
     """Instrada i risultati. Qualsiasi errore del classificatore è fail-open."""
+    results = [result for result in results if isinstance(result, dict)]
     automatic: list[dict] = []
     candidates: list[tuple[int, dict]] = []
     for index, result in enumerate(results):
