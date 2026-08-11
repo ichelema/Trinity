@@ -99,4 +99,21 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 - Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
   Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
+## Retain after task completion
+
+At the end of a significant task, evaluate whether the work produced durable
+knowledge worth persisting. Save only if the information is verified, non-obvious
+and likely useful in future sessions (decisions with rationale, root causes and
+workarounds, environment-specific constraints, relevant discarded approaches).
+
+Do NOT save: temporary state, trivial output, repository-recoverable data,
+intermediate attempts, or duplicates.
+
+If yes: notify with ONE short sentence, then immediately call `mcp__hindsight__retain`
+with a short self-contained form that explains WHY.
+
+If no: do nothing.
+
+If uncertain: ask me with a brief summary of what you would store.
+
 
