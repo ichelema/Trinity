@@ -1035,6 +1035,12 @@ else
 	ko "config filtro post-recall incompleta ($FILTER_CFG)"
 fi
 
+if grep -q 'output\["systemMessage"\] = context' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "debug recall usa systemMessage per essere visibile nella conversazione"
+else
+	ko "debug recall resta solo in additionalContext e non è visibile nel terminale"
+fi
+
 if grep -q 'from hindsight_recall_filter import' "$HOOKS_DIR/benchmark/hindsight_recall_result_filter_bench.py"; then
 	ok "benchmark e produzione condividono prompt/schema/logica score"
 else

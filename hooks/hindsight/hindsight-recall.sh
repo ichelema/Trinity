@@ -93,12 +93,17 @@ def emit_context(memories, route_counts, model, latency_ms=0.0, error=None):
             + "\n".join(lines)
             + "\n\nUse as consultative context. Verify mutable facts against the repo."
         )
-    print(json.dumps({
+    output = {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
             "additionalContext": context,
         }
-    }, ensure_ascii=False))
+    }
+    # additionalContext entra nel modello ma non viene mostrato nel terminale.
+    # systemMessage rende visibile lo stesso blocco solo nella modalità debug.
+    if cfg.get("recall_debug_in_context"):
+        output["systemMessage"] = context
+    print(json.dumps(output, ensure_ascii=False))
 
 
 # Il pending viene gestito prima del gate sui prompt corti: "sì" deve poter
