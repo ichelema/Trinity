@@ -288,6 +288,10 @@ def _pending_path(directory: str, session_id: str, cwd: str) -> Path | None:
 
 
 def _secure_directory(directory: str) -> Path:
+    """Best-effort 0700: reale solo su POSIX. Su Windows/NTFS mkdir(mode=...)
+    e chmod sono di fatto no-op (toccano solo il bit read-only): la protezione
+    dei testi delle memorie dipende dalle ACL ereditate dalla directory cache
+    per-utente. Vale anche per i chmod 0600 su lock e file pending."""
     path = Path(directory)
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
