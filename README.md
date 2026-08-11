@@ -95,7 +95,7 @@ Eventi registrati dal plugin:
 | `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model |
 | `UserPromptSubmit` | — | skill-eval · Hindsight **recall** · failcheck |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
-| `Stop` | — | suono di fine · Hindsight **retain** (async) |
+| `Stop` | — | suono di fine · Hindsight **retain** (worker in background; con gate `enforce` può bloccare lo stop per il retain via MCP) |
 | `SessionEnd` | — | shutdown servizi Hindsight |
 | `Notification` | `permission_prompt` | suono + toast Windows |
 
@@ -475,6 +475,7 @@ python hooks/hindsight/lib/hindsight_config.py --banks   # URL retain + recall r
 |---|---|
 | default (solo recall): legge progetto+core, retain disabilitato | nessuno (eredita il plugin) |
 | abilitare il retain automatico (scrive sul bank del progetto) | `{ "retain_enabled": true }` |
+| retain automatico col gate semantico (salva solo conoscenza durevole, notify → retain via MCP) | `{ "retain_enabled": true, "retain_gate_mode": "enforce" }` |
 | progetto totalmente isolato (non legge nemmeno il core) | `{ "bank": { "recall_banks": ["auto"] } }` |
 | progetto che scrive direttamente sul core (niente bank proprio) | `{ "bank": { "retain_bank": "core" } }` |
 | leggere anche il bank di un altro progetto | `{ "bank": { "recall_banks": ["auto", "NomeAltroBank", "core"] } }` |
@@ -485,6 +486,19 @@ Parametri principali del filtro: `recall_result_filter_model`,
 `recall_result_filter_threshold`, `recall_result_filter_timeout`, `recall_pending_ttl`.
 `recall_pending_dir` è un path trust-sensitive e non può essere sovrascritto dalla config di un
 progetto; si configura solo nella base fidata del plugin o tramite env amministrata dall'utente.
+
+**Gate semantico pre-retain (ICH-67).** Con `retain_gate_mode` diverso da `off`, prima della
+POST il worker valuta la finestra con una chiamata LLM a schema strict
+(`lib/hindsight_retain_gate.py`): `shadow` logga soltanto la decisione
+(`retain`/`skip`/`uncertain`, evento `retain_gate` nel debug log), `enforce` salva solo le
+finestre giudicate durevoli — e non con la POST diretta: l'hook Stop (sincrono, guardia
+`stop_hook_active` anti-loop) risponde `decision: "block"`, Claude mostra una notifica di una
+riga e scrive via retain MCP (percorso di scrittura unificato). Anti-duplicati: `document_id`
+derivato dal contenuto della finestra (replay identici fanno upsert) e candidati semantici dai
+bank di lettura passati al gate. Fail-closed: un errore del gate equivale a `skip`. Parametri:
+`retain_gate_mode` (`off`, default), `retain_gate_model`, `retain_gate_timeout`. Il lato
+agente (retain MCP proattivo) è coperto dalle regole "Retain after task completion" in
+`core-behavior.md`, attive a ogni sessione.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (gpt-4.1-nano: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
@@ -511,8 +525,9 @@ override parziale non cancella le chiavi non menzionate. Esempio (`<progetto>/hi
 { "retain_enabled": true, "bank": { "recall_banks": ["auto"] } }
 ```
 
-**Failcheck dei retain falliti.** Il retain è asincrono: Claude Code lo lancia in background
-e non aspetta il risultato. Se l'estrazione LLM fallisce (es. credito OpenAI esaurito), la
+**Failcheck dei retain falliti.** Il retain non aspetta il risultato: il wrapper manda il
+worker in background (salvo gate `enforce`) e la POST è comunque asincrona lato server.
+Se l'estrazione LLM fallisce (es. credito OpenAI esaurito), la
 memoria **non viene salvata** senza che nessuno se ne accorga. L'hook `hindsight-failcheck.sh`
 (terzo hook di `UserPromptSubmit`) interroga l'endpoint `/operations?status=failed` su tutti
 i bank (retain + recall) a ogni prompt, deduplicando le notifiche via state file in `%TEMP%`
