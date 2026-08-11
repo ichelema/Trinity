@@ -22,7 +22,12 @@ export HS_CACHE_DIR
 #
 # Root del plugin (lib/ -> hindsight/ -> hooks/ -> plugin): serve per `mise -C` cosi'
 # si risolve SEMPRE il python del plugin (3.13), non quello del cwd del progetto ospite.
-HS_PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Parameter expansion, zero fork: il vecchio `$(cd "$(dirname ...)" && pwd)` pagava
+# subshell + exec di dirname (~400ms su MSYS) a OGNI hook, anche sul fast-path che
+# non usa mise. Path non canonicalizzato (resta il /../../..): a `mise -C` basta.
+HS_PLUGIN_ROOT="${BASH_SOURCE[0]%/*}"
+[ "$HS_PLUGIN_ROOT" = "${BASH_SOURCE[0]}" ] && HS_PLUGIN_ROOT="."
+HS_PLUGIN_ROOT="$HS_PLUGIN_ROOT/../../.."
 
 # Risolve il binario python reale di mise per il plugin, con cache su file. Lo shim
 # mise rilancerebbe mise.exe a OGNI invocazione (~300ms, benchmark 2026-07-10): qui
