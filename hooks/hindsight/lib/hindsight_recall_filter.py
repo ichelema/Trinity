@@ -264,8 +264,14 @@ def consent_decision(prompt: str) -> str | None:
     )
     if text in standalone_negative or any(re.search(pattern, text) for pattern in explicit_negative):
         return "negative"
+    if text in standalone_positive:
+        return "positive"
     explicit_positive = r"\b(?:usale|utilizzale|mostrale|mostramele|iniettale)\b"
-    if text in standalone_positive or re.search(explicit_positive, text):
+    pos_match = re.search(explicit_positive, text)
+    if pos_match:
+        prefix = text[:pos_match.start()]
+        if re.search(r"\bnon\b", prefix):
+            return "negative"
         return "positive"
     return None
 
