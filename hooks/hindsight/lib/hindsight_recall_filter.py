@@ -14,7 +14,9 @@ import urllib.request
 from pathlib import Path
 from typing import Callable, Sequence
 
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+# Override solo via env (ambiente fidato): la config di progetto non può
+# dirottare l'endpoint. Usato dai test e2e per mockare il classificatore.
+OPENAI_URL = os.environ.get("HS_OPENAI_URL", "https://api.openai.com/v1/chat/completions")
 
 CLASSIFIER_REASONS = {
     "directly_actionable",

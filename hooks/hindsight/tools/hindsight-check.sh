@@ -1015,6 +1015,14 @@ else
 	note "$FILTER_TEST"
 fi
 
+HOOK_E2E=$(cd "$HOOKS_DIR" && PYTHONUTF8=1 python test_hindsight_recall_hook.py 2>&1)
+if [ "$?" -eq 0 ]; then
+	ok "test e2e hook recall (high+medium, consenso, fail-open) passati"
+else
+	ko "test e2e hook recall falliti"
+	note "$HOOK_E2E"
+fi
+
 FILTER_CFG=$(PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import sys
 sys.path.insert(0, sys.argv[1])
