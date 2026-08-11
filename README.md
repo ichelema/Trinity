@@ -92,9 +92,8 @@ Eventi registrati dal plugin:
 
 | Evento | Matcher | Comandi |
 |---|---|---|
-| `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · inietta mental model |
+| `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model |
 | `UserPromptSubmit` | — | skill-eval · Hindsight **recall** · failcheck |
-| `PreToolUse` | `Bash` | auto-allow `git commit` (solo se senza push nella stessa riga) |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
 | `Stop` | — | suono di fine · Hindsight **retain** (async) |
 | `SessionEnd` | — | shutdown servizi Hindsight |
@@ -187,6 +186,34 @@ Conseguenze pratiche:
 - Il `CLAUDE.md` locale di un progetto ha **precedenza** in caso di conflitto (è più specifico).
 - Per modificare il comportamento dell'agente si edita **questo file**, non i singoli progetti.
 - I path che cambiano per macchina **non** sono nel file: vengono da variabili d'ambiente (vedi §10).
+
+### 4.1 Istruzioni per singolo modello (`CLAUDE_<MODELLO>.md`)
+
+Claude Code carica i `CLAUDE.md` senza guardare quale modello sta girando: nativamente non
+esiste un modo per dire "queste istruzioni solo con Fable". L'hook
+`hooks/inject-model-behavior.sh` colma quella lacuna.
+
+**Ogni progetto può avere il suo file per modello**: basta creare nella root del progetto un
+`CLAUDE_<FAMIGLIA>.md`, e viene iniettato solo quando la sessione gira con quel modello.
+
+| Modello | File letto dalla root del progetto |
+| --- | --- |
+| `claude-fable-5` | `CLAUDE_FABLE.md` |
+| `claude-opus-5` | `CLAUDE_OPUS.md` |
+| `claude-haiku-4-5-20251001` | `CLAUDE_HAIKU.md` |
+
+Il nome è **derivato dall'id** del modello, non confrontato con una lista: per aggiungere un
+modello basta creare il file, senza toccare l'hook.
+
+L'hook legge il campo `model` dallo stdin JSON di `SessionStart`. Due limiti da conoscere:
+
+- Il campo arriva **solo in sessione interattiva**: i call site headless (`claude -p`) lo
+  omettono, quindi lì l'hook non inietta nulla.
+- `/model` a metà sessione **non** rilancia `SessionStart`: il file iniettato resta quello
+  del modello di partenza fino al riavvio.
+
+Se il campo manca o il file non esiste, l'hook esce senza output: nessun token speso, e su
+Linux o con modelli senza file è un no-op.
 
 ---
 
