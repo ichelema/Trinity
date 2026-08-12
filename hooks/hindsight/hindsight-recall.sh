@@ -34,11 +34,9 @@ from hindsight_recall_filter import (
     save_pending,
 )
 from hindsight_recall_lib import build_recall_payload
+from hindsight_retain_gate import handle_retain_consent
 
 cfg = load_config()
-if not cfg.get("recall_enabled", True):
-    debug_log(cfg, "recall_skip", reason="disabled")
-    sys.exit(0)
 
 try:
     hook = json.loads(os.environ["HOOK_INPUT"])
@@ -57,6 +55,51 @@ session_id = str(hook.get("session_id") or "")
 cwd = str(hook.get("cwd") or "")
 pending_dir = cfg["recall_pending_dir"]
 pending_ttl = float(cfg["recall_pending_ttl"])
+
+# Consenso del RETAIN pending (gate "uncertain", ICH-67) — PRIMA di tutto il
+# resto, incluso il gate recall_enabled: la domanda del gate retain e' sempre
+# la piu' recente (posta alla fine del turno precedente), quindi un si'/no
+# secco appartiene a lei, e va onorata anche nei progetti col recall spento.
+retain_outcome = handle_retain_consent(original_prompt, session_id, cwd)
+if retain_outcome:
+    debug_log(
+        cfg,
+        "retain_pending",
+        action=retain_outcome.get("action"),
+        reason=retain_outcome.get("reason"),
+        status=retain_outcome.get("status"),
+        error=retain_outcome.get("error"),
+        preview=(retain_outcome.get("preview") or "")[:300],
+    )
+    if retain_outcome["action"] == "saved":
+        # Lo stesso "si'" non deve autorizzare anche le memorie medium rimaste
+        # in pending dal recall: la domanda a cui risponde e' quella del retain.
+        discard_pending_if_present(pending_dir, session_id, cwd, pending_ttl)
+        preview = retain_outcome.get("preview") or ""
+        print(json.dumps({
+            "systemMessage": f"Hindsight: memoria salvata — {preview}",
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "## Hindsight retain\n\nLa memoria in attesa di conferma è stata "
+                    "salvata nel bank. Non serve alcun retain manuale."
+                ),
+            },
+        }, ensure_ascii=False))
+        sys.exit(0)
+    if retain_outcome["action"] == "error":
+        print(json.dumps({
+            "systemMessage": (
+                "Hindsight: salvataggio della memoria in attesa NON riuscito — "
+                + str(retain_outcome.get("error") or "")
+            ),
+        }, ensure_ascii=False))
+        sys.exit(0)
+    # "discarded" (no / prompt nuovo): si prosegue col flusso normale.
+
+if not cfg.get("recall_enabled", True):
+    debug_log(cfg, "recall_skip", reason="disabled")
+    sys.exit(0)
 
 
 def emit_context(memories, route_counts, model, latency_ms=0.0, error=None):

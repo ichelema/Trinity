@@ -16,6 +16,7 @@ Filtri rumore: niente output di tool, niente codice raw, niente env dump.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -28,8 +29,9 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from hindsight_config import cache_dir, load_config, retain_bank_url
+from hindsight_config import cache_dir, load_config, recall_bank_urls, retain_bank_url
 from hindsight_debug import debug_log
+from hindsight_retain_gate import evaluate_retain, save_retain_pending
 
 CFG = load_config()
 
@@ -320,7 +322,7 @@ def should_retain_now(
 #     (blocco iniettato a SessionStart da hindsight-mm-inject.sh)
 _MEMORY_BLOCK_RE = re.compile(
     r"<hindsight_memories>.*?</hindsight_memories>"
-    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug).*?Verify mutable facts against the repo\.",
+    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug|retain debug).*?Verify mutable facts against the repo\.",
     re.DOTALL,
 )
 
@@ -430,7 +432,8 @@ def build_content(hook: dict, summary: dict) -> str | None:
 # Modalita' "chunked" (sliding window) — ispirata al plugin ufficiale Hindsight.
 # Invece di sovrascrivere un unico documento-sessione con l'ultimo scambio
 # (lossy: vedi build_content/summarize), salva FETTE immutabili della
-# conversazione, ognuna con un document_id timestamped univoco. La finestra
+# conversazione, ognuna con un document_id derivato dal contenuto (univoco tra
+# fette diverse, stabile sui replay della stessa finestra). La finestra
 # copre gli ultimi (retain_every_n_turns + retain_overlap_turns) turni: l'overlap
 # ricuce i confini tra fette consecutive cosi' nessun ragionamento a cavallo va
 # perso. La ridondanza tra fette viene assorbita dalla consolidation del server
@@ -449,15 +452,30 @@ def _iter_role_messages(entries: list[dict]) -> list[dict]:
     return msgs
 
 
+def _human_user_text(content) -> str:
+    """Testo UMANO di un messaggio user; stringa vuota per i messaggi sintetici.
+    Nel transcript anche i tool_result hanno ruolo user (content senza blocchi
+    text) e i wrapper <system-reminder>/<command-...> iniziano con "<": nessuno
+    dei due e' un turno di dialogo. E' il criterio unico usato sia per i confini
+    di finestra sia per i turni raccolti da summarize_window."""
+    txt = strip_memory_block(extract_text(content))
+    if txt and not txt.startswith("<"):
+        return txt
+    return ""
+
+
 def slice_last_turns_by_user_boundary(messages: list[dict], turns: int) -> list[dict]:
-    """Ultimi N turni, dove un turno inizia a un messaggio user. Cammina
-    all'indietro contando i confini-user. Port di sliceLastTurnsByUserBoundary()."""
+    """Ultimi N turni, dove un turno inizia a un messaggio user con testo UMANO.
+    Cammina all'indietro contando i confini. Contare ogni messaggio ruolo-user
+    (come il port originale di sliceLastTurnsByUserBoundary) consumava la
+    finestra con gli pseudo-turni muti dei tool_result: fette con soli testi
+    assistant e prompt umani spinti fuori (visto 2026-08-12)."""
     if not messages or turns <= 0:
         return []
     seen = 0
     start = -1
     for i in range(len(messages) - 1, -1, -1):
-        if messages[i]["role"] == "user":
+        if messages[i]["role"] == "user" and _human_user_text(messages[i]["content"]):
             seen += 1
             if seen >= turns:
                 start = i
@@ -479,8 +497,8 @@ def summarize_window(entries: list[dict], window_turns: int) -> dict:
         role = m["role"]
         content = m["content"]
         if role == "user":
-            txt = strip_memory_block(extract_text(content))
-            if txt and not txt.startswith("<"):
+            txt = _human_user_text(content)
+            if txt:
                 turns.append(("user", txt))
         elif role == "assistant" and isinstance(content, list):
             texts = []
@@ -525,17 +543,14 @@ def summarize_window(entries: list[dict], window_turns: int) -> dict:
 
 
 def build_content_chunk(hook: dict, summary: dict) -> str | None:
-    """Content di una fetta: la conversazione multi-turno della finestra + file/comandi."""
+    """Content di una fetta: la conversazione multi-turno della finestra + file/comandi.
+    Niente header Timestamp/CWD/Session (ICH-67): quei valori sono gia' nei
+    metadata dell'item e nel campo timestamp — nel content sarebbero solo rumore
+    per l'estrattore. Bonus: il content e' stabile per costruzione, quindi il
+    document_id derivato dal suo hash resta identico sui replay."""
     if not summary["turns"] and not summary["files_modified"]:
         return None
-    parts = [
-        "Claude Code session activity (chunk).",
-        f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
-        f"CWD: {hook.get('cwd', '')}",
-        f"Session: {hook.get('session_id', '')}",
-        "",
-        "## Conversation (recent turns)",
-    ]
+    parts = ["## Conversation (recent turns)"]
     for role, text in summary["turns"]:
         parts += [f"[{role}] {text}", ""]
     if summary["files_modified"]:
@@ -733,6 +748,32 @@ def resolve_context(summary: dict, hook: dict) -> str:
     return "claude-code/" + "/".join(domains)
 
 
+def gate_debug_context(gate, bank: str) -> str:
+    """Blocco '## Hindsight retain debug' per systemMessage/additionalContext
+    (retain_debug_in_context, speculare al debug del recall). Header e trailer
+    combaciano con _MEMORY_BLOCK_RE: il retain successivo lo scarta
+    (anti-feedback-loop)."""
+    return (
+        "## Hindsight retain debug\n\n"
+        f"Gate: {gate.action} ({gate.reason})\n"
+        f"Model: {CFG.get('retain_gate_model')}\n"
+        f"Gate latency: {gate.latency_ms:.1f} ms\n"
+        f"Bank: {bank}"
+        + (f"\nPreview: {gate.preview}" if gate.preview else "")
+        + (f"\nGate error (fail-open): {gate.error}" if gate.error else "")
+        + "\n\nUse as consultative context. Verify mutable facts against the repo."
+    )
+
+
+def gate_debug_output(gate, bank: str) -> dict:
+    """JSON hook-output di solo debug: visibile (systemMessage) e nel contesto."""
+    context = gate_debug_context(gate, bank)
+    return {
+        "systemMessage": context,
+        "hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context},
+    }
+
+
 def main() -> int:
     # Interruttore master: se il retain automatico e' disattivato in config, esci
     # subito — niente parse del transcript, niente POST, niente estrazione LLM.
@@ -777,14 +818,41 @@ def main() -> int:
         debug_log(CFG, "retain_skip", reason="throttling", session=session_id[:8])
         return 0
 
+    # Gate semantico pre-retain (ICH-67), DOPO il throttling cosi' paga solo sui
+    # turni che salverebbero davvero. Attivo sempre (retain_enabled e' l'unico
+    # interruttore): retain -> POST diretta silenziosa; skip -> niente;
+    # uncertain -> POST in pending + domanda all'utente (ramo piu' sotto).
+    # Un errore TECNICO del gate e' FAIL-OPEN: si salva come prima del gate —
+    # col gate obbligatorio, il fail-closed perderebbe ogni retain a LLM giu'.
+    gate = evaluate_retain(
+        content, summary, recall_bank_urls(CFG, hook.get("cwd") or None), CFG
+    )
+    debug_log(
+        CFG,
+        "retain_gate",
+        action=gate.action,
+        reason=gate.reason,
+        duplicates=len(gate.duplicate_of),
+        latency_ms=gate.latency_ms,
+        error=gate.error,
+        preview=gate.preview[:300],
+    )
+    if gate.action == "skip" and not gate.error:
+        print(f"[retain] skip: gate ({gate.reason})")
+        debug_log(CFG, "retain_skip", reason=f"gate_{gate.reason}", session=session_id[:8])
+        if CFG.get("retain_debug_in_context"):
+            print("HSGATE " + json.dumps(gate_debug_output(gate, "-"), ensure_ascii=False))
+        return 0
+
     git = git_info(hook.get("cwd") or "")
     tags = build_tags(hook, git)
 
-    # context: dominio/i del task (max 3), schema "claude-code/<d1>[/<d2>][/<d3>]".
-    # repo/branch NON vanno qui (sono gia' nei tag e nei metadata): nel context
-    # darebbero cardinalita' ~1 e zero segnale. Vedi resolve_context() e la config
-    # context_extraction*. Mai solleva: peggio caso ritorna "claude-code".
-    context = resolve_context(summary, hook)
+    # context: riga descrittiva del dominio prodotta dal GATE (legge gia' tutta
+    # la finestra: una chiamata LLM in meno e un frame piu' ricco per
+    # l'estrattore della "categoria secca" claude-code/<slug>). Fallback alla
+    # catena storica resolve_context (nano -> heuristic -> "claude-code")
+    # quando il gate non l'ha prodotta: errore tecnico o campo vuoto.
+    context = gate.context or resolve_context(summary, hook)
 
     # metadata: filter values stringa (lo schema accetta dict[str,str]). Tutti i
     # valori opzionali vengono inclusi solo se non vuoti per non sporcare il dict.
@@ -799,12 +867,19 @@ def main() -> int:
         if v:
             metadata[k] = str(v)
 
-    # document_id: in chunked ogni fetta e' un documento IMMUTABILE con id
-    # timestamped (niente upsert distruttivo, niente perdita tra retain). In legacy
+    # document_id: in chunked ogni fetta e' un documento con id derivato dal
+    # CONTENUTO (fette diverse = documenti diversi, niente perdita tra retain;
+    # fetta identica ri-presentata = stesso id, il server fa upsert invece di
+    # duplicare — dedup replay esatto, ICH-67). Il content e' stabile per
+    # costruzione: build_content_chunk non contiene piu' righe volatili. In legacy
     # resta l'id stabile per-sessione con guardia compaction (compute_document_id,
     # che fa upsert — verificato lossy sul testo non-ultimo).
     if retain_mode == "chunked":
-        doc_id = f"{session_id}-{int(time.time() * 1000)}" if session_id else None
+        if session_id:
+            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+            doc_id = f"{session_id}-{digest}"
+        else:
+            doc_id = None
     else:
         doc_id = compute_document_id(
             session_id,
@@ -840,6 +915,44 @@ def main() -> int:
     # il bank si auto-crea al primo retain, nessun provisioning).
     api_url = os.environ.get("API_URL") or retain_bank_url(CFG, hook.get("cwd") or None)
 
+    # Uncertain: la POST pronta va in pending (stessa meccanica dei medium del
+    # recall ICH-66: file per session+cwd, TTL, consumo singolo) e l'hook blocca
+    # lo stop per far porre a Claude la domanda. Il si' al prompt successivo
+    # esegue la POST dall'hook recall (handle_retain_consent); no/prompt nuovo
+    # la scartano. gate.error non arriva qui: e' fail-open verso la POST diretta.
+    if gate.action == "uncertain" and not gate.error:
+        if not save_retain_pending(
+            session_id, hook.get("cwd") or "", api_url, payload, gate.preview
+        ):
+            # Senza pending affidabile (niente session_id / stato non scrivibile)
+            # la domanda non potrebbe mantenere la promessa del si': non si salva.
+            debug_log(CFG, "retain_skip", reason="gate_uncertain_no_pending")
+            return 0
+        question = f"Vuoi che salvi questa memoria? — {gate.preview} (sì/no)"
+        # La reason viene SEMPRE stampata nel transcript (limite Claude Code:
+        # per Stop non esiste un canale nascosto come l'additionalContext di
+        # UserPromptSubmit), quindi resta corta: solo la domanda e le due
+        # direttive essenziali.
+        instruction = (
+            f"Retain gate uncertain: ask the user verbatim {question!r} and end "
+            "the turn. Do not save anything yourself; a yes runs the pending "
+            "save at the next prompt."
+        )
+        # Niente additionalContext: su Stop non e' documentato e duplicare
+        # l'istruzione produce due righe identiche nel transcript (error +
+        # feedback). La reason da sola basta a far porre la domanda.
+        out = {
+            "decision": "block",
+            "reason": instruction,
+        }
+        if CFG.get("retain_debug_in_context"):
+            out["systemMessage"] = gate_debug_context(gate, api_url.rsplit("/", 1)[-1])
+        print("HSGATE " + json.dumps(out, ensure_ascii=False))
+        debug_log(
+            CFG, "retain_pending", action="saved", doc_id=doc_id, preview=gate.preview[:300]
+        )
+        return 0
+
     debug_log(
         CFG,
         "retain",
@@ -874,6 +987,14 @@ def main() -> int:
                 status=res.status,
                 response=body[:300],
             )
+            if CFG.get("retain_debug_in_context"):
+                print(
+                    "HSGATE "
+                    + json.dumps(
+                        gate_debug_output(gate, api_url.rsplit("/", 1)[-1]),
+                        ensure_ascii=False,
+                    )
+                )
     except Exception as exc:
         print(f"[retain] FAIL {exc}", file=sys.stderr)
         debug_log(CFG, "retain_error", doc_id=doc_id, error=str(exc)[:200])
