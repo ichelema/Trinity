@@ -1092,23 +1092,24 @@ import sys
 sys.path.insert(0, sys.argv[1])
 import hindsight_config as hc
 cfg = hc.load_config()
-mode = cfg.get("retain_gate_mode")
 model = cfg.get("retain_gate_model")
 timeout = cfg.get("retain_gate_timeout")
-mode_ok = mode in ("off", "shadow", "enforce")
+debug = cfg.get("retain_debug_in_context")
+# Il gate non ha piu' modalita': comanda solo retain_enabled. Un
+# retain_gate_mode residuo nei DEFAULTS segnalerebbe una regressione.
+mode_gone = "retain_gate_mode" not in hc.DEFAULTS
 model_ok = isinstance(model, str) and bool(model.strip())
 to_ok = isinstance(timeout, (int, float)) and not isinstance(timeout, bool) and timeout > 0
-print(mode if mode_ok and model_ok and to_ok else f"KO mode={mode} model={model} timeout={timeout}")
+dbg_ok = isinstance(debug, bool)
+print("OK" if mode_gone and model_ok and to_ok and dbg_ok
+      else f"KO mode_gone={mode_gone} model={model} timeout={timeout} debug={debug}")
 PY
 )
-case "$GATE_CFG" in
-off | shadow | enforce)
-	ok "config gate valida (mode=$GATE_CFG, model e timeout ok)"
-	;;
-*)
+if [ "$GATE_CFG" = "OK" ]; then
+	ok "config gate valida (model/timeout/debug; nessun retain_gate_mode residuo)"
+else
 	ko "config retain_gate_* non valida ($GATE_CFG)"
-	;;
-esac
+fi
 
 # In enforce il gate impone latenza sincrona: il suo timeout deve stare sotto il
 # timeout dell'hook Stop con margine per parsing + context extraction + startup.
@@ -1132,18 +1133,30 @@ else
 	ko "retain_gate_timeout troppo vicino al timeout dell'hook Stop ($GATE_BUDGET)"
 fi
 
-# Wrapper: guardia anti-loop e inoltro della riga HSGATE su stdout.
-if grep -q 'stop_hook_active' "$HOOKS_DIR/hindsight-retain.sh" && grep -q 'HSGATE' "$HOOKS_DIR/hindsight-retain.sh"; then
-	ok "wrapper: guardia stop_hook_active + inoltro HSGATE presenti"
+# Wrapper: guardia anti-loop, inoltro HSGATE e dispatch su retain_enabled
+# (background coi progetti senza retain, foreground col gate attivo).
+if grep -q 'stop_hook_active' "$HOOKS_DIR/hindsight-retain.sh" && grep -q 'HSGATE' "$HOOKS_DIR/hindsight-retain.sh" &&
+	grep -q -- '--get retain_enabled' "$HOOKS_DIR/hindsight-retain.sh"; then
+	ok "wrapper: guardia stop_hook_active + inoltro HSGATE + dispatch su retain_enabled"
 else
-	ko "wrapper senza guardia anti-loop o senza inoltro HSGATE"
+	ko "wrapper senza guardia anti-loop, inoltro HSGATE o dispatch su retain_enabled"
 fi
 
-# Worker integra il gate; il fail-closed vive nel modulo lib condiviso coi test.
-if grep -q 'evaluate_retain' "$HOOKS_DIR/hindsight-retain-worker.py" && [ -r "$HOOKS_DIR/lib/hindsight_retain_gate.py" ]; then
-	ok "worker integra evaluate_retain (lib/hindsight_retain_gate.py)"
+# Worker integra gate e pending uncertain; il modulo lib e' condiviso coi test.
+if grep -q 'evaluate_retain' "$HOOKS_DIR/hindsight-retain-worker.py" &&
+	grep -q 'save_retain_pending' "$HOOKS_DIR/hindsight-retain-worker.py" &&
+	[ -r "$HOOKS_DIR/lib/hindsight_retain_gate.py" ]; then
+	ok "worker integra evaluate_retain + pending uncertain (lib/hindsight_retain_gate.py)"
 else
-	ko "gate non integrato nel worker o modulo lib mancante"
+	ko "gate/pending non integrati nel worker o modulo lib mancante"
+fi
+
+# Il consenso del pending retain vive nell'hook recall (prompt successivo):
+# senza, il si' dell'utente non eseguirebbe mai la POST in attesa.
+if grep -q 'handle_retain_consent' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "recall hook gestisce il consenso del retain pending"
+else
+	ko "handle_retain_consent assente da hindsight-recall.sh"
 fi
 
 GATE_TEST=$(cd "$HOOKS_DIR" && PYTHONUTF8=1 python test_hindsight_retain_gate.py 2>&1)

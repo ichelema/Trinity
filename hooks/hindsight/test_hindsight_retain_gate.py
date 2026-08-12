@@ -1,5 +1,10 @@
 #!/usr/bin/env python
-"""Test del gate semantico pre-retain (ICH-67): modulo lib + integrazione worker."""
+"""Test del gate semantico pre-retain (ICH-67): modulo lib + integrazione worker.
+
+Flusso coperto: gate sempre attivo quando retain_enabled e' true;
+retain -> POST diretta silenziosa; skip -> niente; uncertain -> pending +
+domanda (consenso al prompt successivo, meccanica ICH-66); errore tecnico
+del gate -> fail-open (POST come prima del gate)."""
 
 from __future__ import annotations
 
@@ -22,6 +27,9 @@ from lib.hindsight_retain_gate import (
     dedup_query,
     evaluate_retain,
     fetch_duplicate_candidates,
+    handle_retain_consent,
+    retain_consent_decision,
+    save_retain_pending,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -219,36 +227,6 @@ class GateModuleTests(unittest.TestCase):
         self.assertNotIn("gate_error", GATE_REASONS)  # sentinella solo fail-closed
 
 
-class GateConfigTests(unittest.TestCase):
-    def test_defaults_and_override_validation(self):
-        self.assertEqual(hindsight_config.DEFAULTS["retain_gate_mode"], "off")
-        self.assertEqual(hindsight_config.DEFAULTS["retain_gate_model"], "gpt-5.6-luna")
-        self.assertEqual(hindsight_config.DEFAULTS["retain_gate_timeout"], 15)
-
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "config.json")
-            cfg = dict(hindsight_config.DEFAULTS)
-            with open(path, "w", encoding="utf-8") as handle:
-                json.dump(
-                    {
-                        "retain_gate_mode": "banana",
-                        "retain_gate_timeout": -3,
-                        "retain_gate_model": "  ",
-                    },
-                    handle,
-                )
-            hindsight_config._merge_json(cfg, path)
-            self.assertEqual(cfg["retain_gate_mode"], "off")
-            self.assertEqual(cfg["retain_gate_timeout"], 15)
-            self.assertEqual(cfg["retain_gate_model"], "gpt-5.6-luna")
-
-            with open(path, "w", encoding="utf-8") as handle:
-                json.dump({"retain_gate_mode": "shadow", "retain_gate_timeout": 8}, handle)
-            hindsight_config._merge_json(cfg, path)
-            self.assertEqual(cfg["retain_gate_mode"], "shadow")
-            self.assertEqual(cfg["retain_gate_timeout"], 8)
-
-
 class FakeResponse:
     status = 200
 
@@ -260,6 +238,113 @@ class FakeResponse:
 
     def __exit__(self, *args):
         return False
+
+
+class ConsentTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        env_patch = mock.patch.dict(
+            os.environ, {"HS_RETAIN_PENDING_DIR": self.tmp.name}
+        )
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+
+    def test_consent_vocabulary(self):
+        positives = ["si", "sì", "Sì grazie", "va bene", "certo", "procedi", "salvala", "salvala pure e poi continua"]
+        negatives = ["no", "No grazie", "non salvarla", "scartala", "non salvare nulla"]
+        neutral = ["", "com'è il meteo?", "sistemami il bug del parser"]
+        for prompt in positives:
+            self.assertEqual(retain_consent_decision(prompt), "positive", prompt)
+        for prompt in negatives:
+            self.assertEqual(retain_consent_decision(prompt), "negative", prompt)
+        for prompt in neutral:
+            self.assertIsNone(retain_consent_decision(prompt), prompt)
+
+    def save(self, preview="Salvo la decisione X."):
+        return save_retain_pending(
+            "sess-consent",
+            "/proj",
+            "http://127.0.0.1:9/banks/t",
+            {"items": [{"content": "finestra"}], "async": True},
+            preview,
+        )
+
+    def test_positive_consumes_and_posts(self):
+        self.assertTrue(self.save())
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeResponse(),
+        ) as urlopen:
+            outcome = handle_retain_consent("si", "sess-consent", "/proj")
+        self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(outcome["status"], 200)
+        self.assertEqual(outcome["preview"], "Salvo la decisione X.")
+        request = urlopen.call_args[0][0]
+        self.assertTrue(request.full_url.endswith("/banks/t/memories"))
+        # consumo singolo: un secondo "si" non trova piu' nulla
+        self.assertIsNone(handle_retain_consent("si", "sess-consent", "/proj"))
+
+    def test_negative_and_new_prompt_discard(self):
+        self.assertTrue(self.save())
+        outcome = handle_retain_consent("no", "sess-consent", "/proj")
+        self.assertEqual(outcome, {"action": "discarded", "reason": "negative"})
+        self.assertIsNone(handle_retain_consent("no", "sess-consent", "/proj"))
+
+        self.assertTrue(self.save())
+        outcome = handle_retain_consent(
+            "parliamo di tutt'altro adesso", "sess-consent", "/proj"
+        )
+        self.assertEqual(outcome, {"action": "discarded", "reason": "new_prompt"})
+
+    def test_post_failure_reports_error(self):
+        self.assertTrue(self.save())
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            side_effect=OSError("connection refused"),
+        ):
+            outcome = handle_retain_consent("si", "sess-consent", "/proj")
+        self.assertEqual(outcome["action"], "error")
+        self.assertIn("OSError", outcome["error"])
+
+    def test_pending_requires_session_id(self):
+        self.assertFalse(
+            save_retain_pending("", "/proj", "http://x", {"items": []}, "p")
+        )
+        self.assertIsNone(handle_retain_consent("si", "", "/proj"))
+
+
+class GateConfigTests(unittest.TestCase):
+    def test_defaults_and_override_validation(self):
+        self.assertNotIn("retain_gate_mode", hindsight_config.DEFAULTS)
+        self.assertEqual(hindsight_config.DEFAULTS["retain_gate_model"], "gpt-5.6-luna")
+        self.assertEqual(hindsight_config.DEFAULTS["retain_gate_timeout"], 15)
+        self.assertIs(hindsight_config.DEFAULTS["retain_debug_in_context"], False)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.json")
+            cfg = dict(hindsight_config.DEFAULTS)
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "retain_gate_timeout": -3,
+                        "retain_gate_model": "  ",
+                        "retain_debug_in_context": "yes",
+                    },
+                    handle,
+                )
+            hindsight_config._merge_json(cfg, path)
+            self.assertEqual(cfg["retain_gate_timeout"], 15)
+            self.assertEqual(cfg["retain_gate_model"], "gpt-5.6-luna")
+            self.assertIs(cfg["retain_debug_in_context"], False)
+
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {"retain_gate_timeout": 8, "retain_debug_in_context": True}, handle
+                )
+            hindsight_config._merge_json(cfg, path)
+            self.assertEqual(cfg["retain_gate_timeout"], 8)
+            self.assertIs(cfg["retain_debug_in_context"], True)
 
 
 def load_worker():
@@ -316,6 +401,7 @@ class WorkerGateTests(unittest.TestCase):
 
         env = {
             "HS_RETAIN_STATE_DIR": self.tmp.name,
+            "HS_RETAIN_PENDING_DIR": os.path.join(self.tmp.name, "pending"),
             "HOOK_INPUT": self.hook_input,
         }
         env_patch = mock.patch.dict(os.environ, env)
@@ -358,13 +444,13 @@ class WorkerGateTests(unittest.TestCase):
                 "retain_max_cmds": 10,
                 "context_extraction": False,
                 "debug_log_enabled": False,
-                "retain_gate_mode": "off",
+                "retain_debug_in_context": False,
             }
         )
         base.update(overrides)
         return base
 
-    def run_main(self, cfg, gate_result=None):
+    def run_main(self, cfg, gate_result):
         stdout = io.StringIO()
         gate_mock = mock.Mock(return_value=gate_result)
         with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
@@ -374,8 +460,16 @@ class WorkerGateTests(unittest.TestCase):
                 rc = self.worker.main()
         return rc, stdout.getvalue(), gate_mock, urlopen
 
+    @staticmethod
+    def gate_lines(out: str) -> list[dict]:
+        return [
+            json.loads(line[len("HSGATE ") :])
+            for line in out.splitlines()
+            if line.startswith("HSGATE ")
+        ]
+
     def test_gate_not_called_before_third_stop(self):
-        cfg = self.cfg(retain_gate_mode="shadow", retain_every_n_turns=3)
+        cfg = self.cfg(retain_every_n_turns=3)
         gate_result = GateResult(action="skip", reason="trivial_or_ephemeral")
         calls = []
         for _ in range(3):
@@ -384,59 +478,70 @@ class WorkerGateTests(unittest.TestCase):
             calls.append(gate_mock.call_count)
         self.assertEqual(calls, [0, 0, 1])
 
-    def test_enforce_retain_emits_block_without_post(self):
-        cfg = self.cfg(retain_gate_mode="enforce")
-        gate_result = GateResult(
-            action="retain",
-            reason="durable_decision",
-            preview="Salvo: gate semantico prima della POST perché riduce il rumore.",
-        )
-        rc, out, gate_mock, urlopen = self.run_main(cfg, gate_result)
-        self.assertEqual(rc, 0)
-        self.assertEqual(gate_mock.call_count, 1)
-        urlopen.assert_not_called()
-
-        gate_lines = [l for l in out.splitlines() if l.startswith("HSGATE ")]
-        self.assertEqual(len(gate_lines), 1)
-        payload = json.loads(gate_lines[0][len("HSGATE ") :])
-        self.assertEqual(payload["decision"], "block")
-        self.assertTrue(payload["reason"])
-        self.assertEqual(payload["hookSpecificOutput"]["hookEventName"], "Stop")
-        self.assertIn("mcp__hindsight__retain", payload["hookSpecificOutput"]["additionalContext"])
-        self.assertIn(gate_result.preview, payload["hookSpecificOutput"]["additionalContext"])
-        self.assertIn(gate_result.preview, payload["systemMessage"])
-
-    def test_enforce_skip_and_uncertain_are_silent(self):
-        cfg = self.cfg(retain_gate_mode="enforce")
-        for action, reason in (
-            ("skip", "repo_recoverable"),
-            ("uncertain", "borderline"),
-        ):
-            rc, out, _gate, urlopen = self.run_main(
-                cfg, GateResult(action=action, reason=reason)
-            )
-            self.assertEqual(rc, 0)
-            urlopen.assert_not_called()
-            self.assertNotIn("HSGATE", out)
-
-    def test_shadow_logs_but_does_not_block(self):
-        cfg = self.cfg(retain_gate_mode="shadow")
+    def test_retain_posts_directly_and_silently(self):
         rc, out, gate_mock, urlopen = self.run_main(
-            cfg, GateResult(action="skip", reason="trivial_or_ephemeral")
+            self.cfg(),
+            GateResult(action="retain", reason="durable_decision", preview="Salvo X."),
         )
         self.assertEqual(rc, 0)
         self.assertEqual(gate_mock.call_count, 1)
-        self.assertEqual(urlopen.call_count, 1)  # POST normale nonostante skip
-        self.assertNotIn("HSGATE", out)
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertEqual(self.gate_lines(out), [])  # nessuna notifica: silenzioso
 
-    def test_gate_off_never_calls_gate(self):
-        cfg = self.cfg()
-        rc, _out, gate_mock, urlopen = self.run_main(
-            cfg, GateResult(action="skip", reason="trivial_or_ephemeral")
+    def test_retain_debug_emits_summary(self):
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(retain_debug_in_context=True),
+            GateResult(action="retain", reason="durable_decision", preview="Salvo X."),
         )
         self.assertEqual(rc, 0)
-        gate_mock.assert_not_called()
         self.assertEqual(urlopen.call_count, 1)
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertNotIn("decision", lines[0])
+        self.assertIn("## Hindsight retain debug", lines[0]["systemMessage"])
+        self.assertIn("retain (durable_decision)", lines[0]["systemMessage"])
+
+    def test_skip_saves_nothing(self):
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(), GateResult(action="skip", reason="repo_recoverable")
+        )
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        self.assertEqual(self.gate_lines(out), [])
+
+    def test_gate_error_is_fail_open(self):
+        rc, _out, _gate, urlopen = self.run_main(
+            self.cfg(),
+            GateResult(action="skip", reason="gate_error", error="TimeoutError: x"),
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(urlopen.call_count, 1)  # salva come prima del gate
+
+    def test_uncertain_blocks_and_saves_pending(self):
+        preview = "Vale la pena salvare la decisione sul gate?"
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(), GateResult(action="uncertain", reason="borderline", preview=preview)
+        )
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["decision"], "block")
+        self.assertIn("Vuoi che salvi questa memoria?", lines[0]["reason"])
+        self.assertIn(preview, lines[0]["reason"])
+        self.assertEqual(lines[0]["hookSpecificOutput"]["hookEventName"], "Stop")
+
+        # Il pending contiene la POST pronta: il "si" al prompt successivo la esegue.
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeResponse(),
+        ) as consent_post:
+            outcome = handle_retain_consent("si", "sess-gate-test", self.tmp.name)
+        self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(consent_post.call_count, 1)
+        posted = json.loads(consent_post.call_args[0][0].data.decode("utf-8"))
+        self.assertEqual(len(posted["items"]), 1)
+        self.assertIn("document_id", posted["items"][0])
 
     def test_chunked_doc_id_stable_on_replay(self):
         cfg = self.cfg()
@@ -446,9 +551,10 @@ class WorkerGateTests(unittest.TestCase):
             payloads.append(json.loads(req.data.decode("utf-8")))
             return FakeResponse()
 
-        with mock.patch.object(self.worker, "CFG", cfg), mock.patch(
-            "urllib.request.urlopen", side_effect=capture
-        ):
+        gate = GateResult(action="retain", reason="durable_decision", preview="x")
+        with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
+            self.worker, "evaluate_retain", return_value=gate
+        ), mock.patch("urllib.request.urlopen", side_effect=capture):
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(self.worker.main(), 0)
                 self.assertEqual(self.worker.main(), 0)
@@ -473,9 +579,9 @@ class WorkerGateTests(unittest.TestCase):
                 )
                 + "\n"
             )
-        with mock.patch.object(self.worker, "CFG", cfg), mock.patch(
-            "urllib.request.urlopen", side_effect=capture
-        ):
+        with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
+            self.worker, "evaluate_retain", return_value=gate
+        ), mock.patch("urllib.request.urlopen", side_effect=capture):
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(self.worker.main(), 0)
         self.assertNotEqual(payloads[2]["items"][0]["document_id"], first["document_id"])
