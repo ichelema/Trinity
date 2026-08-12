@@ -574,6 +574,55 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(len(posted["items"]), 1)
         self.assertIn("document_id", posted["items"][0])
 
+    def test_window_boundaries_ignore_synthetic_user_messages(self):
+        def user(text):
+            return {"type": "user", "message": {"role": "user", "content": text}}
+
+        def assistant(text):
+            return {
+                "type": "user",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": text}],
+                },
+            }
+
+        tool_result = {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "tool_result", "content": "output del tool"}],
+            },
+        }
+        reminder = {
+            "type": "user",
+            "message": {"role": "user", "content": "<system-reminder>nota</system-reminder>"},
+        }
+        entries = [
+            user("prima domanda vera dell'utente"),
+            assistant("prima risposta"),
+            tool_result,
+            tool_result,
+            reminder,
+            assistant("seconda risposta dopo i tool"),
+            user("seconda domanda vera dell'utente"),
+            assistant("terza risposta"),
+        ]
+        summary = self.worker.summarize_window(entries, 2)
+        user_texts = [t for r, t in summary["turns"] if r == "user"]
+        # 2 turni UMANI: la finestra parte dalla prima domanda vera, non viene
+        # consumata da tool_result/reminder (pseudo-turni con ruolo user).
+        self.assertEqual(
+            user_texts,
+            ["prima domanda vera dell'utente", "seconda domanda vera dell'utente"],
+        )
+        # e con finestra 1 resta solo l'ultimo turno umano
+        summary_one = self.worker.summarize_window(entries, 1)
+        self.assertEqual(
+            [t for r, t in summary_one["turns"] if r == "user"],
+            ["seconda domanda vera dell'utente"],
+        )
+
     def test_chunked_doc_id_stable_on_replay(self):
         cfg = self.cfg()
         payloads = []

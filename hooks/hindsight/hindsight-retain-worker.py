@@ -452,15 +452,30 @@ def _iter_role_messages(entries: list[dict]) -> list[dict]:
     return msgs
 
 
+def _human_user_text(content) -> str:
+    """Testo UMANO di un messaggio user; stringa vuota per i messaggi sintetici.
+    Nel transcript anche i tool_result hanno ruolo user (content senza blocchi
+    text) e i wrapper <system-reminder>/<command-...> iniziano con "<": nessuno
+    dei due e' un turno di dialogo. E' il criterio unico usato sia per i confini
+    di finestra sia per i turni raccolti da summarize_window."""
+    txt = strip_memory_block(extract_text(content))
+    if txt and not txt.startswith("<"):
+        return txt
+    return ""
+
+
 def slice_last_turns_by_user_boundary(messages: list[dict], turns: int) -> list[dict]:
-    """Ultimi N turni, dove un turno inizia a un messaggio user. Cammina
-    all'indietro contando i confini-user. Port di sliceLastTurnsByUserBoundary()."""
+    """Ultimi N turni, dove un turno inizia a un messaggio user con testo UMANO.
+    Cammina all'indietro contando i confini. Contare ogni messaggio ruolo-user
+    (come il port originale di sliceLastTurnsByUserBoundary) consumava la
+    finestra con gli pseudo-turni muti dei tool_result: fette con soli testi
+    assistant e prompt umani spinti fuori (visto 2026-08-12)."""
     if not messages or turns <= 0:
         return []
     seen = 0
     start = -1
     for i in range(len(messages) - 1, -1, -1):
-        if messages[i]["role"] == "user":
+        if messages[i]["role"] == "user" and _human_user_text(messages[i]["content"]):
             seen += 1
             if seen >= turns:
                 start = i
@@ -482,8 +497,8 @@ def summarize_window(entries: list[dict], window_turns: int) -> dict:
         role = m["role"]
         content = m["content"]
         if role == "user":
-            txt = strip_memory_block(extract_text(content))
-            if txt and not txt.startswith("<"):
+            txt = _human_user_text(content)
+            if txt:
                 turns.append(("user", txt))
         elif role == "assistant" and isinstance(content, list):
             texts = []
