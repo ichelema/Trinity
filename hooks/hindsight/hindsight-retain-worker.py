@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from hindsight_config import cache_dir, load_config, recall_bank_urls, retain_bank_url
 from hindsight_debug import debug_log
-from hindsight_retain_gate import evaluate_retain
+from hindsight_retain_gate import evaluate_retain, save_retain_pending
 
 CFG = load_config()
 
@@ -322,7 +322,7 @@ def should_retain_now(
 #     (blocco iniettato a SessionStart da hindsight-mm-inject.sh)
 _MEMORY_BLOCK_RE = re.compile(
     r"<hindsight_memories>.*?</hindsight_memories>"
-    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug).*?Verify mutable facts against the repo\.",
+    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug|retain debug).*?Verify mutable facts against the repo\.",
     re.DOTALL,
 )
 
@@ -736,6 +736,32 @@ def resolve_context(summary: dict, hook: dict) -> str:
     return "claude-code/" + "/".join(domains)
 
 
+def gate_debug_context(gate, bank: str) -> str:
+    """Blocco '## Hindsight retain debug' per systemMessage/additionalContext
+    (retain_debug_in_context, speculare al debug del recall). Header e trailer
+    combaciano con _MEMORY_BLOCK_RE: il retain successivo lo scarta
+    (anti-feedback-loop)."""
+    return (
+        "## Hindsight retain debug\n\n"
+        f"Gate: {gate.action} ({gate.reason})\n"
+        f"Model: {CFG.get('retain_gate_model')}\n"
+        f"Gate latency: {gate.latency_ms:.1f} ms\n"
+        f"Bank: {bank}"
+        + (f"\nPreview: {gate.preview}" if gate.preview else "")
+        + (f"\nGate error (fail-open): {gate.error}" if gate.error else "")
+        + "\n\nUse as consultative context. Verify mutable facts against the repo."
+    )
+
+
+def gate_debug_output(gate, bank: str) -> dict:
+    """JSON hook-output di solo debug: visibile (systemMessage) e nel contesto."""
+    context = gate_debug_context(gate, bank)
+    return {
+        "systemMessage": context,
+        "hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context},
+    }
+
+
 def main() -> int:
     # Interruttore master: se il retain automatico e' disattivato in config, esci
     # subito — niente parse del transcript, niente POST, niente estrazione LLM.
@@ -781,33 +807,30 @@ def main() -> int:
         return 0
 
     # Gate semantico pre-retain (ICH-67), DOPO il throttling cosi' paga solo sui
-    # turni che salverebbero davvero. "shadow" valuta e logga senza toccare il
-    # flusso; "enforce" prosegue solo su action "retain" e sposta la scrittura su
-    # Claude via MCP (ramo HSGATE piu' sotto). Fail-closed: un gate in errore
-    # risponde "skip" (error nel debug log), quindi in enforce non si salva nulla.
-    gate_mode = str(CFG.get("retain_gate_mode", "off"))
-    gate = None
-    if gate_mode in ("shadow", "enforce"):
-        gate = evaluate_retain(
-            content, summary, recall_bank_urls(CFG, hook.get("cwd") or None), CFG
-        )
-        debug_log(
-            CFG,
-            "retain_gate",
-            mode=gate_mode,
-            action=gate.action,
-            reason=gate.reason,
-            duplicates=len(gate.duplicate_of),
-            latency_ms=gate.latency_ms,
-            error=gate.error,
-            preview=gate.preview[:300],
-        )
-        if gate_mode == "enforce" and gate.action != "retain":
-            print(f"[retain] skip: gate {gate.action} ({gate.reason})")
-            debug_log(
-                CFG, "retain_skip", reason=f"gate_{gate.action}", session=session_id[:8]
-            )
-            return 0
+    # turni che salverebbero davvero. Attivo sempre (retain_enabled e' l'unico
+    # interruttore): retain -> POST diretta silenziosa; skip -> niente;
+    # uncertain -> POST in pending + domanda all'utente (ramo piu' sotto).
+    # Un errore TECNICO del gate e' FAIL-OPEN: si salva come prima del gate —
+    # col gate obbligatorio, il fail-closed perderebbe ogni retain a LLM giu'.
+    gate = evaluate_retain(
+        content, summary, recall_bank_urls(CFG, hook.get("cwd") or None), CFG
+    )
+    debug_log(
+        CFG,
+        "retain_gate",
+        action=gate.action,
+        reason=gate.reason,
+        duplicates=len(gate.duplicate_of),
+        latency_ms=gate.latency_ms,
+        error=gate.error,
+        preview=gate.preview[:300],
+    )
+    if gate.action == "skip" and not gate.error:
+        print(f"[retain] skip: gate ({gate.reason})")
+        debug_log(CFG, "retain_skip", reason=f"gate_{gate.reason}", session=session_id[:8])
+        if CFG.get("retain_debug_in_context"):
+            print("HSGATE " + json.dumps(gate_debug_output(gate, "-"), ensure_ascii=False))
+        return 0
 
     git = git_info(hook.get("cwd") or "")
     tags = build_tags(hook, git)
@@ -853,38 +876,6 @@ def main() -> int:
             count_transcript_lines(hook.get("transcript_path", "")),
         )
 
-    # Enforce + retain: la POST non parte da qui — l'hook risponde a Claude Code
-    # con decision:block e Claude esegue il retain via MCP (percorso di scrittura
-    # unificato, nessun doppio salvataggio). La riga HSGATE e' il canale di
-    # ritorno verso hindsight-retain.sh, che la inoltra su stdout. context e tags
-    # appena calcolati viaggiano nell'istruzione cosi' il retain MCP resta
-    # coerente con quello che il worker avrebbe scritto.
-    if gate is not None and gate_mode == "enforce":
-        notice = gate.preview
-        additional = (
-            "The pre-retain semantic gate decided this session window contains "
-            f"durable knowledge. Before ending the turn: tell the user in ONE short "
-            f"sentence what is being stored, based on: {notice!r}. Then call "
-            "mcp__hindsight__retain once with a short self-contained fact derived "
-            f"from it (favour the WHY over the what), using context {context!r} and "
-            f"tags {json.dumps(tags)}. Then end the turn. Do not ask for confirmation."
-        )
-        out = {
-            "decision": "block",
-            "reason": (
-                "Pre-retain gate: durable knowledge detected; persist it via MCP "
-                "before stopping."
-            ),
-            "hookSpecificOutput": {
-                "hookEventName": "Stop",
-                "additionalContext": additional,
-            },
-            "systemMessage": f"Hindsight retain gate: {notice}",
-        }
-        print("HSGATE " + json.dumps(out, ensure_ascii=False))
-        debug_log(CFG, "retain_gate_block", doc_id=doc_id, preview=notice[:300])
-        return 0
-
     item = {
         "content": content,
         "context": context,
@@ -913,6 +904,43 @@ def main() -> int:
     # poi bank.retain_bank risolto sul cwd della sessione ("auto" = slug repo;
     # il bank si auto-crea al primo retain, nessun provisioning).
     api_url = os.environ.get("API_URL") or retain_bank_url(CFG, hook.get("cwd") or None)
+
+    # Uncertain: la POST pronta va in pending (stessa meccanica dei medium del
+    # recall ICH-66: file per session+cwd, TTL, consumo singolo) e l'hook blocca
+    # lo stop per far porre a Claude la domanda. Il si' al prompt successivo
+    # esegue la POST dall'hook recall (handle_retain_consent); no/prompt nuovo
+    # la scartano. gate.error non arriva qui: e' fail-open verso la POST diretta.
+    if gate.action == "uncertain" and not gate.error:
+        if not save_retain_pending(
+            session_id, hook.get("cwd") or "", api_url, payload, gate.preview
+        ):
+            # Senza pending affidabile (niente session_id / stato non scrivibile)
+            # la domanda non potrebbe mantenere la promessa del si': non si salva.
+            debug_log(CFG, "retain_skip", reason="gate_uncertain_no_pending")
+            return 0
+        question = f"Vuoi che salvi questa memoria? — {gate.preview} (sì/no)"
+        instruction = (
+            "The pre-retain gate is uncertain whether this session window is worth "
+            f"persisting. Ask the user exactly this question, then end the turn: "
+            f"{question!r}. Do not call any retain tool and do not save anything "
+            "yourself: if the user agrees, the pending save runs automatically at "
+            "the next prompt."
+        )
+        out = {
+            "decision": "block",
+            "reason": instruction,
+            "hookSpecificOutput": {
+                "hookEventName": "Stop",
+                "additionalContext": instruction,
+            },
+        }
+        if CFG.get("retain_debug_in_context"):
+            out["systemMessage"] = gate_debug_context(gate, api_url.rsplit("/", 1)[-1])
+        print("HSGATE " + json.dumps(out, ensure_ascii=False))
+        debug_log(
+            CFG, "retain_pending", action="saved", doc_id=doc_id, preview=gate.preview[:300]
+        )
+        return 0
 
     debug_log(
         CFG,
@@ -948,6 +976,14 @@ def main() -> int:
                 status=res.status,
                 response=body[:300],
             )
+            if CFG.get("retain_debug_in_context"):
+                print(
+                    "HSGATE "
+                    + json.dumps(
+                        gate_debug_output(gate, api_url.rsplit("/", 1)[-1]),
+                        ensure_ascii=False,
+                    )
+                )
     except Exception as exc:
         print(f"[retain] FAIL {exc}", file=sys.stderr)
         debug_log(CFG, "retain_error", doc_id=doc_id, error=str(exc)[:200])

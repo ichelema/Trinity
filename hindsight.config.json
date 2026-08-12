@@ -41,9 +41,9 @@
   "retain_max_files": 15,
   "retain_max_cmds": 10,
   "retain_text_truncate": 2000,
-  "retain_gate_mode": "off",
   "retain_gate_model": "gpt-5.6-luna",
   "retain_gate_timeout": 15,
+  "retain_debug_in_context": false,
 
   "context_extraction": true,
   "context_extraction_strategy": "llm",

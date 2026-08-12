@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Stop hook (SINCRONO in hooks/hooks.json, timeout 60s): salva un riassunto
 # strutturato del turno appena completato in Hindsight. Dispatch (ICH-67):
-#   - retain_gate_mode off/shadow -> worker in BACKGROUND e risposta immediata
-#     '{}': per Claude Code e' identico al vecchio "async": true (zero attesa).
-#   - retain_gate_mode enforce    -> worker in foreground; se il gate decide
-#     "retain" il worker scrive una riga 'HSGATE {json}' nel log e questo
-#     wrapper la inoltra su stdout (decision:block -> Claude mostra la notifica
-#     e chiama il retain MCP prima di fermarsi).
+#   - retain_enabled false -> worker in BACKGROUND e risposta immediata '{}':
+#     per Claude Code e' identico al vecchio "async": true (zero attesa; il
+#     worker e' comunque un no-op col retain spento).
+#   - retain_enabled true  -> worker in foreground col gate semantico attivo;
+#     quando il gate e' "uncertain" (decision:block con la domanda all'utente)
+#     o il debug retain e' acceso, il worker scrive una riga 'HSGATE {json}'
+#     nel log e questo wrapper la inoltra su stdout.
 # La POST del worker resta async:true lato server, quindi anche in foreground
 # non si aspetta l'estrazione LLM dei fatti.
 set -uo pipefail
@@ -65,15 +66,16 @@ run_worker() {
 	return "$rc"
 }
 
-# Modalita' del gate dalla config centralizzata: e' l'unico costo sincrono del
+# Interruttore dalla config centralizzata: e' l'unico costo sincrono del
 # percorso comune (un avvio Python). Il worker vero resta fuori dal percorso
-# critico salvo enforce.
-GATE_MODE="$("$HS_PY" "$SCRIPT_DIR/lib/hindsight_config.py" --get retain_gate_mode 2>/dev/null)"
+# critico dei progetti senza retain.
+RETAIN_ON="$("$HS_PY" "$SCRIPT_DIR/lib/hindsight_config.py" --get retain_enabled 2>/dev/null)"
 
-if [ "$GATE_MODE" = "enforce" ]; then
+if [ "$RETAIN_ON" = "True" ]; then
 	run_worker
-	# In enforce+retain il worker non fa la POST: emette la riga HSGATE col JSON
-	# gia' pronto per Claude Code. Riga assente => nessun blocco: '{}'.
+	# Il worker emette la riga HSGATE (JSON gia' pronto per Claude Code) quando
+	# il gate e' uncertain (blocco + domanda) o il debug retain e' attivo.
+	# Riga assente => niente da dire: '{}'.
 	GATE_LINE=$(grep '^HSGATE ' "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tail -1)
 	if [ -n "$GATE_LINE" ]; then
 		printf '%s\n' "${GATE_LINE#HSGATE }"
@@ -87,7 +89,7 @@ if [ "$GATE_MODE" = "enforce" ]; then
 	exit 0
 fi
 
-# off/shadow: worker in background e risposta immediata — comportamento
+# retain disabilitato: worker in background e risposta immediata — comportamento
 # equivalente al vecchio hook async. </dev/null stacca stdin; stdout/stderr del
 # figlio vanno nel log, quindi nessun fd tiene in vita l'hook per Claude Code.
 run_worker </dev/null &

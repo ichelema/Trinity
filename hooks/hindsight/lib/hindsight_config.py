@@ -162,15 +162,18 @@ DEFAULTS = {
     "retain_max_files": 15,
     "retain_max_cmds": 10,
     "retain_text_truncate": 2000,
-    # Gate semantico pre-retain (ICH-67): valuta la finestra PRIMA della POST.
-    #   off     comportamento storico (nessuna chiamata gate)
-    #   shadow  valuta e logga (debug_log "retain_gate"), POST invariata
-    #   enforce solo action "retain" prosegue, e la scrittura passa a Claude
-    #           via MCP (decision:block dall'hook Stop); skip/uncertain = niente
-    # Vedi hindsight_retain_gate.py; attivo solo se anche retain_enabled e' true.
-    "retain_gate_mode": "off",
+    # Gate semantico pre-retain (ICH-67): quando retain_enabled e' true valuta
+    # OGNI finestra prima della POST. Esiti: retain -> salva silenzioso;
+    # skip -> non salva; uncertain -> mette la POST in pending e chiede
+    # all'utente (si'/no al prompt successivo, meccanica dei medium ICH-66).
+    # Errore tecnico del gate = fail-open (salva come prima del gate).
+    # Vedi hindsight_retain_gate.py.
     "retain_gate_model": "gpt-5.6-luna",
     "retain_gate_timeout": 15,
+    # Se attivo, ogni valutazione del gate produce un blocco
+    # "## Hindsight retain debug" visibile (systemMessage) e nel contesto,
+    # speculare a recall_debug_in_context.
+    "retain_debug_in_context": False,
     # context: dominio/i del task da mettere nel campo `context` del retain
     # (schema "claude-code/<dom1>[/<dom2>][/<dom3>]"). NB: in Hindsight il context
     # e' descrittivo (frame per l'LLM estrattore), NON strutturale: relazioni ed
@@ -315,12 +318,10 @@ def _valid_override(key: str, value) -> bool:
             and not isinstance(value, bool)
             and 0 <= value <= 1
         )
-    if key in {"recall_result_filter_enabled", "recall_debug_in_context"}:
+    if key in {"recall_result_filter_enabled", "recall_debug_in_context", "retain_debug_in_context"}:
         return isinstance(value, bool)
     if key in {"recall_result_filter_model", "retain_gate_model"}:
         return isinstance(value, str) and bool(value.strip())
-    if key == "retain_gate_mode":
-        return value in ("off", "shadow", "enforce")
     return True
 
 

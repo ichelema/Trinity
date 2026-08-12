@@ -1,25 +1,50 @@
 """Gate semantico pre-retain (ICH-67): decide se la finestra Stop va persistita.
 
 Stesso pattern di hindsight_recall_filter.py: una sola chiamata OpenAI con
-response_format json_schema strict, validazione completa della risposta e
-fail-closed (qualsiasi errore => action "skip", il worker non salva nulla).
-Il consumatore e' hindsight-retain-worker.py, che chiama evaluate_retain()
-dopo il throttling e prima della POST (modalita' shadow/enforce, vedi
-retain_gate_mode in hindsight_config.py).
+response_format json_schema strict e validazione completa della risposta.
+Attivo ogni volta che retain_enabled e' true; esiti (li applica il worker):
+  retain     -> POST diretta e silenziosa nel bank
+  skip       -> nessun salvataggio
+  uncertain  -> POST messa in pending + domanda all'utente; il consenso al
+                prompt successivo la esegue (handle_retain_consent, stessa
+                meccanica dei medium del recall ICH-66)
+Un errore TECNICO del gate e' fail-open lato worker (salva come prima del
+gate): con il gate obbligatorio, il fail-closed perderebbe ogni retain a
+server LLM giu'. L'errore resta visibile in GateResult.error e nel debug log.
 """
 
 from __future__ import annotations
 
+import json
+import os
+import re
+import urllib.request
 from dataclasses import dataclass, field
 
 # Doppio percorso: nome top-level quando lib/ e' su sys.path (worker, bench);
 # relativo quando il modulo viene importato come package (test: lib.<modulo>).
 try:
+    from hindsight_config import cache_dir
     from hindsight_multibank import fetch_bank_results
-    from hindsight_recall_filter import ApiCall, api_json
+    from hindsight_recall_filter import (
+        ApiCall,
+        _normalize_prompt,
+        api_json,
+        consume_pending,
+        discard_pending_if_present,
+        save_pending,
+    )
 except ImportError:
+    from .hindsight_config import cache_dir
     from .hindsight_multibank import fetch_bank_results
-    from .hindsight_recall_filter import ApiCall, api_json
+    from .hindsight_recall_filter import (
+        ApiCall,
+        _normalize_prompt,
+        api_json,
+        consume_pending,
+        discard_pending_if_present,
+        save_pending,
+    )
 
 GATE_ACTIONS = {"retain", "skip", "uncertain"}
 
@@ -187,3 +212,92 @@ def evaluate_retain(
             candidates=candidates,
             error=f"{type(exc).__name__}: {exc}",
         )
+
+
+# ---------------------------------------------------------------------------
+# Pending "uncertain" + consenso al prompt successivo — stessa meccanica del
+# consenso sui medium del recall (ICH-66): file per session_id+cwd, TTL,
+# consumo singolo. Qui il payload conservato e' la POST /memories gia' pronta:
+# al "si'" dell'utente la esegue l'hook recall, identica a quella del worker.
+# ---------------------------------------------------------------------------
+
+RETAIN_PENDING_TTL = 900.0
+
+
+def retain_pending_dir() -> str:
+    """Directory del pending retain, separata da quella del recall.
+    HS_RETAIN_PENDING_DIR consente l'override nei test."""
+    return os.environ.get("HS_RETAIN_PENDING_DIR") or cache_dir() + "/hs-retain-pending"
+
+
+def retain_consent_decision(prompt: str) -> str | None:
+    """Si'/no standalone o verbi espliciti di salvataggio nei prompt misti.
+    Speculare a consent_decision del recall, con il lessico del salvare."""
+    text = _normalize_prompt(prompt)
+    if not text:
+        return None
+    standalone_negative = {"no", "no grazie"}
+    standalone_positive = {"si", "sì", "si grazie", "sì grazie", "va bene", "d accordo", "certo", "procedi"}
+    explicit_negative = (
+        r"\bnon\s+salvar(?:la|lo|e)\b",
+        r"\b(?:scartala|scartalo|non\s+salvare)\b",
+    )
+    if text in standalone_negative or any(re.search(pattern, text) for pattern in explicit_negative):
+        return "negative"
+    explicit_positive = r"\b(?:salvala|salvalo|salva\s+pure)\b"
+    if text in standalone_positive or re.search(explicit_positive, text):
+        return "positive"
+    return None
+
+
+def save_retain_pending(
+    session_id: str, cwd: str, api_url: str, payload: dict, preview: str
+) -> bool:
+    """Mette in attesa la POST del retain in cerca di conferma. False se non
+    c'e' session_id o lo stato non e' scrivibile: in quel caso NON si chiede
+    (una domanda senza pending non potrebbe mantenere la promessa del si')."""
+    return save_pending(
+        retain_pending_dir(),
+        session_id,
+        cwd,
+        [{"api_url": api_url, "payload": payload, "preview": preview}],
+    )
+
+
+def handle_retain_consent(
+    prompt: str, session_id: str, cwd: str, ttl: float = RETAIN_PENDING_TTL
+) -> dict | None:
+    """Da chiamare al prompt successivo alla domanda del gate (hook recall).
+    Positivo -> consuma il pending ed esegue la POST conservata; negativo o
+    prompt nuovo -> scarta. Ritorna un esito per debug/notifica, None se non
+    c'era alcun pending valido."""
+    directory = retain_pending_dir()
+    decision = retain_consent_decision(prompt)
+    if decision == "positive":
+        consumed = consume_pending(directory, session_id, cwd, ttl)
+        if not consumed:
+            return None
+        entry = consumed[0] if isinstance(consumed[0], dict) else {}
+        preview = str(entry.get("preview") or "")
+        try:
+            request = urllib.request.Request(
+                str(entry["api_url"]) + "/memories",
+                data=json.dumps(entry["payload"]).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                status = response.status
+            return {"action": "saved", "status": status, "preview": preview}
+        except Exception as exc:
+            return {
+                "action": "error",
+                "error": f"{type(exc).__name__}: {exc}",
+                "preview": preview,
+            }
+    if discard_pending_if_present(directory, session_id, cwd, ttl):
+        return {
+            "action": "discarded",
+            "reason": "negative" if decision == "negative" else "new_prompt",
+        }
+    return None
