@@ -560,7 +560,9 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(lines[0]["decision"], "block")
         self.assertIn("Vuoi che salvi questa memoria?", lines[0]["reason"])
         self.assertIn(preview, lines[0]["reason"])
-        self.assertEqual(lines[0]["hookSpecificOutput"]["hookEventName"], "Stop")
+        # Niente hookSpecificOutput: additionalContext non e' documentato per
+        # Stop e duplicava l'istruzione nel transcript (error + feedback).
+        self.assertNotIn("hookSpecificOutput", lines[0])
 
         # Il pending contiene la POST pronta: il "si" al prompt successivo la esegue.
         with mock.patch(

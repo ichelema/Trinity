@@ -938,13 +938,12 @@ def main() -> int:
             "the turn. Do not save anything yourself; a yes runs the pending "
             "save at the next prompt."
         )
+        # Niente additionalContext: su Stop non e' documentato e duplicare
+        # l'istruzione produce due righe identiche nel transcript (error +
+        # feedback). La reason da sola basta a far porre la domanda.
         out = {
             "decision": "block",
             "reason": instruction,
-            "hookSpecificOutput": {
-                "hookEventName": "Stop",
-                "additionalContext": instruction,
-            },
         }
         if CFG.get("retain_debug_in_context"):
             out["systemMessage"] = gate_debug_context(gate, api_url.rsplit("/", 1)[-1])
