@@ -91,7 +91,7 @@ Ask yourself: "Could this information avoid work, mistakes or repeated analysis 
 Rules:
 1. action "retain": set preview to ONE short self-contained sentence, in the same language as the conversation, stating WHAT gets stored and WHY it matters (favour the why over the what).
 2. action "skip": set preview to "".
-3. action "uncertain": only when genuinely borderline; set preview to the short summary you would store.
+3. action "uncertain": when the window contains knowledge that WOULD be durable but is not yet confirmed — an unverified hypothesis with concrete value, a provisional decision, conflicting sources — or when retain and skip both seem defensible; set preview to the short summary you would store.
 4. duplicate_of: indices of the provided existing memories that already cover the same facts. If the window adds nothing beyond them, use action "skip" with reason "duplicate".
 5. Judge the window as a whole: one durable fact is enough to retain.
 6. context: ONE short line, in the same language as the conversation, describing the technical domain the window is about — subject and project, not an activity and not a bare category (e.g. "architettura del recall automatico Hindsight nel plugin Trinity", NOT "tooling"). Fill it for every action; empty string only if the window has no technical subject."""
