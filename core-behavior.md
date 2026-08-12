@@ -99,6 +99,7 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 - Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
   Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
+<!-- RETAIN:manual -->
 ## Retain a fine task
 
 Al termine di un task significativo, valuta se il lavoro ha prodotto conoscenza
@@ -110,11 +111,19 @@ scartati rilevanti).
 NON salvare: stato temporaneo, output banale, dati ricavabili dal repository,
 tentativi intermedi, duplicati.
 
-Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain`
-con una forma breve e autosufficiente che spieghi il PERCHÉ.
+Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain` così:
+
+- `content`: forma breve e autosufficiente che spieghi il PERCHÉ, coi dettagli
+  tecnici (comandi, path, valori) preservati alla lettera.
+- `context`: una riga descrittiva del dominio (es. "gestione bank e config
+  Hindsight nel progetto Trinity") — MAI una categoria secca né il nome del bank.
+- `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del
+  progetto e `branch:<nome>` solo se davvero legato al branch. NIENTE tag
+  semantici (bug, convention, preferenze…): frammentano la consolidation.
 
 Se no: non fare nulla.
 
 Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
+<!-- /RETAIN:manual -->
 
 

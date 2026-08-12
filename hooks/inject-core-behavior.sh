@@ -15,6 +15,18 @@ FILE="$ROOT/core-behavior.md"
 : "${OBSIDIAN_VAULT_NAME:=⚠️ imposta OBSIDIAN_VAULT_NAME}"
 export OBSIDIAN_VAULT OBSIDIAN_VAULT_NAME
 
+# La sezione "Retain a fine task" (marker RETAIN:manual) vale solo nei progetti
+# SENZA retain automatico: dove retain_enabled e' true salva gia' il gate
+# dell'hook Stop, e la regola agent-side creerebbe salvataggi doppi. Config
+# risolta dal loader centralizzato (rispetta l'override di progetto via
+# CLAUDE_PROJECT_DIR). Se python non risponde, la sezione resta: con gli hook
+# rotti il retain MCP e' l'unica strada che funziona.
+. "$ROOT/hooks/hindsight/lib/hs-python.sh"
+CFG_PY="$ROOT/hooks/hindsight/lib/hindsight_config.py"
+command -v cygpath >/dev/null 2>&1 && CFG_PY="$(cygpath -w "$CFG_PY")"
+RETAIN_DROP=0
+[ "$("$HS_PY" "$CFG_PY" --get retain_enabled 2>/dev/null)" = "True" ] && RETAIN_DROP=1
+
 # Il file contiene blocchi per-OS delimitati da <!-- OS:windows --> e
 # <!-- OS:linux -->: tieni solo quelli dell'OS corrente e togli i marker.
 case "$(uname -s)" in
@@ -30,6 +42,8 @@ filter_os() {
         *"<!-- OS:$OS_DROP -->"*) drop=1; continue ;;
         *"<!-- /OS:$OS_DROP -->"*) drop=0; continue ;;
         *"<!-- OS:"* | *"<!-- /OS:"*) continue ;;
+        *"<!-- RETAIN:manual -->"*) [ "$RETAIN_DROP" -eq 1 ] && drop=1; continue ;;
+        *"<!-- /RETAIN:manual -->"*) [ "$RETAIN_DROP" -eq 1 ] && drop=0; continue ;;
         esac
         [ "$drop" -eq 1 ] && continue
         printf '%s\n' "$line"
