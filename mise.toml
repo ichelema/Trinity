@@ -257,7 +257,7 @@ run = [
   # del path reale usata dagli hook (hs-python.sh). Il suo check -x non basta: un
   # upgrade installa il nuovo python ACCANTO al vecchio, che resta eseguibile, e la
   # cache continuerebbe a puntare all'interprete su cui pip NON ha appena installato.
-  'rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-python-real.path"',
+  'rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-python-real.path" "${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-python-final.path"',
 ]
 
 [tasks.start-hindsight]

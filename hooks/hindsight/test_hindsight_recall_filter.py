@@ -7,12 +7,15 @@ import os
 import stat
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
 from lib import hindsight_config
 from lib.hindsight_recall_filter import (
     CLASSIFIER_SCHEMA,
+    _SWEEP_AGE,
+    _sweep_stale,
     consent_decision,
     consume_pending,
     discard_pending,
@@ -194,6 +197,38 @@ class PendingTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_missing_pending_short_circuits_without_lock(self):
+        os.makedirs(self.directory)
+        self.assertIsNone(consume_pending(self.directory, "s1", "/a", 10))
+        self.assertIsNone(load_pending(self.directory, "s1", "/a", 10))
+        self.assertFalse(discard_pending_if_present(self.directory, "s1", "/a", 10))
+        self.assertFalse(discard_pending(self.directory, "s1", "/a"))
+        # fast-path: nessun file .lock creato nel caso comune "nessun pending"
+        self.assertEqual(os.listdir(self.directory), [])
+
+    def test_sweep_removes_stale_artifacts_and_keeps_live_ones(self):
+        os.makedirs(self.directory)
+        old = time.time() - _SWEEP_AGE - 60
+
+        def touch(name, mtime=None):
+            path = os.path.join(self.directory, name)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("{}")
+            if mtime is not None:
+                os.utime(path, (mtime, mtime))
+
+        touch("dead.json", old)
+        touch("dead.1234.tmp", old)
+        touch("orphan.json.lock", old)
+        touch("held.json", None)          # pending fresco
+        touch("held.json.lock", old)      # lock vecchio ma col json vivo: resta
+        touch("fresh.json", None)
+        _sweep_stale(self.directory, time.time())
+        self.assertEqual(
+            sorted(os.listdir(self.directory)),
+            ["fresh.json", "held.json", "held.json.lock"],
+        )
 
     def test_permissions_ttl_isolation_and_single_consumption(self):
         self.assertTrue(save_pending(self.directory, "s1", "/a", self.memories, now=100))
