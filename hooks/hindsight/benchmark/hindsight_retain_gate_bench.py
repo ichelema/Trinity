@@ -258,6 +258,7 @@ def evaluate(args) -> int:
                         "predicted": result.action,
                         "reason": result.reason,
                         "preview": result.preview,
+                        "context": result.context,
                         "duplicate_of": result.duplicate_of,
                         "latency_ms": result.latency_ms,
                         "error": result.error,

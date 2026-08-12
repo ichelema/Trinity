@@ -528,17 +528,14 @@ def summarize_window(entries: list[dict], window_turns: int) -> dict:
 
 
 def build_content_chunk(hook: dict, summary: dict) -> str | None:
-    """Content di una fetta: la conversazione multi-turno della finestra + file/comandi."""
+    """Content di una fetta: la conversazione multi-turno della finestra + file/comandi.
+    Niente header Timestamp/CWD/Session (ICH-67): quei valori sono gia' nei
+    metadata dell'item e nel campo timestamp — nel content sarebbero solo rumore
+    per l'estrattore. Bonus: il content e' stabile per costruzione, quindi il
+    document_id derivato dal suo hash resta identico sui replay."""
     if not summary["turns"] and not summary["files_modified"]:
         return None
-    parts = [
-        "Claude Code session activity (chunk).",
-        f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
-        f"CWD: {hook.get('cwd', '')}",
-        f"Session: {hook.get('session_id', '')}",
-        "",
-        "## Conversation (recent turns)",
-    ]
+    parts = ["## Conversation (recent turns)"]
     for role, text in summary["turns"]:
         parts += [f"[{role}] {text}", ""]
     if summary["files_modified"]:
@@ -835,11 +832,12 @@ def main() -> int:
     git = git_info(hook.get("cwd") or "")
     tags = build_tags(hook, git)
 
-    # context: dominio/i del task (max 3), schema "claude-code/<d1>[/<d2>][/<d3>]".
-    # repo/branch NON vanno qui (sono gia' nei tag e nei metadata): nel context
-    # darebbero cardinalita' ~1 e zero segnale. Vedi resolve_context() e la config
-    # context_extraction*. Mai solleva: peggio caso ritorna "claude-code".
-    context = resolve_context(summary, hook)
+    # context: riga descrittiva del dominio prodotta dal GATE (legge gia' tutta
+    # la finestra: una chiamata LLM in meno e un frame piu' ricco per
+    # l'estrattore della "categoria secca" claude-code/<slug>). Fallback alla
+    # catena storica resolve_context (nano -> heuristic -> "claude-code")
+    # quando il gate non l'ha prodotta: errore tecnico o campo vuoto.
+    context = gate.context or resolve_context(summary, hook)
 
     # metadata: filter values stringa (lo schema accetta dict[str,str]). Tutti i
     # valori opzionali vengono inclusi solo se non vuoti per non sporcare il dict.
@@ -857,16 +855,13 @@ def main() -> int:
     # document_id: in chunked ogni fetta e' un documento con id derivato dal
     # CONTENUTO (fette diverse = documenti diversi, niente perdita tra retain;
     # fetta identica ri-presentata = stesso id, il server fa upsert invece di
-    # duplicare — dedup replay esatto, ICH-67). La riga "Timestamp:" va esclusa
-    # dall'hash: cambia a ogni build e renderebbe l'id sempre nuovo. In legacy
+    # duplicare — dedup replay esatto, ICH-67). Il content e' stabile per
+    # costruzione: build_content_chunk non contiene piu' righe volatili. In legacy
     # resta l'id stabile per-sessione con guardia compaction (compute_document_id,
     # che fa upsert — verificato lossy sul testo non-ultimo).
     if retain_mode == "chunked":
         if session_id:
-            stable = "\n".join(
-                l for l in content.splitlines() if not l.startswith("Timestamp:")
-            )
-            digest = hashlib.sha256(stable.encode("utf-8")).hexdigest()[:12]
+            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
             doc_id = f"{session_id}-{digest}"
         else:
             doc_id = None

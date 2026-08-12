@@ -199,8 +199,13 @@ EOF
 	# Stesso path che usa hindsight-retain.sh (HS_CACHE_DIR, esportata da hs-python.sh).
 	RETAIN_LOG="${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-retain.log"
 	>"$RETAIN_LOG"
-	# HS_RETAIN_FORCE bypassa il throttling (step E) per testare il POST in modo deterministico
-	echo "$RETAIN_PAYLOAD" | HS_RETAIN_FORCE=1 "$HOOKS_DIR/hindsight-retain.sh"
+	# HS_RETAIN_FORCE bypassa il throttling (step E) per testare il POST in modo
+	# deterministico. OPENAI_API_KEY svuotata: il gate semantico (ICH-67) va in
+	# errore tecnico -> FAIL-OPEN -> la POST parte sempre. Senza, l'esito
+	# dipenderebbe dal giudizio dell'LLM sul contenuto sintetico (es. "skip:
+	# duplicate" ai run successivi) e il check diventerebbe non deterministico;
+	# cosi' si esercita anche il ramo fail-open, che deve salvare.
+	echo "$RETAIN_PAYLOAD" | HS_RETAIN_FORCE=1 OPENAI_API_KEY= "$HOOKS_DIR/hindsight-retain.sh" >/dev/null
 	sleep 1
 	if grep -q "\[retain\] OK 200" "$RETAIN_LOG" 2>/dev/null; then
 		ok "retain hook OK (log: $(head -1 "$RETAIN_LOG" | head -c 120))"

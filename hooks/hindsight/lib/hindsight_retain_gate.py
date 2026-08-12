@@ -73,8 +73,9 @@ GATE_SCHEMA = {
         "reason": {"type": "string", "enum": sorted(GATE_REASONS)},
         "preview": {"type": "string"},
         "duplicate_of": {"type": "array", "items": {"type": "integer"}},
+        "context": {"type": "string"},
     },
-    "required": ["action", "reason", "preview", "duplicate_of"],
+    "required": ["action", "reason", "preview", "duplicate_of", "context"],
 }
 
 # Derivato dal draft di ICH-67. Il preview e' nella lingua della conversazione:
@@ -92,7 +93,8 @@ Rules:
 2. action "skip": set preview to "".
 3. action "uncertain": only when genuinely borderline; set preview to the short summary you would store.
 4. duplicate_of: indices of the provided existing memories that already cover the same facts. If the window adds nothing beyond them, use action "skip" with reason "duplicate".
-5. Judge the window as a whole: one durable fact is enough to retain."""
+5. Judge the window as a whole: one durable fact is enough to retain.
+6. context: ONE short line, in the same language as the conversation, describing the technical domain the window is about — subject and project, not an activity and not a bare category (e.g. "architettura del recall automatico Hindsight nel plugin Trinity", NOT "tooling"). Fill it for every action; empty string only if the window has no technical subject."""
 
 
 @dataclass
@@ -100,6 +102,9 @@ class GateResult:
     action: str
     reason: str
     preview: str = ""
+    # Riga descrittiva del dominio della finestra, prodotta dal gate: diventa il
+    # campo `context` del retain (il worker ricade su resolve_context se vuota).
+    context: str = ""
     duplicate_of: list[int] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
@@ -181,12 +186,15 @@ def evaluate_retain(
         reason = data.get("reason")
         preview = data.get("preview")
         duplicate_of = data.get("duplicate_of")
+        context = data.get("context")
         if action not in GATE_ACTIONS:
             raise ValueError("action non valida")
         if reason not in GATE_REASONS:
             raise ValueError("reason non valida")
         if not isinstance(preview, str):
             raise ValueError("preview non valida")
+        if not isinstance(context, str):
+            raise ValueError("context non valido")
         if action == "retain" and not preview.strip():
             raise ValueError("preview vuota su action retain")
         if not isinstance(duplicate_of, list) or any(
@@ -201,6 +209,7 @@ def evaluate_retain(
             action=action,
             reason=reason,
             preview=preview.strip(),
+            context=context.strip(),
             duplicate_of=duplicate_of,
             candidates=candidates,
             latency_ms=round(latency, 2),

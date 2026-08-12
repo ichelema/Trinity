@@ -58,11 +58,15 @@ class GateModuleTests(unittest.TestCase):
                 "reason": "durable_decision",
                 "preview": "Salvo la decisione X perché Y.",
                 "duplicate_of": [],
+                "context": "gestione bank e config Hindsight nel progetto Trinity",
             }),
         )
         self.assertEqual(result.action, "retain")
         self.assertEqual(result.reason, "durable_decision")
         self.assertEqual(result.preview, "Salvo la decisione X perché Y.")
+        self.assertEqual(
+            result.context, "gestione bank e config Hindsight nel progetto Trinity"
+        )
         self.assertIsNone(result.error)
         self.assertEqual(result.latency_ms, 7.0)
 
@@ -76,6 +80,7 @@ class GateModuleTests(unittest.TestCase):
                 "reason": "trivial_or_ephemeral",
                 "preview": "",
                 "duplicate_of": [],
+                "context": "",
             }),
         )
         self.assertEqual(result.action, "skip")
@@ -91,6 +96,7 @@ class GateModuleTests(unittest.TestCase):
                 "reason": "borderline",
                 "preview": "Forse vale la pena salvare Z.",
                 "duplicate_of": [],
+                "context": "ipotesi sulla latenza del recall",
             }),
         )
         self.assertEqual(result.action, "uncertain")
@@ -100,12 +106,13 @@ class GateModuleTests(unittest.TestCase):
         summary = {"turns": []}
         bad_payloads = [
             {},  # schema incompleto
-            {"action": "keep", "reason": "duplicate", "preview": "", "duplicate_of": []},
-            {"action": "skip", "reason": "unknown_reason", "preview": "", "duplicate_of": []},
-            {"action": "retain", "reason": "durable_decision", "preview": "  ", "duplicate_of": []},
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": ["0"]},
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [True]},
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [0]},  # fuori range: 0 candidati
+            {"action": "keep", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": ""},
+            {"action": "skip", "reason": "unknown_reason", "preview": "", "duplicate_of": [], "context": ""},
+            {"action": "retain", "reason": "durable_decision", "preview": "  ", "duplicate_of": [], "context": ""},
+            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": ["0"], "context": ""},
+            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [True], "context": ""},
+            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [0], "context": ""},  # fuori range: 0 candidati
+            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": 5},  # context non stringa
         ]
         for payload in bad_payloads:
             result = evaluate_retain("finestra", summary, [], cfg, fake_api(payload))
@@ -131,6 +138,7 @@ class GateModuleTests(unittest.TestCase):
                     "reason": "duplicate",
                     "preview": "",
                     "duplicate_of": [0, 1],
+                    "context": "",
                 }),
             )
             self.assertEqual(ok.action, "skip")
@@ -147,6 +155,7 @@ class GateModuleTests(unittest.TestCase):
                     "reason": "duplicate",
                     "preview": "",
                     "duplicate_of": [5],
+                    "context": "",
                 }),
             )
             self.assertEqual(out_of_range.reason, "gate_error")
@@ -161,6 +170,7 @@ class GateModuleTests(unittest.TestCase):
                     "reason": "duplicate",
                     "preview": "",
                     "duplicate_of": [0, 0],
+                    "context": "",
                 }),
             )
             self.assertEqual(duplicated_index.reason, "gate_error")
@@ -481,12 +491,33 @@ class WorkerGateTests(unittest.TestCase):
     def test_retain_posts_directly_and_silently(self):
         rc, out, gate_mock, urlopen = self.run_main(
             self.cfg(),
-            GateResult(action="retain", reason="durable_decision", preview="Salvo X."),
+            GateResult(
+                action="retain",
+                reason="durable_decision",
+                preview="Salvo X.",
+                context="convenzioni di branching nel progetto di prova",
+            ),
         )
         self.assertEqual(rc, 0)
         self.assertEqual(gate_mock.call_count, 1)
         self.assertEqual(urlopen.call_count, 1)
         self.assertEqual(self.gate_lines(out), [])  # nessuna notifica: silenzioso
+        item = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
+        # context descrittivo dal gate; niente header volatile nel content
+        self.assertEqual(item["context"], "convenzioni di branching nel progetto di prova")
+        self.assertTrue(item["content"].startswith("## Conversation (recent turns)"))
+        self.assertNotIn("Session:", item["content"])
+        self.assertNotIn("CWD:", item["content"])
+
+    def test_gate_context_fallback_when_empty(self):
+        rc, _out, _gate, urlopen = self.run_main(
+            self.cfg(),
+            GateResult(action="retain", reason="durable_decision", preview="Salvo X."),
+        )
+        self.assertEqual(rc, 0)
+        item = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
+        # context vuoto dal gate -> catena storica (context_extraction off => piano)
+        self.assertEqual(item["context"], "claude-code")
 
     def test_retain_debug_emits_summary(self):
         rc, out, _gate, urlopen = self.run_main(
@@ -563,8 +594,8 @@ class WorkerGateTests(unittest.TestCase):
         first, second = (p["items"][0] for p in payloads)
         self.assertEqual(first["document_id"], second["document_id"])
         self.assertTrue(first["document_id"].startswith("sess-gate-test-"))
-        # Il timestamp nel content cambia ma non deve cambiare l'id.
-        self.assertNotEqual(first["content"], second["content"])
+        # Senza header volatile il content e' identico sui replay: stesso id.
+        self.assertEqual(first["content"], second["content"])
 
         with open(self.transcript, "a", encoding="utf-8") as handle:
             handle.write(

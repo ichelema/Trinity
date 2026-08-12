@@ -498,9 +498,13 @@ della finestra (replay identici fanno upsert) e candidati semantici dai bank di 
 passati al gate. Un errore tecnico del gate è **fail-open** (salva come prima del gate: col
 gate obbligatorio, il fail-closed perderebbe ogni retain a servizio LLM giù). Con
 `retain_debug_in_context: true` ogni valutazione produce un blocco "## Hindsight retain
-debug" visibile in conversazione, speculare a `recall_debug_in_context`. Parametri:
-`retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain MCP proattivo) è coperto
-dalle regole "Retain a fine task" in `core-behavior.md`, attive a ogni sessione.
+debug" visibile in conversazione, speculare a `recall_debug_in_context`. Il gate produce
+anche il **`context` descrittivo** del retain (una riga di dominio invece della categoria
+secca `claude-code/<slug>`; fallback alla vecchia estrazione `context_extraction` se manca),
+e il content della fetta non porta più l'header Timestamp/CWD/Session — quei valori vivono
+nei metadata. Parametri: `retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain
+MCP proattivo) è coperto dalle regole "Retain a fine task" in `core-behavior.md`, attive a
+ogni sessione.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (gpt-4.1-nano: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
