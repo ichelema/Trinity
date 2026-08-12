@@ -929,12 +929,14 @@ def main() -> int:
             debug_log(CFG, "retain_skip", reason="gate_uncertain_no_pending")
             return 0
         question = f"Vuoi che salvi questa memoria? — {gate.preview} (sì/no)"
+        # La reason viene SEMPRE stampata nel transcript (limite Claude Code:
+        # per Stop non esiste un canale nascosto come l'additionalContext di
+        # UserPromptSubmit), quindi resta corta: solo la domanda e le due
+        # direttive essenziali.
         instruction = (
-            "The pre-retain gate is uncertain whether this session window is worth "
-            f"persisting. Ask the user exactly this question, then end the turn: "
-            f"{question!r}. Do not call any retain tool and do not save anything "
-            "yourself: if the user agrees, the pending save runs automatically at "
-            "the next prompt."
+            f"Retain gate uncertain: ask the user verbatim {question!r} and end "
+            "the turn. Do not save anything yourself; a yes runs the pending "
+            "save at the next prompt."
         )
         out = {
             "decision": "block",
