@@ -363,6 +363,33 @@ def _file_lock(path: Path, timeout: float = 2.0):
             handle.close()
 
 
+# Età oltre la quale lo sweep elimina gli artefatti orfani. Volutamente molto
+# più ampia del recall_pending_ttl (900s): qui si fa igiene della directory,
+# non si applica la scadenza — quella resta a load/consume/discard.
+_SWEEP_AGE = 86400
+
+
+def _sweep_stale(directory: str, now: float) -> None:
+    """Best-effort: elimina pending scaduti di sessioni morte, .tmp di crash e
+    .lock orfani (json assente) più vecchi di _SWEEP_AGE. Un .lock in uso su
+    Windows non è cancellabile (msvcrt tiene il file aperto) e l'OSError viene
+    ignorato. Chiamata solo dal percorso non comune di save_pending."""
+    try:
+        entries = list(os.scandir(directory))
+    except OSError:
+        return
+    alive = {entry.name for entry in entries if entry.name.endswith(".json")}
+    for entry in entries:
+        try:
+            if now - entry.stat().st_mtime <= _SWEEP_AGE:
+                continue
+            if entry.name.endswith(".json.lock") and entry.name[:-5] in alive:
+                continue
+            os.unlink(entry.path)
+        except OSError:
+            pass
+
+
 def save_pending(
     directory: str,
     session_id: str,
@@ -377,6 +404,7 @@ def save_pending(
         _secure_directory(directory)
     except OSError:
         return False
+    _sweep_stale(directory, time.time() if now is None else now)
     payload = {
         "created_at": time.time() if now is None else now,
         "session_id": session_id,
@@ -416,7 +444,7 @@ def load_pending(
     now: float | None = None,
 ) -> list[dict] | None:
     path = _pending_path(directory, session_id, cwd)
-    if path is None:
+    if path is None or not path.exists():
         return None
     current = time.time() if now is None else now
     with _file_lock(path) as locked:
@@ -446,7 +474,9 @@ def consume_pending(
     now: float | None = None,
 ) -> list[dict] | None:
     path = _pending_path(directory, session_id, cwd)
-    if path is None:
+    # Fast-path senza lock: nel caso comune (nessun pending) si paga un solo stat.
+    # Se il file compare tra il check e il return lo gestisce il prompt successivo.
+    if path is None or not path.exists():
         return None
     current = time.time() if now is None else now
     with _file_lock(path) as locked:
@@ -470,7 +500,7 @@ def consume_pending(
 
 def discard_pending(directory: str, session_id: str, cwd: str) -> bool:
     path = _pending_path(directory, session_id, cwd)
-    if path is None:
+    if path is None or not path.exists():
         return False
     with _file_lock(path) as locked:
         if not locked:
@@ -491,7 +521,7 @@ def discard_pending_if_present(
 ) -> bool:
     """Elimina atomicamente un pending valido senza separare verifica e delete."""
     path = _pending_path(directory, session_id, cwd)
-    if path is None:
+    if path is None or not path.exists():
         return False
     current = time.time() if now is None else now
     with _file_lock(path) as locked:

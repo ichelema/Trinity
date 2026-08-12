@@ -178,12 +178,16 @@ if results and not any(
     degraded.append("risultati senza scores.reranker: reranker del server in fallback RRF")
 if degraded:
     try:
+        log_path = os.path.join(_hs_state_dir(), "hs-reranker-degraded.log")
+        # Con reranker in degrado persistente si appende a OGNI prompt: stesso
+        # cap di rotazione di hindsight_debug (5MB -> .1).
+        try:
+            if os.path.getsize(log_path) > 5_000_000:
+                os.replace(log_path, log_path + ".1")
+        except OSError:
+            pass
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        with open(
-            os.path.join(_hs_state_dir(), "hs-reranker-degraded.log"),
-            "a",
-            encoding="utf-8",
-        ) as handle:
+        with open(log_path, "a", encoding="utf-8") as handle:
             for message in degraded:
                 handle.write(f"{timestamp}\t{message}\n")
     except Exception:

@@ -49,6 +49,16 @@ _hs_mise_python() {
   [ -x "$real" ] && printf '%s' "$real"
 }
 
+# Cache su file del valore FINALE di HS_PY (gia' de-shimmato): la lettura e' un
+# read builtin (zero fork), la risoluzione sotto (command -v / mise = 1-2 fork a
+# prompt) gira solo su cache-miss o se il binario e' sparito. NB: cache globale,
+# primo-risolutore-vince — coerente con la cache mise qui sopra; install-hindsight
+# la elimina insieme a hs-python-real.path quando il runtime puo' cambiare.
+_hs_py_cache="$HS_CACHE_DIR/hs-python-final.path"
+HS_PY=""
+{ [ -f "$_hs_py_cache" ] && IFS= read -r HS_PY < "$_hs_py_cache"; } || true
+if [ ! -x "$HS_PY" ]; then
+HS_PY=""
 # Ordine di risoluzione, dipendente dall'OS. $OSTYPE e' una variabile di bash (zero
 # fork); `uname -s` costava ~475ms su MSYS/Windows (misurato 2026-07-28). Valori:
 # linux-gnu / darwin* / cygwin (bash MSYS2) / msys.
@@ -86,7 +96,11 @@ case "$HS_PY" in
   [ -n "$_hs_real" ] && HS_PY="$_hs_real"
   ;;
 esac
+# "python" nudo (fallback estremo) non e' un path: -x fallisce e non viene cachato.
+[ -x "$HS_PY" ] && { printf '%s' "$HS_PY" > "$_hs_py_cache" 2>/dev/null || true; }
+fi
 unset -f _hs_mise_python 2>/dev/null || true
+unset _hs_py_cache
 export HS_PY
 # UTF-8 garantito anche fuori da Trinity (il python MSYS UCRT64 usa cp1252 di
 # default -> UnicodeEncodeError sul testo unicode delle memorie).
