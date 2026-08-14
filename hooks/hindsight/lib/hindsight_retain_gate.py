@@ -48,22 +48,24 @@ except ImportError:
 
 GATE_ACTIONS = {"retain", "skip", "uncertain"}
 
-GATE_REASONS = {
-    # retain
-    "durable_decision",
-    "root_cause_or_workaround",
-    "environment_constraint",
-    "convention_or_preference",
-    "discarded_approach",
-    # skip
-    "trivial_or_ephemeral",
-    "repo_recoverable",
-    "intermediate_attempt",
-    "duplicate",
-    "no_durable_knowledge",
-    # uncertain
-    "borderline",
+REASONS_BY_ACTION = {
+    "retain": {
+        "durable_decision",
+        "root_cause_or_workaround",
+        "environment_constraint",
+        "convention_or_preference",
+        "discarded_approach",
+    },
+    "skip": {
+        "trivial_or_ephemeral",
+        "repo_recoverable",
+        "intermediate_attempt",
+        "duplicate",
+        "no_durable_knowledge",
+    },
+    "uncertain": {"borderline"},
 }
+GATE_REASONS = set().union(*REASONS_BY_ACTION.values())
 
 GATE_SCHEMA = {
     "type": "object",
@@ -111,19 +113,42 @@ class GateResult:
     error: str | None = None
 
 
+DEDUP_QUERY_MAX_CHARS = 1500
+
+
+def _bounded_dedup_query(first_user: str, last_assistant: str) -> str:
+    """Compone una query entro il limite conservando entrambe le estremità.
+    A ogni parte spetta metà budget; quello inutilizzato passa all'altra."""
+    separator = "\n\n"
+    budget = DEDUP_QUERY_MAX_CHARS - len(separator)
+    first_budget = min(len(first_user), budget // 2)
+    assistant_budget = min(len(last_assistant), budget - first_budget)
+    first_budget = min(len(first_user), budget - assistant_budget)
+    return f"{first_user[:first_budget]}{separator}{last_assistant[-assistant_budget:]}"
+
+
 def dedup_query(summary: dict) -> str:
-    """Query per il recall anti-duplicato: l'ultimo testo assistant della
-    finestra (e' il riassunto migliore di cosa e' stato concluso). Fallback
-    all'ultimo prompt user; stringa vuota se la finestra non ha testo."""
+    """Query anti-duplicato composta dal primo prompt user e dall'ultima
+    risposta assistant. Il primo conserva il soggetto anche quando la chiusura
+    devia su test o PR; l'ultima conserva la conclusione. Se coincidono o una
+    manca, usa un solo testo. Fallback al prompt user legacy."""
     turns = summary.get("turns") or []
-    for role, text in reversed(turns):
-        if role == "assistant" and text.strip():
-            return text
-    last_user = summary.get("last_user_prompt") or ""
-    for role, text in reversed(turns):
-        if role == "user" and text.strip():
-            return text
-    return last_user
+    first_user = next(
+        (text.strip() for role, text in turns if role == "user" and text.strip()),
+        "",
+    )
+    last_assistant = next(
+        (
+            text.strip()
+            for role, text in reversed(turns)
+            if role == "assistant" and text.strip()
+        ),
+        "",
+    )
+    if first_user and last_assistant and first_user != last_assistant:
+        return _bounded_dedup_query(first_user, last_assistant)
+    query = first_user or last_assistant or (summary.get("last_user_prompt") or "")
+    return query[:DEDUP_QUERY_MAX_CHARS]
 
 
 def fetch_duplicate_candidates(
@@ -135,7 +160,7 @@ def fetch_duplicate_candidates(
     "Query too long" del query-embedder (vedi recall_max_prompt_chars)."""
     if not query:
         return []
-    payload = {"query": query[:1500], "limit": max_candidates}
+    payload = {"query": query[:DEDUP_QUERY_MAX_CHARS], "limit": max_candidates}
     seen: set[str] = set()
     out: list[dict] = []
     for url in bank_urls:
@@ -191,6 +216,8 @@ def evaluate_retain(
             raise ValueError("action non valida")
         if reason not in GATE_REASONS:
             raise ValueError("reason non valida")
+        if reason not in REASONS_BY_ACTION[action]:
+            raise ValueError("reason incompatibile con action")
         if not isinstance(preview, str):
             raise ValueError("preview non valida")
         if not isinstance(context, str):
@@ -205,6 +232,10 @@ def evaluate_retain(
             not 0 <= i < len(candidates) for i in duplicate_of
         ):
             raise ValueError("indici duplicato fuori range o duplicati")
+        if reason == "duplicate" and (action != "skip" or not duplicate_of):
+            raise ValueError("reason duplicate richiede action skip e duplicate_of")
+        if duplicate_of and reason != "duplicate":
+            raise ValueError("duplicate_of richiede reason duplicate")
         return GateResult(
             action=action,
             reason=reason,

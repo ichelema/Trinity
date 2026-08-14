@@ -23,6 +23,7 @@ from lib.hindsight_retain_gate import (
     GATE_ACTIONS,
     GATE_REASONS,
     GATE_SCHEMA,
+    REASONS_BY_ACTION,
     GateResult,
     dedup_query,
     evaluate_retain,
@@ -112,6 +113,7 @@ class GateModuleTests(unittest.TestCase):
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": ["0"], "context": ""},
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [True], "context": ""},
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [0], "context": ""},  # fuori range: 0 candidati
+            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": ""},
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": 5},  # context non stringa
         ]
         for payload in bad_payloads:
@@ -175,6 +177,68 @@ class GateModuleTests(unittest.TestCase):
             )
             self.assertEqual(duplicated_index.reason, "gate_error")
 
+            for payload in (
+                {
+                    "action": "retain",
+                    "reason": "duplicate",
+                    "preview": "Memoria duplicata.",
+                    "duplicate_of": [0],
+                    "context": "",
+                },
+                {
+                    "action": "skip",
+                    "reason": "duplicate",
+                    "preview": "",
+                    "duplicate_of": [],
+                    "context": "",
+                },
+                {
+                    "action": "skip",
+                    "reason": "trivial_or_ephemeral",
+                    "preview": "",
+                    "duplicate_of": [0],
+                    "context": "",
+                },
+            ):
+                inconsistent = evaluate_retain(
+                    "finestra", summary, ["http://bank"], cfg, fake_api(payload)
+                )
+                self.assertEqual(inconsistent.reason, "gate_error", payload)
+
+    def test_reason_must_match_action(self):
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        summary = {"turns": []}
+        contradictory = (
+            ("retain", "trivial_or_ephemeral", "Salvo X."),
+            ("skip", "durable_decision", ""),
+            ("uncertain", "repo_recoverable", "Forse salvo X."),
+        )
+        for action, reason, preview in contradictory:
+            result = evaluate_retain(
+                "finestra",
+                summary,
+                [],
+                cfg,
+                fake_api({
+                    "action": action,
+                    "reason": reason,
+                    "preview": preview,
+                    "duplicate_of": [],
+                    "context": "dominio di prova",
+                }),
+            )
+            self.assertEqual(result.reason, "gate_error", (action, reason))
+            self.assertIsNotNone(result.error, (action, reason))
+            self.assertIn("incompatibile", result.error or "", (action, reason))
+
+    def test_reason_map_covers_schema_without_overlap(self):
+        self.assertEqual(set(REASONS_BY_ACTION), GATE_ACTIONS)
+        flattened = [
+            reason for reasons in REASONS_BY_ACTION.values() for reason in reasons
+        ]
+        self.assertEqual(set(flattened), GATE_REASONS)
+        self.assertEqual(len(flattened), len(set(flattened)))
+
     def test_api_errors_fail_closed(self):
         cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
         summary = {"turns": []}
@@ -192,16 +256,45 @@ class GateModuleTests(unittest.TestCase):
             self.assertEqual(result.reason, "gate_error")
             self.assertIn(type(exc).__name__, result.error)
 
-    def test_dedup_query_prefers_last_assistant(self):
+    def test_dedup_query_combines_first_user_and_last_assistant(self):
         self.assertEqual(
-            dedup_query({"turns": [("user", "u1"), ("assistant", "a1"), ("user", "u2")]}),
-            "a1",
+            dedup_query({
+                "turns": [
+                    ("user", "argomento iniziale"),
+                    ("assistant", "risposta intermedia"),
+                    ("user", "domanda successiva"),
+                    ("assistant", "chiusura finale"),
+                ]
+            }),
+            "argomento iniziale\n\nchiusura finale",
         )
+
+    def test_dedup_query_fallbacks_and_avoids_duplicate_text(self):
         self.assertEqual(dedup_query({"turns": [("user", "solo user")]}), "solo user")
+        self.assertEqual(
+            dedup_query({"turns": [("assistant", "solo assistant")]}),
+            "solo assistant",
+        )
+        self.assertEqual(
+            dedup_query({"turns": [("user", "uguale"), ("assistant", "uguale")]}),
+            "uguale",
+        )
         self.assertEqual(dedup_query({"turns": []}), "")
         self.assertEqual(
             dedup_query({"last_user_prompt": "legacy prompt"}), "legacy prompt"
         )
+
+    def test_dedup_query_limit_preserves_both_parts(self):
+        query = dedup_query({
+            "turns": [
+                ("user", "inizio-user " + "u" * 2000),
+                ("assistant", "a" * 2000 + " fine-assistant"),
+            ]
+        })
+        self.assertEqual(len(query), 1500)
+        self.assertTrue(query.startswith("inizio-user "))
+        self.assertTrue(query.endswith(" fine-assistant"))
+        self.assertIn("\n\n", query)
 
     def test_fetch_duplicate_candidates_dedup_cap_and_query_limit(self):
         calls = []
