@@ -19,8 +19,13 @@ PERIMETRO — il ponte si attiva SOLO se valgono tutte queste condizioni:
   - metodo POST sul path esatto ``/v1/responses``;
   - il corpo contiene ``litellm_session_id`` fra quelli abilitati
     (default: ``typingmind``, override con RESPONSES_BRIDGE_SESSIONS);
-  - il client NON ha chiesto ``stream``;
   - la risposta a monte è davvero ``text/event-stream``.
+Con due comportamenti a seconda di cosa ha chiesto il client:
+  - senza ``stream``: il flusso viene aggregato in un unico JSON (punto 1);
+  - con ``stream``: il flusso SSE passa intatto, ma l'evento finale
+    ``response.completed`` viene ricompletato con gli item accumulati —
+    da build di metà agosto 2026 TypingMind renderizza da quell'evento
+    (vuoto per il difetto del punto 1) e mostrava bolle vuote.
 Claude Code (``/v1/messages``) e Hindsight (``/v1/chat/completions``) non
 passano di qui in nessun caso.
 """
@@ -165,15 +170,46 @@ class _Ponte:
 
         try:
             dati = json.loads(corpo)
-            attiva = (dati.get("litellm_session_id") in SESSIONI
-                      and dati.get("stream") not in (True, "true"))
+            sessione = dati.get("litellm_session_id") in SESSIONI
+            streaming = dati.get("stream") in (True, "true")
         except ValueError:
-            attiva = False
-        if not attiva:
+            sessione = streaming = False
+        if not sessione:
             return await self.app(scope, receive_replay, send)
 
         host = dict(scope.get("headers") or {}).get(b"host")
         base_url = "http://" + (host.decode() if host else "127.0.0.1:4000")
+
+        if streaming:
+            # Passthrough SSE: si riscrive solo l'evento finale, che il
+            # backend manda con output vuoto (i contenuti veri stanno negli
+            # output_item.done). Da build di metà agosto 2026 TypingMind
+            # renderizza dall'evento finale: senza questo, bolle vuote.
+            resto = {"pending": b"", "items": [], "sse": False}
+
+            async def send_stream(message):
+                tipo = message["type"]
+                if tipo == "http.response.start":
+                    intestazioni = {k.lower(): v for k, v in message.get("headers", [])}
+                    resto["sse"] = b"text/event-stream" in intestazioni.get(b"content-type", b"")
+                    return await send(message)
+                if tipo != "http.response.body" or not resto["sse"]:
+                    return await send(message)
+                buf = resto["pending"] + (message.get("body", b"") or b"")
+                more = bool(message.get("more_body"))
+                righe = buf.split(b"\n")
+                if more:
+                    resto["pending"] = righe.pop()   # riga incompleta: al giro dopo
+                    coda = b""
+                else:
+                    resto["pending"] = b""
+                    coda = righe.pop()               # chiusura: nulla da trattenere
+                corpo_out = b"".join(
+                    self._patch_riga(r, resto, base_url) + b"\n" for r in righe) + coda
+                await send({"type": "http.response.body",
+                            "body": corpo_out, "more_body": more})
+
+            return await self.app(scope, receive_replay, send_stream)
 
         stato = {"start": None, "sse": False, "buffer": bytearray()}
 
@@ -197,6 +233,31 @@ class _Ponte:
             await send(message)
 
         await self.app(scope, receive_replay, send_filtrato)
+
+    @staticmethod
+    def _patch_riga(riga, resto, base_url):
+        """Accumula gli output_item.done e ricompleta il response.completed."""
+        if not riga.startswith(b"data: "):
+            return riga
+        dato = riga[6:].strip()
+        if not dato or dato == b"[DONE]":
+            return riga
+        try:
+            ev = json.loads(dato)
+        except ValueError:
+            return riga
+        tipo = ev.get("type")
+        if tipo == "response.output_item.done" and ev.get("item"):
+            resto["items"].append(ev["item"])
+            return riga
+        if tipo == "response.completed" and ev.get("response") is not None:
+            finale = ev["response"]
+            if not finale.get("output") and resto["items"]:
+                finale["output"] = resto["items"]
+                _estrai_immagini(finale, base_url)
+                _log(f"stream: evento finale ricostruito con {len(resto['items'])} item")
+                return b"data: " + json.dumps(ev).encode("utf-8")
+        return riga
 
     async def _concludi(self, stato, base_url, send):
         finale = _aggrega(stato["buffer"].decode("utf-8", errors="replace"))
