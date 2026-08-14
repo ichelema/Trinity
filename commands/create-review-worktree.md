@@ -157,6 +157,14 @@ Converti il path in formato Windows:
 3. Riscrivi il file.
 4. Verifica che `git -C "<worktree-path>" status` funzioni ancora.
 
+> **Nota — rimozione del worktree.** `git worktree remove` valida il
+> file `.git` interno del worktree e lo esige in formato POSIX: con il
+> path convertito in formato Windows la rimozione fallisce. Prima di
+> rimuovere il worktree, ripristina il valore `gitdir:` al formato POSIX
+> (es. `E:/` → `/e/`), poi esegui `git worktree remove`. Non usare mai
+> `git worktree prune` come scorciatoia: su questa macchina ha già
+> cancellato worktree e branch estranei.
+
 ## Verifica finale
 
 Nel nuovo worktree verifica che:
