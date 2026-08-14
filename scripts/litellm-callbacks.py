@@ -4,6 +4,26 @@ from litellm.caching.caching import DualCache
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
 
+# Sessioni per cui iniettare i tool provider-native (stesso valore usato dal
+# ponte responses_bridge; il client lo manda come `litellm_session_id`).
+SESSIONI_TYPINGMIND = {"typingmind"}
+
+# Tool provider-native da accodare. `search_context_size: high` amplia il
+# contesto raccolto dalla ricerca web rispetto al 'medium' di default.
+# Su image_generation NON si imposta `quality`: il backend la normalizza
+# sempre a 'auto' (verificato con low/medium/hd, nessun errore e nessun
+# effetto), mentre `moderation` viene rispettata.
+TOOL_NATIVI = (
+    {
+        "type": "web_search",
+        "search_context_size": "high",
+        # I modelli 5.6 dichiarano web_search_tool_type "text_and_image":
+        # senza questo campo la ricerca resta solo testuale.
+        "search_content_types": ["text", "image"],
+    },
+    {"type": "image_generation", "moderation": "low"},
+)
+
 
 class SystemToInstructions(CustomLogger):
     """
@@ -30,6 +50,27 @@ class SystemToInstructions(CustomLogger):
     def _is_chatgpt(self, model: str) -> bool:
         m = (model or "").lower()
         return m.startswith("chatgpt/") or m.startswith("claude-gpt-")
+
+    def _effort_configurato(self, model) -> Optional[str]:
+        """Effort dichiarato nel config per l'alias, o None.
+
+        Nel config convivono due forme: `reasoning_effort: high` e, per max,
+        `reasoning_effort: {effort: max}`.
+        """
+        try:
+            from litellm.proxy.proxy_server import llm_router
+
+            if llm_router is None:
+                return None
+            for deployment in llm_router.get_model_list(model_name=model) or []:
+                valore = (deployment.get("litellm_params") or {}).get("reasoning_effort")
+                if isinstance(valore, dict):
+                    valore = valore.get("effort")
+                if valore:
+                    return str(valore)
+        except Exception:  # noqa: BLE001 - mai far fallire la richiesta per questo
+            pass
+        return None
 
     def _to_str(self, content) -> str:
         """Normalizza string o lista di content-block Anthropic a stringa pura."""
@@ -87,6 +128,41 @@ class SystemToInstructions(CustomLogger):
 
         if instr_parts:
             data["instructions"] = "\n\n".join(instr_parts)
+
+        # TypingMind non sa inviare i tool provider-native, e aggiungerli come
+        # body param sostituisce l'array dei plugin invece di fondersi con esso
+        # (i plugin sparirebbero: canvas, filesystem, ...). Qui si accodano ai
+        # tool che il client ha già mandato, così convivono.
+        if data.get("litellm_session_id") in SESSIONI_TYPINGMIND:
+            tools = data.get("tools")
+            if not isinstance(tools, list):
+                tools = []
+            for nativo in TOOL_NATIVI:
+                esistente = next(
+                    (t for t in tools
+                     if isinstance(t, dict) and t.get("type") == nativo["type"]),
+                    None,
+                )
+                if esistente is None:
+                    tools.append(dict(nativo))
+                else:
+                    # TypingMind manda il tool nudo (es. il toggle "Web
+                    # Browser" invia {"type": "web_search"}): si completano i
+                    # parametri mancanti senza toccare le scelte del client.
+                    for chiave, valore in nativo.items():
+                        esistente.setdefault(chiave, valore)
+            data["tools"] = tools
+
+            # TypingMind manda un blocco `reasoning` senza effort (osservato:
+            # `{}` oppure `{"summary": "auto"}`). Quel blocco sostituisce il
+            # valore mappato da reasoning_effort, quindi senza questo innesto
+            # il modello ricadrebbe sul default del server (medium) invece di
+            # usare l'effort dell'alias scelto.
+            reasoning = data.get("reasoning")
+            if isinstance(reasoning, dict) and not reasoning.get("effort"):
+                effort = self._effort_configurato(data.get("model"))
+                if effort:
+                    reasoning["effort"] = effort
 
         return data
 
