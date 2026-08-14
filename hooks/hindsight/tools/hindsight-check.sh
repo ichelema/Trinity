@@ -510,6 +510,30 @@ else
 	ko "definizioni mental_models mancanti in config ($MM_CFG)"
 fi
 
+# Per-progetto (ICH-77): le nuove chiavi devono essere riconosciute coi default
+# attesi e mental_model_bank_urls deve tornare URL bank-scoped, deduplicati, non vuoti.
+MM_BANKS=$(
+	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+cfg = hc.load_config()
+ok = True
+if cfg.get("mental_model_inject_banks") != ["auto", "core"]:
+    ok = False
+if cfg.get("project_mental_models") != [] or cfg.get("project_mental_models_inject_ids") != []:
+    ok = False
+urls = hc.mental_model_bank_urls(cfg)
+ok = ok and bool(urls) and all("/banks/" in u for u in urls) and len(urls) == len(set(urls))
+print("OK" if ok else "KO")
+PY
+)
+if [ "$MM_BANKS" = "OK" ]; then
+	ok "chiavi mental model per-progetto + mental_model_bank_urls coerenti"
+else
+	ko "chiavi mental model per-progetto o helper incoerenti ($MM_BANKS)"
+fi
+
 MM_LIVE=$(curl -s -m 5 "$API_BASE/mental-models" 2>/dev/null | python -c "
 import json,sys
 ids={i.get('id') for i in json.load(sys.stdin).get('items',[])}

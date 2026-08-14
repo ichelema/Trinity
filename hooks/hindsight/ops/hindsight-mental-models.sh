@@ -2,7 +2,8 @@
 # Utility (NON hook): gestione delle "knowledge page" Hindsight (mental model).
 # Un mental model e' una reflection pinnata: documento vivo rigenerato eseguendo
 # una source_query via reflect. Le definizioni stanno in hindsight.config.json
-# (chiave "mental_models"); qui si fanno seed/list/show/refresh via REST.
+# (chiave "mental_models" per i modelli CORE, "project_mental_models" per quelli
+# del progetto); qui si fanno seed/list/show/refresh via REST sul bank risolto dal cwd.
 #
 # Uso:
 #   bash hindsight-mental-models.sh seed                # crea le pagine mancanti (idempotente)
@@ -18,13 +19,28 @@ export HOOKS_DIR
 . "$HOOKS_DIR/../lib/hs-python.sh"
 
 "$HS_PY" - "$@" <<'PY'
-import json, os, sys, urllib.request, urllib.error
+import json, os, subprocess, sys, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "..", "lib"))
-from hindsight_config import load_config
+from hindsight_config import load_config, resolve_bank, bank_url
+
+# Config per-progetto: gli hook ricevono CLAUDE_PROJECT_DIR da Claude Code, ma
+# questo script gira a mano. Ricava il toplevel git del cwd e lo imposta, cosi'
+# load_config carica l'eventuale hindsight.config.json del progetto (project_mental_models).
+try:
+    _root = subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"], cwd=os.getcwd(),
+        stderr=subprocess.DEVNULL, text=True).strip()
+except Exception:
+    _root = ""
+if _root:
+    os.environ["CLAUDE_PROJECT_DIR"] = _root
 
 cfg = load_config()
-BASE = cfg["api_url"]
+cwd = os.getcwd()
+_core = (cfg.get("bank") or {}).get("core_bank", "")
+_bank = resolve_bank((cfg.get("bank") or {}).get("retain_bank", "auto"), cfg, cwd)
+BASE = bank_url(cfg, _bank)
 
 
 def req(method, path, body=None, timeout=90):
@@ -76,7 +92,11 @@ elif cmd == "show":
 elif cmd == "seed":
     existing = {m.get("id") for m in list_models()}
     created = skipped = 0
-    for spec in cfg.get("mental_models", []):
+    # Quali modelli? I modelli CORE vivono nel core; quelli del PROGETTO
+    # (project_mental_models) nel bank del progetto. La scelta segue il bank
+    # risolto per il cwd (speculare a dove scrivono i fatti via retain_bank).
+    specs = cfg.get("mental_models", []) if _bank == _core else cfg.get("project_mental_models", [])
+    for spec in specs:
         mid = spec.get("id")
         if not mid or not spec.get("source_query"):
             print(f"! definizione incompleta, salto: {spec}", file=sys.stderr)

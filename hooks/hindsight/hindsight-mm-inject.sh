@@ -18,7 +18,7 @@ PYTHONUTF8=1 "$HS_PY" <<'PY' 2>/dev/null
 import json, os, sys, time, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
-from hindsight_config import load_config
+from hindsight_config import load_config, resolve_bank, bank_url
 
 cfg = load_config()
 
@@ -27,9 +27,32 @@ cfg = load_config()
 if not cfg.get("mental_models_inject_on_start"):
     sys.exit(0)
 
-base = cfg["api_url"]
-ids = cfg.get("mental_models_inject_ids") or []
-if not ids:
+core = (cfg.get("bank") or {}).get("core_bank", "trinity-project")
+names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
+
+# (url, [ids]) per ogni bank risolto, dedup per NOME. I modelli CORE sono filtrati
+# da mental_models_inject_ids, quelli di PROGETTO da project_mental_models_inject_ids.
+targets = []
+_seen = set()
+for n in names:
+    b = resolve_bank(n, cfg)
+    if not b or b in _seen:
+        continue
+    _seen.add(b)
+    if b == core:
+        _ids = cfg.get("mental_models_inject_ids") or []
+    else:
+        _ids = cfg.get("project_mental_models_inject_ids") or []
+    if _ids:
+        targets.append((bank_url(cfg, b), _ids))
+
+# Coppie (url, id) da iniettare, in ordine di bank (progetto poi core).
+pairs = []
+for url, _ids in targets:
+    for mid in _ids:
+        pairs.append((url, mid))
+
+if not pairs:
     sys.exit(0)
 
 
@@ -61,16 +84,20 @@ def wait_ready(url, deadline):
 # pronto e tornerebbero a mani vuote. Attendi la readiness (budget affine a ensure-up),
 # poi procedi; se non e' pronto entro il budget, esci pulito (best-effort invariato).
 # Un 404 sul primo id conta come pronto: server e DB su, l'id semplicemente non c'e'.
-if not wait_ready(f"{base}/mental-models/{ids[0]}", time.monotonic() + 20):
+if not wait_ready(f"{pairs[0][0]}/mental-models/{pairs[0][1]}", time.monotonic() + 20):
     sys.exit(0)
 
 blocks = []
-for mid in ids:
+_seen_ids = set()
+for url, mid in pairs:
+    if mid in _seen_ids:
+        continue  # dedup per id: un id di progetto non deve riusare gli id core
+    _seen_ids.add(mid)
     try:
         # detail=content: senza, il default e' "full" che trascina anche il
         # reflect_response (provenance, anche centinaia di KB) — qui inutile,
         # servono solo name e content.
-        req = urllib.request.Request(f"{base}/mental-models/{mid}?detail=content", method="GET")
+        req = urllib.request.Request(f"{url}/mental-models/{mid}?detail=content", method="GET")
         with urllib.request.urlopen(req, timeout=2) as res:
             m = json.loads(res.read().decode("utf-8", errors="replace"))
     except Exception:
