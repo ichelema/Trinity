@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 # Logica condivisa dai git hook post-commit / post-merge.
 #
-# Se la sorgente versionata della callback LiteLLM è tra i file cambiati,
-# lancia il deploy idempotente che la copia in $HOME/.litellm/callbacks.py
-# (o $LITELLM_CONFIG_DIR). Nessun path hardcoded: la destinazione la decide
+# Se una delle sorgenti versionate dei moduli LiteLLM è tra i file cambiati,
+# lancia il deploy idempotente che le copia in $HOME/.litellm/ (o in
+# $LITELLM_CONFIG_DIR). Nessun path hardcoded: la destinazione la decide
 # scripts/deploy-litellm-callback.sh.
 
-TARGET="scripts/litellm-callbacks.py"
+TARGETS=(
+	"scripts/litellm-callbacks.py"
+	"scripts/litellm-responses-bridge.py"
+)
 
 # deploy_if_changed <file>...  — $@ = elenco di path (relativi alla root repo)
 deploy_if_changed() {
-	local f
+	local f t
 	for f in "$@"; do
-		if [ "$f" = "$TARGET" ]; then
-			local repo
-			repo="$(git rev-parse --show-toplevel)"
-			echo "[git hook] $TARGET modificato → deploy callback LiteLLM"
-			bash "$repo/scripts/deploy-litellm-callback.sh"
-			return $?
-		fi
+		for t in "${TARGETS[@]}"; do
+			if [ "$f" = "$t" ]; then
+				local repo
+				repo="$(git rev-parse --show-toplevel)"
+				echo "[git hook] $f modificato → deploy moduli LiteLLM"
+				bash "$repo/scripts/deploy-litellm-callback.sh"
+				return $?
+			fi
+		done
 	done
 }
