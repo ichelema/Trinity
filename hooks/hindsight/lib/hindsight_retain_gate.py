@@ -94,9 +94,13 @@ Rules:
 1. action "retain": set preview to ONE short self-contained sentence, in the same language as the conversation, stating WHAT gets stored and WHY it matters (favour the why over the what).
 2. action "skip": set preview to "".
 3. action "uncertain": when the window contains knowledge that WOULD be durable but is not yet confirmed — an unverified hypothesis with concrete value, a provisional decision, conflicting sources — or when retain and skip both seem defensible; set preview to the short summary you would store.
-4. duplicate_of: indices of the provided existing memories that already cover the same facts. If the window adds nothing beyond them, use action "skip" with reason "duplicate".
-5. Judge the window as a whole: one durable fact is enough to retain.
-6. context: ONE short line, in the same language as the conversation, describing the technical domain the window is about — subject and project, not an activity and not a bare category (e.g. "architettura del recall automatico Hindsight nel plugin Trinity", NOT "tooling"). Fill it for every action; empty string only if the window has no technical subject."""
+4. reason must match the action:
+   - action "retain": durable_decision, root_cause_or_workaround, environment_constraint, convention_or_preference, discarded_approach
+   - action "skip": trivial_or_ephemeral, repo_recoverable, intermediate_attempt, duplicate, no_durable_knowledge
+   - action "uncertain": borderline (the only reason it admits)
+5. duplicate_of: indices of the provided existing memories that already cover the same facts. Set it ONLY with action "skip" and reason "duplicate"; if the window adds something beyond the existing memories, leave it empty. If the window adds nothing beyond them, use action "skip" with reason "duplicate".
+6. Judge the window as a whole: one durable fact is enough to retain.
+7. context: ONE short line, in the same language as the conversation, describing the technical domain the window is about — subject and project, not an activity and not a bare category (e.g. "architettura del recall automatico Hindsight nel plugin Trinity", NOT "tooling"). Fill it for every action; empty string only if the window has no technical subject."""
 
 
 @dataclass
@@ -192,9 +196,12 @@ def evaluate_retain(
     cfg: dict,
     api_call: ApiCall = api_json,
 ) -> GateResult:
-    """Valuta la finestra. Fail-closed: QUALSIASI errore (key assente, timeout,
-    HTTP, JSON, schema violato, indici duplicato fuori range) => "skip" con
-    error valorizzato — in enforce non si salva niente, in shadow si logga."""
+    """Valuta la finestra. Le violazioni STRUTTURALI della risposta (enum fuori
+    schema, tipi errati, indici fuori range o ripetuti) e gli errori tecnici
+    (key assente, timeout, HTTP, JSON) => "skip" con error valorizzato, che il
+    worker tratta come fail-open. Le violazioni SEMANTICHE (action e reason
+    entrambe valide ma male accoppiate) vengono invece normalizzate senza
+    errore: la action decisa dal modello non cambia mai."""
     timeout = float(cfg.get("retain_gate_timeout", 15))
     model = str(cfg.get("retain_gate_model", "gpt-5.6-luna"))
     candidates = fetch_duplicate_candidates(bank_urls, dedup_query(summary), timeout)
@@ -212,30 +219,40 @@ def evaluate_retain(
         preview = data.get("preview")
         duplicate_of = data.get("duplicate_of")
         context = data.get("context")
-        if action not in GATE_ACTIONS:
-            raise ValueError("action non valida")
-        if reason not in GATE_REASONS:
-            raise ValueError("reason non valida")
-        if reason not in REASONS_BY_ACTION[action]:
-            raise ValueError("reason incompatibile con action")
+        if not isinstance(action, str) or action not in GATE_ACTIONS:
+            raise ValueError(f"action non valida: {action!r}")
+        if not isinstance(reason, str) or reason not in GATE_REASONS:
+            raise ValueError(f"reason non valida: {reason!r}")
         if not isinstance(preview, str):
-            raise ValueError("preview non valida")
+            raise ValueError(f"preview non valida: {preview!r}")
         if not isinstance(context, str):
-            raise ValueError("context non valido")
+            raise ValueError(f"context non valido: {context!r}")
         if action == "retain" and not preview.strip():
             raise ValueError("preview vuota su action retain")
         if not isinstance(duplicate_of, list) or any(
             isinstance(i, bool) or not isinstance(i, int) for i in duplicate_of
         ):
-            raise ValueError("duplicate_of non valido")
+            raise ValueError(f"duplicate_of non valido: {duplicate_of!r}")
         if len(set(duplicate_of)) != len(duplicate_of) or any(
             not 0 <= i < len(candidates) for i in duplicate_of
         ):
-            raise ValueError("indici duplicato fuori range o duplicati")
-        if reason == "duplicate" and (action != "skip" or not duplicate_of):
-            raise ValueError("reason duplicate richiede action skip e duplicate_of")
-        if duplicate_of and reason != "duplicate":
-            raise ValueError("duplicate_of richiede reason duplicate")
+            raise ValueError(
+                f"indici duplicato fuori range o duplicati: {duplicate_of!r} "
+                f"su {len(candidates)} candidati"
+            )
+        # Violazioni SEMANTICHE (reason valida ma male accoppiata alla action,
+        # duplicate_of fuori dal caso skip+duplicate): qui la action del
+        # modello e' affidabile e va rispettata — degradare a gate_error
+        # produrrebbe il fail-open del worker, cioe' il salvataggio diretto di
+        # finestre giudicate uncertain o skip. Si normalizzano i soli metadati:
+        # la reason dichiarata resta com'e' (finisce nel debug log del worker),
+        # duplicate_of vale solo per skip+duplicate (i candidati citati restano
+        # comunque in GateResult.candidates).
+        if duplicate_of and (action != "skip" or reason != "duplicate"):
+            duplicate_of = []
+        if action == "skip" and reason == "duplicate" and not duplicate_of:
+            # Claim di duplicato senza indici a supporto: l'esito resta skip.
+            reason = "no_durable_knowledge"
         return GateResult(
             action=action,
             reason=reason,

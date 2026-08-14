@@ -48,6 +48,7 @@ class Args:
     workers = 1
     dry_run_extract = 0
     bench_bank = "unused"
+    dedup_bank_url = ""
 
 
 class RetainGateBenchmarkTests(unittest.TestCase):
@@ -70,7 +71,7 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         self.banks_patch.start()
         self.addCleanup(self.banks_patch.stop)
 
-    def run_evaluate(self, labels, results, *, with_dedup=True):
+    def run_evaluate(self, labels, results, *, with_dedup=True, dedup_bank_url="", seen_bank_urls=None):
         windows = [
             {"id": label["id"], "content": label["id"], "turns": []}
             for label in labels
@@ -80,10 +81,13 @@ class RetainGateBenchmarkTests(unittest.TestCase):
             return windows if path == self.bench.WINDOWS_FILE else labels
 
         def evaluate_retain(content, summary, bank_urls, cfg):
+            if seen_bank_urls is not None:
+                seen_bank_urls.append(bank_urls)
             return results[content]
 
         args = Args()
         args.with_dedup = with_dedup
+        args.dedup_bank_url = dedup_bank_url
         output = io.StringIO()
         with mock.patch.object(self.bench, "read_jsonl", side_effect=read_jsonl), mock.patch.object(
             self.bench, "evaluate_retain", side_effect=evaluate_retain
@@ -147,10 +151,40 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("categorie mancanti: semantic", output)
 
+    def test_dataset_without_duplicates_keeps_exit_zero(self):
+        labels = [
+            {"id": "keep", "expected_action": "retain"},
+            {"id": "drop", "expected_action": "skip"},
+        ]
+        results = {
+            "keep": FakeResult("retain", "durable", []),
+            "drop": FakeResult("skip", "ephemeral", []),
+        }
+        rc, output = self.run_evaluate(labels, results, with_dedup=False)
+        self.assertEqual(rc, 0)
+        self.assertIn("n/a", output)
+        self.assertNotIn("target 100% FAIL", output)
+
     def test_duplicate_labels_require_dedup(self):
         rc, output = self.run_evaluate(self.labels(), {}, with_dedup=False)
         self.assertEqual(rc, 1)
         self.assertIn("richiedono --with-dedup", output)
+
+    def test_dedup_bank_url_replaces_real_banks(self):
+        results = {
+            "exact": FakeResult("skip", "duplicate", [0], [{"id": "memory-exact"}]),
+            "semantic": FakeResult("skip", "duplicate", [0], [{"id": "memory-semantic"}]),
+        }
+        seen: list[list[str]] = []
+        rc, _output = self.run_evaluate(
+            self.labels(),
+            results,
+            dedup_bank_url="http://bench-bank",
+            seen_bank_urls=seen,
+        )
+        self.assertEqual(rc, 0)
+        self.assertTrue(all(urls == ["http://bench-bank"] for urls in seen))
+        self.bench.recall_bank_urls.assert_not_called()
 
 
 if __name__ == "__main__":

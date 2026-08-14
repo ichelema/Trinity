@@ -21,6 +21,7 @@ from unittest import mock
 from lib import hindsight_config
 from lib.hindsight_retain_gate import (
     GATE_ACTIONS,
+    GATE_PROMPT,
     GATE_REASONS,
     GATE_SCHEMA,
     REASONS_BY_ACTION,
@@ -113,7 +114,6 @@ class GateModuleTests(unittest.TestCase):
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": ["0"], "context": ""},
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [True], "context": ""},
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [0], "context": ""},  # fuori range: 0 candidati
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": ""},
             {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": 5},  # context non stringa
         ]
         for payload in bad_payloads:
@@ -177,43 +177,94 @@ class GateModuleTests(unittest.TestCase):
             )
             self.assertEqual(duplicated_index.reason, "gate_error")
 
-            for payload in (
-                {
+            # Combo SEMANTICHE (fix ICH-72): niente gate_error, la action del
+            # modello resta e i metadati vengono normalizzati.
+            retain_with_indices = evaluate_retain(
+                "finestra",
+                summary,
+                ["http://bank"],
+                cfg,
+                fake_api({
+                    "action": "retain",
+                    "reason": "durable_decision",
+                    "preview": "Salvo X.",
+                    "duplicate_of": [0],
+                    "context": "",
+                }),
+            )
+            self.assertEqual(retain_with_indices.action, "retain")
+            self.assertEqual(retain_with_indices.duplicate_of, [])
+            self.assertEqual(retain_with_indices.candidates, candidates)
+            self.assertIsNone(retain_with_indices.error)
+
+            retain_claiming_duplicate = evaluate_retain(
+                "finestra",
+                summary,
+                ["http://bank"],
+                cfg,
+                fake_api({
                     "action": "retain",
                     "reason": "duplicate",
                     "preview": "Memoria duplicata.",
                     "duplicate_of": [0],
                     "context": "",
-                },
-                {
+                }),
+            )
+            self.assertEqual(retain_claiming_duplicate.action, "retain")
+            self.assertEqual(retain_claiming_duplicate.duplicate_of, [])
+            self.assertIsNone(retain_claiming_duplicate.error)
+
+            unclaimed_duplicate = evaluate_retain(
+                "finestra",
+                summary,
+                ["http://bank"],
+                cfg,
+                fake_api({
                     "action": "skip",
                     "reason": "duplicate",
                     "preview": "",
                     "duplicate_of": [],
                     "context": "",
-                },
-                {
+                }),
+            )
+            self.assertEqual(unclaimed_duplicate.action, "skip")
+            # claim di duplicato senza indici: degradato a skip "neutro"
+            self.assertEqual(unclaimed_duplicate.reason, "no_durable_knowledge")
+            self.assertIsNone(unclaimed_duplicate.error)
+
+            stray_indices = evaluate_retain(
+                "finestra",
+                summary,
+                ["http://bank"],
+                cfg,
+                fake_api({
                     "action": "skip",
                     "reason": "trivial_or_ephemeral",
                     "preview": "",
                     "duplicate_of": [0],
                     "context": "",
-                },
-            ):
-                inconsistent = evaluate_retain(
-                    "finestra", summary, ["http://bank"], cfg, fake_api(payload)
-                )
-                self.assertEqual(inconsistent.reason, "gate_error", payload)
+                }),
+            )
+            self.assertEqual(stray_indices.action, "skip")
+            self.assertEqual(stray_indices.reason, "trivial_or_ephemeral")
+            self.assertEqual(stray_indices.duplicate_of, [])
+            self.assertIsNone(stray_indices.error)
 
-    def test_reason_must_match_action(self):
+    def test_mismatched_reason_preserves_action(self):
+        """Fix ICH-72: action e reason valide ma male accoppiate NON degradano
+        piu' a gate_error (che il worker tratta come fail-open, cioe' POST
+        diretta anche per finestre giudicate uncertain/skip): la action del
+        modello resta e la reason viene accettata com'e'."""
         cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
         summary = {"turns": []}
-        contradictory = (
+        mismatched = (
+            # i primi due sono i casi reali del debug log (2026-08-14)
+            ("uncertain", "root_cause_or_workaround", "Forse salvo X."),
+            ("uncertain", "environment_constraint", "Forse salvo Y."),
             ("retain", "trivial_or_ephemeral", "Salvo X."),
             ("skip", "durable_decision", ""),
-            ("uncertain", "repo_recoverable", "Forse salvo X."),
         )
-        for action, reason, preview in contradictory:
+        for action, reason, preview in mismatched:
             result = evaluate_retain(
                 "finestra",
                 summary,
@@ -227,9 +278,10 @@ class GateModuleTests(unittest.TestCase):
                     "context": "dominio di prova",
                 }),
             )
-            self.assertEqual(result.reason, "gate_error", (action, reason))
-            self.assertIsNotNone(result.error, (action, reason))
-            self.assertIn("incompatibile", result.error or "", (action, reason))
+            self.assertEqual(result.action, action, (action, reason))
+            self.assertEqual(result.reason, reason, (action, reason))
+            self.assertEqual(result.preview, preview, (action, reason))
+            self.assertIsNone(result.error, (action, reason))
 
     def test_reason_map_covers_schema_without_overlap(self):
         self.assertEqual(set(REASONS_BY_ACTION), GATE_ACTIONS)
@@ -328,6 +380,10 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(set(GATE_SCHEMA["properties"]["action"]["enum"]), GATE_ACTIONS)
         self.assertEqual(set(GATE_SCHEMA["properties"]["reason"]["enum"]), GATE_REASONS)
         self.assertNotIn("gate_error", GATE_REASONS)  # sentinella solo fail-closed
+        # La mappa reason->action e' esplicita anche nel prompt: ogni action e
+        # ogni reason del validatore devono comparirvi (niente drift silenzioso).
+        for name in sorted(GATE_ACTIONS | GATE_REASONS):
+            self.assertIn(name, GATE_PROMPT, name)
 
 
 class FakeResponse:
@@ -668,6 +724,24 @@ class WorkerGateTests(unittest.TestCase):
         posted = json.loads(consent_post.call_args[0][0].data.decode("utf-8"))
         self.assertEqual(len(posted["items"]), 1)
         self.assertIn("document_id", posted["items"][0])
+
+    def test_uncertain_with_semantic_reason_still_pending(self):
+        # Regressione ICH-72: uncertain + reason semantica arrivava al worker
+        # come gate_error (fail-open) => POST diretta. Ora resta un uncertain
+        # normale: pending + domanda, nessun salvataggio silenzioso.
+        preview = "Salvo la causa radice appena confermata?"
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(),
+            GateResult(
+                action="uncertain", reason="root_cause_or_workaround", preview=preview
+            ),
+        )
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["decision"], "block")
+        self.assertIn(preview, lines[0]["reason"])
 
     def test_window_boundaries_ignore_synthetic_user_messages(self):
         def user(text):
