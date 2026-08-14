@@ -147,6 +147,59 @@ Il restore **rifiuta** se il DB locale ha scritture piu' recenti del dump
 consapevolmente con `--force`. Un dump di sicurezza `pre-restore-*` viene
 comunque creato.
 
+### 6.1 Due inciampi del Postgres embedded su Linux
+
+Entrambi incontrati il 2026-08-14 su CachyOS (Arch), durante il restore
+descritto in `MIGRAZIONE-EMBEDDING-LINUX.md`.
+
+**`CREATE DATABASE` rifiutato per collation version.** Quando la glibc di
+sistema viene aggiornata (qui 2.43 -> 2.44) il cluster resta indietro e
+Postgres 18 blocca la creazione di nuovi database dal template:
+
+```
+ERROR: template database "template1" has a collation version mismatch
+```
+
+Il restore muore subito dopo il dump di sicurezza, senza toccare il DB
+reale. Si allinea una volta sola, e i database creati dopo nascono gia'
+corretti (quello ripristinato compreso):
+
+```bash
+PSQL=$(echo "$HOME"/.pg0/installation/*/bin/psql)
+for db in template1 postgres; do
+  "$PSQL" "postgresql://hindsight:hindsight@127.0.0.1:5432/postgres" \
+    -c "ALTER DATABASE $db REFRESH COLLATION VERSION;"
+done
+```
+
+Il `REFRESH` dichiara solo che le collation sono allineate: su un DB con
+indici testuali andrebbe seguito da un `REINDEX`, ma qui i due database
+sono vuoti e quello di lavoro viene ricreato dal dump.
+
+**`psql`/`pg_ctl` a mano non partono.** I binari portabili di pg0 cercano
+le proprie librerie (libicu 70 & c.), che il loader di sistema non
+conosce — su Arch c'e' la 78:
+
+```
+error while loading shared libraries: libicuuc.so.70
+```
+
+Serve indicarle esplicitamente; gli script del repo lo fanno gia' da se',
+il problema si presenta solo nei comandi lanciati a mano:
+
+```bash
+export LD_LIBRARY_PATH="$HOME/.pg0/installation/18.1.0/lib:${LD_LIBRARY_PATH:-}"
+```
+
+E per avviare il cluster fuori dal server MCP (es. per un'ispezione)
+serve anche `-k /tmp`: la socket dir di default `/run/postgresql` la crea
+solo il servizio systemd di sistema, che qui non e' in uso.
+
+```bash
+pg_ctl -D "$HOME/.pg0/instances/hindsight-mcp/data" -o "-k /tmp" \
+  -l /tmp/pg-manuale.log start
+```
+
 ## 7. Timer schedulati
 
 Solo i job che hanno senso sul server: vedi `scheduler/systemd/README.md`
