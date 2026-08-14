@@ -296,6 +296,7 @@ progetto (sono file del plugin, non del singolo progetto):
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — attivo, richiede l'app Obsidian in ascolto su :3002 |
 | `debugger` | stdio (node, exe-free) | debug **autonomo** di Claude (mcp-debugger): breakpoint, step, variabili su Python/Ruby/JavaScript, 21 tool |
 | `neovim` | stdio (node, exe-free) | pair-debugging sulla sessione **nvim-dap dell'utente** (fork `ichelema/mcp-neovim-server`): 21 tool `dap_*` + 18 `vim_*` |
+| `linear` | http (remoto, `mcp.linear.app/mcp`) | issue, progetti e cicli di Linear: 53 tool `mcp__linear__*` sul workspace `Ichelema` |
 
 Il server `hindsight` (memoria persistente, vedi §9) dal 2026-07-10 **non** sta più nel
 `.mcp.json`: è registrato a **scope user** (`claude mcp add-json hindsight --scope user`)
@@ -307,15 +308,23 @@ readiness del server e fa da ponte verso `http://127.0.0.1:8888/mcp/<bank>/` via
 definizione `hindsight` a scope project: due scope con lo stesso nome generano il warning
 "Conflicting scopes" a ogni sessione.
 
-`ticktick` è l'unico server **remoto**: è gestito da TickTick
-(`https://mcp.ticktick.com/`, Streamable HTTP), quindi non ha runtime locale né
-processo da avviare. Si autentica con un Bearer token letto a runtime da
+`ticktick` e `linear` sono i due server **remoti**: nessuno dei due ha runtime
+locale o processo da avviare, ma si autenticano in modo diverso.
+
+`ticktick` è gestito da TickTick
+(`https://mcp.ticktick.com/`, Streamable HTTP). Si autentica con un Bearer token letto a runtime da
 `${TICKTICK_API_KEY}` — l'espansione delle variabili vale anche nei campi `url` e
 `headers`, così il segreto **non** entra nel repo: va definito per-macchina (§10). Il
 token si crea dal web di TickTick: avatar in alto a sinistra → *Settings > Account >
 API Token*; se un giorno viene revocato o scade, si rigenera da lì (il Bearer non ha
 refresh automatico). Copre task, liste, abitudini, focus record e countdown; le funzioni
 avanzate di TickTick non sono esposte.
+
+`linear` (dal 2026-08-08) usa invece **OAuth**, non un token nel file: alla prima
+sessione lo stato è *Needs authentication* e va completato a mano con `/mcp`, che
+apre il browser — l'agente non può farlo al posto tuo. Fatto una volta, espone 53
+tool `mcp__linear__*` sul workspace `Ichelema`. L'endpoint corretto è
+`https://mcp.linear.app/mcp` (Streamable HTTP); `/sse` è deprecato.
 
 Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
 `E:/AI/tools/notebooklm`, launcher con `truststore` per il proxy Eni): i file del plugin
