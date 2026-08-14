@@ -59,7 +59,7 @@
         "${MCP_NEOVIM_DIR}/build/index.js"
       ],
       "env": {
-        "NVIM_SOCKET_PATH": "//./pipe/claude-debug-trinity"
+        "NVIM_SOCKET_PATH": "${NVIM_SOCKET_PATH:-//./pipe/claude-debug-trinity}"
       }
     },
     "ticktick": {
