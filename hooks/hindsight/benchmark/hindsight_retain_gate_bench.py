@@ -19,7 +19,13 @@ Due fasi, stessa filosofia di hindsight_recall_gate_bench.py:
 
 Formato label (una riga JSONL per finestra, allineata per "id"):
   {"id": "...", "expected_action": "retain|skip|uncertain", "reason": "...",
-   "durable_claims": ["..."], "duplicate_of": ["mem-..."], "critical": false}
+   "durable_claims": ["..."], "duplicate_of": ["mem-..."],
+   "duplicate_kind": "exact|semantic", "critical": false}
+
+`duplicate_kind` e' richiesto per misurare separatamente i target ICH-72:
+exact 100%, semantic >=85%. Il dataset deve contenere entrambe le categorie e
+l'evaluate dei duplicati richiede --with-dedup; input incompleto o target mancati
+restituiscono un codice di uscita non zero.
 
 I contenuti restano negli artefatti locali ignorati da Git; su stdout solo
 avanzamento, conteggi e metriche aggregate.
@@ -195,6 +201,29 @@ def evaluate(args) -> int:
         print(f"[evaluate] servono {WINDOWS_FILE} e {LABELS_FILE} (vedi --build-corpus)")
         return 1
     labeled = [(l, windows[l["id"]]) for l in labels if l.get("id") in windows]
+    duplicates = [label for label, _window in labeled if label.get("duplicate_of")]
+    invalid_kinds = [
+        label.get("id")
+        for label in duplicates
+        if label.get("duplicate_kind") not in {"exact", "semantic"}
+    ]
+    duplicate_kinds = {label.get("duplicate_kind") for label in duplicates}
+    if invalid_kinds:
+        print(
+            "[evaluate] duplicate_kind mancante/non valido per: "
+            + ", ".join(str(item) for item in invalid_kinds)
+        )
+        return 1
+    if duplicates and duplicate_kinds != {"exact", "semantic"}:
+        missing = {"exact", "semantic"} - duplicate_kinds
+        print(
+            "[evaluate] dataset duplicati incompleto; categorie mancanti: "
+            + ", ".join(sorted(missing))
+        )
+        return 1
+    if duplicates and not args.with_dedup:
+        print("[evaluate] le label duplicate richiedono --with-dedup")
+        return 1
     print(f"[evaluate] {len(labeled)} finestre etichettate, modello {cfg['retain_gate_model']}")
 
     bank_urls = recall_bank_urls(cfg) if args.with_dedup else []
@@ -222,7 +251,33 @@ def evaluate(args) -> int:
         if l["expected_action"] == "retain" and l.get("critical") and r.action != "retain"
     ]
     duplicates = [(l, w, r) for l, w, r in rows if l.get("duplicate_of")]
-    dup_suppressed = [x for x in duplicates if x[2].action != "retain"]
+    exact_duplicates = [
+        x for x in duplicates if x[0].get("duplicate_kind") == "exact"
+    ]
+    semantic_duplicates = [
+        x for x in duplicates if x[0].get("duplicate_kind") == "semantic"
+    ]
+
+    def detected_duplicate(row) -> bool:
+        label, _window, result = row
+        if not (
+            result.action == "skip"
+            and result.reason == "duplicate"
+            and result.duplicate_of
+        ):
+            return False
+        expected_ids = {str(item) for item in label.get("duplicate_of") or []}
+        detected_ids = {
+            str(result.candidates[index].get("id"))
+            for index in result.duplicate_of
+            if 0 <= index < len(result.candidates)
+            and result.candidates[index].get("id") is not None
+        }
+        return bool(expected_ids & detected_ids)
+
+    dup_suppressed = [x for x in duplicates if detected_duplicate(x)]
+    exact_suppressed = [x for x in exact_duplicates if detected_duplicate(x)]
+    semantic_suppressed = [x for x in semantic_duplicates if detected_duplicate(x)]
     uncertain = [x for x in rows if x[2].action == "uncertain"]
     latencies = [r.latency_ms for _l, _w, r in rows if r.latency_ms]
 
@@ -233,7 +288,19 @@ def evaluate(args) -> int:
     print(f"  copertura retain-worthy: {pct(tp, expected_retain):5.1f}%  ({len(tp)}/{len(expected_retain)})")
     print(f"  falsi negativi critici : {len(critical_fn)}")
     print(f"  riduzione POST         : {pct([x for x in rows if x[2].action != 'retain'], rows):5.1f}%")
-    print(f"  duplicati soppressi    : {pct(dup_suppressed, duplicates):5.1f}%  ({len(dup_suppressed)}/{len(duplicates)})")
+    print(f"  duplicati rilevati     : {pct(dup_suppressed, duplicates):5.1f}%  ({len(dup_suppressed)}/{len(duplicates)})")
+    exact_pct = pct(exact_suppressed, exact_duplicates)
+    exact_target = "PASS" if exact_pct >= 100 else "FAIL"
+    print(
+        f"  duplicati exact        : {exact_pct:5.1f}%  "
+        f"({len(exact_suppressed)}/{len(exact_duplicates)}) target 100% {exact_target}"
+    )
+    semantic_pct = pct(semantic_suppressed, semantic_duplicates)
+    semantic_target = "PASS" if semantic_pct >= 85 else "FAIL"
+    print(
+        f"  duplicati semantic     : {semantic_pct:5.1f}%  "
+        f"({len(semantic_suppressed)}/{len(semantic_duplicates)}) target >=85% {semantic_target}"
+    )
     print(f"  quota uncertain        : {pct(uncertain, rows):5.1f}%")
     print(f"  errori tecnici gate    : {pct(tech_errors, rows):5.1f}%  ({len(tech_errors)})")
     print(f"  latenza gate p95       : {percentile(latencies, 95) / 1000:.2f}s")
@@ -260,6 +327,11 @@ def evaluate(args) -> int:
                         "preview": result.preview,
                         "context": result.context,
                         "duplicate_of": result.duplicate_of,
+                        "duplicate_candidate_ids": [
+                            result.candidates[index].get("id")
+                            for index in result.duplicate_of
+                            if 0 <= index < len(result.candidates)
+                        ],
                         "latency_ms": result.latency_ms,
                         "error": result.error,
                     },
@@ -268,7 +340,7 @@ def evaluate(args) -> int:
                 + "\n"
             )
     print(f"[evaluate] dettaglio per finestra -> {RESULTS_FILE}")
-    return 0
+    return 0 if exact_pct >= 100 and semantic_pct >= 85 else 1
 
 
 def main() -> int:
