@@ -1,3 +1,19 @@
 {
-  "env": {}
+  "env": {
+    "EDITOR": "nvim",
+    "SUDO_ASKPASS": "/home/ichelema/.local/bin/sudo-askpass.sh",
+    "OBSIDIAN_VAULT": "/Dati/Obsidian/Sinapsi",
+    "OBSIDIAN_VAULT_NAME": "sinapsi",
+    "MCP_EXCALIDRAW_DIR": "/home/ichelema/.local/opt/mcp_excalidraw",
+    "MCP_DEBUGGER_DIR": "/Dati/AI/tools/mcp-debugger",
+    "MCP_NEOVIM_DIR": "/Dati/AI/tools/mcp-neovim-server",
+    "NVIM_SOCKET_PATH": "/run/user/1001/claude-debug-Trinity",
+    "NOTEBOOKLM_DATA": "/Dati/AI/tools/notebooklm-data",
+    "NOTEBOOKLM_LIB": "/home/ichelema/.local/share/mise/installs/python/3.13/lib/python3.13/site-packages",
+    "PLAYWRIGHT_MCP_BROWSER": "chromium"
+  },
+  "model": "opus",
+  "enabledPlugins": {
+    "lua-lsp@claude-plugins-official": true
+  }
 }
