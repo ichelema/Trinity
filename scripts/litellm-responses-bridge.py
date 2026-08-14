@@ -1,0 +1,249 @@
+"""Ponte /v1/responses per client che non gestiscono SSE (TypingMind).
+
+Due problemi risolti, entrambi a livello di trasporto HTTP — per questo non
+possono stare in ``callbacks.py``, che vede solo i dati Python della chiamata:
+
+1. Il backend ChatGPT (Codex OAuth) risponde SEMPRE in ``text/event-stream``,
+   anche quando il client ha chiesto una risposta normale: TypingMind fa
+   ``JSON.parse`` sul flusso e fallisce con "Unexpected token 'd', data:...".
+   Qui il flusso viene aggregato nell'oggetto ``response`` finale.
+   NB: l'evento ``response.completed`` arriva con ``output`` VUOTO — i
+   contenuti reali stanno negli eventi ``response.output_item.done``.
+
+2. Le immagini arrivano come item ``image_generation_call`` con il PNG in
+   base64 nel campo ``result``: TypingMind non sa renderizzarlo. Il PNG viene
+   salvato su disco, servito da ``GET /img/<nome>`` e sostituito da un link
+   markdown nel testo del messaggio, che invece viene renderizzato.
+
+PERIMETRO — il ponte si attiva SOLO se valgono tutte queste condizioni:
+  - metodo POST sul path esatto ``/v1/responses``;
+  - il corpo contiene ``litellm_session_id`` fra quelli abilitati
+    (default: ``typingmind``, override con RESPONSES_BRIDGE_SESSIONS);
+  - il client NON ha chiesto ``stream``;
+  - la risposta a monte è davvero ``text/event-stream``.
+Claude Code (``/v1/messages``) e Hindsight (``/v1/chat/completions``) non
+passano di qui in nessun caso.
+"""
+import base64
+import hashlib
+import json
+import os
+import time
+
+_DIR = os.path.dirname(os.path.abspath(__file__))
+IMG_DIR = os.path.join(_DIR, "images")
+GIORNI_RITENZIONE = int(os.environ.get("RESPONSES_BRIDGE_RETENTION_DAYS", "7"))
+SESSIONI = {s.strip() for s in os.environ.get(
+    "RESPONSES_BRIDGE_SESSIONS", "typingmind").split(",") if s.strip()}
+PATH = "/v1/responses"
+
+
+LOG_FILE = os.path.join(_DIR, "bridge.log")
+
+
+def _log(msg):
+    print(f"[responses-bridge] {msg}", flush=True)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except OSError:
+        pass
+
+
+def _pulisci_vecchie():
+    """Le immagini pesano ~2,5 MB l'una: senza pulizia la cartella cresce."""
+    if not os.path.isdir(IMG_DIR):
+        return
+    limite = time.time() - GIORNI_RITENZIONE * 86400
+    rimosse = 0
+    for nome in os.listdir(IMG_DIR):
+        percorso = os.path.join(IMG_DIR, nome)
+        try:
+            if os.path.isfile(percorso) and os.path.getmtime(percorso) < limite:
+                os.remove(percorso)
+                rimosse += 1
+        except OSError:
+            pass
+    if rimosse:
+        _log(f"pulizia: rimosse {rimosse} immagini più vecchie di {GIORNI_RITENZIONE} giorni")
+
+
+def _aggrega(testo_sse):
+    """Da flusso SSE all'oggetto response finale, con l'output ricostruito."""
+    finale = None
+    items = []
+    for riga in testo_sse.splitlines():
+        if not riga.startswith("data: "):
+            continue
+        dato = riga[6:].strip()
+        if not dato or dato == "[DONE]":
+            continue
+        try:
+            ev = json.loads(dato)
+        except ValueError:
+            continue
+        tipo = ev.get("type")
+        if tipo == "response.completed" and ev.get("response"):
+            finale = ev["response"]
+        elif tipo == "response.output_item.done" and ev.get("item"):
+            items.append(ev["item"])
+    if finale is not None and not finale.get("output") and items:
+        finale["output"] = items
+    return finale
+
+
+def _estrai_immagini(finale, base_url):
+    """Salva i PNG, li sostituisce con link markdown, alleggerisce il JSON."""
+    urls = []
+    for item in finale.get("output", []):
+        if item.get("type") != "image_generation_call" or not item.get("result"):
+            continue
+        try:
+            raw = base64.b64decode(item["result"])
+        except Exception:
+            continue
+        ext = item.get("output_format") or "png"
+        nome = f"{hashlib.sha1(raw).hexdigest()[:16]}.{ext}"
+        os.makedirs(IMG_DIR, exist_ok=True)
+        with open(os.path.join(IMG_DIR, nome), "wb") as f:
+            f.write(raw)
+        urls.append(f"{base_url}/img/{nome}")
+        item["result"] = ""
+    if not urls:
+        return 0
+    md = "\n\n" + "\n".join(f"![immagine generata]({u})" for u in urls)
+    messaggi = [i for i in finale.get("output", []) if i.get("type") == "message"]
+    if messaggi:
+        parti = messaggi[-1].setdefault("content", [])
+        testi = [p for p in parti if isinstance(p, dict) and "text" in p]
+        if testi:
+            testi[-1]["text"] = (testi[-1].get("text") or "") + md
+        else:
+            parti.append({"type": "output_text", "text": md, "annotations": []})
+    else:
+        finale.setdefault("output", []).append({
+            "type": "message", "role": "assistant", "status": "completed",
+            "content": [{"type": "output_text", "text": md, "annotations": []}],
+        })
+    return len(urls)
+
+
+class _Ponte:
+    """Middleware ASGI puro.
+
+    Non si usa BaseHTTPMiddleware perché per decidere se intervenire va letto
+    il corpo della richiesta: quello consumerebbe il canale ``receive`` e il
+    proxy resterebbe in attesa di un corpo mai riconsegnato. Qui i messaggi
+    vengono bufferizzati e riprodotti intatti a valle.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or scope.get("path") != PATH \
+                or scope.get("method") != "POST":
+            return await self.app(scope, receive, send)
+
+        messaggi = []
+        corpo = b""
+        while True:
+            m = await receive()
+            messaggi.append(m)
+            corpo += m.get("body", b"") or b""
+            if not m.get("more_body"):
+                break
+        coda = list(messaggi)
+
+        async def receive_replay():
+            # Esaurito il replay si delega al canale vero: restituire qui un
+            # http.disconnect farebbe credere a StreamingResponse che il client
+            # se ne sia andato, cancellando la risposta a metà.
+            if coda:
+                return coda.pop(0)
+            return await receive()
+
+        try:
+            dati = json.loads(corpo)
+            attiva = (dati.get("litellm_session_id") in SESSIONI
+                      and dati.get("stream") not in (True, "true"))
+        except ValueError:
+            attiva = False
+        if not attiva:
+            return await self.app(scope, receive_replay, send)
+
+        host = dict(scope.get("headers") or {}).get(b"host")
+        base_url = "http://" + (host.decode() if host else "127.0.0.1:4000")
+
+        stato = {"start": None, "sse": False, "buffer": bytearray()}
+
+        async def send_filtrato(message):
+            tipo = message["type"]
+            if tipo == "http.response.start":
+                stato["start"] = message
+                intestazioni = {k.lower(): v for k, v in message.get("headers", [])}
+                stato["sse"] = b"text/event-stream" in intestazioni.get(b"content-type", b"")
+                if not stato["sse"]:
+                    await send(message)
+                return
+            if tipo == "http.response.body":
+                if not stato["sse"]:
+                    return await send(message)
+                stato["buffer"] += message.get("body", b"") or b""
+                if message.get("more_body"):
+                    return
+                await self._concludi(stato, base_url, send)
+                return
+            await send(message)
+
+        await self.app(scope, receive_replay, send_filtrato)
+
+    async def _concludi(self, stato, base_url, send):
+        finale = _aggrega(stato["buffer"].decode("utf-8", errors="replace"))
+        if finale is None:
+            corpo = b'{"error":{"message":"responses-bridge: flusso SSE senza evento finale"}}'
+            stato_http = 502
+        else:
+            n = _estrai_immagini(finale, base_url)
+            corpo = json.dumps(finale).encode("utf-8")
+            stato_http = stato["start"]["status"]
+            if n:
+                _log(f"{n} immagine/i salvate e linkate, risposta {len(corpo)} byte")
+        # Si conservano gli header originali (CORS in primis: senza
+        # access-control-allow-origin il browser scarta la risposta), si
+        # sostituiscono solo quelli legati al corpo, che ora è diverso.
+        esclusi = {b"content-type", b"content-length", b"transfer-encoding",
+                   b"content-encoding"}
+        intestazioni = [(k, v) for k, v in (stato["start"] or {}).get("headers", [])
+                        if k.lower() not in esclusi]
+        intestazioni += [(b"content-type", b"application/json"),
+                         (b"content-length", str(len(corpo)).encode())]
+        await send({
+            "type": "http.response.start",
+            "status": stato_http,
+            "headers": intestazioni,
+        })
+        await send({"type": "http.response.body", "body": corpo, "more_body": False})
+
+
+def install(app):
+    """Aggancia middleware e rotta immagini. Non solleva mai: in caso di
+    problemi il proxy deve partire comunque, semplicemente senza il ponte."""
+    try:
+        from fastapi.responses import FileResponse, JSONResponse
+
+        _pulisci_vecchie()
+
+        @app.get("/img/{nome}", include_in_schema=False)
+        async def _immagine(nome: str):
+            percorso = os.path.join(IMG_DIR, os.path.basename(nome))
+            if not os.path.isfile(percorso):
+                return JSONResponse({"error": "immagine non trovata"}, status_code=404)
+            return FileResponse(percorso, media_type="image/png",
+                                headers={"Cache-Control": "public, max-age=86400"})
+
+        app.add_middleware(_Ponte)
+        _log(f"attivo su POST {PATH} per sessioni {sorted(SESSIONI)}; "
+             f"immagini in {IMG_DIR}")
+    except Exception as e:  # noqa: BLE001
+        _log(f"NON attivato ({e}); il proxy parte normalmente")
