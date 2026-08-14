@@ -191,7 +191,7 @@ def cmd_scan(cfg: dict, args) -> int:
 def cmd_triage(cfg: dict, args) -> int:
     state = _load_state()
     cache = state.setdefault("triage", {})
-    model = cfg.get("context_extraction_model", "gpt-4.1-nano")
+    model = cfg.get("promote_model", "gpt-4.1-nano")
     found = scan(cfg, args.bank or None, args.timeout)
     candidates: list[dict] = []
     errors = 0
