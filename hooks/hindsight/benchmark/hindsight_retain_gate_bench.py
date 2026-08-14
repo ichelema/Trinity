@@ -23,9 +23,11 @@ Formato label (una riga JSONL per finestra, allineata per "id"):
    "duplicate_kind": "exact|semantic", "critical": false}
 
 `duplicate_kind` e' richiesto per misurare separatamente i target ICH-72:
-exact 100%, semantic >=85%. Il dataset deve contenere entrambe le categorie e
-l'evaluate dei duplicati richiede --with-dedup; input incompleto o target mancati
-restituiscono un codice di uscita non zero.
+exact 100%, semantic >=85%, applicati solo quando il dataset contiene label
+duplicate. In quel caso il dataset deve contenere entrambe le categorie e
+l'evaluate richiede --with-dedup; input incompleto o target mancati
+restituiscono un codice di uscita non zero. Un dataset senza duplicati
+mantiene il contratto storico ICH-67: exit 0 se la run tecnica va a buon fine.
 
 I contenuti restano negli artefatti locali ignorati da Git; su stdout solo
 avanzamento, conteggi e metriche aggregate.
@@ -226,7 +228,14 @@ def evaluate(args) -> int:
         return 1
     print(f"[evaluate] {len(labeled)} finestre etichettate, modello {cfg['retain_gate_model']}")
 
-    bank_urls = recall_bank_urls(cfg) if args.with_dedup else []
+    if not args.with_dedup:
+        bank_urls = []
+    elif args.dedup_bank_url:
+        # Misura controllata (piano ICH-72): un bank popolato ad hoc al posto
+        # dei bank reali, cosi' i candidati di dedup sono noti e stabili.
+        bank_urls = [args.dedup_bank_url]
+    else:
+        bank_urls = recall_bank_urls(cfg)
 
     def run(pair):
         label, window = pair
@@ -290,17 +299,25 @@ def evaluate(args) -> int:
     print(f"  riduzione POST         : {pct([x for x in rows if x[2].action != 'retain'], rows):5.1f}%")
     print(f"  duplicati rilevati     : {pct(dup_suppressed, duplicates):5.1f}%  ({len(dup_suppressed)}/{len(duplicates)})")
     exact_pct = pct(exact_suppressed, exact_duplicates)
-    exact_target = "PASS" if exact_pct >= 100 else "FAIL"
-    print(
-        f"  duplicati exact        : {exact_pct:5.1f}%  "
-        f"({len(exact_suppressed)}/{len(exact_duplicates)}) target 100% {exact_target}"
-    )
+    exact_ok = not exact_duplicates or exact_pct >= 100
+    if exact_duplicates:
+        exact_target = "PASS" if exact_pct >= 100 else "FAIL"
+        print(
+            f"  duplicati exact        : {exact_pct:5.1f}%  "
+            f"({len(exact_suppressed)}/{len(exact_duplicates)}) target 100% {exact_target}"
+        )
+    else:
+        print("  duplicati exact        : n/a (0 label) target 100%")
     semantic_pct = pct(semantic_suppressed, semantic_duplicates)
-    semantic_target = "PASS" if semantic_pct >= 85 else "FAIL"
-    print(
-        f"  duplicati semantic     : {semantic_pct:5.1f}%  "
-        f"({len(semantic_suppressed)}/{len(semantic_duplicates)}) target >=85% {semantic_target}"
-    )
+    semantic_ok = not semantic_duplicates or semantic_pct >= 85
+    if semantic_duplicates:
+        semantic_target = "PASS" if semantic_pct >= 85 else "FAIL"
+        print(
+            f"  duplicati semantic     : {semantic_pct:5.1f}%  "
+            f"({len(semantic_suppressed)}/{len(semantic_duplicates)}) target >=85% {semantic_target}"
+        )
+    else:
+        print("  duplicati semantic     : n/a (0 label) target >=85%")
     print(f"  quota uncertain        : {pct(uncertain, rows):5.1f}%")
     print(f"  errori tecnici gate    : {pct(tech_errors, rows):5.1f}%  ({len(tech_errors)})")
     print(f"  latenza gate p95       : {percentile(latencies, 95) / 1000:.2f}s")
@@ -340,7 +357,7 @@ def evaluate(args) -> int:
                 + "\n"
             )
     print(f"[evaluate] dettaglio per finestra -> {RESULTS_FILE}")
-    return 0 if exact_pct >= 100 and semantic_pct >= 85 else 1
+    return 0 if exact_ok and semantic_ok else 1
 
 
 def main() -> int:
@@ -354,6 +371,7 @@ def main() -> int:
     parser.add_argument("--model", default="", help="override retain_gate_model")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--with-dedup", action="store_true", help="usa i bank reali per il controllo duplicati")
+    parser.add_argument("--dedup-bank-url", default="", metavar="URL", help="con --with-dedup, usa questo bank al posto dei bank reali")
     parser.add_argument("--dry-run-extract", type=int, default=0, metavar="N", help="ispeziona N finestre retain via dry-run-extract")
     parser.add_argument("--bench-bank", default="retain-gate-bench")
     args = parser.parse_args()
