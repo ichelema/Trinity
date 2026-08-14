@@ -959,6 +959,58 @@ tramite launcher shell che impostano le variabili d'ambiente corrette prima di l
 Il DB di LiteLLM usa lo stesso Postgres embedded di Hindsight, ma su un database separato
 chiamato `litellm`.
 
+#### Il proxy su Linux (dal 2026-08-14)
+
+Stessi file e stessi nomi, ma tre differenze da conoscere prima di mettere mano al
+proxy su una macchina Linux. Vivono tutti **fuori dal repo**, quindi non arrivano col
+`git pull`: vanno rifatti per macchina.
+
+**Il launcher Windows non gira su Linux.** `litellm-proxy-run.py` esiste per aggirare un
+problema di console group di Windows: installa un guard sui CTRL_C e patcha
+`subprocess.Popen` con `creationflags`, che su Linux solleva `ValueError: creationflags
+is only supported on Windows platforms`. La versione Linux tiene **solo** la ragione per
+cui quel launcher esiste — installare il ponte `/v1/responses` di TypingMind nell'app
+FastAPI prima di servirla — e lascia cadere le contromisure Windows:
+
+```python
+from litellm.proxy.proxy_server import app
+import responses_bridge
+responses_bridge.install(app)
+uvicorn.run(app, host=host, port=port)
+```
+
+Lanciare la CLI `litellm --config ...` **non** è equivalente: il proxy parte e i
+`callbacks.py` funzionano, ma senza le rotte `/v1/responses` e `/img` TypingMind riceve
+un flusso SSE che non sa parsare. Nella CLI non c'è modo di agganciare middleware: o il
+launcher, o niente ponte.
+
+> Contropartita: le migrazioni del DB, che la CLI applica allo startup, con uvicorn
+> diretto non partono. Dopo un upgrade di `litellm` serve un singolo avvio con
+> `litellm --config "$CONFIG_FILE"` per applicarle.
+
+**Prisma non trova il suo query engine.** Prisma sceglie il binario dall'OpenSSL di
+sistema: su Arch (3.6) cerca un `query-engine-debian-openssl-3.6.x` che per prisma 5.17
+non esiste, e il proxy muore allo startup con `NotConnectedError: Not connected to the
+query engine` — messaggio che non lascia intuire la causa. L'engine 3.0.x già scaricato
+funziona, basta imporlo:
+
+```bash
+PRISMA_ENGINE="$(ls -1 "$HOME"/.cache/prisma-python/binaries/*/*/node_modules/@prisma/engines/query-engine-debian-openssl-3.0.x 2>/dev/null | head -1)"
+[ -n "$PRISMA_ENGINE" ] && export PRISMA_QUERY_ENGINE_BINARY="$PRISMA_ENGINE"
+```
+
+**Il Postgres è un cluster a parte, non quello di Hindsight.** Su Linux LiteLLM usa un
+cluster utente in `~/.litellm/pgdata` sulla porta **5433**, distinto dal pg0 di Hindsight
+(5432). Non è un servizio: lo avvia `litellm-start-proxy.sh` se non risponde già, con
+`-k /tmp` perché la socket dir di default `/run/postgresql` la crea solo il servizio
+systemd di sistema.
+
+Con questi tre pezzi a posto l'avvio è un comando solo:
+
+```bash
+~/.local/bin/litellm-start-proxy.sh    # Postgres + proxy + ponte TypingMind
+```
+
 **`callbacks.py` — perché è necessario per il recall Hindsight.**
 
 Quando un hook `UserPromptSubmit` (hindsight-recall, skill-eval) ha qualcosa da dire al modello,
