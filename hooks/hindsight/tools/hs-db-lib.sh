@@ -20,7 +20,14 @@ MINGW* | MSYS* | CYGWIN*)
 	_HS_OS=linux
 	PGBIN="${HS_PGBIN:-$(ls -d "$HOME"/.pg0/installation/*/bin 2>/dev/null | sort -V | tail -1)}"
 	_EXE=""
-	BACKUP_DIR="${HS_BACKUP_DIR:-$HOME/backups/hindsight}"
+	# Come su Windows i dump vanno sulla chiavetta (fa da corriere tra le
+	# macchine); se non e' montata si ripiega sul profilo locale.
+	_HS_USB="/run/media/$(id -un)/SPHYNX"
+	if [ -d "$_HS_USB" ]; then
+		BACKUP_DIR="${HS_BACKUP_DIR:-$_HS_USB/var/backups/hindsight}"
+	else
+		BACKUP_DIR="${HS_BACKUP_DIR:-$HOME/backups/hindsight}"
+	fi
 	;;
 esac
 
