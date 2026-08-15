@@ -516,7 +516,7 @@ MCP proattivo) è coperto dalle regole "Retain a fine task" in `core-behavior.md
 ogni sessione.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
-(gpt-4.1-nano: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
+(`promote_model`, gpt-5.6-luna: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
 move: comando **`/trinity:promote`**, meccanica in `hooks/hindsight/ops/hindsight-promote.py`.
 Il move ritiene l'`original_text` sul core (con strip dei tag `repo:`/`branch:`, che nello
 scope all_strict impedirebbero la fusione cross-repo) e cancella il documento dal bank
