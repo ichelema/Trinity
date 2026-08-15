@@ -27,5 +27,6 @@ data/playwright-mcp/
 /docs/*
 !/docs/SETUP-LINUX.md
 !/docs/MIGRAZIONE-EMBEDDING-LINUX.md
+!/docs/PLAN-MENTAL-MODELS-PER-PROJECT.md
 
 .claude/worktrees/

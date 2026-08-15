@@ -96,6 +96,6 @@ Sei l'agente **<nome>** con memoria persistente Hindsight sul bank `trinity-proj
 
 ## Note
 
-- Bank inchiodato nell'URL MCP (`/mcp/trinity-project/`): NON passare `bank_id` ai tool, è già risolto.
+- Il bank è risolto per-progetto dallo shim MCP (`hooks/hindsight/mcp/hindsight-mcp-shim.sh`): nel repo Trinity è il core `trinity-project`, altrove il bank del progetto. NON passare `bank_id` ai tool: è già risolto.
 - Se i tool `mcp__hindsight__*` non rispondono, il server potrebbe essere giù:
   `mise run start-hindsight`, poi nuova sessione (vedi skill hindsight, troubleshooting).

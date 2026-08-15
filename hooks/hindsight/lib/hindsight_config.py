@@ -247,6 +247,18 @@ DEFAULTS = {
     # 10.4k) e il taglio proporzionale qui sotto non scatta piu'.
     "mental_models_inject_max_chars": 9500,
     "mental_models": [],
+    # Multi-bank mental model: sorgente delle "knowledge page" iniettate a
+    # SessionStart e gestite da ops/hindsight-mental-models.sh. Speculare a
+    # recall_banks: "auto" = bank del progetto, "core" = core condiviso. Dedup
+    # per nome: in Trinity "auto" collassa sul core -> resta il solo core.
+    "mental_model_inject_banks": ["auto", "core"],
+    # Modelli DEL PROGETTO (definiti nel hindsight.config.json del progetto):
+    # vivono nel bank del progetto, non nel core. I modelli CORE restano nella
+    # chiave "mental_models" (definiti dal plugin) e sono iniettati ovunque.
+    # Chiave separata perche' il merge a strati SOSTITUISCE le liste: un
+    # "mental_models" di progetto clobbererebbe i 3 core, qui invece e' additivo.
+    "project_mental_models": [],
+    "project_mental_models_inject_ids": [],
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
     "debug_log_enabled": False,
@@ -312,9 +324,14 @@ def _project_config_path() -> str | None:
 # (retain). Il blocco "bank" e' bloccato PER INTERO: retain_bank/core_bank
 # permetterebbero di scrivere nel core condiviso (poisoning), recall_banks di
 # leggere il core o i bank di altri progetti (info-leak), api_base di dirottare
-# l'endpoint. Restano impostabili da config plugin/utente e da env
-# (HINDSIGHT_API_URL, HS_CFG_*).
-PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank"}
+# l'endpoint. mental_model_inject_banks e' bloccata per lo stesso motivo di
+# recall_banks: seleziona i bank SORGENTE dell'iniezione mental model a
+# SessionStart, quindi lasciarla al progetto riaprirebbe lo stesso info-leak
+# cross-bank da un'altra porta (il progetto potrebbe farsi iniettare i mental
+# model del core o di un bank altrui). project_mental_models* restano libere:
+# sono self-scoped, si applicano solo al bank del progetto stesso. Restano
+# impostabili da config plugin/utente e da env (HINDSIGHT_API_URL, HS_CFG_*).
+PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank", "mental_model_inject_banks"}
 
 
 def _valid_override(key: str, value) -> bool:
@@ -575,6 +592,23 @@ def recall_bank_urls(cfg: dict, cwd: str | None = None) -> list[str]:
     return out or [cfg["api_url"]]
 
 
+def mental_model_bank_urls(cfg: dict, cwd: str | None = None) -> list[str]:
+    """URL dei bank da cui iniettare i mental model (da mental_model_inject_banks).
+    Speculare a recall_bank_urls: "auto"/"core" risolti e deduplicati; con api_url
+    esplicito (retrocompat single-bank) restituisce solo quello."""
+    if cfg.get("_api_url_explicit"):
+        return [cfg["api_url"]]
+    names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
+    out: list[str] = []
+    seen: set[str] = set()
+    for n in names:
+        b = resolve_bank(n, cfg, cwd)
+        if b and b not in seen:
+            seen.add(b)
+            out.append(bank_url(cfg, b))
+    return out or [bank_url(cfg, (cfg.get("bank") or {}).get("core_bank", ""))]
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
 
@@ -607,8 +641,9 @@ def load_config() -> dict:
             applied.add(key)
 
     # Retrocompat api_url: se NESSUNA fonte (file o env) lo ha impostato
-    # esplicitamente, derivalo dal blocco bank (= URL del CORE): mm-inject,
-    # reflect, export e check continuano a leggerlo e devono puntare al core.
+    # esplicitamente, derivalo dal blocco bank (= URL del CORE): reflect,
+    # export e check continuano a leggerlo e devono puntare al core. (mm-inject
+    # e ops/mental-models non lo leggono piu': risolvono per-progetto.)
     # Se invece e' esplicito, vince su tutto il blocco bank: retain_bank_url e
     # recall_bank_urls lo rispettano e ripristinano il single-bank odierno.
     cfg["_api_url_explicit"] = "api_url" in applied
