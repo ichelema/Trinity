@@ -19,22 +19,24 @@ export HOOKS_DIR
 . "$HOOKS_DIR/../lib/hs-python.sh"
 
 "$HS_PY" - "$@" <<'PY'
-import json, os, subprocess, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "..", "lib"))
 from hindsight_config import load_config, resolve_bank, retain_bank_url
 
 # Config per-progetto: gli hook ricevono CLAUDE_PROJECT_DIR da Claude Code, ma
-# questo script gira a mano. Ricava il toplevel git del cwd e lo imposta, cosi'
-# load_config carica l'eventuale hindsight.config.json del progetto (project_mental_models).
-try:
-    _root = subprocess.check_output(
-        ["git", "rev-parse", "--show-toplevel"], cwd=os.getcwd(),
-        stderr=subprocess.DEVNULL, text=True).strip()
-except Exception:
-    _root = ""
-if _root:
-    os.environ["CLAUDE_PROJECT_DIR"] = _root
+# questo script gira a mano. Risali dal cwd fino alla prima dir con ".git"
+# (dir o file: nei worktree e' un file). Niente `git rev-parse`: su MSYS2
+# restituirebbe un path POSIX che il Python Windows non sa aprire.
+_d = os.getcwd()
+while True:
+    if os.path.exists(os.path.join(_d, ".git")):
+        os.environ["CLAUDE_PROJECT_DIR"] = _d
+        break
+    _p = os.path.dirname(_d)
+    if _p == _d:
+        break
+    _d = _p
 
 cfg = load_config()
 cwd = os.getcwd()
