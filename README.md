@@ -601,7 +601,18 @@ Procedura: scrivi il config, poi `bash hooks/hindsight/ops/hindsight-mental-mode
 nel bank progetto, taggato `["claude-code"]` o senza tag, legge i fatti del progetto in
 refresh — nessun tag speciale serve. **Non riusare gli id core** (`user-profile`,
 `project-conventions`, `recurring-learnings`): il dedup per id fa vincere il primo bank.
-Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16).
+
+Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16), lanciato **dal repo del
+plugin** — valida il lato core/default (forma delle chiavi, helper `mental_model_bank_urls`,
+retrocompat `api_url` esplicito, seed/show sul bank core, pinnati al root del plugin a
+prescindere da dove giri il check). Non verifica il setup di un progetto specifico: per quello,
+dal cwd del progetto,
+
+1. `bash hooks/hindsight/ops/hindsight-mental-models.sh seed` → crea i modelli nel bank del
+   progetto (idempotente: ri-eseguito non ricrea nulla);
+2. `bash hooks/hindsight/ops/hindsight-mental-models.sh list` → li mostra;
+3. `echo '{"hook_event_name":"SessionStart"}' | HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 bash hooks/hindsight/hindsight-mm-inject.sh` →
+   inject testabile: il JSON in output include core + progetto.
 
 ---
 

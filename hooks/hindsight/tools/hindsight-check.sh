@@ -513,8 +513,10 @@ else
 	ko "definizioni mental_models mancanti in config ($MM_CFG)"
 fi
 
-# Per-progetto (ICH-77): le nuove chiavi devono essere riconosciute coi default
-# attesi e mental_model_bank_urls deve tornare URL bank-scoped, deduplicati, non vuoti.
+# Per-progetto (ICH-77): le chiavi devono avere la FORMA attesa (non i valori di
+# default, che un progetto che ha seguito la procedura per-progetto legittimamente
+# sovrascrive) e mental_model_bank_urls deve tornare URL bank-scoped, deduplicati,
+# non vuoti.
 MM_BANKS=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import sys
@@ -522,9 +524,15 @@ sys.path.insert(0, sys.argv[1])
 import hindsight_config as hc
 cfg = hc.load_config()
 ok = True
-if cfg.get("mental_model_inject_banks") != ["auto", "core"]:
+banks = cfg.get("mental_model_inject_banks")
+if not (isinstance(banks, list) and banks and all(isinstance(b, str) for b in banks)):
     ok = False
-if cfg.get("project_mental_models") != [] or cfg.get("project_mental_models_inject_ids") != []:
+models = cfg.get("project_mental_models") or []
+if not (isinstance(models, list)
+        and all(isinstance(m, dict) and m.get("id") and m.get("source_query") for m in models)):
+    ok = False
+ids = cfg.get("project_mental_models_inject_ids") or []
+if not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
     ok = False
 urls = hc.mental_model_bank_urls(cfg)
 ok = ok and bool(urls) and all("/banks/" in u for u in urls) and len(urls) == len(set(urls))
@@ -532,9 +540,29 @@ print("OK" if ok else "KO")
 PY
 )
 if [ "$MM_BANKS" = "OK" ]; then
-	ok "chiavi mental model per-progetto + mental_model_bank_urls coerenti"
+	ok "chiavi mental model per-progetto (forma) + mental_model_bank_urls coerenti"
 else
 	ko "chiavi mental model per-progetto o helper incoerenti ($MM_BANKS)"
+fi
+
+# Retrocompat (F2): con api_url esplicito (config fidato o HINDSIGHT_API_URL),
+# mental_model_bank_urls deve tornare SOLO quell'URL. Nessuna chiamata HTTP: la
+# variabile e' impostata solo per questo sotto-processo, non per il resto dello script.
+MM_RETROCOMPAT=$(
+	HINDSIGHT_API_URL="http://retrocompat-fixture.invalid:9/v1/legacy" PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, sys.argv[1])
+import hindsight_config as hc
+cfg = hc.load_config()
+url = "http://retrocompat-fixture.invalid:9/v1/legacy"
+ok = cfg.get("_api_url_explicit") is True and hc.mental_model_bank_urls(cfg) == [url]
+print("OK" if ok else "KO")
+PY
+)
+if [ "$MM_RETROCOMPAT" = "OK" ]; then
+	ok "retrocompat: api_url esplicito onorato da mental_model_bank_urls"
+else
+	ko "retrocompat: api_url esplicito NON onorato da mental_model_bank_urls ($MM_RETROCOMPAT)"
 fi
 
 MM_LIVE=$(curl -s -m 5 "$API_BASE/mental-models" 2>/dev/null | python -c "
@@ -549,14 +577,17 @@ else
 	ko "knowledge page mancanti — esegui: bash hooks/hindsight/ops/hindsight-mental-models.sh seed"
 fi
 
-RESEED=$(bash "$HOOKS_DIR/ops/hindsight-mental-models.sh" seed 2>/dev/null | grep -c "^+ creato" || true)
+# Pin del cwd al root del plugin: lo script ops risolve il bank dal cwd, e se il
+# check gira dal cwd di un progetto NON deve seminare/leggere il SUO bank (side
+# effect indesiderato di una verifica) ma sempre quello core del plugin.
+RESEED=$(cd "$HOOKS_DIR/../.." && bash hooks/hindsight/ops/hindsight-mental-models.sh seed 2>/dev/null | grep -c "^+ creato" || true)
 if [ "$RESEED" = "0" ]; then
 	ok "seed idempotente (nessuna pagina ri-creata)"
 else
 	ko "seed NON idempotente ($RESEED pagine ri-create)"
 fi
 
-SHOW_LEN=$(bash "$HOOKS_DIR/ops/hindsight-mental-models.sh" show user-profile 2>/dev/null | wc -c)
+SHOW_LEN=$(cd "$HOOKS_DIR/../.." && bash hooks/hindsight/ops/hindsight-mental-models.sh show user-profile 2>/dev/null | wc -c)
 if [ "$SHOW_LEN" -gt 200 ] 2>/dev/null; then
 	ok "show user-profile ritorna contenuto generato ($SHOW_LEN char)"
 else
