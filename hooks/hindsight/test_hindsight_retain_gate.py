@@ -683,8 +683,8 @@ class ConsentTests(unittest.TestCase):
             {"action": "discarded", "reason": "new_prompt", "preview": "Salvo la decisione Y."},
         )
 
-    def test_post_failure_reports_error(self):
-        self.assertTrue(self.save())
+    def test_post_failure_reports_error_and_restores_pending(self):
+        self.assertTrue(self.save(context=""))
         with mock.patch(
             "lib.hindsight_retain_gate.urllib.request.urlopen",
             side_effect=OSError("connection refused"),
@@ -692,6 +692,21 @@ class ConsentTests(unittest.TestCase):
             outcome = handle_retain_consent("si", "sess-consent", "/proj")
         self.assertEqual(outcome["action"], "error")
         self.assertIn("OSError", outcome["error"])
+        self.assertEqual(outcome["preview"], "Salvo la decisione X.")
+        # Il pending consumato viene rimesso in attesa: un secondo "si'"
+        # riprova la POST (qui con la rete tornata) invece di trovare il vuoto.
+        # Il context risolto al primo tentativo (qui il fallback repo/branch,
+        # ma vale anche per la proposta letta dal transcript) viaggia col
+        # pending ripristinato: al retry e' gia' nell'item, senza dipendere da
+        # un transcript nel frattempo cambiato.
+        self.assertTrue(outcome["restored"])
+        retry, posted = self.consent("si")
+        self.assertEqual(retry["action"], "saved")
+        self.assertEqual(retry["context_source"], "gate")
+        self.assertEqual(posted["context"], "sessione Claude Code")
+        self.assertEqual(posted["content"], "finestra")
+        # e il ripristino e' a consumo singolo come l'originale
+        self.assertIsNone(handle_retain_consent("si", "sess-consent", "/proj"))
 
     def test_pending_requires_session_id(self):
         self.assertFalse(

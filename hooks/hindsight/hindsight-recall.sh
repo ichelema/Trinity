@@ -107,12 +107,15 @@ if retain_outcome:
         }, ensure_ascii=False))
         sys.exit(0)
     if retain_outcome["action"] == "error":
-        print(json.dumps({
-            "systemMessage": (
-                "Hindsight: salvataggio della memoria in attesa NON riuscito — "
-                + str(retain_outcome.get("error") or "")
-            ),
-        }, ensure_ascii=False))
+        # Il pending e' stato rimesso in attesa (restored): l'utente puo'
+        # riprovare con un altro "si'" senza rifare il retain a mano.
+        message = (
+            "Hindsight: salvataggio della memoria in attesa NON riuscito — "
+            + str(retain_outcome.get("error") or "")
+        )
+        if retain_outcome.get("restored"):
+            message += " Rispondi «sì» al prossimo prompt per riprovare."
+        print(json.dumps({"systemMessage": message}, ensure_ascii=False))
         sys.exit(0)
     # "discarded": col "no" resta silenzioso; su prompt NUOVO l'utente deve
     # sapere che la domanda del gate e' decaduta (altrimenti crede di aver

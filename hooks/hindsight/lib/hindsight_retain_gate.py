@@ -396,10 +396,11 @@ def handle_retain_consent(
     """Da chiamare al prompt successivo alla domanda del gate (hook recall).
     Positivo (si' o `context: <testo>`) -> consuma il pending, risolve il
     context dell'item nell'ordine esplicito -> gate -> proposta di Claude nel
-    transcript -> riga repo/branch, ed esegue la POST conservata; negativo o
-    prompt nuovo -> scarta. Ritorna un esito per debug/notifica (con preview,
-    e per il salvataggio anche context e context_source), None se non c'era
-    alcun pending valido."""
+    transcript -> riga repo/branch, ed esegue la POST conservata (se la POST
+    fallisce il pending viene rimesso in attesa: un secondo si' riprova);
+    negativo o prompt nuovo -> scarta. Ritorna un esito per debug/notifica
+    (con preview, e per il salvataggio anche context e context_source; per
+    l'errore anche restored), None se non c'era alcun pending valido."""
     directory = retain_pending_dir()
     explicit = retain_consent_context(prompt)
     decision = "positive" if explicit else retain_consent_decision(prompt)
@@ -442,10 +443,24 @@ def handle_retain_consent(
                 "context_source": context_source,
             }
         except Exception as exc:
+            # POST fallita DOPO il consumo: senza ripristino il "si'" dell'utente
+            # e' andato perso e un secondo "si'" non troverebbe nulla. Si rimette
+            # il pending (TTL ripartito) cosi' il prossimo consenso riprova; il
+            # document_id stabile fa fare upsert al server, niente doppioni.
+            # L'item porta gia' il context risolto qui sopra (proposta/fallback):
+            # al retry non serve rileggere un transcript nel frattempo cambiato.
+            restored = save_retain_pending(
+                session_id,
+                cwd,
+                str(entry.get("api_url") or ""),
+                entry.get("payload") or {},
+                preview,
+            )
             return {
                 "action": "error",
                 "error": f"{type(exc).__name__}: {exc}",
                 "preview": preview,
+                "restored": restored,
             }
     consumed = consume_pending(directory, session_id, cwd, ttl)
     if not consumed:

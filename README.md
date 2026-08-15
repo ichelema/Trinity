@@ -516,7 +516,8 @@ POST va comunque in pending e Claude propone una riga di dominio nella domanda (
 memoria con context «…»? (sì / no / context: …)"*); al prompt successivo `sì` salva col
 context risolto in catena (gate → proposta di Claude nel transcript → riga repo/branch), `no`
 scarta, `context: <testo>` salva col context indicato. Lo scarto per prompt nuovo è visibile
-(*"Hindsight: memoria in attesa scartata — …"*). Il content della fetta non porta più
+(*"Hindsight: memoria in attesa scartata — …"*); se la POST del sì fallisce (bank giù) il
+pending viene rimesso in attesa e l'avviso invita a rispondere di nuovo sì. Il content della fetta non porta più
 l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
 `retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain MCP proattivo): il formato
 di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni

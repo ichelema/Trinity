@@ -129,9 +129,10 @@ class HookE2ETests(unittest.TestCase):
     def pending_files(self):
         return glob.glob(os.path.join(self.pending_dir, "*.json"))
 
-    def save_retain_pending(self, preview, context="", metadata=None):
+    def save_retain_pending(self, preview, context="", metadata=None, api_url=None):
         """Pending del retain (gate ICH-67/73) come lo lascia il worker allo Stop:
-        stessa lib e stessa dir che l'hook legge via HS_RETAIN_PENDING_DIR."""
+        stessa lib e stessa dir che l'hook legge via HS_RETAIN_PENDING_DIR.
+        api_url None = il MockBackend; esplicito per simulare un bank giu'."""
         item = {
             "content": "finestra e2e",
             "context": context,
@@ -147,7 +148,7 @@ class HookE2ETests(unittest.TestCase):
             saved = save_retain_pending(
                 "e2e-session",
                 self.tmp.name,
-                f"http://127.0.0.1:{self.port}/banks/t",
+                api_url or f"http://127.0.0.1:{self.port}/banks/t",
                 {"items": [item], "async": True},
                 preview,
             )
@@ -308,6 +309,18 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(
             MockBackend.retain_posts[-1]["items"][0]["context"], "dominio esplicito"
         )
+
+    def test_retain_pending_post_failure_notifies_and_keeps_pending(self):
+        # Bank irraggiungibile (porta 9, nessun listener): il "sì" fallisce, l'utente
+        # viene avvisato con l'invito a riprovare e il pending resta in attesa.
+        self.save_retain_pending("Salvo la decisione e2e.", api_url="http://127.0.0.1:9/banks/t")
+        output = self.run_hook("sì")
+        message = output["systemMessage"]
+        self.assertIn("NON riuscito", message)
+        self.assertIn("riprovare", message)
+        self.assertEqual(MockBackend.retain_posts, [])
+        retain_pending = glob.glob(os.path.join(self.retain_pending_dir, "*.json"))
+        self.assertEqual(len(retain_pending), 1)
 
 
 if __name__ == "__main__":
