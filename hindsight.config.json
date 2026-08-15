@@ -46,7 +46,7 @@
   "retain_gate_timeout": 15,
   "retain_debug_in_context": true,
 
-  "promote_model": "gpt-4.1-nano",
+  "promote_model": "gpt-5.6-luna",
 
   "context_extraction": true,
   "context_extraction_strategy": "llm",

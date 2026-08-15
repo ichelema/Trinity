@@ -193,7 +193,7 @@ DEFAULTS = {
     # settimanale promote_scan): decide "questo fatto resterebbe utile su un
     # progetto diverso?". Chiave dedicata perche' il compito non c'entra con
     # l'estrazione dei domini del context (vedi ICH-73).
-    "promote_model": "gpt-4.1-nano",
+    "promote_model": "gpt-5.6-luna",
     "reflect_budget": "mid",
     "reflect_max_tokens": 2000,
     "recall_compose_enabled": False,
