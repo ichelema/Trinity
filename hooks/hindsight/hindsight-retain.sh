@@ -5,9 +5,11 @@
 #     per Claude Code e' identico al vecchio "async": true (zero attesa; il
 #     worker e' comunque un no-op col retain spento).
 #   - retain_enabled true  -> worker in foreground col gate semantico attivo;
-#     quando il gate e' "uncertain" (decision:block con la domanda all'utente)
-#     o il debug retain e' acceso, il worker scrive una riga 'HSGATE {json}'
-#     nel log e questo wrapper la inoltra su stdout.
+#     quando il gate e' "uncertain" o non ha prodotto un context (decision:block
+#     con la domanda all'utente), quando va in errore tecnico (systemMessage
+#     non bloccante, fail-closed ICH-73) o quando il debug retain e' acceso, il
+#     worker scrive una riga 'HSGATE {json}' nel log e questo wrapper la
+#     inoltra su stdout.
 # La POST del worker resta async:true lato server, quindi anche in foreground
 # non si aspetta l'estrazione LLM dei fatti.
 set -uo pipefail
@@ -74,7 +76,8 @@ RETAIN_ON="$("$HS_PY" "$SCRIPT_DIR/lib/hindsight_config.py" --get retain_enabled
 if [ "$RETAIN_ON" = "True" ]; then
 	run_worker
 	# Il worker emette la riga HSGATE (JSON gia' pronto per Claude Code) quando
-	# il gate e' uncertain (blocco + domanda) o il debug retain e' attivo.
+	# il gate e' uncertain o senza context (blocco + domanda), in errore tecnico
+	# (notifica non bloccante) o quando il debug retain e' attivo.
 	# Riga assente => niente da dire: '{}'.
 	GATE_LINE=$(grep '^HSGATE ' "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tail -1)
 	if [ -n "$GATE_LINE" ]; then

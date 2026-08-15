@@ -1,9 +1,12 @@
-"""E2e deterministico di hindsight-recall.sh (audit ICH-66, finding B7).
+"""E2e deterministico di hindsight-recall.sh (audit ICH-66, finding B7; ICH-73).
 
-Recall e classificatore sono mockati da un server HTTP locale; l'hook viene
-eseguito come vero subprocess bash con HOOK_INPUT su stdin. Copre i rami che
-vivono solo nel corpo dell'hook: regola high+medium, consenso/pending end-to-end,
-fail-open su classificatore rotto e su save_pending impossibile.
+Recall, classificatore e POST /memories sono mockati da un server HTTP locale;
+l'hook viene eseguito come vero subprocess bash con HOOK_INPUT su stdin. Copre
+i rami che vivono solo nel corpo dell'hook: regola high+medium, consenso/pending
+end-to-end, fail-open su classificatore rotto e su save_pending impossibile, e
+il consenso del RETAIN pending (ICH-73): scarto visibile su prompt nuovo, context
+dalla proposta di Claude nel transcript o dalla risposta `context: ...`, sempre
+con UN SOLO oggetto JSON su stdout.
 """
 
 import glob
@@ -15,6 +18,9 @@ import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest import mock
+
+from lib.hindsight_retain_gate import save_retain_pending
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 HOOK = os.path.join(HOOKS_DIR, "hindsight-recall.sh")
@@ -24,17 +30,22 @@ BASH = shutil.which("bash") or "bash"
 
 
 class MockBackend(BaseHTTPRequestHandler):
-    """Un solo server per entrambi gli endpoint: /memories/recall e chat/completions."""
+    """Un solo server per tutti gli endpoint: /memories/recall, chat/completions
+    e la POST /memories eseguita dal consenso del retain pending (ICH-73)."""
 
     recall_results: list = []
     classifier_spec: object = None  # lista di classifications | ("status", int) | "garbage"
     classifier_calls = 0
+    retain_posts: list = []  # body JSON delle POST /memories, in ordine
 
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         cls = type(self)
         if self.path.endswith("/memories/recall"):
             self._send(200, json.dumps({"results": cls.recall_results}))
+        elif self.path.endswith("/memories"):
+            cls.retain_posts.append(json.loads(body.decode("utf-8")))
+            self._send(200, json.dumps({"success": True}))
         elif self.path.endswith("/chat/completions"):
             cls.classifier_calls += 1
             if isinstance(cls.classifier_spec, tuple):
@@ -74,17 +85,20 @@ class HookE2ETests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.pending_dir = os.path.join(self.tmp.name, "pending")
+        self.retain_pending_dir = os.path.join(self.tmp.name, "retain-pending")
         MockBackend.recall_results = []
         MockBackend.classifier_spec = []
         MockBackend.classifier_calls = 0
+        MockBackend.retain_posts = []
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_hook(self, prompt, session_id="e2e-session"):
-        hook_input = json.dumps(
-            {"prompt": prompt, "session_id": session_id, "cwd": self.tmp.name}
-        )
+    def run_hook(self, prompt, session_id="e2e-session", transcript_path=None):
+        hook = {"prompt": prompt, "session_id": session_id, "cwd": self.tmp.name}
+        if transcript_path is not None:
+            hook["transcript_path"] = transcript_path
+        hook_input = json.dumps(hook)
         env = {
             **os.environ,
             "HINDSIGHT_API_URL": f"http://127.0.0.1:{self.port}",
@@ -92,6 +106,7 @@ class HookE2ETests(unittest.TestCase):
             "OPENAI_API_KEY": "test-key",
             "HS_CFG_BANK": '{"recall_banks": []}',
             "HS_CFG_RECALL_PENDING_DIR": self.pending_dir,
+            "HS_RETAIN_PENDING_DIR": self.retain_pending_dir,
             "HS_CFG_RECALL_TIMEOUT": "5",
             "HS_CFG_RECALL_RESULT_FILTER_TIMEOUT": "5",
             "HS_CFG_RECALL_DEBUG_IN_CONTEXT": "false",
@@ -104,13 +119,57 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         if not proc.stdout.strip():
             return None
-        return json.loads(proc.stdout)  # stdout non vuoto deve essere JSON valido
+        # stdout non vuoto deve essere UN SOLO oggetto JSON valido: due oggetti
+        # (es. notifica + contesto stampati separatamente) fanno fallire il parse.
+        return json.loads(proc.stdout)
 
     def context(self, output):
         return output["hookSpecificOutput"]["additionalContext"]
 
     def pending_files(self):
         return glob.glob(os.path.join(self.pending_dir, "*.json"))
+
+    def save_retain_pending(self, preview, context="", metadata=None):
+        """Pending del retain (gate ICH-67/73) come lo lascia il worker allo Stop:
+        stessa lib e stessa dir che l'hook legge via HS_RETAIN_PENDING_DIR."""
+        item = {
+            "content": "finestra e2e",
+            "context": context,
+            "tags": ["claude-code"],
+            "timestamp": "2026-08-15T10:00:00+00:00",
+            "metadata": (
+                {"source": "claude-code-hook", "repo": "Trinity", "branch": "main"}
+                if metadata is None
+                else metadata
+            ),
+        }
+        with mock.patch.dict(os.environ, {"HS_RETAIN_PENDING_DIR": self.retain_pending_dir}):
+            saved = save_retain_pending(
+                "e2e-session",
+                self.tmp.name,
+                f"http://127.0.0.1:{self.port}/banks/t",
+                {"items": [item], "async": True},
+                preview,
+            )
+        self.assertTrue(saved)
+
+    def write_transcript(self, assistant_text):
+        """Transcript JSONL il cui ultimo messaggio assistant e' assistant_text."""
+        path = os.path.join(self.tmp.name, "transcript.jsonl")
+        records = [
+            {"type": "user", "message": {"role": "user", "content": "domanda dell'utente"}},
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": assistant_text}],
+                },
+            },
+        ]
+        with open(path, "w", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        return path
 
     PROMPT = "dimmi qualcosa di rilevante sul progetto per favore"
 
@@ -194,6 +253,61 @@ class HookE2ETests(unittest.TestCase):
         context = self.context(self.run_hook(self.PROMPT))
         self.assertIn("theta memo", context)
         self.assertEqual(MockBackend.classifier_calls, 0)
+
+    def test_retain_pending_discarded_on_new_prompt_is_visible(self):
+        self.save_retain_pending("Salvo la decisione e2e.")
+        output = self.run_hook(self.PROMPT)
+        # Il pending viene scartato in modo VISIBILE (ICH-73), e il recall
+        # prosegue: nessun risultato -> nessun additionalContext, ma la notifica
+        # esce comunque, come unico oggetto JSON.
+        self.assertIn(
+            "memoria in attesa scartata — Salvo la decisione e2e.", output["systemMessage"]
+        )
+        self.assertNotIn("hookSpecificOutput", output)
+        self.assertEqual(MockBackend.retain_posts, [])
+
+    def test_retain_pending_discard_notice_merges_with_recall_context(self):
+        # Caso limite oltre il contratto (documentato): stesso scarto, ma il
+        # recall HA contenuto -> notifica e additionalContext devono uscire nello
+        # STESSO oggetto JSON (path emit(), non finish()); run_hook fallirebbe
+        # su due oggetti separati.
+        self.save_retain_pending("Salvo la decisione e2e.")
+        MockBackend.recall_results = [
+            {"text": "iota memo", "type": "world", "scores": {"reranker": 0.95}},
+        ]
+        output = self.run_hook(self.PROMPT)
+        self.assertIn(
+            "memoria in attesa scartata — Salvo la decisione e2e.", output["systemMessage"]
+        )
+        self.assertIn("iota memo", self.context(output))
+        self.assertEqual(MockBackend.retain_posts, [])
+
+    def test_retain_pending_yes_uses_transcript_proposal(self):
+        self.save_retain_pending("Salvo la decisione e2e.", context="")
+        transcript = self.write_transcript(
+            "Salvo questa memoria con context «dominio e2e»? (sì / no / context: …)"
+        )
+        output = self.run_hook("sì", transcript_path=transcript)
+        message = output["systemMessage"]
+        self.assertIn("memoria salvata", message)
+        self.assertIn("Salvo la decisione e2e.", message)
+        self.assertIn("dominio e2e", message)
+        self.assertIn("proposto da Claude", message)
+        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.assertEqual(MockBackend.retain_posts[-1]["items"][0]["context"], "dominio e2e")
+        self.assertIn("## Hindsight retain", self.context(output))
+
+    def test_retain_pending_context_reply(self):
+        self.save_retain_pending("Salvo la decisione e2e.", context="")
+        output = self.run_hook("context: dominio esplicito")
+        message = output["systemMessage"]
+        self.assertIn("memoria salvata", message)
+        self.assertIn("dominio esplicito", message)
+        self.assertIn("indicato da te", message)
+        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.assertEqual(
+            MockBackend.retain_posts[-1]["items"][0]["context"], "dominio esplicito"
+        )
 
 
 if __name__ == "__main__":

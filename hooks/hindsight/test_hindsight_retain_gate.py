@@ -1,10 +1,16 @@
 #!/usr/bin/env python
-"""Test del gate semantico pre-retain (ICH-67): modulo lib + integrazione worker.
+"""Test del gate semantico pre-retain (ICH-67, ICH-73): modulo lib + integrazione worker.
 
 Flusso coperto: gate sempre attivo quando retain_enabled e' true;
-retain -> POST diretta silenziosa; skip -> niente; uncertain -> pending +
-domanda (consenso al prompt successivo, meccanica ICH-66); errore tecnico
-del gate -> fail-open (POST come prima del gate)."""
+retain + context -> POST diretta silenziosa; skip -> niente; uncertain +
+context -> pending + domanda classica "(sì/no)" (consenso al prompt
+successivo, meccanica ICH-66); context VUOTO (retain o uncertain) -> pending +
+Claude propone una riga di dominio e chiede "(sì / no / context: …)": al
+prompt successivo il context viene risolto con la catena esplicito
+(`context: ...`) -> gate -> proposta di Claude nel transcript -> riga
+repo/branch (HITL ICH-73); errore tecnico del gate -> fail-closed (nessuna
+POST, systemMessage non bloccante una sola volta per sessione, rollback del
+contatore di throttling cosi' il prossimo Stop rivaluta)."""
 
 from __future__ import annotations
 
@@ -28,9 +34,12 @@ from lib.hindsight_retain_gate import (
     GateResult,
     dedup_query,
     evaluate_retain,
+    fallback_context,
     fetch_duplicate_candidates,
     handle_retain_consent,
+    retain_consent_context,
     retain_consent_decision,
+    retain_context_from_transcript,
     save_retain_pending,
 )
 
@@ -43,6 +52,25 @@ def fake_api(response: dict, latency: float = 7.0):
         return response, latency
 
     return _call
+
+
+def user_record(text: str) -> dict:
+    return {"type": "user", "message": {"role": "user", "content": text}}
+
+
+def assistant_record(text: str) -> dict:
+    return {
+        "type": "assistant",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
+    }
+
+
+def write_jsonl(path: str, records: list[dict]) -> str:
+    """Transcript JSONL minimale (stesso formato dei record reali di Claude Code)."""
+    with open(path, "w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return path
 
 
 class GateModuleTests(unittest.TestCase):
@@ -252,9 +280,10 @@ class GateModuleTests(unittest.TestCase):
 
     def test_mismatched_reason_preserves_action(self):
         """Fix ICH-72: action e reason valide ma male accoppiate NON degradano
-        piu' a gate_error (che il worker tratta come fail-open, cioe' POST
-        diretta anche per finestre giudicate uncertain/skip): la action del
-        modello resta e la reason viene accettata com'e'."""
+        piu' a gate_error (che il worker trattava allora come fail-open, cioe'
+        POST diretta anche per finestre giudicate uncertain/skip; da ICH-73 e'
+        fail-closed, cioe' finestra persa): la action del modello resta e la
+        reason viene accettata com'e'."""
         cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
         summary = {"turns": []}
         mismatched = (
@@ -420,14 +449,38 @@ class ConsentTests(unittest.TestCase):
         for prompt in neutral:
             self.assertIsNone(retain_consent_decision(prompt), prompt)
 
-    def save(self, preview="Salvo la decisione X."):
+    def save(self, preview="Salvo la decisione X.", context=None, metadata=None):
+        """Pending con la POST pronta. context/metadata None = chiave assente
+        nell'item (come i pending storici, pre-ICH-73)."""
+        item = {"content": "finestra"}
+        if context is not None:
+            item["context"] = context
+        if metadata is not None:
+            item["metadata"] = metadata
         return save_retain_pending(
             "sess-consent",
             "/proj",
             "http://127.0.0.1:9/banks/t",
-            {"items": [{"content": "finestra"}], "async": True},
+            {"items": [item], "async": True},
             preview,
         )
+
+    def consent(self, prompt, transcript_path=""):
+        """handle_retain_consent con la POST mockata: (esito, item POSTato o None)."""
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeResponse(),
+        ) as urlopen:
+            outcome = handle_retain_consent(
+                prompt, "sess-consent", "/proj", transcript_path=transcript_path
+            )
+        posted = None
+        if urlopen.called:
+            posted = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
+        return outcome, posted
+
+    def transcript(self, *records):
+        return write_jsonl(os.path.join(self.tmp.name, "transcript.jsonl"), list(records))
 
     def test_positive_consumes_and_posts(self):
         self.assertTrue(self.save())
@@ -447,14 +500,188 @@ class ConsentTests(unittest.TestCase):
     def test_negative_and_new_prompt_discard(self):
         self.assertTrue(self.save())
         outcome = handle_retain_consent("no", "sess-consent", "/proj")
-        self.assertEqual(outcome, {"action": "discarded", "reason": "negative"})
+        self.assertEqual(
+            outcome,
+            {"action": "discarded", "reason": "negative", "preview": "Salvo la decisione X."},
+        )
         self.assertIsNone(handle_retain_consent("no", "sess-consent", "/proj"))
 
         self.assertTrue(self.save())
         outcome = handle_retain_consent(
             "parliamo di tutt'altro adesso", "sess-consent", "/proj"
         )
-        self.assertEqual(outcome, {"action": "discarded", "reason": "new_prompt"})
+        self.assertEqual(
+            outcome,
+            {"action": "discarded", "reason": "new_prompt", "preview": "Salvo la decisione X."},
+        )
+
+    def test_context_reply_grammar(self):
+        # L'intero prompt e' "context: <testo>", con prefisso di assenso opzionale.
+        accepted = {
+            "context: architettura X": "architettura X",
+            "sì, context: X": "X",
+            "Sì context: X": "X",
+            "va bene, context: X": "X",
+            "d'accordo: context: X": "X",
+            "context: X\n": "X",  # newline finale tollerata
+        }
+        for prompt, expected in accepted.items():
+            self.assertEqual(retain_consent_context(prompt), expected, prompt)
+        # Il prefisso ammesso e' SOLO il lessico standalone di retain_consent_decision
+        # ("ok" non lo e', ne' da solo ne' come prefisso); un prompt multi-riga che
+        # apre con "context:" e prosegue con altro e' testo libero -> new_prompt.
+        rejected = (
+            "si",
+            "no",
+            "ok, context: X",
+            "parliamo del context: X del progetto",
+            "context:",
+            "context:   ",
+            "context: X\n\npoi sistemiamo il README",
+        )
+        for prompt in rejected:
+            self.assertIsNone(retain_consent_context(prompt), prompt)
+
+    def test_positive_keeps_gate_context(self):
+        self.assertTrue(self.save(context="dominio del gate"))
+        outcome, posted = self.consent("si")
+        self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(outcome["context_source"], "gate")
+        self.assertEqual(outcome["context"], "dominio del gate")
+        self.assertEqual(posted["context"], "dominio del gate")
+
+    def test_explicit_context_overrides_pending(self):
+        for prompt in ("context: nuovo dominio", "sì, context: nuovo dominio"):
+            with self.subTest(prompt=prompt):
+                self.assertTrue(self.save(context="dal gate"))
+                outcome, posted = self.consent(prompt)
+                self.assertEqual(outcome["action"], "saved")
+                self.assertEqual(outcome["context_source"], "explicit")
+                self.assertEqual(outcome["context"], "nuovo dominio")
+                self.assertEqual(posted["context"], "nuovo dominio")
+
+    def test_positive_takes_proposal_from_transcript(self):
+        cases = (
+            (
+                "Salvo questa memoria con context «dominio proposto da claude»? "
+                "(sì / no / context: …)",
+                "dominio proposto da claude",
+            ),
+            (
+                "Vuoi che salvi questa memoria? — Salvo X. "
+                "Context proposto: «altro dominio» (sì / no / context: …)",
+                "altro dominio",
+            ),
+            (
+                # due match nell'ultimo messaggio assistant: vince l'ULTIMO
+                "Salvo questa memoria con context «primo tentativo»? Anzi, meglio: "
+                "Context proposto: «ultimo match» (sì / no / context: …)",
+                "ultimo match",
+            ),
+            (
+                # placeholder dell'istruzione ricopiato alla lettera come ULTIMO
+                # match: non e' una proposta, vale il match precedente
+                "Salvo questa memoria con context «dominio vero»? "
+                "(sì / no / context: «<PROPOSTA>»)",
+                "dominio vero",
+            ),
+        )
+        for text, expected in cases:
+            with self.subTest(expected=expected):
+                transcript = self.transcript(
+                    user_record("domanda iniziale"),
+                    # messaggio assistant PRECEDENTE con una proposta: ignorato
+                    assistant_record(
+                        "Salvo questa memoria con context «proposta vecchia»? "
+                        "(sì / no / context: …)"
+                    ),
+                    user_record("altra domanda"),
+                    assistant_record(text),
+                )
+                self.assertEqual(retain_context_from_transcript(transcript), expected)
+                self.assertTrue(self.save(context=""))
+                outcome, posted = self.consent("si", transcript_path=transcript)
+                self.assertEqual(outcome["action"], "saved")
+                self.assertEqual(outcome["context_source"], "proposal")
+                self.assertEqual(outcome["context"], expected)
+                self.assertEqual(posted["context"], expected)
+
+    def test_positive_falls_back_to_repo_branch(self):
+        self.assertEqual(
+            fallback_context({"repo": "Trinity", "branch": "main"}),
+            "sessione Claude Code nel repo Trinity, branch main",
+        )
+        self.assertEqual(
+            fallback_context({"repo": "Trinity"}), "sessione Claude Code nel repo Trinity"
+        )
+        self.assertEqual(
+            fallback_context({"branch": "main"}), "sessione Claude Code sul branch main"
+        )
+        self.assertEqual(fallback_context({}), "sessione Claude Code")
+
+        # nessun transcript: ultima risorsa repo/branch dai metadata dell'item
+        self.assertTrue(
+            self.save(context="", metadata={"repo": "Trinity", "branch": "main"})
+        )
+        outcome, posted = self.consent("si")
+        self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(outcome["context_source"], "fallback")
+        self.assertEqual(outcome["context"], "sessione Claude Code nel repo Trinity, branch main")
+        self.assertEqual(posted["context"], "sessione Claude Code nel repo Trinity, branch main")
+
+        # transcript senza proposta (o inesistente) + metadata vuoti
+        transcript = self.transcript(
+            user_record("domanda"), assistant_record("Fatto, ho chiuso il task.")
+        )
+        self.assertIsNone(retain_context_from_transcript(transcript))
+        self.assertIsNone(
+            retain_context_from_transcript(os.path.join(self.tmp.name, "missing.jsonl"))
+        )
+        self.assertTrue(self.save(context="", metadata={}))
+        outcome, posted = self.consent("si", transcript_path=transcript)
+        self.assertEqual(outcome["context_source"], "fallback")
+        self.assertEqual(outcome["context"], "sessione Claude Code")
+        self.assertEqual(posted["context"], "sessione Claude Code")
+
+    def test_proposal_skips_placeholder_and_tool_only_records(self):
+        # solo il placeholder ricopiato alla lettera: nessuna proposta
+        self.assertIsNone(
+            retain_context_from_transcript(
+                self.transcript(
+                    assistant_record("Salvo questa memoria con context «<PROPOSTA>»?")
+                )
+            )
+        )
+        # l'ultimo record assistant e' un tool_use senza testo (Claude Code scrive
+        # un record per content-block): si risale al testo precedente
+        tool_only = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "name": "Read", "input": {}}],
+            },
+        }
+        self.assertEqual(
+            retain_context_from_transcript(
+                self.transcript(
+                    assistant_record("Salvo questa memoria con context «prima del tool»?"),
+                    tool_only,
+                )
+            ),
+            "prima del tool",
+        )
+
+    def test_discard_returns_preview(self):
+        self.assertTrue(self.save())
+        self.assertEqual(
+            handle_retain_consent("no", "sess-consent", "/proj"),
+            {"action": "discarded", "reason": "negative", "preview": "Salvo la decisione X."},
+        )
+        self.assertTrue(self.save(preview="Salvo la decisione Y."))
+        self.assertEqual(
+            handle_retain_consent("sistemami il bug del parser", "sess-consent", "/proj"),
+            {"action": "discarded", "reason": "new_prompt", "preview": "Salvo la decisione Y."},
+        )
 
     def test_post_failure_reports_error(self):
         self.assertTrue(self.save())
@@ -476,6 +703,13 @@ class ConsentTests(unittest.TestCase):
 class GateConfigTests(unittest.TestCase):
     def test_defaults_and_override_validation(self):
         self.assertNotIn("retain_gate_mode", hindsight_config.DEFAULTS)
+        # ICH-73: il fallback nano del context e' rimosso, chiavi comprese.
+        for key in (
+            "context_extraction",
+            "context_extraction_strategy",
+            "context_extraction_model",
+        ):
+            self.assertNotIn(key, hindsight_config.DEFAULTS, key)
         self.assertEqual(hindsight_config.DEFAULTS["retain_gate_model"], "gpt-5.6-luna")
         self.assertEqual(hindsight_config.DEFAULTS["retain_gate_timeout"], 15)
         self.assertIs(hindsight_config.DEFAULTS["retain_debug_in_context"], False)
@@ -601,13 +835,33 @@ class WorkerGateTests(unittest.TestCase):
                 "retain_text_truncate": 2000,
                 "retain_max_files": 15,
                 "retain_max_cmds": 10,
-                "context_extraction": False,
                 "debug_log_enabled": False,
                 "retain_debug_in_context": False,
             }
         )
         base.update(overrides)
         return base
+
+    def read_state(self) -> dict:
+        """File di stato del worker (stop_count, gate_error_notified per sessione)."""
+        with open(
+            os.path.join(self.tmp.name, "hs-retain-state.json"), encoding="utf-8"
+        ) as handle:
+            return json.load(handle)
+
+    def consent(self, prompt, transcript_path=""):
+        """handle_retain_consent sul pending del worker: (esito, item POSTato o None)."""
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeResponse(),
+        ) as urlopen:
+            outcome = handle_retain_consent(
+                prompt, "sess-gate-test", self.tmp.name, transcript_path=transcript_path
+            )
+        posted = None
+        if urlopen.called:
+            posted = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
+        return outcome, posted
 
     def run_main(self, cfg, gate_result):
         stdout = io.StringIO()
@@ -658,20 +912,81 @@ class WorkerGateTests(unittest.TestCase):
         self.assertNotIn("Session:", item["content"])
         self.assertNotIn("CWD:", item["content"])
 
-    def test_gate_context_fallback_when_empty(self):
-        rc, _out, _gate, urlopen = self.run_main(
+    def test_retain_without_context_blocks_asking_context(self):
+        # retain SENZA context: niente POST diretta e niente fallback LLM (ICH-73):
+        # pending + block, Claude propone un context e chiede conferma.
+        rc, out, _gate, urlopen = self.run_main(
             self.cfg(),
-            GateResult(action="retain", reason="durable_decision", preview="Salvo X."),
+            GateResult(
+                action="retain", reason="durable_decision", preview="Salvo X.", context=""
+            ),
         )
         self.assertEqual(rc, 0)
-        item = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
-        # context vuoto dal gate -> catena storica (context_extraction off => piano)
-        self.assertEqual(item["context"], "claude-code")
+        urlopen.assert_not_called()
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["decision"], "block")
+        reason = lines[0]["reason"]
+        self.assertIn(
+            "Salvo questa memoria con context «<PROPOSTA>»? (sì / no / context: …)", reason
+        )
+        self.assertIn("Salvo X.", reason)
+        self.assertNotIn("hookSpecificOutput", lines[0])
+
+        # Risposta esplicita "context: ..." al prompt successivo -> POST con quel context.
+        outcome, posted = self.consent("context: dominio scelto")
+        self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(outcome["context_source"], "explicit")
+        self.assertEqual(outcome["context"], "dominio scelto")
+        self.assertEqual(posted["context"], "dominio scelto")
+        self.assertIn("document_id", posted)
+
+    def test_uncertain_without_context_asks_fused_question(self):
+        preview = "Forse vale la pena salvare la scelta sul gate."
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(),
+            GateResult(action="uncertain", reason="borderline", preview=preview, context=""),
+        )
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]["decision"], "block")
+        # La preview finisce col punto: nella domanda fusa non deve raddoppiare.
+        self.assertIn(
+            f"Vuoi che salvi questa memoria? — {preview.rstrip('.')}. "
+            "Context proposto: «<PROPOSTA>» (sì / no / context: …)",
+            lines[0]["reason"],
+        )
+        self.assertNotIn("..", lines[0]["reason"].replace("…", ""))
+
+        # "si" al prompt successivo: il context arriva dalla proposta che Claude
+        # ha scritto nel transcript (ultimo messaggio assistant).
+        transcript = write_jsonl(
+            os.path.join(self.tmp.name, "consent-transcript.jsonl"),
+            [
+                user_record("domanda abbastanza lunga per superare i filtri del retain"),
+                assistant_record(
+                    f"Vuoi che salvi questa memoria? — {preview}. "
+                    "Context proposto: «dominio dal transcript» (sì / no / context: …)"
+                ),
+            ],
+        )
+        outcome, posted = self.consent("si", transcript_path=transcript)
+        self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(outcome["context_source"], "proposal")
+        self.assertEqual(outcome["context"], "dominio dal transcript")
+        self.assertEqual(posted["context"], "dominio dal transcript")
 
     def test_retain_debug_emits_summary(self):
         rc, out, _gate, urlopen = self.run_main(
             self.cfg(retain_debug_in_context=True),
-            GateResult(action="retain", reason="durable_decision", preview="Salvo X."),
+            GateResult(
+                action="retain",
+                reason="durable_decision",
+                preview="Salvo X.",
+                context="dominio di prova",
+            ),
         )
         self.assertEqual(rc, 0)
         self.assertEqual(urlopen.call_count, 1)
@@ -689,26 +1004,77 @@ class WorkerGateTests(unittest.TestCase):
         urlopen.assert_not_called()
         self.assertEqual(self.gate_lines(out), [])
 
-    def test_gate_error_is_fail_open(self):
-        rc, _out, _gate, urlopen = self.run_main(
-            self.cfg(),
+    def test_gate_error_is_fail_closed_with_rollback_and_notice(self):
+        cfg = self.cfg(retain_every_n_turns=3)
+        gate_error = GateResult(action="skip", reason="gate_error", error="TimeoutError: x")
+        # 1° e 2° Stop: throttling, il gate non viene nemmeno chiamato.
+        for _ in range(2):
+            rc, out, gate_mock, urlopen = self.run_main(cfg, gate_error)
+            self.assertEqual(rc, 0)
+            gate_mock.assert_not_called()
+            urlopen.assert_not_called()
+            self.assertEqual(self.gate_lines(out), [])
+        # 3° Stop: gate chiamato -> errore tecnico -> FAIL-CLOSED: nessuna POST,
+        # systemMessage non bloccante, rollback del contatore.
+        rc, out, gate_mock, urlopen = self.run_main(cfg, gate_error)
+        self.assertEqual(rc, 0)
+        self.assertEqual(gate_mock.call_count, 1)
+        urlopen.assert_not_called()
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertNotIn("decision", lines[0])  # notifica, non block
+        self.assertIn("errore tecnico del gate", lines[0]["systemMessage"])
+        self.assertIn("TimeoutError: x", lines[0]["systemMessage"])
+        entry = self.read_state()["sess-gate-test"]
+        self.assertEqual(entry["stop_count"], 2)  # 3 -> 2: il prossimo Stop rivaluta
+        self.assertIs(entry["gate_error_notified"], True)
+        # 4° Stop: il contatore torna a 3 -> gate CHIAMATO di nuovo (rollback
+        # efficace); stesso errore -> nessuna seconda notifica nella sessione.
+        rc, out, gate_mock, urlopen = self.run_main(cfg, gate_error)
+        self.assertEqual(rc, 0)
+        self.assertEqual(gate_mock.call_count, 1)
+        urlopen.assert_not_called()
+        self.assertEqual(self.gate_lines(out), [])
+        self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 2)
+
+    def test_gate_error_debug_still_emits_block(self):
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(retain_debug_in_context=True),
             GateResult(action="skip", reason="gate_error", error="TimeoutError: x"),
         )
         self.assertEqual(rc, 0)
-        self.assertEqual(urlopen.call_count, 1)  # salva come prima del gate
+        urlopen.assert_not_called()
+        lines = self.gate_lines(out)
+        self.assertEqual(len(lines), 1)
+        self.assertNotIn("decision", lines[0])
+        message = lines[0]["systemMessage"]
+        self.assertIn("errore tecnico del gate", message)  # notifica fail-closed
+        self.assertIn("## Hindsight retain debug", message)  # + blocco debug
+        self.assertIn("fail-closed", message)
+        self.assertIn(
+            "## Hindsight retain debug",
+            lines[0]["hookSpecificOutput"]["additionalContext"],
+        )
 
     def test_uncertain_blocks_and_saves_pending(self):
         preview = "Vale la pena salvare la decisione sul gate?"
         rc, out, _gate, urlopen = self.run_main(
-            self.cfg(), GateResult(action="uncertain", reason="borderline", preview=preview)
+            self.cfg(),
+            GateResult(
+                action="uncertain", reason="borderline", preview=preview, context="dominio"
+            ),
         )
         self.assertEqual(rc, 0)
         urlopen.assert_not_called()
         lines = self.gate_lines(out)
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0]["decision"], "block")
-        self.assertIn("Vuoi che salvi questa memoria?", lines[0]["reason"])
-        self.assertIn(preview, lines[0]["reason"])
+        # uncertain CON context: la domanda classica resta identica (niente
+        # proposta di context, ICH-73 tocca solo il caso context vuoto).
+        self.assertIn(
+            f"Vuoi che salvi questa memoria? — {preview} (sì/no)", lines[0]["reason"]
+        )
+        self.assertNotIn("<PROPOSTA>", lines[0]["reason"])
         # Niente hookSpecificOutput: additionalContext non e' documentato per
         # Stop e duplicava l'istruzione nel transcript (error + feedback).
         self.assertNotIn("hookSpecificOutput", lines[0])
@@ -720,20 +1086,25 @@ class WorkerGateTests(unittest.TestCase):
         ) as consent_post:
             outcome = handle_retain_consent("si", "sess-gate-test", self.tmp.name)
         self.assertEqual(outcome["action"], "saved")
+        self.assertEqual(outcome["context_source"], "gate")
         self.assertEqual(consent_post.call_count, 1)
         posted = json.loads(consent_post.call_args[0][0].data.decode("utf-8"))
         self.assertEqual(len(posted["items"]), 1)
         self.assertIn("document_id", posted["items"][0])
+        self.assertEqual(posted["items"][0]["context"], "dominio")
 
     def test_uncertain_with_semantic_reason_still_pending(self):
         # Regressione ICH-72: uncertain + reason semantica arrivava al worker
-        # come gate_error (fail-open) => POST diretta. Ora resta un uncertain
-        # normale: pending + domanda, nessun salvataggio silenzioso.
+        # come gate_error (allora fail-open) => POST diretta. Ora resta un
+        # uncertain normale: pending + domanda, nessun salvataggio silenzioso.
         preview = "Salvo la causa radice appena confermata?"
         rc, out, _gate, urlopen = self.run_main(
             self.cfg(),
             GateResult(
-                action="uncertain", reason="root_cause_or_workaround", preview=preview
+                action="uncertain",
+                reason="root_cause_or_workaround",
+                preview=preview,
+                context="dominio",
             ),
         )
         self.assertEqual(rc, 0)
@@ -800,7 +1171,9 @@ class WorkerGateTests(unittest.TestCase):
             payloads.append(json.loads(req.data.decode("utf-8")))
             return FakeResponse()
 
-        gate = GateResult(action="retain", reason="durable_decision", preview="x")
+        gate = GateResult(
+            action="retain", reason="durable_decision", preview="x", context="dominio"
+        )
         with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", side_effect=capture):
