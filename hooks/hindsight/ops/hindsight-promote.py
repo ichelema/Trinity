@@ -53,8 +53,14 @@ machine or the toolchain, lessons about tools used across projects.
 KEEP examples: project-specific architecture/config/decisions, file paths or components that
 exist only in that project, task state, anything meaningless outside the project.
 
+A fact about a machine, OS, shell, proxy or toolchain is CROSS-PROJECT: it holds for every
+project on that machine. Proper names (a corporate network, a distro, a package manager) do
+not make it project-specific — judge what the fact is ABOUT, not what it mentions.
+
 Reply in JSON: {"verdict": "promote"|"keep", "reason": "<one short sentence in Italian>"}.
-When uncertain, prefer "keep" (promotion is curated, false positives cost human review time)."""
+When uncertain, prefer "promote": every candidate goes through human review, so a wrong
+promote costs seconds to reject, while a wrong keep is silent — the fact never shows up in
+any list and is never reconsidered."""
 
 _TRIAGE_SCHEMA = {
     "type": "object",
@@ -170,7 +176,10 @@ def triage_one(text: str, model: str, timeout: int = 20) -> dict:
             {"role": "system", "content": _TRIAGE_SYSTEM_PROMPT},
             {"role": "user", "content": text[:4000]},
         ],
-        "temperature": 0.0,
+        # Niente temperature: i reasoning model (gpt-5.x) accettano solo il
+        # default e danno HTTP 400 se la riceve. Misurato che non serve: il
+        # verdetto e' un enum sotto schema strict e resta stabile comunque,
+        # varia solo la formulazione di reason.
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "triage", "schema": _TRIAGE_SCHEMA, "strict": True},
