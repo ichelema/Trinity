@@ -27,24 +27,30 @@ cfg = load_config()
 if not cfg.get("mental_models_inject_on_start"):
     sys.exit(0)
 
-core = (cfg.get("bank") or {}).get("core_bank", "trinity-project")
-names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
+# Retrocompat api_url (vedi hindsight_config.py, load_config): se impostato
+# esplicitamente (config fidato o HINDSIGHT_API_URL), vince su tutto il blocco
+# bank -> single-bank legacy, solo gli id CORE (comportamento pre-PR).
+if cfg.get("_api_url_explicit"):
+    targets = [(cfg["api_url"], cfg.get("mental_models_inject_ids") or [])]
+else:
+    core = (cfg.get("bank") or {}).get("core_bank", "trinity-project")
+    names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
 
-# (url, [ids]) per ogni bank risolto, dedup per NOME. I modelli CORE sono filtrati
-# da mental_models_inject_ids, quelli di PROGETTO da project_mental_models_inject_ids.
-targets = []
-_seen = set()
-for n in names:
-    b = resolve_bank(n, cfg)
-    if not b or b in _seen:
-        continue
-    _seen.add(b)
-    if b == core:
-        _ids = cfg.get("mental_models_inject_ids") or []
-    else:
-        _ids = cfg.get("project_mental_models_inject_ids") or []
-    if _ids:
-        targets.append((bank_url(cfg, b), _ids))
+    # (url, [ids]) per ogni bank risolto, dedup per NOME. I modelli CORE sono filtrati
+    # da mental_models_inject_ids, quelli di PROGETTO da project_mental_models_inject_ids.
+    targets = []
+    _seen = set()
+    for n in names:
+        b = resolve_bank(n, cfg)
+        if not b or b in _seen:
+            continue
+        _seen.add(b)
+        if b == core:
+            _ids = cfg.get("mental_models_inject_ids") or []
+        else:
+            _ids = cfg.get("project_mental_models_inject_ids") or []
+        if _ids:
+            targets.append((bank_url(cfg, b), _ids))
 
 # Coppie (url, id) da iniettare, in ordine di bank (progetto poi core).
 pairs = []

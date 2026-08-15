@@ -22,7 +22,7 @@ export HOOKS_DIR
 import json, os, subprocess, sys, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "..", "lib"))
-from hindsight_config import load_config, resolve_bank, bank_url
+from hindsight_config import load_config, resolve_bank, retain_bank_url
 
 # Config per-progetto: gli hook ricevono CLAUDE_PROJECT_DIR da Claude Code, ma
 # questo script gira a mano. Ricava il toplevel git del cwd e lo imposta, cosi'
@@ -39,8 +39,12 @@ if _root:
 cfg = load_config()
 cwd = os.getcwd()
 _core = (cfg.get("bank") or {}).get("core_bank", "")
+# _bank resta calcolato (anche con api_url esplicito) per la scelta delle specs
+# nel ramo non-esplicito del seed, sotto.
 _bank = resolve_bank((cfg.get("bank") or {}).get("retain_bank", "auto"), cfg, cwd)
-BASE = bank_url(cfg, _bank)
+# retain_bank_url onora la retrocompat api_url esplicito (vedi hindsight_config.py):
+# con HINDSIGHT_API_URL o api_url nel config fidato, vince su tutto il blocco bank.
+BASE = retain_bank_url(cfg, cwd)
 
 
 def req(method, path, body=None, timeout=90):
@@ -95,7 +99,11 @@ elif cmd == "seed":
     # Quali modelli? I modelli CORE vivono nel core; quelli del PROGETTO
     # (project_mental_models) nel bank del progetto. La scelta segue il bank
     # risolto per il cwd (speculare a dove scrivono i fatti via retain_bank).
-    specs = cfg.get("mental_models", []) if _bank == _core else cfg.get("project_mental_models", [])
+    # Con api_url esplicito (retrocompat single-bank) i modelli sono sempre i CORE.
+    if cfg.get("_api_url_explicit"):
+        specs = cfg.get("mental_models", [])
+    else:
+        specs = cfg.get("mental_models", []) if _bank == _core else cfg.get("project_mental_models", [])
     for spec in specs:
         mid = spec.get("id")
         if not mid or not spec.get("source_query"):
