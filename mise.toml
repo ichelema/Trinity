@@ -310,7 +310,7 @@ run = "bash hooks/hindsight/tools/hs-db-restore.sh"
 description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:9999, collegato all'API :8888. Foreground: Ctrl-C per fermarlo."
 # HOSTNAME=localhost: Next.js eredita la env HOSTNAME (sotto MSYS2 = nome macchina) e
 # vi si legherebbe; forzata a localhost per non esporre la UI in LAN (bind su ::1).
-# Workaround hostname (2026-06-12, verificato fino alla 0.9.0): il redirect-loop
+# Workaround hostname (2026-06-12, verificato fino alla 0.9.1): il redirect-loop
 # delle 0.7.0+ non è un bug i18n in sé ma un origin-mismatch di Next standalone
 # (vercel/next.js#91844): NextURL normalizza 127.0.0.1→localhost nel rewrite del
 # middleware next-intl, mentre initUrl del router usa l'hostname di bind → il
