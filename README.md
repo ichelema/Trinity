@@ -606,7 +606,8 @@ Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16), lanciato
 plugin** — valida il lato core/default (forma delle chiavi, helper `mental_model_bank_urls`,
 retrocompat `api_url` esplicito, seed/show sul bank core, pinnati al root del plugin a
 prescindere da dove giri il check). Non verifica il setup di un progetto specifico: per quello,
-dal cwd del progetto,
+dal cwd del progetto (gli script vivono nel repo del plugin: prefissa i path qui sotto col suo
+percorso, es. `~/.claude/skills/trinity/`),
 
 1. `bash hooks/hindsight/ops/hindsight-mental-models.sh seed` → crea i modelli nel bank del
    progetto (idempotente: ri-eseguito non ricrea nulla);
