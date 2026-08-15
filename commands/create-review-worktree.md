@@ -69,7 +69,7 @@ La directory del worktree deve chiamarsi:
 
 Il `+` sostituisce il `/` del branch (che non è valido nei nomi di
 directory) e mantiene il raggruppamento visivo coerente con gli altri
-worktree (es. `improvement+ICH-72-retain-gate-dedup`).
+worktree (es. `improvements+ICH-72-retain-gate-dedup`).
 
 Verifica il nome del branch con:
 
@@ -135,8 +135,8 @@ Risolvi il percorso assoluto del worktree in formato Windows dentro
 `<repo-root>/.claude/worktrees/<prefix>+$issue_id-review-$model`
 
 Esempio: se la root è `E:/AI/Claude/Trinity` e il prefisso è
-`improvement`, il worktree sarà
-`E:/AI/Claude/Trinity/.claude/worktrees/improvement+ICH-72-review-Fable`.
+`improvements`, il worktree sarà
+`E:/AI/Claude/Trinity/.claude/worktrees/improvements+ICH-72-review-Fable`.
 
 Crea il branch e il worktree usando il percorso assoluto Windows:
 
