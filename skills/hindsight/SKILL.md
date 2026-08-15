@@ -343,7 +343,8 @@ allo scope di consolidation (= tag). Verificato sul sorgente di hindsight-api
 
 Conseguenza: una categoria secca ("tooling", "preferences") è il valore meno
 utile possibile — non descrive nulla. Usa una **descrizione del dominio del
-task**, come fa il retain worker automatico (context extraction via LLM):
+task**, come fa il gate del retain worker automatico (che produce il `context`
+insieme al verdetto):
 
 | ❌ Categoria secca | ✅ Dominio descrittivo                                                               |
 | ----------------- | ----------------------------------------------------------------------------------- |

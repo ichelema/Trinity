@@ -504,16 +504,24 @@ meccanica dei `medium` del recall: file per sessione, TTL 900s, consumo singolo)
 che salvi questa memoria? — …"*: il sì al prompt successivo esegue la POST dall'hook recall,
 un no o un prompt qualsiasi la scartano. Anti-duplicati: `document_id` derivato dal contenuto
 della finestra (replay identici fanno upsert) e candidati semantici dai bank di lettura
-passati al gate. Un errore tecnico del gate è **fail-open** (salva come prima del gate: col
-gate obbligatorio, il fail-closed perderebbe ogni retain a servizio LLM giù). Con
-`retain_debug_in_context: true` ogni valutazione produce un blocco "## Hindsight retain
-debug" visibile in conversazione, speculare a `recall_debug_in_context`. Il gate produce
-anche il **`context` descrittivo** del retain (una riga di dominio invece della categoria
-secca `claude-code/<slug>`; fallback alla vecchia estrazione `context_extraction` se manca),
-e il content della fetta non porta più l'header Timestamp/CWD/Session — quei valori vivono
-nei metadata. Parametri: `retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain
-MCP proattivo) è coperto dalle regole "Retain a fine task" in `core-behavior.md`, attive a
-ogni sessione.
+passati al gate. Un errore tecnico del gate (timeout, chiave assente, output fuori schema) è
+**fail-closed** (ICH-73): nessun salvataggio, un `systemMessage` non bloccante una sola volta
+per sessione, e rollback del contatore `stop_count` così il prossimo Stop riprova su una
+finestra che scivola di un solo turno. Con `retain_debug_in_context: true` ogni valutazione
+produce un blocco "## Hindsight retain debug" visibile in conversazione, speculare a
+`recall_debug_in_context`. Il gate produce anche il **`context` descrittivo** del retain (una
+riga di dominio invece della categoria secca `claude-code/<slug>`): non esiste più
+un'estrazione di fallback via LLM — se il context manca, con esito `retain` o `uncertain`, la
+POST va comunque in pending e Claude propone una riga di dominio nella domanda (*"Salvo questa
+memoria con context «…»? (sì / no / context: …)"*); al prompt successivo `sì` salva col
+context risolto in catena (gate → proposta di Claude nel transcript → riga repo/branch), `no`
+scarta, `context: <testo>` salva col context indicato. Lo scarto per prompt nuovo è visibile
+(*"Hindsight: memoria in attesa scartata — …"*). Il content della fetta non porta più
+l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
+`retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain MCP proattivo): il formato
+di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni
+sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain_enabled` è
+`false` (col gate attivo produrrebbero salvataggi doppi).
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (`promote_model`, gpt-5.6-luna: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
