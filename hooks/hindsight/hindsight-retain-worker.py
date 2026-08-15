@@ -317,7 +317,10 @@ def note_gate_error(session_id: str) -> bool:
     cosi' il prossimo Stop rivaluta una finestra che conserva 3 dei 4 turni, e
     flag gate_error_notified nella stessa entry. Ritorna True se e' la PRIMA
     notifica della sessione (il chiamante emette il systemMessage solo allora).
-    Senza session_id: nessuno stato, ritorna True."""
+    Senza session_id: nessuno stato, ritorna True. Se lo Stop era `force`
+    (HS_RETAIN_FORCE del check, SessionEnd storico) o every_n<=1 il contatore
+    non era salito: il decremento e' innocuo (clamp a 0; al piu' la prossima
+    valutazione slitta di uno Stop), non vale un ramo dedicato."""
     if not session_id:
         return True
     path = _retain_state_path()
