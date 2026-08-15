@@ -580,7 +580,9 @@ progetto:
 
 La sorgente dei bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a
 `recall_banks`): `auto` = bank del progetto, `core` = core condiviso. Nel repo del plugin
-`auto` collassa sul core, quindi il comportamento resta identico. Esempio
+`auto` collassa sul core, quindi il comportamento resta identico. `mental_model_inject_banks`
+è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto):
+il `hindsight.config.json` di un progetto può impostare solo `project_mental_models*`. Esempio
 (`<progetto>/hindsight.config.json`):
 
 ```json

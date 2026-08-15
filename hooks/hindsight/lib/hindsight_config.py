@@ -324,9 +324,14 @@ def _project_config_path() -> str | None:
 # (retain). Il blocco "bank" e' bloccato PER INTERO: retain_bank/core_bank
 # permetterebbero di scrivere nel core condiviso (poisoning), recall_banks di
 # leggere il core o i bank di altri progetti (info-leak), api_base di dirottare
-# l'endpoint. Restano impostabili da config plugin/utente e da env
-# (HINDSIGHT_API_URL, HS_CFG_*).
-PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank"}
+# l'endpoint. mental_model_inject_banks e' bloccata per lo stesso motivo di
+# recall_banks: seleziona i bank SORGENTE dell'iniezione mental model a
+# SessionStart, quindi lasciarla al progetto riaprirebbe lo stesso info-leak
+# cross-bank da un'altra porta (il progetto potrebbe farsi iniettare i mental
+# model del core o di un bank altrui). project_mental_models* restano libere:
+# sono self-scoped, si applicano solo al bank del progetto stesso. Restano
+# impostabili da config plugin/utente e da env (HINDSIGHT_API_URL, HS_CFG_*).
+PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank", "mental_model_inject_banks"}
 
 
 def _valid_override(key: str, value) -> bool:
