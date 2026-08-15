@@ -8,9 +8,15 @@ Attivo ogni volta che retain_enabled e' true; esiti (li applica il worker):
   uncertain  -> POST messa in pending + domanda all'utente; il consenso al
                 prompt successivo la esegue (handle_retain_consent, stessa
                 meccanica dei medium del recall ICH-66)
-Un errore TECNICO del gate e' fail-open lato worker (salva come prima del
-gate): con il gate obbligatorio, il fail-closed perderebbe ogni retain a
-server LLM giu'. L'errore resta visibile in GateResult.error e nel debug log.
+Un errore TECNICO del gate e' fail-closed lato worker (ICH-73): nessun
+salvataggio, notifica non bloccante una volta per sessione e rollback del
+contatore cosi' il prossimo Stop riprova. L'errore resta visibile in
+GateResult.error e nel debug log.
+Il gate produce anche il `context` descrittivo del retain; se manca (retain o
+uncertain) il worker mette comunque la POST in pending e Claude propone una
+riga di dominio: al prompt successivo handle_retain_consent risolve il context
+nell'ordine esplicito (`context: …`) -> gate -> proposta nel transcript ->
+riga repo/branch (fallback_context, zero rete).
 """
 
 from __future__ import annotations
@@ -31,9 +37,9 @@ try:
         _normalize_prompt,
         api_json,
         consume_pending,
-        discard_pending_if_present,
         save_pending,
     )
+    from hindsight_recall_lib import last_assistant_text
 except ImportError:
     from .hindsight_config import cache_dir
     from .hindsight_multibank import fetch_bank_results
@@ -42,9 +48,9 @@ except ImportError:
         _normalize_prompt,
         api_json,
         consume_pending,
-        discard_pending_if_present,
         save_pending,
     )
+    from .hindsight_recall_lib import last_assistant_text
 
 GATE_ACTIONS = {"retain", "skip", "uncertain"}
 
@@ -109,7 +115,8 @@ class GateResult:
     reason: str
     preview: str = ""
     # Riga descrittiva del dominio della finestra, prodotta dal gate: diventa il
-    # campo `context` del retain (il worker ricade su resolve_context se vuota).
+    # campo `context` del retain (vuota = il worker mette il retain in pending e
+    # chiede un context all'utente).
     context: str = ""
     duplicate_of: list[int] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
@@ -199,9 +206,10 @@ def evaluate_retain(
     """Valuta la finestra. Le violazioni STRUTTURALI della risposta (enum fuori
     schema, tipi errati, indici fuori range o ripetuti) e gli errori tecnici
     (key assente, timeout, HTTP, JSON) => "skip" con error valorizzato, che il
-    worker tratta come fail-open. Le violazioni SEMANTICHE (action e reason
-    entrambe valide ma male accoppiate) vengono invece normalizzate senza
-    errore: la action decisa dal modello non cambia mai."""
+    worker tratta come fail-closed (nessun salvataggio + notifica). Le
+    violazioni SEMANTICHE (action e reason entrambe valide ma male accoppiate)
+    vengono invece normalizzate senza errore: la action decisa dal modello non
+    cambia mai."""
     timeout = float(cfg.get("retain_gate_timeout", 15))
     model = str(cfg.get("retain_gate_model", "gpt-5.6-luna"))
     candidates = fetch_duplicate_candidates(bank_urls, dedup_query(summary), timeout)
@@ -243,8 +251,8 @@ def evaluate_retain(
         # Violazioni SEMANTICHE (reason valida ma male accoppiata alla action,
         # duplicate_of fuori dal caso skip+duplicate): qui la action del
         # modello e' affidabile e va rispettata — degradare a gate_error
-        # produrrebbe il fail-open del worker, cioe' il salvataggio diretto di
-        # finestre giudicate uncertain o skip. Si normalizzano i soli metadati:
+        # produrrebbe il fail-closed del worker, cioe' la perdita della finestra
+        # (anche di quelle giudicate retain). Si normalizzano i soli metadati:
         # la reason dichiarata resta com'e' (finisce nel debug log del worker),
         # duplicate_of vale solo per skip+duplicate (i candidati citati restano
         # comunque in GateResult.candidates).
@@ -280,6 +288,21 @@ def evaluate_retain(
 
 RETAIN_PENDING_TTL = 900.0
 
+# Proposta di Claude nel transcript: "context «…»" ma anche "Context proposto: «…»".
+# Si prende l'ULTIMO match del testo dell'ultimo messaggio assistant.
+RETAIN_CONTEXT_PROPOSAL_RE = re.compile(r"context[^«»\n]{0,20}«([^«»]+)»", re.IGNORECASE)
+
+# Risposta esplicita dell'utente: l'intero prompt e' "context: <testo>" su UNA
+# sola riga, con prefisso opzionale di assenso (lo stesso lessico standalone di
+# retain_consent_decision: sì / si / va bene / d'accordo / certo / procedi)
+# seguito da separatore opzionale (, . ; : ! -). Niente DOTALL: un prompt
+# multi-riga che apre con "context:" e prosegue con altro e' testo libero ->
+# new_prompt, come promesso dalla grammatica (mai un context implicito).
+RETAIN_CONTEXT_REPLY_RE = re.compile(
+    r"^\s*(?:(?:s[iì]|va\s+bene|d['’ ]?accordo|certo|procedi)\s*[,.;:!\-]?\s*)?context\s*:[ \t]*([^\n]+?)\s*$",
+    re.IGNORECASE,
+)
+
 
 def retain_pending_dir() -> str:
     """Directory del pending retain, separata da quella del recall.
@@ -307,6 +330,48 @@ def retain_consent_decision(prompt: str) -> str | None:
     return None
 
 
+def retain_consent_context(prompt: str) -> str | None:
+    """Testo del context se il prompt e' nella forma `context: <testo>` (anche
+    `sì, context: <testo>`); None altrimenti. Testo vuoto/solo spazi -> None."""
+    match = RETAIN_CONTEXT_REPLY_RE.match(prompt or "")
+    if not match:
+        return None
+    return match.group(1).strip() or None
+
+
+RETAIN_CONTEXT_PLACEHOLDER = "<PROPOSTA>"
+
+
+def retain_context_from_transcript(transcript_path: str) -> str | None:
+    """Ultimo match di RETAIN_CONTEXT_PROPOSAL_RE nell'ultimo messaggio assistant
+    (last_assistant_text). None se assente/vuoto. Il placeholder letterale
+    dell'istruzione («<PROPOSTA>»), ricopiato da Claude senza sostituirlo, non
+    e' una proposta: si scarta e si guarda il match precedente."""
+    matches = RETAIN_CONTEXT_PROPOSAL_RE.findall(last_assistant_text(transcript_path))
+    for match in reversed(matches):
+        text = match.strip()
+        if text and text.upper() != RETAIN_CONTEXT_PLACEHOLDER:
+            return text
+    return None
+
+
+def fallback_context(metadata: dict) -> str:
+    """Ultima risorsa, zero rete: riga da metadata.repo / metadata.branch.
+    repo+branch -> "sessione Claude Code nel repo {repo}, branch {branch}"
+    solo repo   -> "sessione Claude Code nel repo {repo}"
+    solo branch -> "sessione Claude Code sul branch {branch}"
+    nessuno     -> "sessione Claude Code" """
+    repo = str(metadata.get("repo") or "")
+    branch = str(metadata.get("branch") or "")
+    if repo and branch:
+        return f"sessione Claude Code nel repo {repo}, branch {branch}"
+    if repo:
+        return f"sessione Claude Code nel repo {repo}"
+    if branch:
+        return f"sessione Claude Code sul branch {branch}"
+    return "sessione Claude Code"
+
+
 def save_retain_pending(
     session_id: str, cwd: str, api_url: str, payload: dict, preview: str
 ) -> bool:
@@ -322,14 +387,23 @@ def save_retain_pending(
 
 
 def handle_retain_consent(
-    prompt: str, session_id: str, cwd: str, ttl: float = RETAIN_PENDING_TTL
+    prompt: str,
+    session_id: str,
+    cwd: str,
+    ttl: float = RETAIN_PENDING_TTL,
+    transcript_path: str = "",
 ) -> dict | None:
     """Da chiamare al prompt successivo alla domanda del gate (hook recall).
-    Positivo -> consuma il pending ed esegue la POST conservata; negativo o
-    prompt nuovo -> scarta. Ritorna un esito per debug/notifica, None se non
-    c'era alcun pending valido."""
+    Positivo (si' o `context: <testo>`) -> consuma il pending, risolve il
+    context dell'item nell'ordine esplicito -> gate -> proposta di Claude nel
+    transcript -> riga repo/branch, ed esegue la POST conservata (se la POST
+    fallisce il pending viene rimesso in attesa: un secondo si' riprova);
+    negativo o prompt nuovo -> scarta. Ritorna un esito per debug/notifica
+    (con preview, e per il salvataggio anche context e context_source; per
+    l'errore anche restored), None se non c'era alcun pending valido."""
     directory = retain_pending_dir()
-    decision = retain_consent_decision(prompt)
+    explicit = retain_consent_context(prompt)
+    decision = "positive" if explicit else retain_consent_decision(prompt)
     if decision == "positive":
         consumed = consume_pending(directory, session_id, cwd, ttl)
         if not consumed:
@@ -337,6 +411,22 @@ def handle_retain_consent(
         entry = consumed[0] if isinstance(consumed[0], dict) else {}
         preview = str(entry.get("preview") or "")
         try:
+            # L'item e' quello scritto dal worker (payload {"items": [item]}):
+            # un pending malformato finisce nel ramo error qui sotto, non in
+            # una POST silenziosa senza context.
+            item = entry["payload"]["items"][0]
+            if explicit:
+                context, context_source = explicit, "explicit"
+            elif item.get("context"):
+                context, context_source = str(item["context"]), "gate"
+            else:
+                proposal = retain_context_from_transcript(transcript_path)
+                if proposal:
+                    context, context_source = proposal, "proposal"
+                else:
+                    context = fallback_context(item.get("metadata") or {})
+                    context_source = "fallback"
+            item["context"] = context
             request = urllib.request.Request(
                 str(entry["api_url"]) + "/memories",
                 data=json.dumps(entry["payload"]).encode("utf-8"),
@@ -345,16 +435,39 @@ def handle_retain_consent(
             )
             with urllib.request.urlopen(request, timeout=10) as response:
                 status = response.status
-            return {"action": "saved", "status": status, "preview": preview}
+            return {
+                "action": "saved",
+                "status": status,
+                "preview": preview,
+                "context": context,
+                "context_source": context_source,
+            }
         except Exception as exc:
+            # POST fallita DOPO il consumo: senza ripristino il "si'" dell'utente
+            # e' andato perso e un secondo "si'" non troverebbe nulla. Si rimette
+            # il pending (TTL ripartito) cosi' il prossimo consenso riprova; il
+            # document_id stabile fa fare upsert al server, niente doppioni.
+            # L'item porta gia' il context risolto qui sopra (proposta/fallback):
+            # al retry non serve rileggere un transcript nel frattempo cambiato.
+            restored = save_retain_pending(
+                session_id,
+                cwd,
+                str(entry.get("api_url") or ""),
+                entry.get("payload") or {},
+                preview,
+            )
             return {
                 "action": "error",
                 "error": f"{type(exc).__name__}: {exc}",
                 "preview": preview,
+                "restored": restored,
             }
-    if discard_pending_if_present(directory, session_id, cwd, ttl):
-        return {
-            "action": "discarded",
-            "reason": "negative" if decision == "negative" else "new_prompt",
-        }
-    return None
+    consumed = consume_pending(directory, session_id, cwd, ttl)
+    if not consumed:
+        return None
+    entry = consumed[0] if isinstance(consumed[0], dict) else {}
+    return {
+        "action": "discarded",
+        "reason": "negative" if decision == "negative" else "new_prompt",
+        "preview": str(entry.get("preview") or ""),
+    }

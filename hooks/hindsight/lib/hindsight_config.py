@@ -168,31 +168,19 @@ DEFAULTS = {
     # OGNI finestra prima della POST. Esiti: retain -> salva silenzioso;
     # skip -> non salva; uncertain -> mette la POST in pending e chiede
     # all'utente (si'/no al prompt successivo, meccanica dei medium ICH-66).
-    # Errore tecnico del gate = fail-open (salva come prima del gate).
-    # Vedi hindsight_retain_gate.py.
+    # Errore tecnico del gate = fail-closed (ICH-73): nessun salvataggio +
+    # notifica non bloccante, vedi hindsight_retain_gate.py.
     "retain_gate_model": "gpt-5.6-luna",
     "retain_gate_timeout": 15,
     # Se attivo, ogni valutazione del gate produce un blocco
     # "## Hindsight retain debug" visibile (systemMessage) e nel contesto,
     # speculare a recall_debug_in_context.
     "retain_debug_in_context": False,
-    # context: dominio/i del task da mettere nel campo `context` del retain
-    # (schema "claude-code/<dom1>[/<dom2>][/<dom3>]"). NB: in Hindsight il context
-    # e' descrittivo (frame per l'LLM estrattore), NON strutturale: relazioni ed
-    # observation-scope si reggono su entita' e tag, non sul context. Quindi qui
-    # puntiamo solo a un frame d'estrazione piu' utile del vecchio repo/branch.
-    #   context_extraction          master switch (False => context piano "claude-code")
-    #   context_extraction_strategy "llm" usa il modello; "heuristic" deriva i domini
-    #                               dai path dei file modificati (zero rete). "llm"
-    #                               ricade automaticamente su "heuristic" se fallisce.
-    #   context_extraction_model    modello per la strategia "llm"
-    "context_extraction": False,
-    "context_extraction_strategy": "llm",
-    "context_extraction_model": "gpt-4.1-nano",
     # Triage della promozione progetto -> core (/trinity:promote e job
     # settimanale promote_scan): decide "questo fatto resterebbe utile su un
-    # progetto diverso?". Chiave dedicata perche' il compito non c'entra con
-    # l'estrazione dei domini del context (vedi ICH-73).
+    # progetto diverso?". Chiave dedicata perche' il compito non c'entra col
+    # gate del retain (nasceva separata dall'estrazione dei domini del context,
+    # rimossa da ICH-73).
     "promote_model": "gpt-5.6-luna",
     "reflect_budget": "mid",
     "reflect_max_tokens": 2000,

@@ -1,10 +1,12 @@
 """Logica pura per il recall composto (step H mirato).
 
 Estratta dall'heredoc inline di hindsight-recall.sh per renderla unit-testabile
-(stesso pattern di hindsight_config.py). Tre funzioni:
+(stesso pattern di hindsight_config.py). Quattro funzioni:
   - needs_context: il prompt e' corto E referenziale → vale comporre col contesto?
   - tail_turns:    estrae l'ultimo turno sostanzioso dalla coda del transcript
   - compose_query: unisce contesto + prompt nella query di recall
+  - last_assistant_text: ultimo testo assistant del transcript (consenso retain,
+    ICH-73: ci si ripesca il context proposto da Claude)
 
 Nessuna dipendenza dalla rete: solo decisione + costruzione stringa. Il flag
 recall_compose_enabled vive nella config; qui needs_context lo rispetta.
@@ -111,6 +113,20 @@ def tail_turns(transcript_path: str, cfg: dict) -> str:
             break
     collected.reverse()
     return " ".join(collected).strip()
+
+
+def last_assistant_text(transcript_path: str, max_lines: int = 80) -> str:
+    """Testo (blocchi text concatenati, ripuliti da strip_memory_block) dell'ULTIMO
+    record assistant CON testo nella coda del transcript JSONL. Claude Code scrive
+    un record per content-block: i record assistant di soli tool_use vengono
+    saltati. "" se il file manca, non e' leggibile o non ha testo assistant."""
+    if not transcript_path or not os.path.exists(transcript_path):
+        return ""
+    for rec in reversed(list(_iter_transcript_tail(transcript_path, max_lines))):
+        role, txt = _record_text(rec)
+        if role == "assistant" and txt:
+            return txt
+    return ""
 
 
 def compose_query(prompt: str, context: str, cfg: dict) -> str:

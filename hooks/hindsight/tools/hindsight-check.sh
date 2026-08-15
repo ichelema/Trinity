@@ -200,20 +200,69 @@ EOF
 	RETAIN_LOG="${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-retain.log"
 	>"$RETAIN_LOG"
 	# HS_RETAIN_FORCE bypassa il throttling (step E) per testare il POST in modo
-	# deterministico. OPENAI_API_KEY svuotata: il gate semantico (ICH-67) va in
-	# errore tecnico -> FAIL-OPEN -> la POST parte sempre. Senza, l'esito
-	# dipenderebbe dal giudizio dell'LLM sul contenuto sintetico (es. "skip:
-	# duplicate" ai run successivi) e il check diventerebbe non deterministico;
-	# cosi' si esercita anche il ramo fail-open, che deve salvare.
-	echo "$RETAIN_PAYLOAD" | HS_RETAIN_FORCE=1 OPENAI_API_KEY= "$HOOKS_DIR/hindsight-retain.sh" >/dev/null
-	sleep 1
-	if grep -q "\[retain\] OK 200" "$RETAIN_LOG" 2>/dev/null; then
-		ok "retain hook OK (log: $(head -1 "$RETAIN_LOG" | head -c 120))"
+	# deterministico. Il gate semantico (ICH-67) e' FAIL-CLOSED da ICH-73: un
+	# errore tecnico (es. OPENAI_API_KEY vuota) NON salva piu' nulla, quindi il
+	# vecchio trucco della chiave svuotata darebbe check KO. Al suo posto uno stub
+	# OpenAI locale (http.server su porta effimera, agganciato via HS_OPENAI_URL)
+	# risponde a qualunque POST un verdetto "retain" con context valorizzato ->
+	# la POST parte sempre. Con l'LLM vero l'esito dipenderebbe dal giudizio sul
+	# contenuto sintetico (es. "skip: duplicate" ai run successivi) e il check
+	# diventerebbe non deterministico. La porta la sceglie il kernel (bind su 0)
+	# e lo stub la pubblica su file: si aspetta quel file (max ~5s) prima di
+	# lanciare il retain; kill dello stub in ogni caso, anche su fallimento.
+	STUB_PY=$(mktemp /tmp/hs-stub-XXXXXX.py)
+	PORT_FILE=$(mktemp /tmp/hs-stub-port-XXXXXX)
+	cat >"$STUB_PY" <<'PY'
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+VERDICT = json.dumps({
+    "action": "retain", "reason": "durable_decision", "preview": "check e2e",
+    "duplicate_of": [],
+    "context": "diagnostica end-to-end del retain hook nel plugin Trinity",
+})
+BODY = json.dumps({"choices": [{"message": {"content": VERDICT}}]}).encode("utf-8")
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(BODY)))
+        self.end_headers()
+        self.wfile.write(BODY)
+
+    def log_message(self, *args):
+        pass
+
+
+srv = HTTPServer(("127.0.0.1", 0), Handler)
+with open(sys.argv[1], "w") as f:
+    f.write(str(srv.server_address[1]))
+srv.serve_forever()
+PY
+	python "$(w "$STUB_PY")" "$(w "$PORT_FILE")" >/dev/null 2>&1 &
+	STUB_PID=$!
+	for _ in $(seq 1 50); do [ -s "$PORT_FILE" ] && break; sleep 0.1; done
+	STUB_PORT=$(tr -d '\r\n' <"$PORT_FILE" 2>/dev/null)
+	if [ -z "$STUB_PORT" ]; then
+		ko "stub OpenAI locale non partito (porta non pubblicata in 5s) — e2e retain saltato"
 	else
-		ko "retain hook non ha scritto OK 200 in $RETAIN_LOG"
-		note "log: $(cat "$RETAIN_LOG" 2>/dev/null | head -3)"
+		echo "$RETAIN_PAYLOAD" | HS_RETAIN_FORCE=1 OPENAI_API_KEY=check-stub \
+			HS_OPENAI_URL="http://127.0.0.1:$STUB_PORT/v1/chat/completions" \
+			"$HOOKS_DIR/hindsight-retain.sh" >/dev/null
+		sleep 1
+		if grep -q "\[retain\] OK 200" "$RETAIN_LOG" 2>/dev/null; then
+			ok "retain hook OK (log: $(head -1 "$RETAIN_LOG" | head -c 120))"
+		else
+			ko "retain hook non ha scritto OK 200 in $RETAIN_LOG"
+			note "log: $(cat "$RETAIN_LOG" 2>/dev/null | head -3)"
+		fi
 	fi
-	rm -f "$FAKE"
+	kill "$STUB_PID" 2>/dev/null
+	wait "$STUB_PID" 2>/dev/null
+	rm -f "$FAKE" "$STUB_PY" "$PORT_FILE"
 fi
 
 # --- 10. RETAIN WORKER: git_info popola i tag (regression fix A) ---
@@ -1183,7 +1232,7 @@ else
 fi
 
 # In enforce il gate impone latenza sincrona: il suo timeout deve stare sotto il
-# timeout dell'hook Stop con margine per parsing + context extraction + startup.
+# timeout dell'hook Stop con margine per parsing + startup.
 GATE_BUDGET=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" "$(w "$HOOKSJSON")" <<'PY' 2>/dev/null
 import json, sys
@@ -1228,6 +1277,16 @@ if grep -q 'handle_retain_consent' "$HOOKS_DIR/hindsight-recall.sh"; then
 	ok "recall hook gestisce il consenso del retain pending"
 else
 	ko "handle_retain_consent assente da hindsight-recall.sh"
+fi
+
+# ICH-73: quando il gate non produce un context, il pending si risolve al prompt
+# successivo leggendo dal transcript la riga proposta da Claude: l'hook recall
+# deve passare transcript_path a handle_retain_consent, altrimenti la catena
+# salta sempre alla riga di ripiego repo/branch.
+if grep -A5 'handle_retain_consent(' "$HOOKS_DIR/hindsight-recall.sh" | grep -q 'transcript_path='; then
+	ok "recall hook passa transcript_path al consenso retain (ICH-73)"
+else
+	ko "hindsight-recall.sh non passa transcript_path a handle_retain_consent (ICH-73)"
 fi
 
 GATE_TEST=$(cd "$HOOKS_DIR" && PYTHONUTF8=1 python test_hindsight_retain_gate.py 2>&1)

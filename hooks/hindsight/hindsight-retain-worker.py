@@ -312,6 +312,35 @@ def should_retain_now(
     return cnt % every_n == 0
 
 
+def note_gate_error(session_id: str) -> bool:
+    """Errore tecnico del gate (fail-closed): rollback di stop_count di 1 (min 0)
+    cosi' il prossimo Stop rivaluta una finestra che conserva 3 dei 4 turni, e
+    flag gate_error_notified nella stessa entry. Ritorna True se e' la PRIMA
+    notifica della sessione (il chiamante emette il systemMessage solo allora).
+    Senza session_id: nessuno stato, ritorna True. Se lo Stop era `force`
+    (HS_RETAIN_FORCE del check, SessionEnd storico) o every_n<=1 il contatore
+    non era salito: il decremento e' innocuo (clamp a 0; al piu' la prossima
+    valutazione slitta di uno Stop), non vale un ramo dedicato."""
+    if not session_id:
+        return True
+    path = _retain_state_path()
+    with _state_lock(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+        if not isinstance(state, dict):
+            state = {}  # file avvelenato (JSON valido ma non-dict): auto-ripara
+        entry = state.get(session_id) or {}
+        entry["stop_count"] = max(0, entry.get("stop_count", 0) - 1)
+        first = not entry.get("gate_error_notified", False)
+        entry["gate_error_notified"] = True
+        state[session_id] = entry
+        _write_retain_state(path, state)
+    return first
+
+
 # Anti-feedback-loop: rimuove blocchi-memoria iniettati dal recall hook prima di
 # ritenere il testo. Senza strip, una memoria citata nel turno verrebbe ri-ritenuta
 # e la memoria "mangerebbe se stessa". Match precisi su marcatori che controlliamo:
@@ -564,190 +593,6 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
     return "\n".join(parts).strip()
 
 
-# ---------------------------------------------------------------------------
-# context del retain: dominio/i del task (max 3) -> "claude-code/<d1>[/<d2>][/<d3>]".
-# In Hindsight il context e' DESCRITTIVO (frame per l'LLM estrattore), non
-# strutturale (le relazioni sono entita'+tag). Qui miriamo solo a un frame piu'
-# utile del vecchio repo/branch. Due strategie: "llm" (gpt-4.1-nano sul riassunto
-# di sessione) con fallback automatico su "heuristic" (domini dai path dei file).
-# ---------------------------------------------------------------------------
-
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-
-# Prompt iterato empiricamente (vedi test/infer_domains_test.py). Le 4 leve che lo
-# fanno funzionare su gpt-4.1-nano: tetto a 3, priorita' ai nomi propri presenti nel
-# testo, distinzione soggetto/strumento (no git/mise/...), blocklist delle attivita'.
-_DOMAIN_SYSTEM_PROMPT = """You label the technical domain(s) of a software-engineering work session.
-
-You receive a compact summary of one session: what the user asked, what the assistant did, which files were touched, which commands were run. Output the technical SUBSYSTEMS, COMPONENTS, or TOOLS the session is about.
-
-Rules:
-1. Output AT MOST 3 domains. Prefer 1. Add a 2nd/3rd ONLY for genuinely distinct areas.
-2. Each domain is a short kebab-case slug, 1-3 words.
-3. PRIORITY — proper nouns beat generic concepts: if the session works ON a named tool/product/component (e.g. Obsidian, Excalidraw, Hindsight, PostgreSQL), use ITS name lowercased as the slug ("obsidian", "excalidraw", "hindsight"). Only invent a generic slug when no such name exists.
-4. SUBJECT vs INSTRUMENT — ask "did we BUILD/CHANGE this, or only USE it to run/ship the work?". A tool used merely as an instrument is NOT a domain. Never output these unless the session is specifically about configuring the tool itself: "git", "mise", "curl", "pip", "bash", "npm", "pnpm", "cargo", "ruby", "python".
-5. Name the SUBSYSTEM/COMPONENT, NEVER the ACTIVITY. Forbidden slugs: "debugging", "refactoring", "coding", "testing", "code-review", "analysis", "reading", "documentation", "note-taking", "diagramming", "configuration". If tempted by one of these, name the component it acted on instead.
-6. Never output near-synonyms together (e.g. "scheduler" AND "scheduling").
-7. Derive domains from concrete nouns: files, tools, components. Ignore filler like "fix this" or "rimetti come era".
-8. Input may be Italian or English; slugs are ALWAYS English.
-9. No clear technical domain → output exactly ["general"].
-
-Examples:
-- Reading hindsight-api source to understand the retain pipeline -> ["hindsight"]   (NOT "code-review")
-- Building a scheduler that checks PyPI for updates, run via mise, committed via git -> ["scheduler"]   (NOT "mise", "git")
-- Drawing an architecture diagram in Excalidraw and saving it as an Obsidian note -> ["excalidraw", "obsidian"]   (NOT "diagramming", "note-taking")
-
-Return JSON: {"domains": ["...", ...]}"""
-
-_DOMAIN_RESPONSE_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "domains": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 3,
-            "items": {"type": "string"},
-        }
-    },
-    "required": ["domains"],
-}
-
-# Alias di normalizzazione per l'euristica path-based (segmento -> dominio).
-_DOMAIN_ALIASES = {"test": "tests"}
-
-
-def _clean_domains(raw: list) -> list[str]:
-    """Normalizza una lista di slug: lower, kebab, dedup (ordine preservato), max 3."""
-    seen: set[str] = set()
-    out: list[str] = []
-    for d in raw:
-        s = str(d).strip().lower().replace(" ", "-")
-        if s and s not in seen:
-            seen.add(s)
-            out.append(s)
-    return out[:3]
-
-
-def _domain_input(summary: dict, hook: dict) -> str:
-    """Riassunto compatto di sessione per il modello. Gestisce sia il summary
-    'chunked' (turns) sia quello 'legacy' (last_user_prompt/last_assistant_text)."""
-    turns = summary.get("turns") or []
-    prompt = summary.get("last_user_prompt") or next(
-        (t for r, t in turns if r == "user"), ""
-    )
-    assistant = summary.get("last_assistant_text") or next(
-        (t for r, t in reversed(turns) if r == "assistant"), ""
-    )
-    files = summary.get("files_modified") or []
-    cmds = summary.get("bash_cmds") or []
-    parts: list[str] = []
-    if prompt:
-        parts += ["## User asked", prompt, ""]
-    if assistant:
-        parts += ["## Assistant did", assistant, ""]
-    if files:
-        parts += ["## Files touched"] + [f"- {f}" for f in files] + [""]
-    if cmds:
-        parts += ["## Commands"] + [f"- {c}" for c in cmds] + [""]
-    return "\n".join(parts).strip()
-
-
-def infer_domains_llm(text: str, model: str, timeout: int = 12) -> list[str]:
-    """Estrae max 3 domini via LLM. Ritorna [] su qualunque errore (no key, rete,
-    timeout, JSON invalido): il chiamante ricade su euristica/context piano."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key or not text:
-        return []
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": _DOMAIN_SYSTEM_PROMPT},
-                {"role": "user", "content": text},
-            ],
-            "temperature": 0.0,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "domains",
-                    "schema": _DOMAIN_RESPONSE_SCHEMA,
-                    "strict": True,
-                },
-            },
-        }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        OPENAI_URL,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:
-            data = json.loads(res.read().decode("utf-8"))
-        content = data["choices"][0]["message"]["content"]
-        return _clean_domains(json.loads(content).get("domains", []))
-    except Exception as e:  # noqa: BLE001 — non deve mai rompere il retain
-        debug_log(CFG, "context_infer_error", error=f"{type(e).__name__}: {e}")
-        return []
-
-
-def _significant_segment(path: str, cwd: str) -> str | None:
-    """Dal path di un file modificato ricava il nome del sottosistema. Salta i
-    prefissi noti (.claude/skills|hooks/<X>), normalizza suffisso -skill e alias."""
-    p = path.replace("\\", "/")
-    c = (cwd or "").replace("\\", "/").rstrip("/")
-    if c and p.startswith(c + "/"):
-        p = p[len(c) + 1 :]
-    segs = [s for s in p.split("/") if s and s != "."]
-    if not segs:
-        return None
-    if len(segs) >= 3 and segs[0] == ".claude" and segs[1] in ("skills", "hooks"):
-        name = segs[2]
-    elif len(segs) >= 2:
-        name = segs[0]  # top-dir per file annidati
-    else:
-        name = segs[0]  # file in root (es. .mise.toml)
-    n = name.strip().lower().lstrip(".")
-    if n.endswith("-skill"):
-        n = n[:-6]
-    n = _DOMAIN_ALIASES.get(n, n)
-    return n or None
-
-
-def domains_from_paths(files: list[str], cwd: str) -> list[str]:
-    """Euristica deterministica (zero rete): domini dai path dei file modificati."""
-    raw = [seg for f in files if (seg := _significant_segment(f, cwd))]
-    return _clean_domains(raw)
-
-
-def resolve_context(summary: dict, hook: dict) -> str:
-    """Costruisce il context del retain secondo la config. Catena:
-    llm -> (fallback) heuristic -> "claude-code" piano. Mai solleva."""
-    if not CFG.get("context_extraction", False):
-        return "claude-code"
-    strategy = CFG.get("context_extraction_strategy", "llm")
-    files = summary.get("files_modified") or []
-    cwd = hook.get("cwd") or ""
-    domains: list[str] = []
-    if strategy == "llm":
-        domains = infer_domains_llm(
-            _domain_input(summary, hook),
-            CFG.get("context_extraction_model", "gpt-4.1-nano"),
-        )
-        if not domains:  # rete di sicurezza quando l'LLM non risponde
-            domains = domains_from_paths(files, cwd)
-    elif strategy == "heuristic":
-        domains = domains_from_paths(files, cwd)
-    if not domains:
-        return "claude-code"
-    return "claude-code/" + "/".join(domains)
-
-
 def gate_debug_context(gate, bank: str) -> str:
     """Blocco '## Hindsight retain debug' per systemMessage/additionalContext
     (retain_debug_in_context, speculare al debug del recall). Header e trailer
@@ -760,7 +605,7 @@ def gate_debug_context(gate, bank: str) -> str:
         f"Gate latency: {gate.latency_ms:.1f} ms\n"
         f"Bank: {bank}"
         + (f"\nPreview: {gate.preview}" if gate.preview else "")
-        + (f"\nGate error (fail-open): {gate.error}" if gate.error else "")
+        + (f"\nGate error (fail-closed): {gate.error}" if gate.error else "")
         + "\n\nUse as consultative context. Verify mutable facts against the repo."
     )
 
@@ -822,8 +667,11 @@ def main() -> int:
     # turni che salverebbero davvero. Attivo sempre (retain_enabled e' l'unico
     # interruttore): retain -> POST diretta silenziosa; skip -> niente;
     # uncertain -> POST in pending + domanda all'utente (ramo piu' sotto).
-    # Un errore TECNICO del gate e' FAIL-OPEN: si salva come prima del gate —
-    # col gate obbligatorio, il fail-closed perderebbe ogni retain a LLM giu'.
+    # Un errore TECNICO del gate e' FAIL-CLOSED (ICH-73): nessun salvataggio,
+    # notifica non bloccante una volta per sessione e rollback del contatore
+    # cosi' il prossimo Stop rivaluta (finestra con overlap: 3 turni su 4
+    # sopravvivono). Salvare "come prima del gate" con un LLM giu' produceva
+    # memorie senza context e senza giudizio.
     gate = evaluate_retain(
         content, summary, recall_bank_urls(CFG, hook.get("cwd") or None), CFG
     )
@@ -837,7 +685,39 @@ def main() -> int:
         error=gate.error,
         preview=gate.preview[:300],
     )
-    if gate.action == "skip" and not gate.error:
+    if gate.error:
+        first = note_gate_error(session_id)
+        print(f"[retain] skip: gate error ({gate.error})")
+        debug_log(
+            CFG,
+            "retain_skip",
+            reason="gate_error",
+            error=gate.error,
+            session=session_id[:8],
+            notified=first,
+        )
+        # rc 0 anche qui: un rc!=0 farebbe scrivere al wrapper "non arrivato al
+        # server" in hs-retain-failed.log, etichetta sbagliata per un gate giu'.
+        out = {}
+        if first:
+            out["systemMessage"] = (
+                "Hindsight: retain automatico non eseguito — errore tecnico del gate "
+                f"({gate.error}). Nessuna memoria salvata per questa finestra; il "
+                "prossimo Stop riprova."
+            )
+        if CFG.get("retain_debug_in_context"):
+            debug = gate_debug_context(gate, "-")
+            out["systemMessage"] = "\n\n".join(
+                filter(None, [out.get("systemMessage"), debug])
+            )
+            out["hookSpecificOutput"] = {
+                "hookEventName": "Stop",
+                "additionalContext": debug,
+            }
+        if out:
+            print("HSGATE " + json.dumps(out, ensure_ascii=False))
+        return 0
+    if gate.action == "skip":
         print(f"[retain] skip: gate ({gate.reason})")
         debug_log(CFG, "retain_skip", reason=f"gate_{gate.reason}", session=session_id[:8])
         if CFG.get("retain_debug_in_context"):
@@ -849,10 +729,11 @@ def main() -> int:
 
     # context: riga descrittiva del dominio prodotta dal GATE (legge gia' tutta
     # la finestra: una chiamata LLM in meno e un frame piu' ricco per
-    # l'estrattore della "categoria secca" claude-code/<slug>). Fallback alla
-    # catena storica resolve_context (nano -> heuristic -> "claude-code")
-    # quando il gate non l'ha prodotta: errore tecnico o campo vuoto.
-    context = gate.context or resolve_context(summary, hook)
+    # l'estrattore della "categoria secca" claude-code/<slug>). Puo' essere
+    # vuota: in quel caso NON si inventa nulla qui — la POST va in pending e
+    # il context lo propone Claude / lo indica l'utente al prompt successivo
+    # (ramo pending piu' sotto; catena in handle_retain_consent, ICH-73).
+    context = gate.context
 
     # metadata: filter values stringa (lo schema accetta dict[str,str]). Tutti i
     # valori opzionali vengono inclusi solo se non vuoti per non sporcare il dict.
@@ -915,29 +796,63 @@ def main() -> int:
     # il bank si auto-crea al primo retain, nessun provisioning).
     api_url = os.environ.get("API_URL") or retain_bank_url(CFG, hook.get("cwd") or None)
 
-    # Uncertain: la POST pronta va in pending (stessa meccanica dei medium del
-    # recall ICH-66: file per session+cwd, TTL, consumo singolo) e l'hook blocca
-    # lo stop per far porre a Claude la domanda. Il si' al prompt successivo
-    # esegue la POST dall'hook recall (handle_retain_consent); no/prompt nuovo
-    # la scartano. gate.error non arriva qui: e' fail-open verso la POST diretta.
-    if gate.action == "uncertain" and not gate.error:
+    # Pending + domanda: la POST pronta va in pending (stessa meccanica dei
+    # medium del recall ICH-66: file per session+cwd, TTL, consumo singolo) e
+    # l'hook blocca lo stop per far porre a Claude la domanda. Ci si arriva
+    # per uncertain (come sempre) e, da ICH-73, anche per retain/uncertain con
+    # context VUOTO: Claude propone una riga di dominio e l'utente risponde
+    # si' / no / `context: …`. Il si' al prompt successivo esegue la POST
+    # dall'hook recall (handle_retain_consent, che risolve il context: esplicito
+    # -> gate -> proposta nel transcript -> repo/branch); no/prompt nuovo la
+    # scartano. gate.error non arriva qui: e' fail-closed piu' sopra.
+    needs_context = not context
+    if gate.action == "uncertain" or needs_context:
         if not save_retain_pending(
             session_id, hook.get("cwd") or "", api_url, payload, gate.preview
         ):
             # Senza pending affidabile (niente session_id / stato non scrivibile)
             # la domanda non potrebbe mantenere la promessa del si': non si salva.
-            debug_log(CFG, "retain_skip", reason="gate_uncertain_no_pending")
+            debug_log(CFG, "retain_skip", reason=f"gate_{gate.action}_no_pending")
             return 0
-        question = f"Vuoi che salvi questa memoria? — {gate.preview} (sì/no)"
         # La reason viene SEMPRE stampata nel transcript (limite Claude Code:
         # per Stop non esiste un canale nascosto come l'additionalContext di
-        # UserPromptSubmit), quindi resta corta: solo la domanda e le due
+        # UserPromptSubmit), quindi resta corta: solo la domanda e le
         # direttive essenziali.
-        instruction = (
-            f"Retain gate uncertain: ask the user verbatim {question!r} and end "
-            "the turn. Do not save anything yourself; a yes runs the pending "
-            "save at the next prompt."
-        )
+        if not needs_context:  # uncertain + context: come oggi
+            question = f"Vuoi che salvi questa memoria? — {gate.preview} (sì/no)"
+            instruction = (
+                f"Retain gate uncertain: ask the user verbatim {question!r} and end "
+                "the turn. Do not save anything yourself; a yes runs the pending "
+                "save at the next prompt."
+            )
+        else:
+            propose = (
+                "Propose ONE short descriptive line for the technical domain of this "
+                "window (subject and project, e.g. \"architettura del recall automatico "
+                "Hindsight nel plugin Trinity\"; never a bare category), in the language "
+                "of the conversation, and put it in place of <PROPOSTA>. "
+            )
+            if gate.action == "retain":
+                question = "Salvo questa memoria con context «<PROPOSTA>»? (sì / no / context: …)"
+                instruction = (
+                    f"Retain gate approved this window but produced no context. {propose}"
+                    f"Then ask the user verbatim {question!r} and end the turn. "
+                    f"Preview: {gate.preview}. Do not save anything yourself; a yes "
+                    "(or a `context: …` reply) runs the pending save at the next prompt."
+                )
+            else:  # uncertain senza context
+                # rstrip('.') evita "…gate.. Context proposto": le preview del
+                # gate sono frasi e finiscono quasi sempre col punto.
+                question = (
+                    f"Vuoi che salvi questa memoria? — {gate.preview.rstrip('.')}. "
+                    "Context proposto: «<PROPOSTA>» (sì / no / context: …)"
+                )
+                instruction = (
+                    f"Retain gate uncertain and no context. {propose}"
+                    f"Then ask the user verbatim {question!r} and end the turn. "
+                    "Do not save anything yourself; a yes (or a `context: …` reply) "
+                    "runs the pending save at the next prompt."
+                )
         # Niente additionalContext: su Stop non e' documentato e duplicare
         # l'istruzione produce due righe identiche nel transcript (error +
         # feedback). La reason da sola basta a far porre la domanda.
@@ -949,7 +864,12 @@ def main() -> int:
             out["systemMessage"] = gate_debug_context(gate, api_url.rsplit("/", 1)[-1])
         print("HSGATE " + json.dumps(out, ensure_ascii=False))
         debug_log(
-            CFG, "retain_pending", action="saved", doc_id=doc_id, preview=gate.preview[:300]
+            CFG,
+            "retain_pending",
+            action="saved",
+            doc_id=doc_id,
+            context=context,
+            preview=gate.preview[:300],
         )
         return 0
 

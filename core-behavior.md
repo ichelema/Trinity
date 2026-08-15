@@ -111,7 +111,19 @@ scartati rilevanti).
 NON salvare: stato temporaneo, output banale, dati ricavabili dal repository,
 tentativi intermedi, duplicati.
 
-Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain` così:
+Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain`
+col formato della sezione sotto.
+
+Se no: non fare nulla.
+
+Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
+<!-- /RETAIN:manual -->
+
+## Formato di `mcp__hindsight__retain`
+
+Vale ogni volta che chiami `mcp__hindsight__retain`; la regola sul `context`
+vale anche quando il gate automatico ti chiede di proporne uno per una memoria
+in attesa.
 
 - `content`: forma breve e autosufficiente che spieghi il PERCHÉ, coi dettagli
   tecnici (comandi, path, valori) preservati alla lettera.
@@ -120,10 +132,5 @@ Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain` c
 - `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del
   progetto e `branch:<nome>` solo se davvero legato al branch. NIENTE tag
   semantici (bug, convention, preferenze…): frammentano la consolidation.
-
-Se no: non fare nulla.
-
-Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
-<!-- /RETAIN:manual -->
 
 
