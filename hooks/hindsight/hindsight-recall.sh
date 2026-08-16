@@ -3,9 +3,10 @@
 # filtra semanticamente i risultati prima di iniettarli. Da ICH-86 ospita
 # anche il lato retain del prompt (vedi hindsight-retain.sh), ma TUTTA quella
 # logica sta nel worker (hindsight-retain-worker.py:retain_at_prompt): qui
-# solo poche righe di colla. Consenso del pending (sincrono) -> gate
-# differito sull'entry in coda avviato in un thread PARALLELO al recall ->
-# recall -> join del gate all'emit, con UN SOLO oggetto JSON su stdout.
+# solo poche righe di colla. Pickup dell'esito del gate del prompt precedente
+# -> consenso del pending (sincrono) -> gate differito sull'entry in coda in
+# un PROCESSO DETACHED parallelo al recall -> recall -> raccolta dell'outbox
+# del gate all'emit (breve budget), con UN SOLO oggetto JSON su stdout.
 set -uo pipefail
 
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
@@ -26,8 +27,8 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-# Istante di partenza dell'hook: la deadline di join del gate differito
-# (RETAIN_JOIN_BUDGET_S, sotto) si misura da qui, non dal momento dell'emit.
+# Istante di partenza dell'hook: la deadline di raccolta dell'esito del gate
+# differito (RETAIN_PICKUP_BUDGET_S, sotto) si misura da qui, non dall'emit.
 T0 = time.monotonic()
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
@@ -68,25 +69,30 @@ pending_ttl = float(cfg["recall_pending_ttl"])
 # Lato RETAIN del prompt (ICH-86): consenso del pending (gate "uncertain" o
 # context mancante, ICH-67/ICH-73) + valutazione DIFFERITA dell'entry accodata
 # dallo Stop precedente. TUTTA la logica sta nel worker (retain_at_prompt):
-# qui solo la colla. Ordine voluto, dentro il worker: PRIMA il consenso, in
-# modo sincrono (risponde alla domanda del turno precedente e consuma il suo
-# pending; su un si' fallito e RIPRISTINATO il gate non parte, l'entry resta
-# in coda), POI il gate differito avviato in un thread daemon (puo' creare il
-# pending successivo), e solo dopo, qui, il recall — cosi' un "si'" non viene
-# mai letto come risposta a una domanda non ancora posta. Il gate corre IN
-# PARALLELO al recall perche' sono indipendenti (coda/transcript vs prompt):
-# la latenza aggiunta al prompt e' ~max(gate, recall) invece della somma. Il
-# suo output si ritira con gate_output(deadline) SOLO al momento dell'emit:
-# e' l'ultimo istante utile per fonderlo nell'unico JSON su stdout, e fino a
-# li' il recall ha lavorato senza aspettarlo. Il worker e' caricato per path
-# (non e' in lib/) dentro un try: un worker rotto non deve mai uccidere il
-# recall (dummy a campi vuoti). I suoi log '[retain] ...' vanno su stderr
-# (hs-recall-stderr.log): lo stdout resta il solo JSON di questo hook.
-# Budget di join del gate: hooks.json da' a questo hook 60s; 55s da T0 lascia
-# 5s di margine per la print e l'uscita. Un gate che non ha finito entro la
-# deadline si perde (come una mancata per throttling; il worker logga
-# retain_skip/deferred_timeout).
-RETAIN_JOIN_BUDGET_S = 55.0
+# qui solo la colla. Ordine voluto, dentro il worker: PRIMA il pickup
+# dell'esito del gate del prompt precedente (se non era arrivato in tempo; se
+# porta la domanda del pending, mai mostrata, il consenso di questo prompt si
+# salta), POI il consenso, in modo sincrono (risponde alla domanda del turno
+# precedente e consuma il suo pending; su un si' fallito e RIPRISTINATO il
+# gate non parte, l'entry resta in coda), POI il gate differito lanciato in
+# un PROCESSO DETACHED (puo' creare il pending successivo), e solo dopo, qui,
+# il recall — cosi' un "si'" non viene mai letto come risposta a una domanda
+# non ancora posta. Il gate corre IN PARALLELO al recall perche' sono
+# indipendenti (coda/transcript vs prompt). Il suo output si ritira con
+# gate_output(deadline) SOLO al momento dell'emit: e' l'ultimo istante utile
+# per fonderlo nell'unico JSON su stdout, e fino a li' il recall ha lavorato
+# senza aspettarlo. Il worker e' caricato per path (non e' in lib/) dentro un
+# try: un worker rotto non deve mai uccidere il recall (dummy a campi vuoti).
+# I suoi log '[retain] ...' vanno su stderr (hs-recall-stderr.log): lo stdout
+# resta il solo JSON di questo hook.
+# Budget di raccolta dell'esito del gate: il gate gira in un processo
+# detached e scrive un outbox; l'hook lo aspetta SOLO fino a T0+6s (gate
+# tipico ~3-5s incluso l'avvio del processo, quindi la domanda di solito
+# esce in QUESTO prompt). Se e' piu' lento l'hook esce comunque e l'esito lo
+# raccoglie il prompt successivo (retain_deferred carried_over -> picked_up):
+# niente piu' max(gate + POST) sul percorso critico del prompt, nessuna
+# finestra persa.
+RETAIN_PICKUP_BUDGET_S = 6.0
 
 
 class _NoRetain:
@@ -97,6 +103,7 @@ class _NoRetain:
     notice = ""
     saved = False
     stop_here = False
+    launched = False
 
     @staticmethod
     def gate_output(deadline: float) -> dict:
@@ -129,11 +136,11 @@ _emitted = False
 
 def emit(output: dict) -> None:
     """Unico punto di stampa: fonde nella stessa uscita la notifica del pending
-    retain scartato e l'output del gate differito — ritirato QUI, con join
-    entro la deadline (systemMessage a righe, additionalContext a blocchi),
-    creando hookSpecificOutput se manca."""
+    retain scartato e l'output del gate differito — ritirato QUI, aspettando
+    l'outbox al massimo fino alla deadline (systemMessage a righe,
+    additionalContext a blocchi), creando hookSpecificOutput se manca."""
     global _emitted
-    extra = RETAIN.gate_output(T0 + RETAIN_JOIN_BUDGET_S)
+    extra = RETAIN.gate_output(T0 + RETAIN_PICKUP_BUDGET_S)
     extra_msg = extra.get("systemMessage") or ""
     extra_ctx = (extra.get("hookSpecificOutput") or {}).get("additionalContext") or ""
     if RETAIN.notice or extra_msg:
@@ -154,7 +161,7 @@ def finish() -> None:
     """Uscita senza contenuto recall: stampa solo notifica/gate differito, se
     ci sono e non sono gia' usciti. gate_output e' idempotente (cache), quindi
     la seconda chiamata dentro emit() non ri-aspetta."""
-    if not _emitted and (RETAIN.notice or RETAIN.gate_output(T0 + RETAIN_JOIN_BUDGET_S)):
+    if not _emitted and (RETAIN.notice or RETAIN.gate_output(T0 + RETAIN_PICKUP_BUDGET_S)):
         emit({})
     sys.exit(0)
 

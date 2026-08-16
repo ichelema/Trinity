@@ -6,10 +6,12 @@
 # un LLM (il gate semantico costa fino a 15s e un decision:block qui
 # interromperebbe il turno). La valutazione e' DIFFERITA:
 #   - al prossimo UserPromptSubmit, hindsight-recall.sh chiama
-#     hindsight-retain-worker.py:retain_at_prompt(...), che in un thread
-#     parallelo al recall esegue evaluate_queued(session_id) -> prende l'entry
-#     piu' recente di questa sessione, la valuta col gate e fa la POST (o mette
-#     in pending + domanda in coda alla risposta successiva);
+#     hindsight-retain-worker.py:retain_at_prompt(...), che lancia un processo
+#     detached (`--queued <session_id>`) parallelo al recall: esegue
+#     evaluate_queued(session_id) -> prende l'entry piu' recente di questa
+#     sessione, la valuta col gate e fa la POST (o mette in pending + domanda
+#     in coda alla risposta successiva) e scrive l'esito in un outbox che
+#     l'hook raccoglie entro un breve budget, o il prompt dopo;
 #   - a chiusura, hindsight-sentinel.sh lancia il worker con `--drain` e valuta
 #     le entry rimaste (la coda della sessione, senza domande).
 # Coda: $HS_CACHE_DIR/hs-retain-queue/<EPOCHREALTIME senza punto>-<pid>.json,

@@ -11,12 +11,12 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
-| `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: consenso del retain pending, poi gate differito dell'entry accodata allo Stop precedente in un thread parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit — un solo JSON in output |
+| `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: pickup dell'esito del gate del prompt precedente, consenso del retain pending, poi gate differito dell'entry accodata allo Stop precedente in un processo detached parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit (attesa max 6 s, altrimenti raccolto al prompt dopo) — un solo JSON in output |
 | `hindsight-ensure-up.sh`     | SessionStart       | se il server :8888 è giù, lo avvia (`mise run start-hindsight`) e attende il boot; spawna la sentinella |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
 | `hindsight-retain.sh`        | Stop               | puro bash: accoda il payload del hook in `$HS_CACHE_DIR/hs-retain-queue/` e risponde `{}` (nessuna valutazione qui) |
 | `hindsight-sentinel.sh`      | — (detached)       | singleton spawnato da ensure-up: quando non resta alcun processo claude vivo drena la coda del retain (`hindsight-retain-worker.py --drain`), attende i retain in volo e ferma server + Postgres (sostituisce l'hook SessionEnd, sempre cancellato: issue #32712) |
-| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: consenso + gate differito in parallelo, importato da `hindsight-recall.sh`), `--drain` dalla sentinella (non è un hook a sé) |
+| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--queued <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'entry della sessione e scrive l'outbox `hs-retain-queue/<session>.out.json`), `--drain` dalla sentinella (non è un hook a sé) |
 
 ## 📁 `lib/` — libreria condivisa
 

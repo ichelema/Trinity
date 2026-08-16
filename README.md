@@ -534,16 +534,25 @@ hook verbatim in `$XDG_CACHE_HOME/trinity/hs-retain-queue/<EPOCHREALTIME>-<pid>.
 risponde `{}` (niente gate, niente `decision: block`, niente Python sul percorso caldo). Al
 prompt successivo `hindsight-recall.sh` delega tutto il lato retain al worker
 (`hindsight-retain-worker.py:retain_at_prompt`, l'hook ha solo poche righe di colla): prima il
-consenso del pending (`handle_retain_consent`, che risponde alla domanda precedente), in modo
-sincrono; poi `evaluate_queued(session_id)` in un thread **parallelo al recall** — prende
-l'entry più recente della sessione, cancella tutte le sue entry, scarta i messaggi utente in
-coda al transcript (il prompt appena inviato) e valuta la finestra del turno completato:
-`retain` → POST silenziosa, `uncertain`/context mancante → pending + istruzione in
-`additionalContext` (la domanda chiude la risposta successiva). L'hook intanto fa il recall e
-al momento dell'emit fonde l'esito del gate (`gate_output`, join entro il budget dell'hook)
-nell'unico JSON: la latenza aggiunta al prompt è ≈ max(gate, recall), non la somma. Il
-throttling non cambia:
-`stop_count` avanza una volta per entry consumata (stessa cadenza `retain_every_n_turns`). A
+*pickup* dell'esito del gate del prompt precedente, se non era arrivato in tempo (outbox
+`hs-retain-queue/<session_id>.out.json`; se porta la domanda del pending, mai mostrata, il
+consenso di questo prompt si salta e la domanda esce ora); poi il consenso del pending
+(`handle_retain_consent`, che risponde alla domanda precedente), in modo sincrono; poi il gate
+differito in un **processo detached** (`hindsight-retain-worker.py --queued <session_id>` →
+`evaluate_queued`) **parallelo al recall** — prende l'entry più recente della sessione,
+cancella tutte le sue entry, scarta i messaggi utente in coda al transcript (il prompt appena
+inviato) e valuta la finestra del turno completato: `retain` → POST silenziosa,
+`uncertain`/context mancante → pending + istruzione in `additionalContext` (la domanda chiude
+la risposta successiva); l'esito finisce nell'outbox. L'hook intanto fa il recall e al momento
+dell'emit aspetta l'outbox solo fino a **6 s** dal suo avvio (`gate_output`; gate tipico ≈ 3-5 s,
+quindi la domanda di solito esce nello stesso prompt): se il processo non ha finito l'hook esce
+comunque, nulla viene ucciso né perso, e l'esito viene raccolto al prompt successivo (eventi
+debug `retain_deferred` `carried_over` / `picked_up`) — niente più stallo del prompt in attesa di
+gate + POST. Entry di coda più vecchie di 24 h (di qualunque sessione: la sentinella non ha
+drenato) vengono rimosse con marker in `hs-retain-failed.log` (`retain_skip.reason`
+`queue_stale`). Il throttling: `stop_count` avanza una volta per **ogni Stop realmente
+avvenuto** (l'entry valutata più le più vecchie scartate dal dequeue), stessa cadenza
+`retain_every_n_turns`; nel drain (`force`) non avanza. A
 chiusura la sentinella lancia `hindsight-retain-worker.py --drain` prima di
 `ops/hindsight-drain-retain.py`: la coda residua è valutata in modalità *drain* (force, nessuna
 domanda: `retain` → POST, con context di ripiego repo/branch se il gate non l'ha dato;

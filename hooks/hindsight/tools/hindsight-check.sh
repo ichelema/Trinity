@@ -1286,8 +1286,9 @@ fi
 # Wiring ICH-86: lo Stop hook e' puro enqueue (hs-retain-queue, niente HSGATE ne'
 # guardia stop_hook_active: non c'e' piu' nessun decision:block da proteggere);
 # l'hook recall delega tutto il lato retain del prompt al worker
-# (retain_at_prompt: consenso + gate differito in parallelo al recall); la
-# sentinella drena il residuo a chiusura (--drain).
+# (retain_at_prompt: pickup + consenso + gate differito in un processo
+# detached parallelo al recall); la sentinella drena il residuo a chiusura
+# (--drain).
 if grep -q 'hs-retain-queue' "$HOOKS_DIR/hindsight-retain.sh" &&
 	! grep -q 'HSGATE' "$HOOKS_DIR/hindsight-retain.sh" &&
 	! grep -q 'stop_hook_active' "$HOOKS_DIR/hindsight-retain.sh"; then
@@ -1315,16 +1316,18 @@ else
 	ko "gate/pending non integrati nel worker o modulo lib mancante"
 fi
 # ICH-86: entry point del lato retain per l'hook recall (retain_at_prompt:
-# consenso + gate differito in un thread parallelo al recall), consumo della
-# coda (evaluate_queued) + scarto dei messaggi utente in coda al transcript (a
+# pickup + consenso + gate differito in un processo detached parallelo al
+# recall, lanciato come `--queued <session>`), consumo della coda
+# (evaluate_queued) + scarto dei messaggi utente in coda al transcript (a
 # UserPromptSubmit puo' gia' contenere il prompt nuovo: la finestra deve
 # essere quella del turno COMPLETATO).
 if grep -q 'def retain_at_prompt' "$HOOKS_DIR/hindsight-retain-worker.py" &&
 	grep -q 'def evaluate_queued' "$HOOKS_DIR/hindsight-retain-worker.py" &&
+	grep -q -- '--queued' "$HOOKS_DIR/hindsight-retain-worker.py" &&
 	grep -q 'def drop_unanswered_tail' "$HOOKS_DIR/hindsight-retain-worker.py"; then
-	ok "worker espone retain_at_prompt + evaluate_queued + drop_unanswered_tail (valutazione differita)"
+	ok "worker espone retain_at_prompt + evaluate_queued + --queued + drop_unanswered_tail (valutazione differita)"
 else
-	ko "retain_at_prompt, evaluate_queued o drop_unanswered_tail assenti dal worker (ICH-86)"
+	ko "retain_at_prompt, evaluate_queued, --queued o drop_unanswered_tail assenti dal worker (ICH-86)"
 fi
 
 # Il consenso del pending retain vive nel worker (retain_at_prompt), chiamato

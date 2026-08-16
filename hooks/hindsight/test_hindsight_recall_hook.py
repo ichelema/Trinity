@@ -10,9 +10,11 @@ con UN SOLO oggetto JSON su stdout.
 
 ICH-86: copre anche il retain DIFFERITO — lo Stop hook (hindsight-retain.sh,
 eseguito anch'esso come subprocess) accoda soltanto; l'entry viene valutata
-dall'hook recall al prompt successivo (gate stubbato dallo stesso mock via
-HS_OPENAI_URL): POST /memories, oppure pending + domanda in coda alla risposta
-fusa nello stesso JSON del recall.
+al prompt successivo da un VERO processo python detached lanciato dall'hook
+recall (`hindsight-retain-worker.py --queued`, gate stubbato dallo stesso mock
+via HS_OPENAI_URL ereditata dall'env dell'hook): POST /memories, oppure
+pending + domanda in coda alla risposta fusa nello stesso JSON del recall —
+o, se il gate e' piu' lento del budget di pickup, raccolta al prompt dopo.
 """
 
 import glob
@@ -574,13 +576,15 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(self.retain_pending_files(), [])
 
     def test_queued_gate_runs_in_parallel_with_recall(self):
-        # WP-D: il gate differito gira in un thread PARALLELO al recall dentro
-        # lo stesso hook. Con gate e recall che dormono entrambi DELAY secondi
-        # il tempo aggiunto e' ~DELAY (parallelo) invece di ~2*DELAY (il vecchio
-        # design seriale). Si misura contro una baseline senza ritardi nello
-        # stesso ambiente (avvio bash+python varia da macchina a macchina):
-        # soglia a meta' strada tra parallelo (+DELAY) e seriale (+2*DELAY),
-        # cioe' +1.5*DELAY, con DELAY=2s -> 1s di margine per lato.
+        # WP-D/WP-E: il gate differito gira in un PROCESSO detached PARALLELO
+        # al recall dell'hook (che ne aspetta l'outbox entro il budget di
+        # pickup). Con gate e recall che dormono entrambi DELAY secondi il
+        # tempo aggiunto e' ~DELAY (parallelo, + l'avvio del figlio) invece di
+        # ~2*DELAY (il vecchio design seriale). Si misura contro una baseline
+        # senza ritardi nello stesso ambiente (avvio bash+python varia da
+        # macchina a macchina): soglia a meta' strada tra parallelo (+DELAY) e
+        # seriale (+2*DELAY), cioe' +1.5*DELAY, con DELAY=2s -> 1s di margine
+        # per lato.
         DELAY = 2.0
         MockBackend.gate_spec = {
             "action": "retain",
@@ -622,6 +626,100 @@ class HookE2ETests(unittest.TestCase):
             f"hook seriale? baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)",
         )
         print(f"\n[parallelismo] baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)")
+
+    def outbox_path(self, session_id="e2e-session"):
+        return os.path.join(self.queue_dir, session_id + ".out.json")
+
+    def wait_for_outbox(self, timeout_s: float, session_id="e2e-session") -> str:
+        """Aspetta che il processo detached scriva l'outbox (e quindi sia
+        finito col lavoro): serve al test lento e a non lasciare figli vivi
+        al teardown."""
+        deadline = time.monotonic() + timeout_s
+        path = self.outbox_path(session_id)
+        while not os.path.exists(path):
+            self.assertLess(time.monotonic(), deadline, f"outbox {path} mai comparso")
+            time.sleep(0.1)
+        return path
+
+    def test_slow_gate_does_not_stall_prompt_and_is_picked_up_next_prompt(self):
+        # WP-E: un gate PIU' LENTO del budget di pickup (RETAIN_PICKUP_BUDGET_S,
+        # 6s da T0) non deve trattenere il prompt: l'hook esce senza la
+        # domanda, il processo detached (VERO python, lanciato dall'hook)
+        # continua e scrive l'outbox; il prompt successivo lo raccoglie e
+        # mostra la domanda ORA, saltando il consenso (il prompt normale NON
+        # deve scartare il pending come "new_prompt"); il "si'" del prompt
+        # dopo ancora esegue la POST. Il figlio eredita l'env dell'hook
+        # (HS_OPENAI_URL/API_URL puntano al mock: gate_calls e retain_posts
+        # lo dimostrano). Gate timeout alzato: 5s farebbe scattare il
+        # fail-closed prima del ritardo artificiale.
+        GATE_DELAY = 12.0
+        PICKUP_BUDGET = 6.0  # RETAIN_PICKUP_BUDGET_S in hindsight-recall.sh
+        slow_env = {"HS_CFG_RETAIN_GATE_TIMEOUT": "25"}
+        MockBackend.gate_spec = {
+            "action": "uncertain",
+            "reason": "borderline",
+            "preview": "Forse salvo la scelta lenta e2e.",
+            "context": "dominio lento e2e",
+        }
+        t0 = time.monotonic()
+        self.assertIsNone(self.run_hook(self.PROMPT, extra_env=slow_env))  # niente in coda
+        baseline = time.monotonic() - t0
+
+        MockBackend.gate_delay_s = GATE_DELAY
+        MockBackend.recall_delay_s = 0.5
+        self.enqueue()
+        t0 = time.monotonic()
+        first = self.run_hook(self.PROMPT, extra_env=slow_env)
+        elapsed = time.monotonic() - t0
+        # L'hook aspetta l'outbox al massimo fino a T0+budget e poi esce: ben
+        # sotto il ritardo del gate (un hook che aspettasse il gate ci
+        # metterebbe >= GATE_DELAY + avvio del figlio). Doppio limite: relativo
+        # alla baseline (avvio bash+python della macchina, +3s di tolleranza) e
+        # assoluto (sotto GATE_DELAY, che un hook bloccato non puo' battere).
+        self.assertLess(
+            elapsed,
+            baseline + PICKUP_BUDGET + 3.0,
+            f"l'hook ha aspettato il gate lento? baseline={baseline:.2f}s primo run={elapsed:.2f}s",
+        )
+        self.assertLess(elapsed, GATE_DELAY)
+        # ...e senza la domanda: il gate non ha ancora risposto
+        self.assertNotIn("Vuoi che salvi", json.dumps(first or {}, ensure_ascii=False))
+        self.assertEqual(self.queue_files(), [])  # entry consumata dal figlio
+        self.assertEqual(self.retain_pending_files(), [])  # niente pending, non ancora
+        # Il figlio finisce per conto suo: outbox su disco (gate 12s + avvio).
+        t1 = time.monotonic()
+        self.wait_for_outbox(GATE_DELAY + 15.0)
+        waited = time.monotonic() - t1
+        self.assertEqual(MockBackend.gate_calls, 1)
+        self.assertEqual(len(self.retain_pending_files()), 1)  # pending scritto dal figlio
+        self.assertEqual(MockBackend.retain_posts, [])
+        # Prompt successivo, NORMALE: la domanda esce adesso (systemMessage
+        # visibile + istruzione in additionalContext) e il pending resta —
+        # il consenso e' stato saltato, altrimenti questo prompt lo avrebbe
+        # scartato con la notifica "memoria in attesa scartata".
+        MockBackend.gate_delay_s = 0.0
+        MockBackend.recall_delay_s = 0.0
+        second = self.run_hook(self.PROMPT, extra_env=slow_env)
+        self.assertEqual(
+            second["systemMessage"],
+            "Hindsight: Vuoi che salvi questa memoria? — Forse salvo la scelta lenta e2e. (sì/no)",
+        )
+        self.assertIn("as the very last thing in your reply", self.context(second))
+        self.assertNotIn("scartata", json.dumps(second, ensure_ascii=False))
+        self.assertNotIn("asks_consent", json.dumps(second))
+        self.assertFalse(os.path.exists(self.outbox_path()))  # raccolto e cancellato
+        self.assertEqual(len(self.retain_pending_files()), 1)
+        self.assertEqual(MockBackend.gate_calls, 1)  # nessuna nuova valutazione
+        # "si'": la POST del pending parte, pending consumato.
+        third = self.run_hook("sì", extra_env=slow_env)
+        self.assertIn("memoria salvata", third["systemMessage"])
+        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.assertEqual(MockBackend.retain_posts[0]["items"][0]["context"], "dominio lento e2e")
+        self.assertEqual(self.retain_pending_files(), [])
+        print(
+            f"\n[gate lento] baseline={baseline:.2f}s primo run={elapsed:.2f}s "
+            f"(budget {PICKUP_BUDGET}s, gate {GATE_DELAY}s), outbox dopo altri {waited:.2f}s"
+        )
 
     def test_stop_hook_enqueues_hook_input_verbatim(self):
         # hindsight-retain.sh (Stop): risponde '{}' e scrive UNA entry con il
