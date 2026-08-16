@@ -106,7 +106,7 @@ for expected in "claude-code"; do
 	if echo " $TAGS " | grep -q " $expected "; then
 		ok "tag '$expected' presente nel bank"
 	else
-		ko "tag '$expected' assente — retain non ha mai tagato (sessione mai chiusa con Stop hook?)"
+		ko "tag '$expected' assente — retain non ha mai tagato (nessun turno accodato allo Stop e' mai stato valutato al prompt successivo o nel drain della sentinella?)"
 	fi
 done
 [ -n "$TAGS" ] && note "tutti i tag visti: $TAGS"
@@ -144,9 +144,11 @@ if [ -r "$HOOKSJSON" ]; then
 				ko "$hook NON registrato in hooks.json"
 			fi
 		done
-		# Dal gate ICH-67 il retain hook e' SINCRONO: e' il wrapper a mandare il
-		# worker in background quando il gate non e' enforce. Un "async": true
-		# sulla sua entry renderebbe muto il decision:block del gate.
+		# Da ICH-86 lo Stop hook non valuta piu' nulla: accoda il payload in
+		# hs-retain-queue/ e risponde '{}'. Deve restare SINCRONO comunque:
+		# l'enqueue deve essere completato prima che parta il prompt successivo,
+		# altrimenti evaluate_queued() nell'hook recall non troverebbe l'entry
+		# (nessun decision:block da proteggere: conta solo l'ordine Stop -> UPS).
 		RETAIN_ASYNC=$(python -c "
 import json, sys
 h = json.load(open(sys.argv[1], encoding='utf-8'))
@@ -157,9 +159,9 @@ flags = [hk.get('async', False)
 print(flags[0] if flags else 'missing')
 " "$(w "$HOOKSJSON")" 2>/dev/null)
 		if [ "$RETAIN_ASYNC" = "False" ]; then
-			ok "retain hook sincrono (niente async — gate-capable)"
+			ok "retain hook sincrono (niente async — l'enqueue termina prima del prompt successivo)"
 		else
-			ko "retain hook con 'async: true' o entry assente ($RETAIN_ASYNC) — il gate enforce non puo' bloccare"
+			ko "retain hook con 'async: true' o entry assente ($RETAIN_ASYNC) — l'entry di coda potrebbe non esserci al prompt successivo"
 		fi
 	else
 		ko "hooks.json non e' JSON valido"
@@ -181,23 +183,44 @@ else
 	note "primi 200 char: ${RESP:0:200}"
 fi
 
-# --- 9. END-TO-END RETAIN HOOK (in background, controllo log) ---
-sect "9. End-to-end: invoca retain hook"
+# --- 9. END-TO-END RETAIN: Stop hook accoda, worker valuta (ICH-86) ---
+sect "9. End-to-end: Stop hook (enqueue) + retain worker"
+# 9a. Lo Stop hook e' puro enqueue: con un HOOK_INPUT deve scrivere ESATTAMENTE un
+# file in $XDG_CACHE_HOME/trinity/hs-retain-queue/ (contenuto = payload verbatim)
+# e stampare '{}'. XDG_CACHE_HOME temporanea: non si sporca la coda reale (una
+# entry finta con session_id 'check-…' verrebbe valutata al drain della sentinella).
+QTMP=$(mktemp -d /tmp/hs-queue-XXXXXX)
+QPAYLOAD='{"session_id":"check-queue","transcript_path":"/nonexistent.jsonl","cwd":"/tmp","hook_event_name":"Stop"}'
+QOUT=$(printf '%s' "$QPAYLOAD" | XDG_CACHE_HOME="$QTMP" bash "$HOOKS_DIR/hindsight-retain.sh" 2>/dev/null)
+QFILES=$(ls "$QTMP/trinity/hs-retain-queue"/*.json 2>/dev/null | wc -l | tr -d ' ')
+QBODY=$(cat "$QTMP"/trinity/hs-retain-queue/*.json 2>/dev/null)
+if [ "$QOUT" = "{}" ] && [ "$QFILES" = "1" ] && [ "$QBODY" = "$QPAYLOAD" ]; then
+	ok "Stop hook accoda un solo file (payload verbatim) e risponde '{}'"
+else
+	ko "Stop hook: output '${QOUT:0:40}', file in coda: $QFILES, payload verbatim: $([ "$QBODY" = "$QPAYLOAD" ] && echo si || echo no)"
+fi
+rm -rf "$QTMP"
+
+# 9b. Il worker in modalita' script (senza flag) valuta $HOOK_INPUT in "deferred"
+# esattamente come evaluate_queued() nell'hook recall a UserPromptSubmit.
 # HS_RETAIN_FORCE bypassa il throttling ma NON l'interruttore master retain_enabled:
 # col retain off il worker esce prima del POST, quindi l'e2e non e' applicabile -> skip.
 RETAIN_ON=$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get retain_enabled 2>/dev/null)
 if [ "$RETAIN_ON" = "False" ]; then
-	skip "retain disabilitato (retain_enabled:false) — e2e retain non applicabile"
+	skip "retain disabilitato (retain_enabled:false) — e2e retain worker non applicabile"
 else
 	FAKE=$(mktemp /tmp/hs-check-XXXXXX.jsonl)
 	FAKE_WIN=$(w "$FAKE")
+	WORKER_WIN_E2E="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
 	cat >"$FAKE" <<EOF
 {"type":"user","message":{"role":"user","content":"diagnostica check end-to-end del retain hook con prompt sufficientemente lungo"}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"check OK"},{"type":"tool_use","name":"Bash","input":{"command":"git status"}}]}}
 EOF
-	RETAIN_PAYLOAD=$(python -c "import json; print(json.dumps({'session_id':'check-1234','transcript_path':r'$FAKE_WIN','cwd':r'$PROJ','hook_event_name':'Stop'}))")
-	# Stesso path che usa hindsight-retain.sh (HS_CACHE_DIR, esportata da hs-python.sh).
+	RETAIN_PAYLOAD=$(python -c "import json; print(json.dumps({'session_id':'check-1234','transcript_path':r'$FAKE_WIN','cwd':r'$PROJ','hook_event_name':'UserPromptSubmit'}))")
+	# Log della valutazione (stdout+stderr del worker), sotto HS_CACHE_DIR come gli
+	# altri artefatti degli hook; il worker gira in foreground, niente sleep.
 	RETAIN_LOG="${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-retain.log"
+	mkdir -p "$(dirname "$RETAIN_LOG")" 2>/dev/null
 	>"$RETAIN_LOG"
 	# HS_RETAIN_FORCE bypassa il throttling (step E) per testare il POST in modo
 	# deterministico. Il gate semantico (ICH-67) e' FAIL-CLOSED da ICH-73: un
@@ -209,7 +232,7 @@ EOF
 	# contenuto sintetico (es. "skip: duplicate" ai run successivi) e il check
 	# diventerebbe non deterministico. La porta la sceglie il kernel (bind su 0)
 	# e lo stub la pubblica su file: si aspetta quel file (max ~5s) prima di
-	# lanciare il retain; kill dello stub in ogni caso, anche su fallimento.
+	# lanciare il worker; kill dello stub in ogni caso, anche su fallimento.
 	STUB_PY=$(mktemp /tmp/hs-stub-XXXXXX.py)
 	PORT_FILE=$(mktemp /tmp/hs-stub-port-XXXXXX)
 	cat >"$STUB_PY" <<'PY'
@@ -249,14 +272,17 @@ PY
 	if [ -z "$STUB_PORT" ]; then
 		ko "stub OpenAI locale non partito (porta non pubblicata in 5s) — e2e retain saltato"
 	else
-		echo "$RETAIN_PAYLOAD" | HS_RETAIN_FORCE=1 OPENAI_API_KEY=check-stub \
-			HS_OPENAI_URL="http://127.0.0.1:$STUB_PORT/v1/chat/completions" \
-			"$HOOKS_DIR/hindsight-retain.sh" >/dev/null
-		sleep 1
+		# HS_PY dal resolver condiviso (lo stesso interprete usato dagli hook); fallback
+		# al python del PATH se il resolver non e' disponibile.
+		HS_PY_E2E=$( (. "$HOOKS_DIR/lib/hs-python.sh" >/dev/null 2>&1 && printf '%s' "$HS_PY") 2>/dev/null)
+		[ -n "$HS_PY_E2E" ] || HS_PY_E2E=python
+		HOOK_INPUT="$RETAIN_PAYLOAD" HS_RETAIN_FORCE=1 OPENAI_API_KEY=check-stub \
+			HS_OPENAI_URL="http://127.0.0.1:$STUB_PORT/v1/chat/completions" PYTHONUTF8=1 \
+			"$HS_PY_E2E" "$WORKER_WIN_E2E" >"$RETAIN_LOG" 2>&1
 		if grep -q "\[retain\] OK 200" "$RETAIN_LOG" 2>/dev/null; then
-			ok "retain hook OK (log: $(head -1 "$RETAIN_LOG" | head -c 120))"
+			ok "retain worker (deferred) OK (log: $(grep -m1 'OK 200' "$RETAIN_LOG" | head -c 120))"
 		else
-			ko "retain hook non ha scritto OK 200 in $RETAIN_LOG"
+			ko "retain worker non ha scritto OK 200 in $RETAIN_LOG"
 			note "log: $(cat "$RETAIN_LOG" 2>/dev/null | head -3)"
 		fi
 	fi
@@ -370,7 +396,7 @@ else
 fi
 rm -rf "$DSTATE"
 
-# --- 14. THROTTLING retain ogni N + force su SessionEnd (step E) ---
+# --- 14. THROTTLING retain ogni N + force nel drain / HS_RETAIN_FORCE (step E) ---
 sect "14. Throttling retain (step E)"
 WORKER_WIN="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
 TSTATE=$(mktemp -d /tmp/hs-tstate-XXXXXX)
@@ -389,7 +415,7 @@ print("OK" if ok else f"KO seq={seq} forced={forced} nosid={nosid}")
 PY
 )
 if [ "$THR_OK" = "OK" ]; then
-	ok "should_retain_now: salta N-1 Stop, ritiene all'N-esimo, force sempre"
+	ok "should_retain_now: salta N-1 entry consumate, ritiene all'N-esima, force sempre"
 else
 	ko "logica throttling errata ($THR_OK)"
 fi
@@ -1231,8 +1257,9 @@ else
 	ko "config retain_gate_* non valida ($GATE_CFG)"
 fi
 
-# In enforce il gate impone latenza sincrona: il suo timeout deve stare sotto il
-# timeout dell'hook Stop con margine per parsing + startup.
+# Il gate gira in modo sincrono DENTRO l'hook recall a UserPromptSubmit (ICH-86):
+# il suo timeout deve stare sotto il timeout di quella entry con margine per
+# recall + filtro + consenso + POST + startup (~25s).
 GATE_BUDGET=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" "$(w "$HOOKSJSON")" <<'PY' 2>/dev/null
 import json, sys
@@ -1241,25 +1268,38 @@ import hindsight_config as hc
 cfg = hc.load_config()
 hooks = json.load(open(sys.argv[2], encoding="utf-8"))
 hook_to = next(
-    h["timeout"] for g in hooks["hooks"].get("Stop", []) for h in g.get("hooks", [])
-    if "hindsight-retain.sh" in h.get("command", "")
+    h["timeout"] for g in hooks["hooks"].get("UserPromptSubmit", []) for h in g.get("hooks", [])
+    if "hindsight-recall.sh" in h.get("command", "")
 )
-print("OK" if float(cfg["retain_gate_timeout"]) + 20 <= hook_to else f"KO gate={cfg['retain_gate_timeout']} hook={hook_to}")
+print("OK" if float(cfg["retain_gate_timeout"]) + 25 <= hook_to else f"KO gate={cfg['retain_gate_timeout']} hook={hook_to}")
 PY
 )
 if [ "$GATE_BUDGET" = "OK" ]; then
-	ok "budget: retain_gate_timeout + margine sotto il timeout dell'hook Stop"
+	ok "budget: retain_gate_timeout + 25s di margine sotto il timeout dell'hook recall (UserPromptSubmit)"
 else
-	ko "retain_gate_timeout troppo vicino al timeout dell'hook Stop ($GATE_BUDGET)"
+	ko "retain_gate_timeout troppo vicino al timeout dell'hook recall a UserPromptSubmit ($GATE_BUDGET)"
 fi
 
-# Wrapper: guardia anti-loop, inoltro HSGATE e dispatch su retain_enabled
-# (background coi progetti senza retain, foreground col gate attivo).
-if grep -q 'stop_hook_active' "$HOOKS_DIR/hindsight-retain.sh" && grep -q 'HSGATE' "$HOOKS_DIR/hindsight-retain.sh" &&
-	grep -q -- '--get retain_enabled' "$HOOKS_DIR/hindsight-retain.sh"; then
-	ok "wrapper: guardia stop_hook_active + inoltro HSGATE + dispatch su retain_enabled"
+# Wiring ICH-86: lo Stop hook e' puro enqueue (hs-retain-queue, niente HSGATE ne'
+# guardia stop_hook_active: non c'e' piu' nessun decision:block da proteggere);
+# l'hook recall consuma la coda a UserPromptSubmit (evaluate_queued); la
+# sentinella drena il residuo a chiusura (--drain).
+if grep -q 'hs-retain-queue' "$HOOKS_DIR/hindsight-retain.sh" &&
+	! grep -q 'HSGATE' "$HOOKS_DIR/hindsight-retain.sh" &&
+	! grep -q 'stop_hook_active' "$HOOKS_DIR/hindsight-retain.sh"; then
+	ok "Stop hook: solo enqueue in hs-retain-queue (niente HSGATE / stop_hook_active)"
 else
-	ko "wrapper senza guardia anti-loop, inoltro HSGATE o dispatch su retain_enabled"
+	ko "Stop hook non e' puro enqueue (manca hs-retain-queue o residui HSGATE/stop_hook_active)"
+fi
+if grep -q 'evaluate_queued' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "recall hook consuma la coda del retain (evaluate_queued) a UserPromptSubmit"
+else
+	ko "evaluate_queued assente da hindsight-recall.sh: la coda del retain non viene mai valutata"
+fi
+if grep -q -- '--drain' "$HOOKS_DIR/hindsight-sentinel.sh"; then
+	ok "sentinella drena la coda del retain (--drain) prima dello shutdown"
+else
+	ko "--drain assente da hindsight-sentinel.sh: la coda della sessione andrebbe persa"
 fi
 
 # Worker integra gate e pending uncertain; il modulo lib e' condiviso coi test.
@@ -1269,6 +1309,15 @@ if grep -q 'evaluate_retain' "$HOOKS_DIR/hindsight-retain-worker.py" &&
 	ok "worker integra evaluate_retain + pending uncertain (lib/hindsight_retain_gate.py)"
 else
 	ko "gate/pending non integrati nel worker o modulo lib mancante"
+fi
+# ICH-86: entry point differito per l'hook recall + scarto dei messaggi utente in
+# coda al transcript (a UserPromptSubmit puo' gia' contenere il prompt nuovo:
+# la finestra deve essere quella del turno COMPLETATO).
+if grep -q 'def evaluate_queued' "$HOOKS_DIR/hindsight-retain-worker.py" &&
+	grep -q 'def drop_unanswered_tail' "$HOOKS_DIR/hindsight-retain-worker.py"; then
+	ok "worker espone evaluate_queued + drop_unanswered_tail (valutazione differita)"
+else
+	ko "evaluate_queued o drop_unanswered_tail assenti dal worker (ICH-86)"
 fi
 
 # Il consenso del pending retain vive nell'hook recall (prompt successivo):

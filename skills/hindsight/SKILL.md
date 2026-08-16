@@ -99,7 +99,7 @@ come `additionalContext` a ogni SessionStart dall'hook `hindsight-mm-inject.sh`
 | `hindsight-ensure-up.sh` | SessionStart | Avvia il server se giù e attende la readiness dell'endpoint MCP (elimina la race "tool `hindsight/*` non registrati") |
 | `hindsight-mm-inject.sh` | SessionStart | Inietta i mental model (vedi sopra) |
 | `hindsight-failcheck.sh` | UserPromptSubmit | Segnala operation async `failed` lato server (retain accettato ma estrazione fallita) e la degradazione del reranker; de-dup via state file |
-| `hindsight-sentinel.sh` | detached da ensure-up | Sostituisce l'hook SessionEnd (che Claude Code cancella, issue #32712): quando l'ultimo processo claude termina fa drain dei retain pendenti e spegne server + Postgres |
+| `hindsight-sentinel.sh` | detached da ensure-up | Sostituisce l'hook SessionEnd (che Claude Code cancella, issue #32712): quando l'ultimo processo claude termina drena la coda del retain (`hindsight-retain-worker.py --drain`: valuta le entry accodate dagli Stop non ancora consumate, force e senza domande), attende i retain in volo e spegne server + Postgres |
 | `ops/hindsight-drain-retain.py` | pre-stop | Attende che i retain in volo raggiungano stato terminale prima dello shutdown (mediana estrazione 32s: uno stop cieco perderebbe la memoria senza errori) |
 | `mise run db-dump` / `db-restore` | manuale | `pg_dump`/restore del DB Hindsight per il sync tra macchine (`tools/hs-db-dump.sh`, `hs-db-restore.sh` con guardrail anti-perdita) |
 | `tools/hindsight_export.py` / `hindsight_import.py` | cambio provider embedding | Export dei documenti → re-retain sul nuovo embedding (il cambio di dimensione obbliga al rebuild del bank) |

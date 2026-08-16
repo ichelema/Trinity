@@ -93,9 +93,9 @@ Eventi registrati dal plugin:
 | Evento | Matcher | Comandi |
 |---|---|---|
 | `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model |
-| `UserPromptSubmit` | — | skill-eval · Hindsight **recall** · failcheck |
+| `UserPromptSubmit` | — | skill-eval · Hindsight **recall** (che prima consuma il consenso e valuta il retain accodato allo Stop precedente: gate → POST o domanda) · failcheck |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
-| `Stop` | — | suono di fine · Hindsight **retain** (worker in background; con retain attivo il gate valuta e, se incerto, blocca lo stop per chiederti se salvare) |
+| `Stop` | — | suono di fine · Hindsight **retain** (solo enqueue: scrive il payload in `hs-retain-queue/` e risponde `{}`; la valutazione è differita al prossimo `UserPromptSubmit`, la coda residua la drena la sentinella — ICH-86) |
 | `Notification` | `permission_prompt` | suono + toast Windows |
 
 Esempio — un hook del plugin (da `hooks/hooks.json`):
@@ -104,7 +104,7 @@ Esempio — un hook del plugin (da `hooks/hooks.json`):
 {
   "type": "command",
   "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
-  "timeout": 40
+  "timeout": 60
 }
 ```
 
@@ -499,14 +499,15 @@ progetto; si configura solo nella base fidata del plugin o tramite env amministr
 OGNI finestra prima della POST con una chiamata LLM a schema strict
 (`lib/hindsight_retain_gate.py`), tre esiti: **`retain`** → salvataggio diretto e silenzioso;
 **`skip`** → nessun salvataggio; **`uncertain`** → la POST pronta va in un pending (stessa
-meccanica dei `medium` del recall: file per sessione, TTL 900s, consumo singolo), l'hook Stop
-— sincrono, con guardia `stop_hook_active` anti-loop — blocca lo stop e Claude chiede *"Vuoi
-che salvi questa memoria? — …"*: il sì al prompt successivo esegue la POST dall'hook recall,
-un no o un prompt qualsiasi la scartano. Anti-duplicati: `document_id` derivato dal contenuto
+meccanica dei `medium` del recall: file per sessione, TTL 900s, consumo singolo) e l'istruzione
+per Claude viaggia in `additionalContext` (canale nascosto di `UserPromptSubmit`): Claude
+risponde al prompt corrente e, come ULTIMA cosa della risposta, chiede *"Vuoi che salvi questa
+memoria? — …"*; il sì al prompt successivo esegue la POST dall'hook recall, un no o un prompt
+qualsiasi la scartano. Anti-duplicati: `document_id` derivato dal contenuto
 della finestra (replay identici fanno upsert) e candidati semantici dai bank di lettura
 passati al gate. Un errore tecnico del gate (timeout, chiave assente, output fuori schema) è
 **fail-closed** (ICH-73): nessun salvataggio, un `systemMessage` non bloccante una sola volta
-per sessione, e rollback del contatore `stop_count` così il prossimo Stop riprova su una
+per sessione, e rollback del contatore `stop_count` così la prossima valutazione riprova su una
 finestra che scivola di un solo turno. Con `retain_debug_in_context: true` ogni valutazione
 produce un blocco "## Hindsight retain debug" visibile in conversazione, speculare a
 `recall_debug_in_context`. Il gate produce anche il **`context` descrittivo** del retain (una
@@ -523,6 +524,25 @@ l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
 di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni
 sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain_enabled` è
 `false` (col gate attivo produrrebbero salvataggi doppi).
+
+**Retain differito: Stop accoda, UserPromptSubmit valuta, la sentinella drena (ICH-86).**
+L'hook `Stop` (`hindsight-retain.sh`) non valuta più nulla: è puro bash, scrive il payload del
+hook verbatim in `$XDG_CACHE_HOME/trinity/hs-retain-queue/<EPOCHREALTIME>-<pid>.json` e
+risponde `{}` (niente gate, niente `decision: block`, niente Python sul percorso caldo). Al
+prompt successivo `hindsight-recall.sh` esegue, nell'ordine: il consenso del pending
+(`handle_retain_consent`, che risponde alla domanda precedente), poi
+`hindsight-retain-worker.py:evaluate_queued(session_id)` — prende l'entry più recente della
+sessione, cancella tutte le sue entry, scarta i messaggi utente in coda al transcript (il
+prompt appena inviato) e valuta la finestra del turno completato: `retain` → POST silenziosa,
+`uncertain`/context mancante → pending + istruzione in `additionalContext` (la domanda chiude
+la risposta successiva) — infine il recall; l'output è un unico JSON. Il throttling non cambia:
+`stop_count` avanza una volta per entry consumata (stessa cadenza `retain_every_n_turns`). A
+chiusura la sentinella lancia `hindsight-retain-worker.py --drain` prima di
+`ops/hindsight-drain-retain.py`: la coda residua è valutata in modalità *drain* (force, nessuna
+domanda: `retain` → POST, con context di ripiego repo/branch se il gate non l'ha dato;
+`uncertain` ed errore del gate → skip, `retain_skip.reason` `gate_uncertain_drain` /
+`gate_error_drain`). Con `retain_enabled: false` il file di coda viene scritto e scartato:
+nessun transcript letto, nessun LLM, nessuna POST.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (`promote_model`, gpt-5.6-luna: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
@@ -549,9 +569,8 @@ override parziale non cancella le chiavi non menzionate. Esempio (`<progetto>/hi
 { "retain_enabled": true, "bank": { "recall_banks": ["auto"] } }
 ```
 
-**Failcheck dei retain falliti.** Il retain non aspetta il risultato: nei progetti senza
-retain il wrapper manda il worker in background (con `retain_enabled: true` gira in
-foreground col gate) e la POST è comunque asincrona lato server.
+**Failcheck dei retain falliti.** Il retain non aspetta il risultato: la valutazione è
+differita al prompt successivo (vedi sopra) e la POST è comunque asincrona lato server.
 Se l'estrazione LLM fallisce (es. credito OpenAI esaurito), la
 memoria **non viene salvata** senza che nessuno se ne accorga. L'hook `hindsight-failcheck.sh`
 (terzo hook di `UserPromptSubmit`) interroga l'endpoint `/operations?status=failed` su tutti
