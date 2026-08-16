@@ -502,8 +502,11 @@ OGNI finestra prima della POST con una chiamata LLM a schema strict
 meccanica dei `medium` del recall: file per sessione, TTL 900s, consumo singolo) e l'istruzione
 per Claude viaggia in `additionalContext` (canale nascosto di `UserPromptSubmit`): Claude
 risponde al prompt corrente e, come ULTIMA cosa della risposta, chiede *"Vuoi che salvi questa
-memoria? — …"*; il sì al prompt successivo esegue la POST dall'hook recall, un no o un prompt
-qualsiasi la scartano. Anti-duplicati: `document_id` derivato dal contenuto
+memoria? — …"*; la stessa domanda esce anche come `systemMessage` (visibile nel terminale, non
+affidata al modello), così un sì al prompt successivo funziona anche se Claude la omette. Il sì
+esegue la POST dall'hook recall, un no o un prompt qualsiasi la scartano (se la domanda non
+compare nell'ultimo testo di Claude la notifica di scarto lo dice: *"domanda non posta da
+Claude"*). Anti-duplicati: `document_id` derivato dal contenuto
 della finestra (replay identici fanno upsert) e candidati semantici dai bank di lettura
 passati al gate. Un errore tecnico del gate (timeout, chiave assente, output fuori schema) è
 **fail-closed** (ICH-73): nessun salvataggio, un `systemMessage` non bloccante una sola volta

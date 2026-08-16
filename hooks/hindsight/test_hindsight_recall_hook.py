@@ -356,6 +356,27 @@ class HookE2ETests(unittest.TestCase):
         self.assertNotIn("hookSpecificOutput", output)
         self.assertEqual(MockBackend.retain_posts, [])
 
+    def test_retain_pending_discard_says_when_question_was_not_asked(self):
+        # Claude ha OMESSO la domanda in coda alla risposta (l'ultimo testo
+        # assistant non la contiene): la notifica di scarto non deve fingere
+        # una domanda mai vista. Con la domanda nel transcript: notifica classica.
+        self.save_retain_pending("Salvo la decisione e2e.")
+        transcript = self.write_transcript("risposta senza domanda finale")
+        output = self.run_hook(self.PROMPT, transcript_path=transcript)
+        self.assertIn(
+            "memoria in attesa scartata (domanda non posta da Claude) — Salvo la decisione e2e.",
+            output["systemMessage"],
+        )
+        self.save_retain_pending("Salvo la decisione e2e.")
+        transcript = self.write_transcript(
+            "risposta\n\nVuoi che salvi questa memoria? — Salvo la decisione e2e. (sì/no)"
+        )
+        output = self.run_hook(self.PROMPT, transcript_path=transcript)
+        self.assertIn(
+            "memoria in attesa scartata — Salvo la decisione e2e.", output["systemMessage"]
+        )
+        self.assertNotIn("domanda non posta", output["systemMessage"])
+
     def test_retain_pending_discard_notice_merges_with_recall_context(self):
         # Caso limite oltre il contratto (documentato): stesso scarto, ma il
         # recall HA contenuto -> notifica e additionalContext devono uscire nello
@@ -466,6 +487,12 @@ class HookE2ETests(unittest.TestCase):
         self.assertIn("Vuoi che salvi questa memoria? — Forse salvo la scelta e2e. (sì/no)", context)
         self.assertIn("as the very last thing in your reply", context)
         self.assertIn("lambda memo", context)
+        # La domanda e' anche VISIBILE nel terminale (systemMessage), cosi'
+        # l'utente la vede anche se Claude la omettesse in coda alla risposta.
+        self.assertEqual(
+            output["systemMessage"],
+            "Hindsight: Vuoi che salvi questa memoria? — Forse salvo la scelta e2e. (sì/no)",
+        )
         self.assertNotIn("decision", output)
         self.assertEqual(output["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
         self.assertEqual(MockBackend.retain_posts, [])

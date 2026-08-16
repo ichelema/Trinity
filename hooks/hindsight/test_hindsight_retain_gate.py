@@ -961,7 +961,12 @@ class WorkerGateTests(unittest.TestCase):
         self.assertIn("Salvo X.", instruction)
         self.assertIn(ASK_LAST, instruction)
         self.assertIn("Answer the current prompt normally first", instruction)
-        self.assertNotIn("systemMessage", out)
+        # Visibile per costruzione (systemMessage nel terminale), anche se
+        # Claude omettesse la domanda: preview + come rispondere; la proposta
+        # del context la fa Claude, quindi qui non c'e' nessun «<PROPOSTA>».
+        self.assertIn("il gate propone di salvare — Salvo X", out["systemMessage"])
+        self.assertIn("sì / no / `context: …`", out["systemMessage"])
+        self.assertNotIn("<PROPOSTA>", out["systemMessage"])
 
         # Risposta esplicita "context: ..." al prompt successivo -> POST con quel context.
         outcome, posted = self.consent("context: dominio scelto")
@@ -1095,8 +1100,12 @@ class WorkerGateTests(unittest.TestCase):
         self.assertNotIn("<PROPOSTA>", instruction)
         self.assertIn(ASK_LAST, instruction)
         self.assertIn("end the turn", instruction)
-        # Niente systemMessage senza debug: la domanda la pone Claude, non l'hook.
-        self.assertNotIn("systemMessage", out)
+        # La stessa domanda anche in systemMessage: visibile nel terminale a
+        # prescindere da Claude (additionalContext e' consultivo).
+        self.assertEqual(
+            out["systemMessage"],
+            f"Hindsight: Vuoi che salvi questa memoria? — {preview} (sì/no)",
+        )
 
         # Il pending contiene la POST pronta: il "si" al prompt successivo la esegue.
         with mock.patch(
@@ -1627,12 +1636,19 @@ class WorkerGateTests(unittest.TestCase):
         self.at_prompt("no", inspect_no)
 
     def test_retain_at_prompt_new_prompt_sets_notice(self):
+        # Il transcript di setUp NON contiene la domanda di consenso: Claude
+        # l'ha omessa (additionalContext e' consultivo). La notifica di scarto
+        # non deve presupporre una domanda mai vista: lo dice esplicitamente.
         preview = self.make_pending()
 
         def inspect(result, gate_mock, urlopen):
             self.assertEqual(result.outcome["action"], "discarded")
             self.assertEqual(result.outcome["reason"], "new_prompt")
-            self.assertEqual(result.notice, f"Hindsight: memoria in attesa scartata — {preview}")
+            self.assertEqual(
+                result.notice,
+                "Hindsight: memoria in attesa scartata (domanda non posta da Claude) "
+                f"— {preview}",
+            )
             self.assertFalse(result.saved)
             self.assertFalse(result.stop_here)
             self.assertEqual(result.consent_output, {})
@@ -1643,6 +1659,24 @@ class WorkerGateTests(unittest.TestCase):
         _result, gate_mock, urlopen = self.at_prompt("parliamo di tutt'altro adesso", inspect)
         gate_mock.assert_not_called()
         urlopen.assert_not_called()
+
+        # Domanda POSTA (ultimo testo assistant la contiene): notifica classica.
+        preview = self.make_pending()
+        with open(self.transcript, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(user_record("ok e poi?")) + "\n")
+            handle.write(
+                json.dumps(
+                    assistant_record(
+                        f"Ecco la risposta.\n\nVuoi che salvi questa memoria? — {preview} (sì/no)"
+                    )
+                )
+                + "\n"
+            )
+
+        def inspect_asked(result, gate_mock, urlopen):
+            self.assertEqual(result.notice, f"Hindsight: memoria in attesa scartata — {preview}")
+
+        self.at_prompt("parliamo di tutt'altro adesso", inspect_asked)
 
     def test_retain_at_prompt_error_restored_skips_gate_and_keeps_queue(self):
         self.make_pending()

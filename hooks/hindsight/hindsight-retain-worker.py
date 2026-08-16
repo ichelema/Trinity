@@ -49,6 +49,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from hindsight_config import cache_dir, load_config, recall_bank_urls, retain_bank_url
 from hindsight_debug import debug_log
+from hindsight_recall_lib import last_assistant_text
 from hindsight_retain_gate import (
     evaluate_retain,
     fallback_context,
@@ -1072,14 +1073,33 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
                     "the turn. Do not save anything yourself; a yes (or a `context: …` "
                     "reply) runs the pending save at the next prompt."
                 )
+        # La domanda va anche in systemMessage, che Claude Code MOSTRA nel
+        # terminale al momento del prompt: additionalContext e' consultivo e
+        # nascosto, e l'istruzione compete col task del prompt — se Claude
+        # omette la domanda in coda, l'utente la vede comunque qui e puo'
+        # rispondere si'/no al prompt dopo (handle_retain_consent non dipende
+        # dalla domanda di Claude: context dal gate o, se manca, proposta nel
+        # transcript o riga repo/branch). Prima di ICH-86 la reason del
+        # decision:block era anch'essa sempre visibile nel transcript.
+        if not needs_context:
+            visible = f"Hindsight: {question}"
+        else:
+            visible = (
+                f"Hindsight: il gate propone di salvare — {gate.preview.rstrip('.')}. "
+                "Claude proporrà un context in coda alla risposta; rispondi "
+                "sì / no / `context: …` al prossimo prompt."
+            )
         out = {
+            "systemMessage": visible,
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
                 "additionalContext": instruction,
-            }
+            },
         }
         if CFG.get("retain_debug_in_context"):
-            out["systemMessage"] = gate_debug_context(gate, api_url.rsplit("/", 1)[-1])
+            out["systemMessage"] = "\n".join(
+                [visible, gate_debug_context(gate, api_url.rsplit("/", 1)[-1])]
+            )
         debug_log(
             CFG,
             "retain_pending",
@@ -1252,7 +1272,28 @@ class PromptRetain:
         return self._gate
 
 
-def _consent_output(outcome: dict) -> tuple[dict, str, bool, bool]:
+# Marcatori delle domande di consenso poste da Claude (i testi sono cablati nel
+# ramo pending di evaluate()): servono per capire, al prompt successivo, se la
+# domanda e' stata DAVVERO posta oppure omessa.
+RETAIN_QUESTION_MARKERS = (
+    "Vuoi che salvi questa memoria?",
+    "Salvo questa memoria con context",
+)
+
+
+def _question_was_asked(transcript_path: str) -> bool:
+    """True se l'ultimo testo assistant contiene una delle domande di consenso.
+    Senza transcript non si puo' dire: si assume posta (notifica classica)."""
+    if not transcript_path:
+        return True
+    try:
+        text = last_assistant_text(transcript_path)
+    except Exception:
+        return True
+    return any(marker in text for marker in RETAIN_QUESTION_MARKERS)
+
+
+def _consent_output(outcome: dict, transcript_path: str = "") -> tuple[dict, str, bool, bool]:
     """Traduce l'esito di handle_retain_consent nei campi dell'hook:
     (consent_output, notice, saved, stop_here). Testi identici a quelli che
     l'hook recall stampava in proprio prima di ICH-86 (WP-D)."""
@@ -1296,13 +1337,18 @@ def _consent_output(outcome: dict) -> tuple[dict, str, bool, bool]:
     # sapere che la domanda del gate e' decaduta (altrimenti crede di aver
     # salvato). La notifica viaggia con QUALUNQUE uscita dell'hook (la fonde
     # emit()/finish() del recall): lo stdout resta un solo oggetto JSON.
+    # Se Claude ha OMESSO la domanda in coda alla risposta (additionalContext e'
+    # consultivo), la notifica non deve presupporre una domanda mai vista: lo
+    # si dice esplicitamente, cosi' l'utente capisce perche' non ha risposto.
     if outcome.get("reason") == "new_prompt":
         preview = outcome.get("preview") or ""
-        notice = (
-            f"Hindsight: memoria in attesa scartata — {preview}"
-            if preview
-            else "Hindsight: memoria in attesa scartata"
+        asked = _question_was_asked(transcript_path)
+        head = (
+            "Hindsight: memoria in attesa scartata"
+            if asked
+            else "Hindsight: memoria in attesa scartata (domanda non posta da Claude)"
         )
+        notice = f"{head} — {preview}" if preview else head
         return {}, notice, False, False
     return {}, "", False, False
 
@@ -1349,7 +1395,7 @@ def retain_at_prompt(
                 result.notice,
                 result.saved,
                 result.stop_here,
-            ) = _consent_output(outcome)
+            ) = _consent_output(outcome, transcript_path)
         if outcome and outcome.get("restored"):
             return result
 
