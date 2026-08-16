@@ -1,7 +1,18 @@
-"""Worker per hindsight-retain.sh — eseguito in background (fire-and-forget).
+"""Worker del retain automatico: valuta un payload di Stop e lo persiste.
 
-Legge il payload del hook da $HOOK_INPUT (env var JSON), parsea il transcript JSONL
-e costruisce un riassunto strutturato. Poi POST a /memories con async=true.
+Da ICH-86 lo Stop hook (hindsight-retain.sh) NON valuta piu' nulla: accoda il
+payload del hook in hs-retain-queue/ e risponde subito. La valutazione avviene
+DOPO, in due punti:
+  - UserPromptSubmit (hindsight-recall.sh) -> evaluate_queued(session_id):
+    prende l'entry piu' recente della sessione ("deferred": il consenso per
+    uncertain/context mancante viaggia in additionalContext, canale nascosto,
+    e la domanda viene posta in coda alla risposta successiva);
+  - chiusura (hindsight-sentinel.sh) -> `--drain`: valuta le code rimaste in
+    modalita' "drain" (force, nessuna domanda: retain -> POST, uncertain -> skip).
+Per ogni entry: parsea il transcript JSONL, costruisce la finestra, passa dal
+gate semantico e fa POST a /memories con async=true.
+Modalita' script senza flag (tools/hindsight-check.sh, run manuali): valuta
+$HOOK_INPUT in "deferred" e stampa 'HSGATE {json}' quando c'e' output.
 
 Filosofia: salvare cio' che e' DURABILE e UTILE per future sessioni:
   - ultimo prompt utente (cosa ho chiesto)
@@ -31,11 +42,17 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from hindsight_config import cache_dir, load_config, recall_bank_urls, retain_bank_url
 from hindsight_debug import debug_log
-from hindsight_retain_gate import evaluate_retain, save_retain_pending
+from hindsight_retain_gate import evaluate_retain, fallback_context, save_retain_pending
 
 CFG = load_config()
 
+# Payload del hook per la modalita' script senza flag (parse_hook). I test e
+# l'hook recall passano invece l'entry direttamente a evaluate()/evaluate_queued().
 HOOK_INPUT = os.environ.get("HOOK_INPUT", "")
+
+# Entry di coda illeggibili piu' giovani di questa soglia vengono lasciate stare:
+# potrebbero essere in scrittura da uno Stop concorrente (printf non atomico).
+QUEUE_UNPARSABLE_GRACE_S = 60.0
 
 NOISY_BASH_PREFIXES = ("ls", "cat", "head", "tail", "echo", "pwd", "which", "type ")
 INTERESTING_BASH_PATTERNS = (
@@ -169,6 +186,116 @@ def _retain_state_path() -> str:
     return os.path.join(d, "hs-retain-state.json")
 
 
+# ---------------------------------------------------------------------------
+# Coda dei payload Stop (ICH-86). Lo Stop hook scrive il HOOK_INPUT verbatim in
+# <queue_dir>/<EPOCHREALTIME senza punto>-<pid>.json e non aspetta nessuno; il
+# nome ordina lessicograficamente per istante di scrittura, quindi "il piu'
+# recente" e' l'ultimo in sorted(). I consumatori (UserPromptSubmit e drain)
+# prendono l'entry, cancellano i file e valutano. Una sola entry conta per
+# sessione: la finestra e' calcolata sul transcript ATTUALE, quindi entry
+# vecchie della stessa sessione darebbero la stessa fetta (o una piu' corta).
+# ---------------------------------------------------------------------------
+
+
+def retain_queue_dir() -> str:
+    """Directory della coda. In cache_dir() (per-utente, 0700) perche' le entry
+    contengono cwd e path del transcript. HS_RETAIN_QUEUE_DIR per i test."""
+    return os.environ.get("HS_RETAIN_QUEUE_DIR") or cache_dir() + "/hs-retain-queue"
+
+
+def _queue_files() -> list[str]:
+    """Path delle entry *.json in ordine di nome (= ordine di scrittura)."""
+    d = retain_queue_dir()
+    try:
+        names = sorted(n for n in os.listdir(d) if n.endswith(".json"))
+    except OSError:
+        return []
+    return [os.path.join(d, n) for n in names]
+
+
+def _read_queue_entry(path: str) -> dict | None:
+    """Entry parsata, o None se illeggibile. Un file illeggibile piu' vecchio di
+    QUEUE_UNPARSABLE_GRACE_S non e' piu' "in scrittura": si cancella per non
+    rileggerlo a ogni prompt. Uno giovane si lascia stare (puo' essere a meta'
+    della printf dello Stop hook)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            entry = json.load(f)
+        if isinstance(entry, dict):
+            return entry
+    except Exception:
+        pass
+    try:
+        if time.time() - os.path.getmtime(path) > QUEUE_UNPARSABLE_GRACE_S:
+            os.remove(path)
+    except OSError:
+        pass
+    return None
+
+
+def _remove_quiet(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def dequeue_for_session(session_id: str) -> dict | None:
+    """Entry PIU' RECENTE della sessione; cancella TUTTE le entry della sessione
+    (anche le piu' vecchie: stessa finestra, valutarle sarebbe lavoro doppio).
+    Le altre sessioni restano in coda. None senza session_id o senza entry."""
+    if not session_id:
+        return None
+    newest = None
+    matched: list[str] = []
+    for path in _queue_files():
+        entry = _read_queue_entry(path)
+        if entry is None or entry.get("session_id") != session_id:
+            continue
+        matched.append(path)
+        newest = entry
+    for path in matched:
+        _remove_quiet(path)
+    return newest
+
+
+def drain_queue() -> list[dict]:
+    """Svuota la coda: una entry per sessione (la piu' recente), in ordine di
+    scrittura; tutti i file parsabili vengono cancellati. Entry senza session_id
+    restano distinte (non si sa se sono la stessa sessione). Usata da --drain."""
+    latest: dict[str, dict] = {}
+    for path in _queue_files():
+        entry = _read_queue_entry(path)
+        if entry is None:
+            continue
+        key = str(entry.get("session_id") or "") or path
+        latest[key] = entry
+        _remove_quiet(path)
+    return list(latest.values())
+
+
+def drop_unanswered_tail(entries: list[dict]) -> list[dict]:
+    """Toglie i messaggi user in coda dopo l'ULTIMO messaggio assistant. A
+    UserPromptSubmit il transcript puo' gia' contenere il prompt appena
+    inviato (e i suoi wrapper <system-reminder>): non e' un turno completato e
+    farebbe scivolare la finestra di un turno rispetto a quella che lo Stop
+    avrebbe visto. Senza nessun assistant non c'e' nulla di completato: []."""
+    def role_of(e) -> str | None:
+        if not isinstance(e, dict):
+            return None
+        msg = e.get("message")
+        return (msg.get("role") if isinstance(msg, dict) else None) or e.get("type")
+
+    roles = [role_of(e) for e in entries]
+    if "assistant" not in roles:
+        return []
+    last_assistant = len(roles) - 1 - roles[::-1].index("assistant")
+    return list(entries[: last_assistant + 1]) + [
+        e for e, r in zip(entries[last_assistant + 1 :], roles[last_assistant + 1 :])
+        if r != "user"
+    ]
+
+
 @contextlib.contextmanager
 def _state_lock(path: str, timeout: float = 5.0):
     """Lock interprocesso best-effort sul file di stato condiviso (flock su POSIX,
@@ -288,8 +415,10 @@ def should_retain_now(
     session_id: str, force: bool = False, every_n: int | None = None
 ) -> bool:
     """Throttling: ritiene un Stop ogni N (default da HS_RETAIN_EVERY_N, fallback 3).
-    Riduce le ri-estrazioni LLM ridondanti su sessioni lunghe. force=True (es. hook
-    SessionEnd) ritiene sempre, per catturare la coda della sessione. Senza session_id
+    Riduce le ri-estrazioni LLM ridondanti su sessioni lunghe. Il contatore avanza
+    a ogni entry di coda CONSUMATA (una per Stop): stessa cadenza di quando il
+    worker girava nello Stop. force=True (drain a fine sessione, HS_RETAIN_FORCE)
+    ritiene sempre, per catturare la coda della sessione. Senza session_id
     o con N<=1 ritiene sempre (nessun throttling)."""
     if every_n is None:
         every_n = max(1, int(CFG.get("retain_every_n_turns", 3)))
@@ -314,11 +443,11 @@ def should_retain_now(
 
 def note_gate_error(session_id: str) -> bool:
     """Errore tecnico del gate (fail-closed): rollback di stop_count di 1 (min 0)
-    cosi' il prossimo Stop rivaluta una finestra che conserva 3 dei 4 turni, e
-    flag gate_error_notified nella stessa entry. Ritorna True se e' la PRIMA
+    cosi' la prossima valutazione rivede una finestra che conserva 3 dei 4 turni,
+    e flag gate_error_notified nella stessa entry. Ritorna True se e' la PRIMA
     notifica della sessione (il chiamante emette il systemMessage solo allora).
-    Senza session_id: nessuno stato, ritorna True. Se lo Stop era `force`
-    (HS_RETAIN_FORCE del check, SessionEnd storico) o every_n<=1 il contatore
+    Senza session_id: nessuno stato, ritorna True. Se la valutazione era `force`
+    (HS_RETAIN_FORCE del check) o every_n<=1 il contatore
     non era salito: il decremento e' innocuo (clamp a 0; al piu' la prossima
     valutazione slitta di uno Stop), non vale un ramo dedicato."""
     if not session_id:
@@ -615,24 +744,56 @@ def gate_debug_output(gate, bank: str) -> dict:
     context = gate_debug_context(gate, bank)
     return {
         "systemMessage": context,
-        "hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": context},
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        },
     }
 
 
-def main() -> int:
+def note_post_failure(msg: str) -> None:
+    """Traccia DUREVOLE di una POST non arrivata al server (server giu', rete,
+    bank irraggiungibile): non esiste nessuna async operation da interrogare,
+    quindi hindsight-failcheck.sh — che fa GET operations?status=failed — e'
+    cieco proprio qui. Stesso file e formato (ts \\t messaggio) di
+    ops/hindsight-drain-retain.py; il failcheck lo raccoglie al prossimo prompt.
+    Best-effort: un problema di scrittura non deve mascherare l'errore vero."""
+    try:
+        with open(
+            os.path.join(cache_dir(), "hs-retain-failed.log"), "a", encoding="utf-8"
+        ) as f:
+            f.write(
+                f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\t{msg}\n"
+            )
+    except Exception:
+        pass
+
+
+def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
+    """Valuta UN payload di Stop. Ritorna (rc, hook_output): hook_output e' il
+    JSON per Claude Code (None = niente da dire); rc 1 solo se la POST non e'
+    arrivata al server. mode:
+      "deferred" -> chiamato a UserPromptSubmit dall'hook recall: throttling
+                    normale; uncertain/context mancante -> pending + istruzione
+                    in additionalContext (la domanda chiude la risposta successiva).
+      "drain"    -> chiamato dal sentinel a fine sessione: force (nessun
+                    throttling), nessun utente a cui chiedere: retain -> POST
+                    (context di fallback se il gate non l'ha dato), uncertain e
+                    errore del gate -> skip silenzioso."""
     # Interruttore master: se il retain automatico e' disattivato in config, esci
     # subito — niente parse del transcript, niente POST, niente estrazione LLM.
     if not CFG.get("retain_enabled", True):
         debug_log(CFG, "retain_skip", reason="disabled")
-        return 0
+        return 0, None
 
-    hook = parse_hook()
     # Stop hook non passa 'prompt'; il filtro avviene in build_content (skip se
     # last_user_prompt+files_modified entrambi vuoti = turno senza contenuto utile).
-    transcript = load_transcript(hook.get("transcript_path", ""))
+    # drop_unanswered_tail: a UserPromptSubmit il transcript puo' gia' contenere
+    # il prompt nuovo; la finestra deve essere quella del turno COMPLETATO.
+    transcript = drop_unanswered_tail(load_transcript(hook.get("transcript_path", "")))
     if not transcript:
         debug_log(CFG, "retain_skip", reason="no_transcript")
-        return 0
+        return 0, None
 
     # Modalita': "chunked" (default) salva fette immutabili con sliding window;
     # qualsiasi altro valore mantiene il vecchio comportamento legacy (un documento
@@ -649,19 +810,18 @@ def main() -> int:
         content = build_content(hook, summary)
     if not content:
         debug_log(CFG, "retain_skip", reason="no_content")
-        return 0
+        return 0, None
 
-    # Throttling: salta i Stop non multipli di N per ridurre le ri-estrazioni LLM
-    # ridondanti su sessioni lunghe. force su SessionEnd (cattura la coda) o via
-    # HS_RETAIN_FORCE. Il contatore avanza solo sui turni con contenuto utile.
+    # Throttling: salta le entry non multiple di N per ridurre le ri-estrazioni
+    # LLM ridondanti su sessioni lunghe. force nel drain di fine sessione (cattura
+    # la coda) o via HS_RETAIN_FORCE. Il contatore avanza solo sui turni con
+    # contenuto utile.
     session_id = hook.get("session_id") or ""
-    force = hook.get("hook_event_name") == "SessionEnd" or bool(
-        os.environ.get("HS_RETAIN_FORCE")
-    )
+    force = mode == "drain" or bool(os.environ.get("HS_RETAIN_FORCE"))
     if not should_retain_now(session_id, force=force):
-        print("[retain] skip: throttling (turno non multiplo di N, niente SessionEnd)")
+        print("[retain] skip: throttling (turno non multiplo di N, niente drain)")
         debug_log(CFG, "retain_skip", reason="throttling", session=session_id[:8])
-        return 0
+        return 0, None
 
     # Gate semantico pre-retain (ICH-67), DOPO il throttling cosi' paga solo sui
     # turni che salverebbero davvero. Attivo sempre (retain_enabled e' l'unico
@@ -669,8 +829,8 @@ def main() -> int:
     # uncertain -> POST in pending + domanda all'utente (ramo piu' sotto).
     # Un errore TECNICO del gate e' FAIL-CLOSED (ICH-73): nessun salvataggio,
     # notifica non bloccante una volta per sessione e rollback del contatore
-    # cosi' il prossimo Stop rivaluta (finestra con overlap: 3 turni su 4
-    # sopravvivono). Salvare "come prima del gate" con un LLM giu' produceva
+    # cosi' la prossima valutazione rivede la finestra (con overlap: 3 turni su
+    # 4 sopravvivono). Salvare "come prima del gate" con un LLM giu' produceva
     # memorie senza context e senza giudizio.
     gate = evaluate_retain(
         content, summary, recall_bank_urls(CFG, hook.get("cwd") or None), CFG
@@ -684,10 +844,22 @@ def main() -> int:
         latency_ms=gate.latency_ms,
         error=gate.error,
         preview=gate.preview[:300],
+        mode=mode,
     )
     if gate.error:
-        first = note_gate_error(session_id)
         print(f"[retain] skip: gate error ({gate.error})")
+        if mode == "drain":
+            # La sessione e' finita: nessuno a cui notificare, nessun "prossimo
+            # turno" per cui fare rollback del contatore.
+            debug_log(
+                CFG,
+                "retain_skip",
+                reason="gate_error_drain",
+                error=gate.error,
+                session=session_id[:8],
+            )
+            return 0, None
+        first = note_gate_error(session_id)
         debug_log(
             CFG,
             "retain_skip",
@@ -696,14 +868,14 @@ def main() -> int:
             session=session_id[:8],
             notified=first,
         )
-        # rc 0 anche qui: un rc!=0 farebbe scrivere al wrapper "non arrivato al
-        # server" in hs-retain-failed.log, etichetta sbagliata per un gate giu'.
-        out = {}
+        # rc 0 anche qui: rc!=0 e' riservato alla POST non arrivata al server
+        # (note_post_failure), etichetta sbagliata per un gate giu'.
+        out: dict = {}
         if first:
             out["systemMessage"] = (
                 "Hindsight: retain automatico non eseguito — errore tecnico del gate "
                 f"({gate.error}). Nessuna memoria salvata per questa finestra; il "
-                "prossimo Stop riprova."
+                "prossimo turno riprova."
             )
         if CFG.get("retain_debug_in_context"):
             debug = gate_debug_context(gate, "-")
@@ -711,18 +883,28 @@ def main() -> int:
                 filter(None, [out.get("systemMessage"), debug])
             )
             out["hookSpecificOutput"] = {
-                "hookEventName": "Stop",
+                "hookEventName": "UserPromptSubmit",
                 "additionalContext": debug,
             }
-        if out:
-            print("HSGATE " + json.dumps(out, ensure_ascii=False))
-        return 0
+        return 0, out or None
     if gate.action == "skip":
         print(f"[retain] skip: gate ({gate.reason})")
         debug_log(CFG, "retain_skip", reason=f"gate_{gate.reason}", session=session_id[:8])
         if CFG.get("retain_debug_in_context"):
-            print("HSGATE " + json.dumps(gate_debug_output(gate, "-"), ensure_ascii=False))
-        return 0
+            return 0, gate_debug_output(gate, "-")
+        return 0, None
+    if mode == "drain" and gate.action == "uncertain":
+        # Nessun utente a cui chiedere e nessun prompt successivo che possa
+        # consumare un pending: l'uncertain a fine sessione si lascia cadere.
+        print(f"[retain] skip: gate uncertain in drain ({gate.preview[:120]})")
+        debug_log(
+            CFG,
+            "retain_skip",
+            reason="gate_uncertain_drain",
+            session=session_id[:8],
+            preview=gate.preview[:300],
+        )
+        return 0, None
 
     git = git_info(hook.get("cwd") or "")
     tags = build_tags(hook, git)
@@ -747,6 +929,19 @@ def main() -> int:
     ):
         if v:
             metadata[k] = str(v)
+
+    if mode == "drain" and not context:
+        # In drain nessuno puo' proporre o dettare un context: si usa l'ultima
+        # risorsa della catena del consenso (riga repo/branch, zero rete) invece
+        # di perdere una finestra che il gate ha giudicato da ritenere.
+        context = fallback_context(metadata)
+        debug_log(
+            CFG,
+            "retain_context",
+            context_source="fallback",
+            context=context,
+            session=session_id[:8],
+        )
 
     # document_id: in chunked ogni fetta e' un documento con id derivato dal
     # CONTENUTO (fette diverse = documenti diversi, niente perdita tra retain;
@@ -796,15 +991,21 @@ def main() -> int:
     # il bank si auto-crea al primo retain, nessun provisioning).
     api_url = os.environ.get("API_URL") or retain_bank_url(CFG, hook.get("cwd") or None)
 
-    # Pending + domanda: la POST pronta va in pending (stessa meccanica dei
-    # medium del recall ICH-66: file per session+cwd, TTL, consumo singolo) e
-    # l'hook blocca lo stop per far porre a Claude la domanda. Ci si arriva
-    # per uncertain (come sempre) e, da ICH-73, anche per retain/uncertain con
-    # context VUOTO: Claude propone una riga di dominio e l'utente risponde
-    # si' / no / `context: …`. Il si' al prompt successivo esegue la POST
-    # dall'hook recall (handle_retain_consent, che risolve il context: esplicito
-    # -> gate -> proposta nel transcript -> repo/branch); no/prompt nuovo la
-    # scartano. gate.error non arriva qui: e' fail-closed piu' sopra.
+    # Pending + domanda (solo deferred: in drain uncertain e' gia' uscito e il
+    # context e' gia' risolto sopra): la POST pronta va in pending (stessa
+    # meccanica dei medium del recall ICH-66: file per session+cwd, TTL, consumo
+    # singolo) e l'istruzione va a Claude via additionalContext, il canale
+    # NASCOSTO di UserPromptSubmit (ICH-86: niente piu' decision:block, che qui
+    # non esiste e comunque interromperebbe il prompt appena inviato). Claude
+    # risponde al prompt corrente e mette la domanda come ULTIMA cosa della
+    # risposta: retain_context_from_transcript legge last_assistant_text per
+    # recuperare la «proposta». Ci si arriva per uncertain (come sempre) e, da
+    # ICH-73, anche per retain/uncertain con context VUOTO: Claude propone una
+    # riga di dominio e l'utente risponde si' / no / `context: …`. Il si' al
+    # prompt successivo esegue la POST dall'hook recall (handle_retain_consent,
+    # che risolve il context: esplicito -> gate -> proposta nel transcript ->
+    # repo/branch); no/prompt nuovo la scartano. gate.error non arriva qui: e'
+    # fail-closed piu' sopra.
     needs_context = not context
     if gate.action == "uncertain" or needs_context:
         if not save_retain_pending(
@@ -813,15 +1014,16 @@ def main() -> int:
             # Senza pending affidabile (niente session_id / stato non scrivibile)
             # la domanda non potrebbe mantenere la promessa del si': non si salva.
             debug_log(CFG, "retain_skip", reason=f"gate_{gate.action}_no_pending")
-            return 0
-        # La reason viene SEMPRE stampata nel transcript (limite Claude Code:
-        # per Stop non esiste un canale nascosto come l'additionalContext di
-        # UserPromptSubmit), quindi resta corta: solo la domanda e le
-        # direttive essenziali.
-        if not needs_context:  # uncertain + context: come oggi
+            return 0, None
+        # I testi delle DOMANDE restano identici (li riconoscono i test e la
+        # regex della proposta); cambia solo la cornice: prima la risposta al
+        # prompt corrente, poi la domanda in chiusura.
+        if not needs_context:  # uncertain + context: domanda classica
             question = f"Vuoi che salvi questa memoria? — {gate.preview} (sì/no)"
             instruction = (
-                f"Retain gate uncertain: ask the user verbatim {question!r} and end "
+                "Hindsight retain gate was uncertain about the previous turn. "
+                "Answer the current prompt normally first. Then, as the very last "
+                f"thing in your reply, ask the user verbatim {question!r} and end "
                 "the turn. Do not save anything yourself; a yes runs the pending "
                 "save at the next prompt."
             )
@@ -835,10 +1037,13 @@ def main() -> int:
             if gate.action == "retain":
                 question = "Salvo questa memoria con context «<PROPOSTA>»? (sì / no / context: …)"
                 instruction = (
-                    f"Retain gate approved this window but produced no context. {propose}"
-                    f"Then ask the user verbatim {question!r} and end the turn. "
-                    f"Preview: {gate.preview}. Do not save anything yourself; a yes "
-                    "(or a `context: …` reply) runs the pending save at the next prompt."
+                    "Hindsight retain gate approved the previous turn but produced "
+                    f"no context. {propose}"
+                    "Answer the current prompt normally first. Then, as the very last "
+                    f"thing in your reply, ask the user verbatim {question!r} and end "
+                    f"the turn. Preview: {gate.preview}. Do not save anything yourself; "
+                    "a yes (or a `context: …` reply) runs the pending save at the next "
+                    "prompt."
                 )
             else:  # uncertain senza context
                 # rstrip('.') evita "…gate.. Context proposto": le preview del
@@ -848,21 +1053,21 @@ def main() -> int:
                     "Context proposto: «<PROPOSTA>» (sì / no / context: …)"
                 )
                 instruction = (
-                    f"Retain gate uncertain and no context. {propose}"
-                    f"Then ask the user verbatim {question!r} and end the turn. "
-                    "Do not save anything yourself; a yes (or a `context: …` reply) "
-                    "runs the pending save at the next prompt."
+                    "Hindsight retain gate was uncertain about the previous turn and "
+                    f"produced no context. {propose}"
+                    "Answer the current prompt normally first. Then, as the very last "
+                    f"thing in your reply, ask the user verbatim {question!r} and end "
+                    "the turn. Do not save anything yourself; a yes (or a `context: …` "
+                    "reply) runs the pending save at the next prompt."
                 )
-        # Niente additionalContext: su Stop non e' documentato e duplicare
-        # l'istruzione produce due righe identiche nel transcript (error +
-        # feedback). La reason da sola basta a far porre la domanda.
         out = {
-            "decision": "block",
-            "reason": instruction,
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": instruction,
+            }
         }
         if CFG.get("retain_debug_in_context"):
             out["systemMessage"] = gate_debug_context(gate, api_url.rsplit("/", 1)[-1])
-        print("HSGATE " + json.dumps(out, ensure_ascii=False))
         debug_log(
             CFG,
             "retain_pending",
@@ -871,7 +1076,7 @@ def main() -> int:
             context=context,
             preview=gate.preview[:300],
         )
-        return 0
+        return 0, out
 
     debug_log(
         CFG,
@@ -907,20 +1112,66 @@ def main() -> int:
                 status=res.status,
                 response=body[:300],
             )
-            if CFG.get("retain_debug_in_context"):
-                print(
-                    "HSGATE "
-                    + json.dumps(
-                        gate_debug_output(gate, api_url.rsplit("/", 1)[-1]),
-                        ensure_ascii=False,
-                    )
-                )
     except Exception as exc:
         print(f"[retain] FAIL {exc}", file=sys.stderr)
         debug_log(CFG, "retain_error", doc_id=doc_id, error=str(exc)[:200])
-        return 1
-    return 0
+        note_post_failure(f"non arrivato al server — {exc}")
+        return 1, None
+    if CFG.get("retain_debug_in_context"):
+        return 0, gate_debug_output(gate, api_url.rsplit("/", 1)[-1])
+    return 0, None
+
+
+def evaluate_queued(session_id: str, mode: str = "deferred") -> dict | None:
+    """Entry point per l'hook recall a UserPromptSubmit: consuma l'entry di coda
+    della sessione e la valuta; ritorna il JSON hook-output da fondere con quello
+    del recall (None = niente). Non solleva MAI: un bug qui non deve rompere il
+    prompt dell'utente (l'errore finisce nel debug log)."""
+    try:
+        entry = dequeue_for_session(session_id)
+        if entry is None:
+            return None
+        _rc, out = evaluate(entry, mode)
+        return out
+    except Exception as exc:
+        try:
+            debug_log(
+                CFG,
+                "retain_error",
+                error=f"{type(exc).__name__}: {exc}"[:300],
+                session=(session_id or "")[:8],
+                where="evaluate_queued",
+            )
+        except Exception:
+            pass
+        return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Modalita' script. `--drain`: svuota la coda valutando ogni entry in
+    "drain" (sentinel di fine sessione), best-effort per entry. Senza flag:
+    valuta $HOOK_INPUT in "deferred" e stampa 'HSGATE {json}' quando c'e'
+    output (tools/hindsight-check.sh e run manuali)."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "--drain" in args:
+        for entry in drain_queue():
+            try:
+                evaluate(entry, "drain")
+            except Exception as exc:
+                print(f"[retain] drain error: {type(exc).__name__}: {exc}", file=sys.stderr)
+                debug_log(
+                    CFG,
+                    "retain_error",
+                    error=f"{type(exc).__name__}: {exc}"[:300],
+                    session=str(entry.get("session_id") or "")[:8],
+                    where="drain",
+                )
+        return 0
+    rc, out = evaluate(parse_hook(), "deferred")
+    if out:
+        print("HSGATE " + json.dumps(out, ensure_ascii=False))
+    return rc
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
