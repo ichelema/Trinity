@@ -131,9 +131,9 @@ Quando il server è up, in una sessione Claude Code questo progetto espone 29 to
 
 | Tool                | Quando usarlo                                                                                                                                                                                                  | Esempio di invocazione                                                                                                                          |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hindsight/retain`  | Memorizzare informazioni nuove (preferenze, decisioni, lezioni). Passa **contesto ricco e crudo**, non frasi pre-digerite: l'LLM estrae meglio i fatti dal testo originale. Asincrono: ritorna `operation_id`. | `retain(content="L'utente Sphynx preferisce Ruby per gli script e usa MSYS2 su Windows 11. Ha appena configurato Hindsight con gpt-5.6-luna.")` |
-| `hindsight/recall`  | Recuperare memorie semanticamente rilevanti per una query. Sincrono.                                                                                                                                           | `recall(query="quali preferenze ha Sphynx per gli script?")`                                                                                    |
-| `hindsight/reflect` | Sintesi disposition-aware su una domanda usando le memorie come contesto.                                                                                                                                      | `reflect(query="Come dovrei impostare un nuovo script per Sphynx?")`                                                                            |
+| `hindsight/retain`  | Memorizzare informazioni nuove (preferenze, decisioni, lezioni). Passa **contesto ricco e crudo**, non frasi pre-digerite: l'LLM estrae meglio i fatti dal testo originale. Asincrono: ritorna `operation_id`. | `retain(content="L'utente Ichelema preferisce Ruby per gli script e usa MSYS2 su Windows 11. Ha appena configurato Hindsight con gpt-5.6-luna.")` |
+| `hindsight/recall`  | Recuperare memorie semanticamente rilevanti per una query. Sincrono.                                                                                                                                           | `recall(query="quali preferenze ha Ichelema per gli script?")`                                                                                    |
+| `hindsight/reflect` | Sintesi disposition-aware su una domanda usando le memorie come contesto.                                                                                                                                      | `reflect(query="Come dovrei impostare un nuovo script per Ichelema?")`                                                                            |
 
 Tool ausiliari più usati:
 
@@ -150,8 +150,8 @@ Tool ausiliari più usati:
 1. Il client (Claude Code) chiama `retain(content=...)`
 2. Il server accetta sincrono → `{status: "accepted", operation_id: "..."}` e mette in coda
 3. Worker async chiama `gpt-5.6-luna` (provider `openai-responses`) per estrarre:
-   - **observation facts** (fatti atomici, es. "Sphynx prefers Ruby for scripting")
-   - **world facts** (versione timestamped + entity-linked, es. "Sphynx prefers Ruby for scripting | When: 2026-05-23 | Involving: Sphynx")
+   - **observation facts** (fatti atomici, es. "Ichelema prefers Ruby for scripting")
+   - **world facts** (versione timestamped + entity-linked, es. "Ichelema prefers Ruby for scripting | When: 2026-05-23 | Involving: Ichelema")
 4. Entrambi i tipi vengono indicizzati con embeddings nel bank `trinity-project`
 5. `recall` cerca semanticamente su observation + world, restituisce ranked
 

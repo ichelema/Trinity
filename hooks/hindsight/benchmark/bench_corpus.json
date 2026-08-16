@@ -3,7 +3,7 @@
   "documents": [
     {
       "id": "doc-identity",
-      "content": "L'utente si chiama Sphynx e preferisce essere chiamato con questo nome. Lavora principalmente su Windows 11 Enterprise usando la shell bash di MSYS2 UCRT64."
+      "content": "L'utente si chiama Ichelema e preferisce essere chiamato con questo nome. Lavora principalmente su Windows 11 Enterprise usando la shell bash di MSYS2 UCRT64."
     },
     {
       "id": "doc-lang",
@@ -19,7 +19,7 @@
     },
     {
       "id": "doc-obsidian",
-      "content": "Sphynx usa Obsidian con il vault chiamato Sinapsi e il plugin Excalidraw per creare e salvare diagrammi all'interno delle note."
+      "content": "Ichelema usa Obsidian con il vault chiamato Sinapsi e il plugin Excalidraw per creare e salvare diagrammi all'interno delle note."
     },
     {
       "id": "doc-keys",
@@ -39,14 +39,14 @@
     },
     {
       "id": "doc-git",
-      "content": "Sphynx non vuole che vengano fatti push git automatici e chiede sempre conferma prima del push. Il formato dei messaggi di commit preferito e' 'tipo: descrizione breve', ad esempio 'fix: corregge parsing CSV'."
+      "content": "Ichelema non vuole che vengano fatti push git automatici e chiede sempre conferma prima del push. Il formato dei messaggi di commit preferito e' 'tipo: descrizione breve', ad esempio 'fix: corregge parsing CSV'."
     }
   ],
   "queries": [
     {
       "id": "q-identity",
       "query": "Come si chiama l'utente e su quale sistema operativo lavora?",
-      "expected": ["sphynx", "windows"],
+      "expected": ["ichelema", "windows"],
       "min_hits": 2
     },
     {
