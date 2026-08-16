@@ -14,7 +14,7 @@ L'implementazione è stata realizzata da un altro agente. Il tuo obiettivo non �
 
 Se `$issue_id` è vuoto, fermati e mostra:
 
-`/independent-review <issue-id>`
+`/4_independent-review <issue-id>`
 
 Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 

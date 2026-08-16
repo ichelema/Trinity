@@ -15,7 +15,7 @@ i comandi sono Bash puro e portabile; i passi solo-Windows sono marcati.
 
 Se `$worktree_name` manca, fermati e mostra:
 
-`/remove-worktree <worktree-name>`
+`/5_remove-worktree <worktree-name>`
 
 Accetta anche un path assoluto: in quel caso usalo com'è. Altrimenti il worktree
 è `<repo-root>/.claude/worktrees/$worktree_name`.
@@ -80,7 +80,8 @@ commit, stato merged/unmerged, presenza del branch remoto.
 
 ### 1. (Windows/MSYS2) ripristina il `gitdir` POSIX nel file `.git` del worktree
 
-I worktree creati con `/create-review-worktree` (o toccati da SmartGit) hanno
+I worktree creati con `/1_create-worktree` o `/3_create-review-worktree` (o
+toccati da SmartGit) hanno
 nel file `<wt-path>/.git` un `gitdir:` in forma Windows (`E:/AI/...`). Il git
 MSYS ci lavora (status, commit), ma `git worktree remove` fa una validazione
 testuale e fallisce con

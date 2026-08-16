@@ -1,5 +1,5 @@
 ---
-description: Crea un branch e un worktree pulito per una review indipendente
+description: Crea un branch e un worktree pulito per implementare una issue Linear
 argument-hint: <source-branch> <issue-id> <model>
 arguments:
   - source_branch
@@ -8,10 +8,10 @@ arguments:
 disable-model-invocation: true
 ---
 
-Crea un branch e un worktree separato per la review del branch remoto
+Crea un branch e un worktree separato del branch remoto
 `$source_branch`, relativo alla issue Linear `$issue_id`.
 
-Il modello che eseguirà la review è `$model`.
+Il modello che eseguirà il task è `$model`.
 
 ## Validazione degli argomenti
 
@@ -23,7 +23,7 @@ Verifica che siano presenti tutti gli argomenti:
 
 Se ne manca uno, fermati e mostra:
 
-`/create-review-worktree <source-branch> <issue-id> <model>`
+`/1_create-worktree <source-branch> <issue-id> <model>`
 
 ## Determinazione del tipo dalla issue
 
@@ -52,20 +52,20 @@ Non modificare la issue, i commenti, lo stato o altri dati Linear.
 
 Costruisci il nome base:
 
-`$issue_id-review-$model`
+`$issue_id-$model`
 
 Costruisci il branch di review:
 
-`<prefix>/$issue_id-review-$model`
+`<prefix>/$issue_id-$model`
 
 Esempi:
 
-- `bug/ICH-72-review-gpt-5.6-sol`
-- `improvments/ICH-72-review-claude-opus-4.1`
+- `bug/ICH-72-gpt-5.6-sol`
+- `improvments/ICH-72-claude-opus-4.1`
 
 La directory del worktree deve chiamarsi:
 
-`<prefix>+$issue_id-review-$model`
+`<prefix>+$issue_id-$model`
 
 Il `+` sostituisce il `/` del branch (che non è valido nei nomi di
 directory) e mantiene il raggruppamento visivo coerente con gli altri
@@ -73,13 +73,13 @@ worktree (es. `improvements+ICH-72-retain-gate-dedup`).
 
 Verifica il nome del branch con:
 
-`git check-ref-format --branch "<review-branch>"`
+`git check-ref-format --branch "<branch>"`
 
 Se non è valido, fermati. Non correggerlo automaticamente.
 
 ## Risoluzione del branch sorgente
 
-Non modificare il working tree corrente.
+Non modificare il working tree o branch corrente.
 
 Esegui:
 
@@ -113,7 +113,7 @@ Determina la root del repository.
 
 La directory di destinazione è dentro `.claude/worktrees/`:
 
-`<repo-root>/.claude/worktrees/<prefix>+$issue_id-review-$model`
+`<repo-root>/.claude/worktrees/<prefix>+$issue_id-$model`
 
 Se il branch o la directory esistono già, fermati senza modificarli,
 riutilizzarli o eliminarli.
@@ -132,11 +132,11 @@ Prima della creazione mostra:
 Risolvi il percorso assoluto del worktree in formato Windows dentro
 `.claude/worktrees/`:
 
-`<repo-root>/.claude/worktrees/<prefix>+$issue_id-review-$model`
+`<repo-root>/.claude/worktrees/<prefix>+$issue_id-$model`
 
 Esempio: se la root è `E:/AI/Claude/Trinity` e il prefisso è
 `improvements`, il worktree sarà
-`E:/AI/Claude/Trinity/.claude/worktrees/improvements+ICH-72-review-Fable`.
+`E:/AI/Claude/Trinity/.claude/worktrees/improvements+ICH-72-Fable`.
 
 Crea il branch e il worktree usando il percorso assoluto Windows:
 
@@ -169,7 +169,7 @@ Converti il path in formato Windows:
 
 Nel nuovo worktree verifica che:
 
-- il branch attivo sia `<review-branch>`;
+- il branch attivo sia `<branch>`;
 - `HEAD` corrisponda allo SHA del branch sorgente;
 - `git status --short` non produca output.
 
@@ -195,7 +195,7 @@ con i valori effettivi:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Commit                 │ <messaggio-commit>                                      │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch di review       │ <review-branch>                                         │
+│ Branch di review       │ <branch>                                                 │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Worktree               │ <percorso-assoluto-Windows>                             │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
@@ -206,5 +206,3 @@ con i valori effettivi:
 ```
 
 Adatta la larghezza della colonna Valore al contenuto effettivo.
-
-Non iniziare la review e non modificare file nel nuovo worktree.
