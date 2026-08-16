@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
@@ -48,17 +49,28 @@ class MockBackend(BaseHTTPRequestHandler):
     gate_spec: dict = {}  # decisione del gate retain (action/reason/preview/context)
     gate_calls = 0
     retain_posts: list = []  # body JSON delle POST /memories, in ordine
+    # Ritardi artificiali (secondi) per misurare il parallelismo gate/recall
+    # (WP-D): recall_delay_s vale SOLO per il recall dell'hook (payload di
+    # build_recall_payload, ha "budget"), non per la query anti-duplicato del
+    # gate ({"query","limit"}): cosi' il tempo del ramo gate e' gate_delay_s e
+    # quello del ramo recall e' recall_delay_s, senza sovrapposizioni.
+    recall_delay_s = 0.0
+    gate_delay_s = 0.0
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         cls = type(self)
         if self.path.endswith("/memories/recall"):
+            if cls.recall_delay_s and "budget" in self._json(body):
+                time.sleep(cls.recall_delay_s)
             self._send(200, json.dumps({"results": cls.recall_results}))
         elif self.path.endswith("/memories"):
             cls.retain_posts.append(json.loads(body.decode("utf-8")))
             self._send(200, json.dumps({"success": True}))
         elif self.path.endswith("/chat/completions") and self._schema_name(body) == "retain_gate_decision":
             cls.gate_calls += 1
+            if cls.gate_delay_s:
+                time.sleep(cls.gate_delay_s)
             decision = {"duplicate_of": [], "context": "", **cls.gate_spec}
             self._send(200, json.dumps({"choices": [{"message": {"content": json.dumps(decision)}}]}))
         elif self.path.endswith("/chat/completions"):
@@ -74,9 +86,17 @@ class MockBackend(BaseHTTPRequestHandler):
             self._send(404, "{}")
 
     @staticmethod
-    def _schema_name(body: bytes) -> str:
+    def _json(body: bytes) -> dict:
         try:
-            return json.loads(body.decode("utf-8"))["response_format"]["json_schema"]["name"]
+            data = json.loads(body.decode("utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    @classmethod
+    def _schema_name(cls, body: bytes) -> str:
+        try:
+            return cls._json(body)["response_format"]["json_schema"]["name"]
         except Exception:
             return ""
 
@@ -120,6 +140,8 @@ class HookE2ETests(unittest.TestCase):
         MockBackend.gate_spec = {}
         MockBackend.gate_calls = 0
         MockBackend.retain_posts = []
+        MockBackend.recall_delay_s = 0.0
+        MockBackend.gate_delay_s = 0.0
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -485,6 +507,56 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(MockBackend.retain_posts, [])
         self.assertEqual(self.queue_files(), [])
         self.assertEqual(self.retain_pending_files(), [])
+
+    def test_queued_gate_runs_in_parallel_with_recall(self):
+        # WP-D: il gate differito gira in un thread PARALLELO al recall dentro
+        # lo stesso hook. Con gate e recall che dormono entrambi DELAY secondi
+        # il tempo aggiunto e' ~DELAY (parallelo) invece di ~2*DELAY (il vecchio
+        # design seriale). Si misura contro una baseline senza ritardi nello
+        # stesso ambiente (avvio bash+python varia da macchina a macchina):
+        # soglia a meta' strada tra parallelo (+DELAY) e seriale (+2*DELAY),
+        # cioe' +1.5*DELAY, con DELAY=2s -> 1s di margine per lato.
+        DELAY = 2.0
+        MockBackend.gate_spec = {
+            "action": "retain",
+            "reason": "durable_decision",
+            "preview": "Salvo la decisione parallela e2e.",
+            "context": "dominio parallelo e2e",
+        }
+        MockBackend.recall_results = [
+            {"text": "mu memo", "type": "world", "scores": {"reranker": 0.95}},
+        ]
+        self.enqueue()
+        t0 = time.monotonic()
+        baseline_output = self.run_hook(self.PROMPT)
+        baseline = time.monotonic() - t0
+        self.assertIn("mu memo", self.context(baseline_output))
+        self.assertEqual(len(MockBackend.retain_posts), 1)
+
+        MockBackend.retain_posts = []
+        MockBackend.gate_calls = 0
+        MockBackend.recall_delay_s = DELAY
+        MockBackend.gate_delay_s = DELAY
+        self.enqueue()
+        t0 = time.monotonic()
+        output = self.run_hook(self.PROMPT)
+        elapsed = time.monotonic() - t0
+        # stesso esito funzionale: recall iniettato, POST del retain fatta,
+        # coda consumata, un solo JSON
+        self.assertIn("mu memo", self.context(output))
+        self.assertNotIn("systemMessage", output)
+        self.assertEqual(MockBackend.gate_calls, 1)
+        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.assertEqual(self.queue_files(), [])
+        # i ritardi sono stati davvero pagati (almeno una volta)...
+        self.assertGreaterEqual(elapsed, DELAY)
+        # ...ma NON due volte: parallelo, non seriale
+        self.assertLess(
+            elapsed,
+            baseline + 1.5 * DELAY,
+            f"hook seriale? baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)",
+        )
+        print(f"\n[parallelismo] baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)")
 
     def test_stop_hook_enqueues_hook_input_verbatim(self):
         # hindsight-retain.sh (Stop): risponde '{}' e scrive UNA entry con il

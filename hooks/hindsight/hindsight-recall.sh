@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # UserPromptSubmit hook: recupera memorie rilevanti da Hindsight via REST e
 # filtra semanticamente i risultati prima di iniettarli. Da ICH-86 ospita
-# anche la valutazione DIFFERITA del retain dello Stop precedente (vedi
-# hindsight-retain.sh): consenso del pending -> gate sull'entry in coda ->
-# recall, con UN SOLO oggetto JSON su stdout.
+# anche il lato retain del prompt (vedi hindsight-retain.sh), ma TUTTA quella
+# logica sta nel worker (hindsight-retain-worker.py:retain_at_prompt): qui
+# solo poche righe di colla. Consenso del pending (sincrono) -> gate
+# differito sull'entry in coda avviato in un thread PARALLELO al recall ->
+# recall -> join del gate all'emit, con UN SOLO oggetto JSON su stdout.
 set -uo pipefail
 
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
@@ -16,7 +18,6 @@ export HOOK_INPUT HOOKS_DIR
 . "$HOOKS_DIR/lib/hs-python.sh"
 
 PYTHONUTF8=1 "$HS_PY" <<'PY' 2>"$HS_CACHE_DIR/hs-recall-stderr.log"
-import contextlib
 import importlib.util
 import json
 import os
@@ -24,6 +25,10 @@ import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
+
+# Istante di partenza dell'hook: la deadline di join del gate differito
+# (RETAIN_JOIN_BUDGET_S, sotto) si misura da qui, non dal momento dell'emit.
+T0 = time.monotonic()
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
 from hindsight_config import cache_dir as _hs_state_dir
@@ -39,7 +44,6 @@ from hindsight_recall_filter import (
     save_pending,
 )
 from hindsight_recall_lib import build_recall_payload
-from hindsight_retain_gate import handle_retain_consent
 
 cfg = load_config()
 
@@ -61,56 +65,55 @@ cwd = str(hook.get("cwd") or "")
 pending_dir = cfg["recall_pending_dir"]
 pending_ttl = float(cfg["recall_pending_ttl"])
 
-# Consenso del RETAIN pending (gate "uncertain" o context mancante, ICH-67/
-# ICH-73) — PRIMA di tutto il resto, incluso il gate recall_enabled: la domanda
-# del gate retain e' sempre la piu' recente (posta alla fine del turno
-# precedente), quindi un si'/no secco (o un `context: …`) appartiene a lei, e
-# va onorata anche nei progetti col recall spento. Il transcript serve a
-# ripescare il context proposto da Claude nella domanda.
-RETAIN_NOTICE = ""  # notifica del pending retain scartato su prompt nuovo
-retain_outcome = handle_retain_consent(
-    original_prompt, session_id, cwd, transcript_path=str(hook.get("transcript_path") or "")
-)
-if retain_outcome:
-    debug_log(
-        cfg,
-        "retain_pending",
-        action=retain_outcome.get("action"),
-        reason=retain_outcome.get("reason"),
-        status=retain_outcome.get("status"),
-        error=retain_outcome.get("error"),
-        context=retain_outcome.get("context"),
-        context_source=retain_outcome.get("context_source"),
-        preview=(retain_outcome.get("preview") or "")[:300],
-    )
+# Lato RETAIN del prompt (ICH-86): consenso del pending (gate "uncertain" o
+# context mancante, ICH-67/ICH-73) + valutazione DIFFERITA dell'entry accodata
+# dallo Stop precedente. TUTTA la logica sta nel worker (retain_at_prompt):
+# qui solo la colla. Ordine voluto, dentro il worker: PRIMA il consenso, in
+# modo sincrono (risponde alla domanda del turno precedente e consuma il suo
+# pending; su un si' fallito e RIPRISTINATO il gate non parte, l'entry resta
+# in coda), POI il gate differito avviato in un thread daemon (puo' creare il
+# pending successivo), e solo dopo, qui, il recall — cosi' un "si'" non viene
+# mai letto come risposta a una domanda non ancora posta. Il gate corre IN
+# PARALLELO al recall perche' sono indipendenti (coda/transcript vs prompt):
+# la latenza aggiunta al prompt e' ~max(gate, recall) invece della somma. Il
+# suo output si ritira con gate_output(deadline) SOLO al momento dell'emit:
+# e' l'ultimo istante utile per fonderlo nell'unico JSON su stdout, e fino a
+# li' il recall ha lavorato senza aspettarlo. Il worker e' caricato per path
+# (non e' in lib/) dentro un try: un worker rotto non deve mai uccidere il
+# recall (dummy a campi vuoti). I suoi log '[retain] ...' vanno su stderr
+# (hs-recall-stderr.log): lo stdout resta il solo JSON di questo hook.
+# Budget di join del gate: hooks.json da' a questo hook 60s; 55s da T0 lascia
+# 5s di margine per la print e l'uscita. Un gate che non ha finito entro la
+# deadline si perde (come una mancata per throttling; il worker logga
+# retain_skip/deferred_timeout).
+RETAIN_JOIN_BUDGET_S = 55.0
 
-# Valutazione DIFFERITA del retain (ICH-86): lo Stop precedente ha solo accodato
-# il suo payload; qui il worker prende l'entry piu' recente di QUESTA sessione,
-# la passa dal gate e fa la POST — oppure salva un pending e chiede a Claude di
-# porre la domanda in coda alla risposta (additionalContext). Ordine voluto:
-# PRIMA il consenso (risponde alla domanda del turno precedente e consuma il
-# suo pending), POI il gate differito (puo' creare il pending successivo), e
-# solo dopo il recall. Cosi' un "si'" non viene mai letto come risposta a una
-# domanda non ancora posta e il pending nuovo non calpesta quello in attesa.
-# Il worker e' caricato per path (non e' in lib/) dentro un try: un worker
-# rotto non deve mai uccidere il recall. Il suo output va fuso in QUALUNQUE
-# uscita dell'hook (emit()/finish() sotto): lo stdout resta un solo JSON.
-# redirect_stdout: le righe di log '[retain] ...' del worker finirebbero su
-# stdout in mezzo al JSON; le dirottiamo sullo stderr (hs-recall-stderr.log).
-# Eccezione: se il "si'" e' fallito e il pending e' stato RIMESSO in attesa
-# (restored), un nuovo pending della stessa sessione lo sovrascriverebbe (un
-# file per session+cwd): l'entry in coda resta e si valuta al prompt dopo.
-RETAIN_EXTRA: dict = {}
+
+class _NoRetain:
+    """Sostituto a campi vuoti se il worker non si carica."""
+
+    outcome = None
+    consent_output: dict = {}
+    notice = ""
+    saved = False
+    stop_here = False
+
+    @staticmethod
+    def gate_output(deadline: float) -> dict:
+        return {}
+
+
+RETAIN = _NoRetain()
 try:
-    if not (retain_outcome and retain_outcome.get("restored")):
-        _spec = importlib.util.spec_from_file_location(
-            "hindsight_retain_worker",
-            os.path.join(os.environ["HOOKS_DIR"], "hindsight-retain-worker.py"),
-        )
-        _worker = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_worker)
-        with contextlib.redirect_stdout(sys.stderr):
-            RETAIN_EXTRA = _worker.evaluate_queued(session_id) or {}
+    _spec = importlib.util.spec_from_file_location(
+        "hindsight_retain_worker",
+        os.path.join(os.environ["HOOKS_DIR"], "hindsight-retain-worker.py"),
+    )
+    _worker = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_worker)
+    RETAIN = _worker.retain_at_prompt(
+        original_prompt, session_id, cwd, str(hook.get("transcript_path") or "")
+    )
 except Exception as exc:
     debug_log(
         cfg,
@@ -119,21 +122,23 @@ except Exception as exc:
         error=f"{type(exc).__name__}: {exc}"[:300],
         session=session_id[:8],
     )
-    RETAIN_EXTRA = {}
+    RETAIN = _NoRetain()
 
 _emitted = False
 
 
 def emit(output: dict) -> None:
     """Unico punto di stampa: fonde nella stessa uscita la notifica del pending
-    retain scartato e l'output del gate differito (systemMessage a righe,
-    additionalContext a blocchi), creando hookSpecificOutput se manca."""
+    retain scartato e l'output del gate differito — ritirato QUI, con join
+    entro la deadline (systemMessage a righe, additionalContext a blocchi),
+    creando hookSpecificOutput se manca."""
     global _emitted
-    extra_msg = RETAIN_EXTRA.get("systemMessage") or ""
-    extra_ctx = (RETAIN_EXTRA.get("hookSpecificOutput") or {}).get("additionalContext") or ""
-    if RETAIN_NOTICE or extra_msg:
+    extra = RETAIN.gate_output(T0 + RETAIN_JOIN_BUDGET_S)
+    extra_msg = extra.get("systemMessage") or ""
+    extra_ctx = (extra.get("hookSpecificOutput") or {}).get("additionalContext") or ""
+    if RETAIN.notice or extra_msg:
         output["systemMessage"] = "\n".join(
-            filter(None, [RETAIN_NOTICE, extra_msg, output.get("systemMessage")])
+            filter(None, [RETAIN.notice, extra_msg, output.get("systemMessage")])
         )
     if extra_ctx:
         hso = output.setdefault("hookSpecificOutput", {"hookEventName": "UserPromptSubmit"})
@@ -147,63 +152,22 @@ def emit(output: dict) -> None:
 
 def finish() -> None:
     """Uscita senza contenuto recall: stampa solo notifica/gate differito, se
-    ci sono e non sono gia' usciti."""
-    if (RETAIN_NOTICE or RETAIN_EXTRA) and not _emitted:
+    ci sono e non sono gia' usciti. gate_output e' idempotente (cache), quindi
+    la seconda chiamata dentro emit() non ri-aspetta."""
+    if not _emitted and (RETAIN.notice or RETAIN.gate_output(T0 + RETAIN_JOIN_BUDGET_S)):
         emit({})
     sys.exit(0)
 
 
-if retain_outcome:
-    if retain_outcome["action"] == "saved":
-        # Lo stesso "si'" non deve autorizzare anche le memorie medium rimaste
-        # in pending dal recall: la domanda a cui risponde e' quella del retain.
-        discard_pending_if_present(pending_dir, session_id, cwd, pending_ttl)
-        preview = retain_outcome.get("preview") or ""
-        message = f"Hindsight: memoria salvata — {preview}"
-        # Context non prodotto dal gate: si dice all'utente quale e' finito
-        # nella memoria e da dove viene (risposta sua, proposta di Claude nel
-        # transcript, oppure la riga repo/branch di ultima risorsa).
-        source = retain_outcome.get("context_source")
-        if source != "gate":
-            label = {
-                "explicit": "indicato da te",
-                "proposal": "proposto da Claude",
-                "fallback": "ricavato da repo/branch",
-            }.get(source, source)
-            message += f" [context «{retain_outcome.get('context') or ''}», {label}]"
-        emit({
-            "systemMessage": message,
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": (
-                    "## Hindsight retain\n\nLa memoria in attesa di conferma è stata "
-                    "salvata nel bank. Non serve alcun retain manuale."
-                ),
-            },
-        })
-        sys.exit(0)
-    if retain_outcome["action"] == "error":
-        # Il pending e' stato rimesso in attesa (restored): l'utente puo'
-        # riprovare con un altro "si'" senza rifare il retain a mano.
-        message = (
-            "Hindsight: salvataggio della memoria in attesa NON riuscito — "
-            + str(retain_outcome.get("error") or "")
-        )
-        if retain_outcome.get("restored"):
-            message += " Rispondi «sì» al prossimo prompt per riprovare."
-        emit({"systemMessage": message})
-        sys.exit(0)
-    # "discarded": col "no" resta silenzioso; su prompt NUOVO l'utente deve
-    # sapere che la domanda del gate e' decaduta (altrimenti crede di aver
-    # salvato). La notifica viaggia con QUALUNQUE uscita successiva dell'hook,
-    # via emit()/finish() qui sopra: lo stdout resta un solo oggetto JSON.
-    if retain_outcome.get("reason") == "new_prompt":
-        preview = retain_outcome.get("preview") or ""
-        RETAIN_NOTICE = (
-            f"Hindsight: memoria in attesa scartata — {preview}"
-            if preview
-            else "Hindsight: memoria in attesa scartata"
-        )
+if RETAIN.saved:
+    # Lo stesso "si'" non deve autorizzare anche le memorie medium rimaste
+    # in pending dal recall: la domanda a cui risponde e' quella del retain.
+    discard_pending_if_present(pending_dir, session_id, cwd, pending_ttl)
+if RETAIN.stop_here:
+    # saved/error: come sempre, si esce senza recall (l'output del gate,
+    # se c'e', viene fuso da emit()).
+    emit(RETAIN.consent_output)
+    sys.exit(0)
 
 
 if not cfg.get("recall_enabled", True):

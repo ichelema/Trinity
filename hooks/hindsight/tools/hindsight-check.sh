@@ -147,7 +147,8 @@ if [ -r "$HOOKSJSON" ]; then
 		# Da ICH-86 lo Stop hook non valuta piu' nulla: accoda il payload in
 		# hs-retain-queue/ e risponde '{}'. Deve restare SINCRONO comunque:
 		# l'enqueue deve essere completato prima che parta il prompt successivo,
-		# altrimenti evaluate_queued() nell'hook recall non troverebbe l'entry
+		# altrimenti il gate differito dell'hook recall (retain_at_prompt ->
+		# evaluate_queued) non troverebbe l'entry
 		# (nessun decision:block da proteggere: conta solo l'ordine Stop -> UPS).
 		RETAIN_ASYNC=$(python -c "
 import json, sys
@@ -202,7 +203,9 @@ fi
 rm -rf "$QTMP"
 
 # 9b. Il worker in modalita' script (senza flag) valuta $HOOK_INPUT in "deferred"
-# esattamente come evaluate_queued() nell'hook recall a UserPromptSubmit.
+# esattamente come il gate differito lanciato da retain_at_prompt() nell'hook
+# recall a UserPromptSubmit (evaluate_queued). I log '[retain]' vanno su stderr,
+# HSGATE su stdout: il file di log raccoglie entrambi (2>&1).
 # HS_RETAIN_FORCE bypassa il throttling ma NON l'interruttore master retain_enabled:
 # col retain off il worker esce prima del POST, quindi l'e2e non e' applicabile -> skip.
 RETAIN_ON=$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get retain_enabled 2>/dev/null)
@@ -1282,7 +1285,8 @@ fi
 
 # Wiring ICH-86: lo Stop hook e' puro enqueue (hs-retain-queue, niente HSGATE ne'
 # guardia stop_hook_active: non c'e' piu' nessun decision:block da proteggere);
-# l'hook recall consuma la coda a UserPromptSubmit (evaluate_queued); la
+# l'hook recall delega tutto il lato retain del prompt al worker
+# (retain_at_prompt: consenso + gate differito in parallelo al recall); la
 # sentinella drena il residuo a chiusura (--drain).
 if grep -q 'hs-retain-queue' "$HOOKS_DIR/hindsight-retain.sh" &&
 	! grep -q 'HSGATE' "$HOOKS_DIR/hindsight-retain.sh" &&
@@ -1291,10 +1295,10 @@ if grep -q 'hs-retain-queue' "$HOOKS_DIR/hindsight-retain.sh" &&
 else
 	ko "Stop hook non e' puro enqueue (manca hs-retain-queue o residui HSGATE/stop_hook_active)"
 fi
-if grep -q 'evaluate_queued' "$HOOKS_DIR/hindsight-recall.sh"; then
-	ok "recall hook consuma la coda del retain (evaluate_queued) a UserPromptSubmit"
+if grep -q 'retain_at_prompt' "$HOOKS_DIR/hindsight-recall.sh"; then
+	ok "recall hook delega il lato retain al worker (retain_at_prompt) a UserPromptSubmit"
 else
-	ko "evaluate_queued assente da hindsight-recall.sh: la coda del retain non viene mai valutata"
+	ko "retain_at_prompt assente da hindsight-recall.sh: consenso e coda del retain non vengono mai gestiti"
 fi
 if grep -q -- '--drain' "$HOOKS_DIR/hindsight-sentinel.sh"; then
 	ok "sentinella drena la coda del retain (--drain) prima dello shutdown"
@@ -1310,22 +1314,26 @@ if grep -q 'evaluate_retain' "$HOOKS_DIR/hindsight-retain-worker.py" &&
 else
 	ko "gate/pending non integrati nel worker o modulo lib mancante"
 fi
-# ICH-86: entry point differito per l'hook recall + scarto dei messaggi utente in
-# coda al transcript (a UserPromptSubmit puo' gia' contenere il prompt nuovo:
-# la finestra deve essere quella del turno COMPLETATO).
-if grep -q 'def evaluate_queued' "$HOOKS_DIR/hindsight-retain-worker.py" &&
+# ICH-86: entry point del lato retain per l'hook recall (retain_at_prompt:
+# consenso + gate differito in un thread parallelo al recall), consumo della
+# coda (evaluate_queued) + scarto dei messaggi utente in coda al transcript (a
+# UserPromptSubmit puo' gia' contenere il prompt nuovo: la finestra deve
+# essere quella del turno COMPLETATO).
+if grep -q 'def retain_at_prompt' "$HOOKS_DIR/hindsight-retain-worker.py" &&
+	grep -q 'def evaluate_queued' "$HOOKS_DIR/hindsight-retain-worker.py" &&
 	grep -q 'def drop_unanswered_tail' "$HOOKS_DIR/hindsight-retain-worker.py"; then
-	ok "worker espone evaluate_queued + drop_unanswered_tail (valutazione differita)"
+	ok "worker espone retain_at_prompt + evaluate_queued + drop_unanswered_tail (valutazione differita)"
 else
-	ko "evaluate_queued o drop_unanswered_tail assenti dal worker (ICH-86)"
+	ko "retain_at_prompt, evaluate_queued o drop_unanswered_tail assenti dal worker (ICH-86)"
 fi
 
-# Il consenso del pending retain vive nell'hook recall (prompt successivo):
-# senza, il si' dell'utente non eseguirebbe mai la POST in attesa.
-if grep -q 'handle_retain_consent' "$HOOKS_DIR/hindsight-recall.sh"; then
-	ok "recall hook gestisce il consenso del retain pending"
+# Il consenso del pending retain vive nel worker (retain_at_prompt), chiamato
+# dall'hook recall al prompt successivo: senza, il si' dell'utente non
+# eseguirebbe mai la POST in attesa.
+if grep -q 'handle_retain_consent' "$HOOKS_DIR/hindsight-retain-worker.py"; then
+	ok "worker gestisce il consenso del retain pending (handle_retain_consent in retain_at_prompt)"
 else
-	ko "handle_retain_consent assente da hindsight-recall.sh"
+	ko "handle_retain_consent assente da hindsight-retain-worker.py"
 fi
 
 # ICH-73: quando il gate non produce un context, il pending si risolve al prompt

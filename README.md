@@ -529,13 +529,17 @@ sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain
 L'hook `Stop` (`hindsight-retain.sh`) non valuta più nulla: è puro bash, scrive il payload del
 hook verbatim in `$XDG_CACHE_HOME/trinity/hs-retain-queue/<EPOCHREALTIME>-<pid>.json` e
 risponde `{}` (niente gate, niente `decision: block`, niente Python sul percorso caldo). Al
-prompt successivo `hindsight-recall.sh` esegue, nell'ordine: il consenso del pending
-(`handle_retain_consent`, che risponde alla domanda precedente), poi
-`hindsight-retain-worker.py:evaluate_queued(session_id)` — prende l'entry più recente della
-sessione, cancella tutte le sue entry, scarta i messaggi utente in coda al transcript (il
-prompt appena inviato) e valuta la finestra del turno completato: `retain` → POST silenziosa,
-`uncertain`/context mancante → pending + istruzione in `additionalContext` (la domanda chiude
-la risposta successiva) — infine il recall; l'output è un unico JSON. Il throttling non cambia:
+prompt successivo `hindsight-recall.sh` delega tutto il lato retain al worker
+(`hindsight-retain-worker.py:retain_at_prompt`, l'hook ha solo poche righe di colla): prima il
+consenso del pending (`handle_retain_consent`, che risponde alla domanda precedente), in modo
+sincrono; poi `evaluate_queued(session_id)` in un thread **parallelo al recall** — prende
+l'entry più recente della sessione, cancella tutte le sue entry, scarta i messaggi utente in
+coda al transcript (il prompt appena inviato) e valuta la finestra del turno completato:
+`retain` → POST silenziosa, `uncertain`/context mancante → pending + istruzione in
+`additionalContext` (la domanda chiude la risposta successiva). L'hook intanto fa il recall e
+al momento dell'emit fonde l'esito del gate (`gate_output`, join entro il budget dell'hook)
+nell'unico JSON: la latenza aggiunta al prompt è ≈ max(gate, recall), non la somma. Il
+throttling non cambia:
 `stop_count` avanza una volta per entry consumata (stessa cadenza `retain_every_n_turns`). A
 chiusura la sentinella lancia `hindsight-retain-worker.py --drain` prima di
 `ops/hindsight-drain-retain.py`: la coda residua è valutata in modalità *drain* (force, nessuna

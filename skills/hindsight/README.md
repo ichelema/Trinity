@@ -14,7 +14,7 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hindsight.config.json` (root del plugin)            | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
 | `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV                                         |
-| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: consenso retain pending → gate differito del turno accodato → recupera memorie e le inietta come `additionalContext`. Sincrono |
+| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: lato retain delegato al worker (`retain_at_prompt`: consenso retain pending, poi gate differito del turno accodato in un thread **parallelo** al recall) → recupera memorie e le inietta come `additionalContext`, fondendo l'esito del gate all'emit. Sincrono |
 | `hindsight_recall_lib.py`                            | Logica pura testabile del recall (compose query + `build_recall_payload`)                                                                          |
 | `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (sincrono, solo enqueue in `hs-retain-queue/`); il worker valuta l'entry al prompt successivo (da `hindsight-recall.sh`) o nel `--drain` della sentinella e salva un riassunto del turno nel bank (ICH-86) |
 | `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
@@ -158,7 +158,9 @@ sessione.
 
 Altri `retain_skip.reason`: `no_transcript`, `no_content`, `gate_uncertain_drain` e
 `gate_error_drain` (in drain non c'è nessuno a cui chiedere: uncertain ed errore del gate si
-lasciano cadere).
+lasciano cadere), `deferred_timeout` (il gate, che a UserPromptSubmit gira in un thread parallelo
+al recall, non ha finito entro il budget dell'hook: la finestra si perde come una mancata per
+throttling).
 
 ---
 

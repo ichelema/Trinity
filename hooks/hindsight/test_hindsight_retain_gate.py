@@ -23,6 +23,7 @@ import io
 import json
 import os
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -898,7 +899,7 @@ class WorkerGateTests(unittest.TestCase):
         with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
             self.worker, "evaluate_retain", gate_mock
         ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 rc, out = self.worker.evaluate(hook or self.hook, mode)
         return rc, out, gate_mock, urlopen
 
@@ -1192,7 +1193,7 @@ class WorkerGateTests(unittest.TestCase):
         with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", side_effect=capture):
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
                 self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
 
@@ -1214,7 +1215,7 @@ class WorkerGateTests(unittest.TestCase):
         with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", side_effect=capture):
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
         self.assertEqual(payloads[2]["items"][0]["document_id"], first["document_id"])
 
@@ -1224,7 +1225,7 @@ class WorkerGateTests(unittest.TestCase):
         with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", side_effect=capture):
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
         self.assertNotEqual(payloads[3]["items"][0]["document_id"], first["document_id"])
 
@@ -1340,7 +1341,7 @@ class WorkerGateTests(unittest.TestCase):
         with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 out = self.worker.evaluate_queued("sess-gate-test")
         urlopen.assert_not_called()
         self.assertIn(f"Vuoi che salvi questa memoria? — {preview} (sì/no)", self.context_of(out))
@@ -1357,7 +1358,7 @@ class WorkerGateTests(unittest.TestCase):
         ), mock.patch.object(self.worker, "evaluate_retain") as gate, mock.patch.object(
             self.worker, "load_transcript"
         ) as load, mock.patch("urllib.request.urlopen") as urlopen:
-            with redirect_stdout(io.StringIO()):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
         gate.assert_not_called()
         load.assert_not_called()
@@ -1454,16 +1455,261 @@ class WorkerGateTests(unittest.TestCase):
     def test_main_default_prints_hsgate_line(self):
         preview = "Vale la pena salvare la decisione sul gate?"
         gate = GateResult(action="uncertain", reason="borderline", preview=preview, context="dominio")
-        stdout = io.StringIO()
+        stdout, stderr = io.StringIO(), io.StringIO()
         with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
-            with redirect_stdout(stdout):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
                 self.assertEqual(self.worker.main([]), 0)
-        lines = [l for l in stdout.getvalue().splitlines() if l.startswith("HSGATE ")]
-        self.assertEqual(len(lines), 1)
+        # stdout e' ESATTAMENTE la riga HSGATE: i log '[retain]' vanno su stderr
+        # (il worker e' importato dall'hook recall, il cui stdout e' il JSON).
+        lines = stdout.getvalue().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertTrue(lines[0].startswith("HSGATE "), lines[0])
         out = json.loads(lines[0][len("HSGATE "):])
         self.assertIn(preview, self.context_of(out))
+
+    def test_evaluate_logs_go_to_stderr_not_stdout(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        gate = GateResult(action="retain", reason="durable_decision", preview="x", context="dominio")
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
+            self.worker, "evaluate_retain", return_value=gate
+        ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("[retain] OK 200", stderr.getvalue())
+        # e anche gli skip (gate/throttling) parlano solo su stderr
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
+            self.worker, "evaluate_retain", return_value=GateResult(action="skip", reason="repo_recoverable")
+        ):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                self.worker.evaluate(self.hook, "deferred")
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("[retain] skip: gate (repo_recoverable)", stderr.getvalue())
+
+    # --- ICH-86 (WP-D): retain_at_prompt = consenso + gate in parallelo ------
+
+    def make_pending(self, preview="Vale la pena salvare la decisione sul gate?"):
+        """Pending come lo lascia il gate 'uncertain' del worker (stessa POST
+        pronta che il si' del prompt successivo esegue)."""
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(),
+            GateResult(action="uncertain", reason="borderline", preview=preview, context="dominio"),
+        )
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        self.assertIn(preview, self.context_of(out))
+        return preview
+
+    def at_prompt(self, prompt, inspect, cfg=None, gate_result=None, urlopen_effect=None):
+        """retain_at_prompt con gate e POST mockati: (result, gate_mock, urlopen).
+        `inspect(result, gate_mock, urlopen)` gira DENTRO il contesto dei patch
+        e prima del join: il gate corre in un thread e legge CFG /
+        evaluate_retain del modulo al momento della chiamata, e la tmp dir deve
+        sopravvivergli. gate_result puo' essere un GateResult o una funzione."""
+        gate_result = gate_result or GateResult(
+            action="retain", reason="durable_decision", preview="Salvo X.", context="dominio"
+        )
+        if callable(gate_result):
+            gate_mock = mock.Mock(side_effect=gate_result)
+        else:
+            gate_mock = mock.Mock(return_value=gate_result)
+        urlopen_kwargs = (
+            {"side_effect": urlopen_effect} if urlopen_effect else {"return_value": FakeResponse()}
+        )
+        stdout = io.StringIO()
+        with mock.patch.object(self.worker, "CFG", cfg or self.cfg()), mock.patch.object(
+            self.worker, "evaluate_retain", gate_mock
+        ), mock.patch("urllib.request.urlopen", **urlopen_kwargs) as urlopen:
+            with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                result = self.worker.retain_at_prompt(
+                    prompt, "sess-gate-test", self.tmp.name, self.transcript
+                )
+                inspect(result, gate_mock, urlopen)
+                if result._thread is not None:
+                    result._thread.join(timeout=10)
+                    self.assertFalse(result._thread.is_alive())
+        # niente su stdout nemmeno col gate in thread (lo stdout e' del JSON
+        # dell'hook recall)
+        self.assertEqual(stdout.getvalue(), "")
+        return result, gate_mock, urlopen
+
+    def test_retain_at_prompt_no_pending_runs_gate_and_output_is_idempotent(self):
+        preview = "Vale la pena salvare la decisione sul gate?"
+        self.enqueue(self.hook, "1700000000100000-1")
+        seen = {}
+
+        def inspect(result, gate_mock, urlopen):
+            self.assertIsNone(result.outcome)
+            self.assertEqual(result.consent_output, {})
+            self.assertEqual(result.notice, "")
+            self.assertFalse(result.saved)
+            self.assertFalse(result.stop_here)
+            out = result.gate_output(time.monotonic() + 10)
+            self.assertIn(f"Vuoi che salvi questa memoria? — {preview} (sì/no)", self.context_of(out))
+            self.assertIn(ASK_LAST, self.context_of(out))
+            # idempotente: seconda chiamata = stesso dict, nessuna nuova attesa
+            self.assertIs(result.gate_output(time.monotonic() + 10), out)
+            self.assertIs(result.gate_output(time.monotonic() - 10), out)
+            seen["out"] = out
+
+        result, gate_mock, urlopen = self.at_prompt(
+            "un prompt qualunque che non e' un consenso",
+            inspect,
+            gate_result=GateResult(action="uncertain", reason="borderline", preview=preview, context="dominio"),
+        )
+        self.assertEqual(gate_mock.call_count, 1)
+        urlopen.assert_not_called()
+        self.assertEqual(self.queue_names(), [])  # entry consumata dal thread
+        self.assertTrue(seen)
+
+    def test_retain_at_prompt_consent_saved_and_gate_still_runs(self):
+        preview = self.make_pending()
+        self.enqueue(self.hook, "1700000000100000-1")
+
+        def inspect(result, gate_mock, urlopen):
+            self.assertTrue(result.saved)
+            self.assertTrue(result.stop_here)
+            self.assertEqual(result.notice, "")
+            self.assertEqual(result.outcome["action"], "saved")
+            self.assertEqual(result.outcome["context_source"], "gate")
+            message = result.consent_output["systemMessage"]
+            self.assertEqual(message, f"Hindsight: memoria salvata — {preview}")
+            self.assertIn(
+                "## Hindsight retain\n\nLa memoria in attesa di conferma è stata salvata",
+                result.consent_output["hookSpecificOutput"]["additionalContext"],
+            )
+            self.assertEqual(
+                result.consent_output["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit"
+            )
+            # il gate e' partito comunque: retain con context -> POST silenziosa
+            self.assertEqual(result.gate_output(time.monotonic() + 10), {})
+
+        result, gate_mock, urlopen = self.at_prompt("sì", inspect)
+        self.assertEqual(gate_mock.call_count, 1)
+        # due POST: quella del consenso (pending) e quella del retain differito
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(self.queue_names(), [])
+        # il pending e' consumato: un secondo si' non trova nulla
+        self.assertIsNone(handle_retain_consent("si", "sess-gate-test", self.tmp.name))
+
+    def test_retain_at_prompt_context_source_label_and_no_notice_on_negative(self):
+        # context mancante -> label della provenienza nel messaggio (qui la
+        # riga repo/branch di ultima risorsa: nessuna proposta nel transcript)
+        rc, out, _gate, _urlopen = self.run_main(
+            self.cfg(),
+            GateResult(action="retain", reason="durable_decision", preview="Salvo X.", context=""),
+        )
+        self.assertIn("<PROPOSTA>", self.context_of(out))
+
+        def inspect(result, gate_mock, urlopen):
+            self.assertTrue(result.saved)
+            self.assertIn(
+                " [context «sessione Claude Code», ricavato da repo/branch]",
+                result.consent_output["systemMessage"],
+            )
+
+        self.at_prompt("sì", inspect)
+
+        # "no": scarto silenzioso (nessuna notifica), niente stop
+        self.make_pending()
+
+        def inspect_no(result, gate_mock, urlopen):
+            self.assertEqual(result.outcome["action"], "discarded")
+            self.assertEqual(result.outcome["reason"], "negative")
+            self.assertEqual(result.notice, "")
+            self.assertFalse(result.stop_here)
+            self.assertEqual(result.consent_output, {})
+            self.assertEqual(result.gate_output(time.monotonic() + 10), {})
+
+        self.at_prompt("no", inspect_no)
+
+    def test_retain_at_prompt_new_prompt_sets_notice(self):
+        preview = self.make_pending()
+
+        def inspect(result, gate_mock, urlopen):
+            self.assertEqual(result.outcome["action"], "discarded")
+            self.assertEqual(result.outcome["reason"], "new_prompt")
+            self.assertEqual(result.notice, f"Hindsight: memoria in attesa scartata — {preview}")
+            self.assertFalse(result.saved)
+            self.assertFalse(result.stop_here)
+            self.assertEqual(result.consent_output, {})
+            # nessuna entry in coda: il gate parte, non trova nulla, {}
+            self.assertIsNotNone(result._thread)
+            self.assertEqual(result.gate_output(time.monotonic() + 10), {})
+
+        _result, gate_mock, urlopen = self.at_prompt("parliamo di tutt'altro adesso", inspect)
+        gate_mock.assert_not_called()
+        urlopen.assert_not_called()
+
+    def test_retain_at_prompt_error_restored_skips_gate_and_keeps_queue(self):
+        self.make_pending()
+        entry = self.enqueue(self.hook, "1700000000100000-1")
+
+        def inspect(result, gate_mock, urlopen):
+            self.assertEqual(result.outcome["action"], "error")
+            self.assertTrue(result.outcome["restored"])
+            self.assertTrue(result.stop_here)
+            self.assertFalse(result.saved)
+            message = result.consent_output["systemMessage"]
+            self.assertIn("Hindsight: salvataggio della memoria in attesa NON riuscito — ", message)
+            self.assertIn("OSError", message)
+            self.assertIn("Rispondi «sì» al prossimo prompt per riprovare.", message)
+            self.assertNotIn("hookSpecificOutput", result.consent_output)
+            # gate NON partito: un nuovo pending calpesterebbe quello ripristinato
+            self.assertIsNone(result._thread)
+            self.assertEqual(result.gate_output(time.monotonic() + 10), {})
+
+        _result, gate_mock, _urlopen = self.at_prompt(
+            "sì", inspect, urlopen_effect=OSError("connection refused")
+        )
+        gate_mock.assert_not_called()
+        # l'entry resta in coda per il prompt successivo
+        self.assertEqual(self.queue_names(), [os.path.basename(entry)])
+        # e il pending ripristinato e' ancora li': un secondo si' lo ritrova
+        with mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
+            retry = handle_retain_consent("si", "sess-gate-test", self.tmp.name)
+        self.assertEqual(retry["action"], "saved")
+
+    def test_retain_at_prompt_deadline_passed_logs_deferred_timeout(self):
+        self.enqueue(self.hook, "1700000000100000-1")
+        log_path = os.path.join(self.tmp.name, "debug.log")
+        cfg = self.cfg(debug_log_enabled=True, debug_log_file=log_path)
+        release = threading.Event()
+
+        def slow_gate(*_args, **_kwargs):
+            release.wait(10)  # il gate "e' ancora in volo" finche' il test non lo libera
+            return GateResult(action="skip", reason="repo_recoverable")
+
+        def inspect(result, gate_mock, urlopen):
+            # deadline gia' passata e gate ancora in volo: {} SUBITO, senza aspettare
+            t0 = time.monotonic()
+            self.assertEqual(result.gate_output(time.monotonic() - 1), {})
+            self.assertLess(time.monotonic() - t0, 1.0)
+            # cache: anche con una deadline generosa non si ri-aspetta
+            self.assertEqual(result.gate_output(time.monotonic() + 10), {})
+            release.set()
+
+        self.at_prompt("prompt qualunque", inspect, cfg=cfg, gate_result=slow_gate)
+        with open(log_path, encoding="utf-8") as handle:
+            events = [json.loads(line) for line in handle if line.strip()]
+        timeouts = [e for e in events if e.get("event") == "retain_skip" and e.get("reason") == "deferred_timeout"]
+        self.assertEqual(len(timeouts), 1, events)
+        self.assertEqual(timeouts[0]["session"], "sess-gat")
+
+    def test_retain_at_prompt_never_raises(self):
+        with mock.patch.object(
+            self.worker, "handle_retain_consent", side_effect=RuntimeError("boom")
+        ):
+            result = self.worker.retain_at_prompt("sì", "sess-gate-test", self.tmp.name, "")
+        self.assertIsNone(result.outcome)
+        self.assertEqual(result.consent_output, {})
+        self.assertEqual(result.notice, "")
+        self.assertFalse(result.saved)
+        self.assertFalse(result.stop_here)
+        self.assertEqual(result.gate_output(time.monotonic() + 1), {})
 
     def test_post_failure_writes_durable_marker(self):
         cache = os.path.join(self.tmp.name, "xdg-cache")
