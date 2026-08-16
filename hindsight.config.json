@@ -105,19 +105,19 @@
     {
       "id": "user-profile",
       "name": "Profilo e preferenze dell'utente",
-      "source_query": "Chi è l'utente? Riassumi il suo ruolo, le preferenze di strumenti e linguaggi, lo stile di comunicazione e l'ambiente di lavoro. Rispondi con al massimo 12 voci in elenco puntato, una riga ciascuna, ogni voce nella forma 'ambito -> preferenza concreta'. Niente introduzione, niente conclusione, niente sotto-sezioni.",
+      "source_query": "Chi è l'utente? Riassumi il suo ruolo, le preferenze di strumenti e linguaggi, lo stile di comunicazione e l'ambiente di lavoro. Non includere regole operative o convenzioni di progetto, che vanno in un modello separato. Rispondi con al massimo 12 voci in elenco puntato, una riga ciascuna, ogni voce nella forma 'ambito -> preferenza concreta'. Niente introduzione, niente conclusione, niente sotto-sezioni.",
       "tags": ["claude-code"]
     },
     {
       "id": "project-conventions",
       "name": "Convenzioni e procedure di progetto",
-      "source_query": "Quali sono le convenzioni operative concrete dell'utente nei suoi progetti: linguaggio di default per gli script, regole su shell e path per ciascun OS in uso (Windows/MSYS2 e Linux), gestione pacchetti, regole di sicurezza (conferme prima di operazioni distruttive, backup .bak, output completo degli errori), convenzioni git e posizione dei file di test? Rispondi con al massimo 15 voci in elenco puntato, una riga ciascuna, ogni voce nella forma 'ambito -> regola concreta (comando/file/percorso)'. Niente introduzione, niente conclusione, niente sotto-sezioni.",
+      "source_query": "Quali sono le convenzioni operative concrete dell'utente nei suoi progetti (scripting, shell, path, pacchetti, Git, test, sicurezza)? Rispondi con al massimo 15 voci in elenco puntato, una riga ciascuna, ogni voce nella forma 'ambito -> regola concreta (comando/file/percorso)'. Niente introduzione, niente conclusione, niente sotto-sezioni.",
       "tags": ["claude-code"]
     },
     {
       "id": "recurring-learnings",
       "name": "Apprendimenti ricorrenti e criticità",
-      "source_query": "Quali bug ricorrenti, criticità, workaround e lezioni apprese sul campo si applicano a questo progetto e alla sua toolchain? Rispondi con al massimo 15 voci in elenco puntato, una riga ciascuna, ogni voce nella forma 'sintomo -> fix concreto (comando/file/variabile)'. Niente introduzione, niente conclusione, niente sotto-sezioni.",
+      "source_query": "Quali bug ricorrenti, criticità, workaround e lezioni apprese sul campo si applicano a questo progetto e alla sua toolchain? Raggruppa per area (es. MSYS2/Windows, Linux, Hindsight, toolchain esterna). Ogni voce nella forma 'sintomo -> fix concreto (comando/file/variabile)'. Annota per quale OS/shell vale ogni voce tra parentesi alla fine. Max 15 voci totali. Niente introduzione, niente conclusione.",
       "tags": ["claude-code"]
     }
   ]
