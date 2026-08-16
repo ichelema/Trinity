@@ -1742,6 +1742,29 @@ class WorkerGateTests(unittest.TestCase):
         self.assertTrue(msg.startswith("non arrivato al server — "), msg)
         self.assertIn("connection refused", msg)
 
+    def test_post_failure_consumes_entry_without_reenqueue(self):
+        # Limite ACCETTATO (asimmetria col path del consenso, che ripristina il
+        # pending): la POST diretta fallita NON ri-accoda l'entry — al prompt
+        # dopo sarebbe comunque throttlata senza un rollback di stop_count — e
+        # la finestra si perde con il solo marker durevole per il failcheck.
+        # Il test fissa questo comportamento perche' non cambi per sbaglio.
+        cache = os.path.join(self.tmp.name, "xdg-cache")
+        self.enqueue(self.hook, "1700000000100000-1")
+        gate = GateResult(action="retain", reason="durable_decision", preview="x", context="dominio")
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}), mock.patch.object(
+            self.worker, "CFG", self.cfg()
+        ), mock.patch.object(
+            self.worker, "evaluate_retain", return_value=gate
+        ), mock.patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                out = self.worker.evaluate_queued("sess-gate-test")
+        self.assertIsNone(out)
+        self.assertEqual(self.queue_names(), [])  # consumata, nessun re-enqueue
+        self.assertFalse(os.path.isdir(os.path.join(self.tmp.name, "pending")))  # e nessun pending
+        marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
+        with open(marker, encoding="utf-8") as handle:
+            self.assertIn("non arrivato al server", handle.read())
+
 
 if __name__ == "__main__":
     unittest.main()

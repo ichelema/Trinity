@@ -477,6 +477,44 @@ class HookE2ETests(unittest.TestCase):
         alone = self.run_hook(self.PROMPT)
         self.assertIn("as the very last thing in your reply", self.context(alone))
 
+    def test_queued_uncertain_plus_recall_medium_same_prompt_yes_resolves_to_retain(self):
+        # Doppia domanda nello stesso prompt (caso raro ma reale, preesistente:
+        # poteva gia' capitare con lo Stop bloccante): gate uncertain sul turno
+        # precedente + memorie medium dal recall. Attesi: UN solo JSON con
+        # entrambe le istruzioni; al "si'" successivo la priorita' e'
+        # deterministica: vince il retain (POST eseguita) e il pending medium
+        # viene scartato senza iniezione — lo stesso "si'" non autorizza entrambi.
+        MockBackend.gate_spec = {
+            "action": "uncertain",
+            "reason": "borderline",
+            "preview": "Forse salvo la doppia domanda e2e.",
+            "context": "dominio doppia domanda e2e",
+        }
+        MockBackend.recall_results = [
+            {"text": "mu memo", "type": "world", "scores": {"reranker": 0.1}},
+        ]
+        MockBackend.classifier_spec = [
+            {"index": 0, "confidence": "medium", "reason": "plausible_but_uncertain"},
+        ]
+        self.enqueue()
+        output = self.run_hook(self.PROMPT)
+        context = self.context(output)
+        self.assertIn("Vuoi che salvi questa memoria? — Forse salvo la doppia domanda e2e. (sì/no)", context)
+        self.assertIn("consenso richiesto", context)
+        self.assertNotIn("mu memo", context)
+        self.assertEqual(len(self.retain_pending_files()), 1)
+        self.assertEqual(len(self.pending_files()), 1)
+        self.assertEqual(MockBackend.retain_posts, [])
+
+        consented = self.run_hook("sì")
+        self.assertIn("memoria salvata", consented["systemMessage"])
+        self.assertNotIn("mu memo", json.dumps(consented, ensure_ascii=False))
+        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.assertEqual(self.retain_pending_files(), [])
+        self.assertEqual(self.pending_files(), [])  # medium scartato, non iniettato
+        # un secondo "si'" non trova piu' nulla: consumo singolo su entrambi
+        self.assertIsNone(self.run_hook("sì"))
+
     def test_queued_stop_of_other_session_is_left_alone(self):
         MockBackend.gate_spec = {
             "action": "retain",
