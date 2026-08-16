@@ -1222,14 +1222,21 @@ class PromptRetain:
             if thread.is_alive():
                 # Il thread e' daemon: muore col processo dell'hook e la
                 # finestra di questo turno va persa, come una mancata per
-                # throttling. Accettabile e raro: la deadline e' ~55s contro
-                # gate 15s + POST 10s; il pending, se c'e', e' gia' su disco e
-                # l'overlap delle finestre ricuce il buco al prossimo turno.
+                # throttling. Raro: la deadline e' ~55s contro gate 15s + POST
+                # 10s; il pending, se c'e', e' gia' su disco e l'overlap delle
+                # finestre ricuce il buco al prossimo turno. Non deve pero'
+                # essere SILENZIOSO: marker durevole per il failcheck (stesso
+                # canale delle POST mai arrivate). "Possibilmente": il thread
+                # potrebbe completare la POST un istante dopo il join.
                 debug_log(
                     CFG,
                     "retain_skip",
                     reason="deferred_timeout",
                     session=self._session_id[:8],
+                )
+                note_post_failure(
+                    "valutazione differita non completata entro il budget "
+                    "dell'hook — memoria possibilmente persa (deferred_timeout)"
                 )
                 return self._gate
             self._gate = dict(self._box.get("out") or {})

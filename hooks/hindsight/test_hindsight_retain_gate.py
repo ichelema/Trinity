@@ -1692,12 +1692,22 @@ class WorkerGateTests(unittest.TestCase):
             self.assertEqual(result.gate_output(time.monotonic() + 10), {})
             release.set()
 
-        self.at_prompt("prompt qualunque", inspect, cfg=cfg, gate_result=slow_gate)
+        cache = os.path.join(self.tmp.name, "xdg-cache")
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}):
+            self.at_prompt("prompt qualunque", inspect, cfg=cfg, gate_result=slow_gate)
         with open(log_path, encoding="utf-8") as handle:
             events = [json.loads(line) for line in handle if line.strip()]
         timeouts = [e for e in events if e.get("event") == "retain_skip" and e.get("reason") == "deferred_timeout"]
         self.assertEqual(len(timeouts), 1, events)
         self.assertEqual(timeouts[0]["session"], "sess-gat")
+        # La perdita non e' silenziosa: marker durevole per il failcheck, UNA
+        # sola riga anche se gate_output e' stata chiamata due volte (cache).
+        marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
+        with open(marker, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("deferred_timeout", lines[0])
+        self.assertIn("possibilmente persa", lines[0])
 
     def test_retain_at_prompt_never_raises(self):
         with mock.patch.object(

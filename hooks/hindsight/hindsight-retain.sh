@@ -34,10 +34,18 @@ HS_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
 QUEUE_DIR="$HS_CACHE_DIR/hs-retain-queue"
 [ -d "$QUEUE_DIR" ] || mkdir -p "$QUEUE_DIR" 2>/dev/null
 
+# Timestamp del nome file: EPOCHREALTIME e' un builtin di bash >= 5.0 (zero
+# fork). Su bash piu' vecchio (macOS /bin/bash 3.2) e' INDEFINITA e con set -u
+# farebbe morire l'hook: fallback a `date` (un fork, pagato solo li'), secondi
+# + 6 zeri per restare a 16 cifre come i nomi scritti da bash 5 (stesso ordine
+# lessicografico = cronologico; nello stesso secondo spareggia il pid).
+STAMP="${EPOCHREALTIME:-}"; STAMP="${STAMP/./}"
+case "$STAMP" in '' | *[!0-9]*) STAMP="$(date +%s 2>/dev/null)000000" ;; esac
+
 # HOOK_INPUT vuoto (stdin non arrivato) => niente da accodare: il worker non
 # saprebbe comunque quale transcript leggere.
 if [ -n "$HOOK_INPUT" ]; then
-	printf '%s' "$HOOK_INPUT" >"$QUEUE_DIR/${EPOCHREALTIME/./}-$$.json" 2>/dev/null
+	printf '%s' "$HOOK_INPUT" >"$QUEUE_DIR/${STAMP}-$$.json" 2>/dev/null
 fi
 
 # exit 0 sempre e '{}' su stdout: nessuna decisione da comunicare qui; l'esito

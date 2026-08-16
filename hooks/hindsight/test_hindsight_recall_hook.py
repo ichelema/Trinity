@@ -593,6 +593,26 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(
             len(glob.glob(os.path.join(cache_home, "trinity", "hs-retain-queue", "*.json"))), 1
         )
+        # Senza EPOCHREALTIME (bash < 5, es. macOS /bin/bash 3.2): l'hook non
+        # deve morire su set -u e il nome deve restare a 16 cifre, cosi' ordina
+        # in modo cronologico insieme alle entry scritte da bash 5. Si simula
+        # con `unset` in un bash che poi sourcia lo script.
+        proc = subprocess.run(
+            [BASH, "-c", 'unset EPOCHREALTIME; . "$0"', STOP_HOOK], input=hook_input,
+            env={**os.environ, "XDG_CACHE_HOME": cache_home},
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "{}")
+        names = sorted(
+            os.path.basename(p)
+            for p in glob.glob(os.path.join(cache_home, "trinity", "hs-retain-queue", "*.json"))
+        )
+        self.assertEqual(len(names), 2)
+        for name in names:
+            stamp = name.split("-", 1)[0]
+            self.assertTrue(stamp.isdigit() and len(stamp) == 16, name)
 
 
 if __name__ == "__main__":
