@@ -21,6 +21,11 @@
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-mm-inject.sh",
           "timeout": 25
+        },
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claudish/capture-model.sh",
+          "timeout": 5
         }
       ]
     }],
@@ -78,6 +83,13 @@
           "timeout": 10
         }
       ]
+    }],
+    "MessageDisplay": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claudish/gate.sh",
+        "timeout": 60
+      }]
     }]
   }
 }
