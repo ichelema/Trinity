@@ -92,10 +92,11 @@ Eventi registrati dal plugin:
 
 | Evento | Matcher | Comandi |
 |---|---|---|
-| `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model |
+| `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model · **cattura il modello** (`capture-model.sh`, §3.1) |
 | `UserPromptSubmit` | — | skill-eval · Hindsight **recall** (che prima consuma il consenso e valuta il retain accodato allo Stop precedente: gate → POST o domanda) · failcheck |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
 | `Stop` | — | suono di fine · Hindsight **retain** (solo enqueue: scrive il payload in `hs-retain-queue/` e risponde `{}`; la valutazione è differita al prossimo `UserPromptSubmit`, la coda residua la drena la sentinella — ICH-86) |
+| `MessageDisplay` | — | **riscrittura in italiano semplice** (`gate.sh` → `rewrite.sh`, §3.1) |
 | `Notification` | `permission_prompt` | suono + toast Windows |
 
 Esempio — un hook del plugin (da `hooks/hooks.json`):
@@ -154,6 +155,44 @@ Matched skills (ranked by relevance):
 
 Questo testo arriva al modello come `additionalContext` dell'hook `UserPromptSubmit`, 
 visibile nel contesto della sessione prima che il modello risponda.
+
+### 3.1 Riscrittura display in italiano semplice (claudish-to-english)
+
+Integrazione del plugin esterno `claudish-to-english` (Mike Gvozdev), ridotto alla sola
+riscrittura display: a ogni messaggio dell'assistente viene accodato un blocco **«💬 In
+italiano semplice»** con la stessa informazione in un italiano più chiaro. È **display-only**:
+il transcript e il ragionamento di Claude restano il testo originale, quindi non interferisce
+con recall/retain di Hindsight.
+
+Gli hook stanno in `hooks/claudish/`:
+
+| File | Evento | Ruolo |
+|---|---|---|
+| `capture-model.sh` | `SessionStart` | legge il campo `model` dallo stdin JSON e lo scrive in `$TMPDIR/claudish/active-model` (presente solo in sessione interattiva; i run headless `-p` lo omettono) |
+| `gate.sh` | `MessageDisplay` | applica la whitelist modelli e poi `exec rewrite.sh` |
+| `rewrite.sh` + `providers.sh` | — | bufferizza i chunk del messaggio, chiama l'LLM sull'ultimo chunk, emette il testo riscritto come `displayContent` |
+
+Configurazione nel blocco `env` di `config/claude/settings.shared.json`:
+
+| Var | Default | Significato |
+|---|---|---|
+| `CLAUDISH_ENABLED` | `1` | interruttore generale (`0` = disattiva) |
+| `CLAUDISH_MODE` | `append` | `append` (blocco accodato) o `replace` (solo la versione semplificata) |
+| `CLAUDISH_PROVIDER` | `ollama` | `ollama`, `anthropic` o `openai` — quale LLM esegue la riscrittura |
+| `CLAUDISH_MODEL` | per-provider | modello che riscrive (qui `gpt-5.6-luna`) |
+| `CLAUDISH_ONLY_MODELS` | *(vuota)* | whitelist dei modelli sessione per cui riscrivere (qui `claude-fable-5,claude-opus-5`) |
+
+**Whitelist modelli.** `CLAUDISH_ONLY_MODELS` limita la riscrittura ai modelli elencati, con
+match case-insensitive per sottostringa. Con `claude-fable-5,claude-opus-5` riscrive solo per
+Fable 5 e Opus 5; per qualunque altro modello (o se il modello non è stato catturato) `gate.sh`
+esce muto e il testo resta invariato. Limite: `/model` a metà sessione non rilancia
+`SessionStart`, quindi la whitelist vale per il modello di **avvio** fino al riavvio.
+
+**Fail-open.** Qualsiasi problema — provider irraggiungibile, chiave mancante, timeout, modello
+non scaricato — lascia il testo originale: la riscrittura non può mai inghiottire la risposta.
+
+**Spegnimento.** A caldo: `touch ~/.claude/claudish-off` per sospendere, `rm` per riprendere
+(riletto a ogni messaggio). A freddo: `CLAUDISH_ENABLED=0`.
 
 ---
 
@@ -1295,6 +1334,7 @@ Trinity/
 │   ├── skill-eval.*         suggerimento skill
 │   ├── windows-toast.sh     toast Windows (entry point hook → chiama il .ps1)
 │   ├── windows-toast.ps1    toast Windows (PowerShell, invocato da .sh)
+│   ├── claudish/            riscrittura display in italiano semplice (capture-model, gate, rewrite, providers — §3.1)
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 │       └── hindsight-dashboard/  dashboard log Roda/Puma :9292 (sviluppo)
