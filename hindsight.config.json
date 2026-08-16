@@ -33,7 +33,7 @@
   "recall_pending_ttl": 900,
   "recall_timeout": 10,
   "recall_rerank_timeout": 6,
-  "recall_debug_in_context": false,
+  "recall_debug_in_context": true,
 
   "retain_mode": "chunked",
   "retain_overlap_turns": 1,
