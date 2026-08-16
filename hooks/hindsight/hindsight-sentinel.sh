@@ -6,8 +6,14 @@
 # Dorme finche' esiste almeno un processo claude (sessioni CLI e app desktop),
 # poi: drain dei retain pendenti -> stop server MCP + Postgres embedded.
 #
-# NB: il retain finale per-sessione decade consapevolmente: era gia' NO-OP con
-# retain_enabled:false; la coda della sessione si salva solo via retain MCP.
+# Drain in due passi, nell'ordine (ICH-86): PRIMA il nostro
+# `hindsight-retain-worker.py --drain` valuta le entry rimaste in
+# hs-retain-queue/ (la coda di ogni sessione: lo Stop hook accoda soltanto, e
+# l'ultimo turno non ha nessun UserPromptSubmit dopo di se' che lo valuti) e
+# crea i retain in volo; POI ops/hindsight-drain-retain.py aspetta che il
+# server abbia DAVVERO estratto i fatti (dei retain MCP e di quelli appena
+# creati) prima dello stop. Con retain_enabled:false il primo passo e' un
+# no-op che svuota solo la coda.
 # Bonus rispetto all'hook: copre anche kill -9 e chiusura finestra; /clear non
 # richiede filtri (il processo claude resta vivo, la sentinella non scatta).
 set -uo pipefail
@@ -52,10 +58,16 @@ while :; do
 	# Conferma: un singolo campione a 0 puo' essere un hiccup di ps.
 	sleep 5
 	[ "$(claude_alive)" -gt 0 ] && continue
-	# Drain: attendi che il server abbia DAVVERO estratto i fatti dei retain MCP
-	# pendenti prima di ucciderlo (l'estrazione LLM e' async server-side, ~32s in
-	# mediana). Senza HOOK_INPUT il drain copre tutte le bank del server.
 	. "$SCRIPT_DIR/lib/hs-python.sh"
+	# Passo 1: valuta le code di sessione rimaste (gate + POST, force, senza
+	# domande) — vedi header. Log in HS_CACHE_DIR (esportata da hs-python.sh):
+	# contiene pezzi di transcript, non va in /tmp (leggibile da tutti su Linux).
+	# Sovrascritto a ogni drain (come il vecchio hs-retain.log): niente crescita.
+	"$HS_PY" "$SCRIPT_DIR/hindsight-retain-worker.py" --drain >"$HS_CACHE_DIR/hs-retain-drain.log" 2>&1
+	# Passo 2: attendi che il server abbia DAVVERO estratto i fatti dei retain
+	# pendenti (MCP + quelli del passo 1) prima di ucciderlo (l'estrazione LLM e'
+	# async server-side, ~32s in mediana). Senza HOOK_INPUT il drain copre tutte
+	# le bank del server.
 	"$HS_PY" "$SCRIPT_DIR/ops/hindsight-drain-retain.py" >/dev/null 2>&1
 	# Anti-race: durante il drain puo' essere partita una nuova sessione.
 	# Spegnerle il server sotto i piedi la lascerebbe senza MCP (il suo ensure-up

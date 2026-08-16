@@ -14,9 +14,9 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hindsight.config.json` (root del plugin)            | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
 | `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV                                         |
-| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: recupera memorie e le inietta come `additionalContext`. Sincrono                                                        |
+| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: lato retain delegato al worker (`retain_at_prompt`: pickup dell'esito del gate precedente, consenso retain pending, poi gate differito del turno accodato in un processo detached **parallelo** al recall) → recupera memorie e le inietta come `additionalContext`, fondendo l'esito del gate all'emit (attesa max 6 s, altrimenti raccolto al prompt dopo). Sincrono |
 | `hindsight_recall_lib.py`                            | Logica pura testabile del recall (compose query + `build_recall_payload`)                                                                          |
-| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (async): salva un riassunto del turno nel bank                                                                                       |
+| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (sincrono, solo enqueue in `hs-retain-queue/`); il worker valuta l'entry al prompt successivo (da `hindsight-recall.sh`) o nel `--drain` della sentinella e salva un riassunto del turno nel bank (ICH-86) |
 | `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
 | `hindsight-check.sh`                                 | **Suite di test/diagnostica** (vedi §9)                                                                                                            |
 | `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                                                                       |
@@ -37,8 +37,8 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 "recall_result_filter_threshold": 0.8,          // bypass su scores.reranker >= soglia
 "recall_pending_ttl": 900,                      // validità del consenso medium (s)
 "recall_debug_in_context": false,               // mostra route + memorie iniettate
-"retain_enabled": false,         // MASTER SWITCH: retain automatico (hook Stop) SPENTO — si salva solo via retain MCP
-"retain_every_n_turns": 3        // throttling retain: salva 1 Stop ogni N (inattivo finché retain_enabled è false)
+"retain_enabled": false,         // MASTER SWITCH: retain automatico (Stop → coda → valutazione al prompt successivo) SPENTO — si salva solo via retain MCP
+"retain_every_n_turns": 3        // throttling retain: salva 1 turno accodato ogni N (inattivo finché retain_enabled è false)
 ```
 
 ---
@@ -146,15 +146,25 @@ che di default non è leggibile da altri utenti della macchina.
 ## 9. Retain — throttling
 
 > ⚠️ Oggi il retain automatico è **spento** (`retain_enabled: false` in `hindsight.config.json`):
-> l'hook Stop esce subito e si salva solo via retain MCP. Il resto della sezione descrive la
-> meccanica quando l'interruttore è attivo.
+> l'hook Stop accoda comunque il payload, il worker lo scarta senza valutarlo e si salva solo via
+> retain MCP. Il resto della sezione descrive la meccanica quando l'interruttore è attivo.
 
-`should_retain_now()` salva 1 Stop ogni `retain_every_n_turns` (3): turni 1-2 → `retain_skip`
+`should_retain_now()` salva 1 turno ogni `retain_every_n_turns` (3): turni 1-2 → `retain_skip`
 `reason=throttling`, turno 3 → salva. Contatore `stop_count` per sessione in
-`%TEMP%\hs-retain-state.json`. **Eccezione**: `SessionEnd` (e `HS_RETAIN_FORCE`) forzano sempre
-il salvataggio, per catturare la coda della sessione.
+`%TEMP%\hs-retain-state.json`: da ICH-86 avanza una volta per **ogni Stop realmente avvenuto**
+— l'entry di coda valutata a UserPromptSubmit più le entry più vecchie della stessa sessione
+scartate dal dequeue (`queued_skipped`), e salva quando l'avanzamento attraversa un multiplo di
+N — stessa cadenza di prima; **non** avanza nel drain. **Eccezione**: il `--drain` della
+sentinella (e `HS_RETAIN_FORCE`) forzano sempre il salvataggio, per catturare la coda della
+sessione.
 
-Altri `retain_skip.reason`: `no_transcript`, `no_content`.
+Altri `retain_skip.reason`: `no_transcript`, `no_content`, `gate_uncertain_drain` e
+`gate_error_drain` (in drain non c'è nessuno a cui chiedere: uncertain ed errore del gate si
+lasciano cadere), `queue_stale` (entry di coda più vecchia di 24 h mai valutata: rimossa con
+marker in `hs-retain-failed.log`). Il gate differito gira in un processo detached
+(`--queued`) e scrive un outbox: se non finisce entro il budget di pickup dell'hook (6 s) non
+si perde nulla — eventi debug `retain_deferred` `carried_over` (l'hook è uscito senza
+aspettarlo) e `picked_up` (il prompt successivo ha raccolto l'esito).
 
 ---
 

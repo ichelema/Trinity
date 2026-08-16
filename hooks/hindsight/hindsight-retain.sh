@@ -1,100 +1,56 @@
 #!/usr/bin/env bash
-# Stop hook (SINCRONO in hooks/hooks.json, timeout 60s): salva un riassunto
-# strutturato del turno appena completato in Hindsight. Dispatch (ICH-67):
-#   - retain_enabled false -> worker in BACKGROUND e risposta immediata '{}':
-#     per Claude Code e' identico al vecchio "async": true (zero attesa; il
-#     worker e' comunque un no-op col retain spento).
-#   - retain_enabled true  -> worker in foreground col gate semantico attivo;
-#     quando il gate e' "uncertain" o non ha prodotto un context (decision:block
-#     con la domanda all'utente), quando va in errore tecnico (systemMessage
-#     non bloccante, fail-closed ICH-73) o quando il debug retain e' acceso, il
-#     worker scrive una riga 'HSGATE {json}' nel log e questo wrapper la
-#     inoltra su stdout.
-# La POST del worker resta async:true lato server, quindi anche in foreground
-# non si aspetta l'estrazione LLM dei fatti.
+# Stop hook (SINCRONO in hooks/hooks.json, timeout 10s): NON valuta e NON salva
+# nulla — accoda il payload del hook e risponde subito '{}' (ICH-86).
+#
+# Perche': lo Stop deve restare istantaneo e non puo' ne' bloccare ne' chiamare
+# un LLM (il gate semantico costa fino a 15s e un decision:block qui
+# interromperebbe il turno). La valutazione e' DIFFERITA:
+#   - al prossimo UserPromptSubmit, hindsight-recall.sh chiama
+#     hindsight-retain-worker.py:retain_at_prompt(...), che lancia un processo
+#     detached (`--queued <session_id>`) parallelo al recall: esegue
+#     evaluate_queued(session_id) -> prende l'entry piu' recente di questa
+#     sessione, la valuta col gate e fa la POST (o mette in pending + domanda
+#     in coda alla risposta successiva) e scrive l'esito in un outbox che
+#     l'hook raccoglie entro un breve budget, o il prompt dopo;
+#   - a chiusura, hindsight-sentinel.sh lancia il worker con `--drain` e valuta
+#     le entry rimaste (la coda della sessione, senza domande).
+# Coda: $HS_CACHE_DIR/hs-retain-queue/<EPOCHREALTIME senza punto>-<pid>.json,
+# HOOK_INPUT verbatim; il nome ordina per istante di scrittura. Percorso caldo
+# a ZERO fork: solo builtin ed espansioni bash (mkdir/chmod solo alla prima
+# creazione della dir, come lib/hs-python.sh). Non si sourcia hs-python.sh:
+# qui non serve nessun Python.
 set -uo pipefail
 
 # $(cat) forka /usr/bin/cat (~400ms su Windows/MSYS); `read` e' un builtin e non forka.
 # NON usare $(</dev/stdin): con stdin da claude.exe (processo Windows nativo) il bash
 # MSYS2 non lo risolve -> variabile vuota. Vedi hindsight-recall.sh per il dettaglio.
 IFS= read -r -d '' HOOK_INPUT || true
-export HOOK_INPUT
 
-# Guardia anti-loop: al Stop successivo a un decision:block Claude Code manda
-# stop_hook_active=true; senza uscita immediata il gate ribloccherebbe in loop.
-# Match testuale puro (zero fork), copre JSON compatto e con spazio dopo i due punti.
-case "$HOOK_INPUT" in
-*'"stop_hook_active":true'* | *'"stop_hook_active": true'*)
-	echo '{}'
-	exit 0
-	;;
-esac
-
-# Path del worker relativo a questo script (robusto a spostamenti della cartella).
-# `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
-# %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
-SCRIPT_DIR="${BASH_SOURCE[0]%/*}"; [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR="."
-# Claude Code (claude.exe nativo) invoca l'hook con path stile Windows (E:/...):
-# bash lo digerisce, ma il python MSYS tratta "E:/..." come RELATIVO (lo concatena
-# al cwd) e il worker non parte -> retain perso a ogni Stop. Normalizza
-# drive-letter -> POSIX (/e/...) con sola espansione bash, zero fork (niente
-# cygpath). Su Linux/macOS il pattern non matcha mai.
-case "$SCRIPT_DIR" in
-[A-Za-z]:/*) _hs_drive="${SCRIPT_DIR%%:*}"; SCRIPT_DIR="/${_hs_drive,,}${SCRIPT_DIR#?:}" ;;
-esac
-. "$SCRIPT_DIR/lib/hs-python.sh"
-
-# run_worker: log in HS_CACHE_DIR (esportata da hs-python.sh) e non in /tmp:
-# contiene l'output del worker, cioe' pezzi di transcript e memorie — su Linux
-# /tmp e' leggibile da tutti. Il worker torna !=0 quando la POST non arriva al
-# server (server giu', rete, bank irraggiungibile): in quel caso NON esiste
-# nessuna async operation da interrogare, quindi hindsight-failcheck.sh — che fa
-# GET operations?status=failed — e' cieco proprio qui. Lascia una traccia
-# DUREVOLE che il failcheck raccoglie al prossimo prompt: il log qui sopra non
-# basta, viene azzerato dal retain successivo ('>'). File separato e append:
-# una riga per fallimento, tab-separated (ts \t messaggio). Il messaggio dice
-# da se' cosa e' successo: nello stesso file scrive anche
-# hindsight-drain-retain.py (retain arrivato al server ma non estratto in
-# tempo), quindi l'etichetta non puo' stare cablata nel failcheck.
-run_worker() {
-	"$HS_PY" "$SCRIPT_DIR/hindsight-retain-worker.py" >"$HS_CACHE_DIR/hs-retain.log" 2>&1
-	local rc=$?
-	if [ "$rc" -ne 0 ]; then
-		printf '%s\t%s\n' \
-			"$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-			"non arrivato al server — $(tail -2 "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tr '\n\t' '  ')" \
-			>>"$HS_CACHE_DIR/hs-retain-failed.log"
-	fi
-	return "$rc"
+# Stesso path e stessa guardia di lib/hs-python.sh (per-utente, 0700: le entry
+# contengono cwd e path del transcript). `[ -d ]` e' un builtin (~0ms); mkdir e
+# chmod sono fork da ~400ms l'uno su MSYS, pagati solo alla creazione.
+HS_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
+[ -d "$HS_CACHE_DIR" ] || {
+	mkdir -p "$HS_CACHE_DIR" 2>/dev/null && chmod 700 "$HS_CACHE_DIR" 2>/dev/null
 }
+QUEUE_DIR="$HS_CACHE_DIR/hs-retain-queue"
+[ -d "$QUEUE_DIR" ] || mkdir -p "$QUEUE_DIR" 2>/dev/null
 
-# Interruttore dalla config centralizzata: e' l'unico costo sincrono del
-# percorso comune (un avvio Python). Il worker vero resta fuori dal percorso
-# critico dei progetti senza retain.
-RETAIN_ON="$("$HS_PY" "$SCRIPT_DIR/lib/hindsight_config.py" --get retain_enabled 2>/dev/null)"
+# Timestamp del nome file: EPOCHREALTIME e' un builtin di bash >= 5.0 (zero
+# fork). Su bash piu' vecchio (macOS /bin/bash 3.2) e' INDEFINITA e con set -u
+# farebbe morire l'hook: fallback a `date` (un fork, pagato solo li'), secondi
+# + 6 zeri per restare a 16 cifre come i nomi scritti da bash 5 (stesso ordine
+# lessicografico = cronologico; nello stesso secondo spareggia il pid).
+STAMP="${EPOCHREALTIME:-}"; STAMP="${STAMP/./}"
+case "$STAMP" in '' | *[!0-9]*) STAMP="$(date +%s 2>/dev/null)000000" ;; esac
 
-if [ "$RETAIN_ON" = "True" ]; then
-	run_worker
-	# Il worker emette la riga HSGATE (JSON gia' pronto per Claude Code) quando
-	# il gate e' uncertain o senza context (blocco + domanda), in errore tecnico
-	# (notifica non bloccante) o quando il debug retain e' attivo.
-	# Riga assente => niente da dire: '{}'.
-	GATE_LINE=$(grep '^HSGATE ' "$HS_CACHE_DIR/hs-retain.log" 2>/dev/null | tail -1)
-	if [ -n "$GATE_LINE" ]; then
-		printf '%s\n' "${GATE_LINE#HSGATE }"
-	else
-		echo '{}'
-	fi
-	# exit 0 sempre: l'esito vero e' nel JSON su stdout; su un hook sincrono un
-	# exit!=0 mostrerebbe un warning a ogni problema di rete, mentre la
-	# visibilita' dei fallimenti e' gia' garantita da hs-retain-failed.log +
-	# failcheck.
-	exit 0
+# HOOK_INPUT vuoto (stdin non arrivato) => niente da accodare: il worker non
+# saprebbe comunque quale transcript leggere.
+if [ -n "$HOOK_INPUT" ]; then
+	printf '%s' "$HOOK_INPUT" >"$QUEUE_DIR/${STAMP}-$$.json" 2>/dev/null
 fi
 
-# retain disabilitato: worker in background e risposta immediata — comportamento
-# equivalente al vecchio hook async. </dev/null stacca stdin; stdout/stderr del
-# figlio vanno nel log, quindi nessun fd tiene in vita l'hook per Claude Code.
-run_worker </dev/null &
+# exit 0 sempre e '{}' su stdout: nessuna decisione da comunicare qui; l'esito
+# della valutazione arrivera' col prossimo prompt (o nel drain di chiusura).
 echo '{}'
 exit 0

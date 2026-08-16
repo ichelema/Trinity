@@ -1,4 +1,5 @@
-"""Gate semantico pre-retain (ICH-67): decide se la finestra Stop va persistita.
+"""Gate semantico pre-retain (ICH-67): decide se la finestra del turno precedente
+(valutata a UserPromptSubmit, ICH-86) va persistita.
 
 Stesso pattern di hindsight_recall_filter.py: una sola chiamata OpenAI con
 response_format json_schema strict e validazione completa della risposta.
@@ -10,7 +11,7 @@ Attivo ogni volta che retain_enabled e' true; esiti (li applica il worker):
                 meccanica dei medium del recall ICH-66)
 Un errore TECNICO del gate e' fail-closed lato worker (ICH-73): nessun
 salvataggio, notifica non bloccante una volta per sessione e rollback del
-contatore cosi' il prossimo Stop riprova. L'errore resta visibile in
+contatore cosi' la prossima valutazione riprova. L'errore resta visibile in
 GateResult.error e nel debug log.
 Il gate produce anche il `context` descrittivo del retain; se manca (retain o
 uncertain) il worker mette comunque la POST in pending e Claude propone una
