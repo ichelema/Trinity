@@ -16,7 +16,7 @@ set -uo pipefail
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
 # claude.exe invoca l'hook con path stile Windows (E:/...): bash lo digerisce,
-# ma un python non-nativo lo tratterebbe come RELATIVO (vedi hindsight-retain.sh).
+# ma un python non-nativo lo tratterebbe come RELATIVO (vedi lib/hs-python.sh).
 # Normalizza drive-letter -> POSIX con sola espansione bash, zero fork.
 case "$HOOKS_DIR" in
 [A-Za-z]:/*) _hs_drive="${HOOKS_DIR%%:*}"; HOOKS_DIR="/${_hs_drive,,}${HOOKS_DIR#?:}" ;;
@@ -139,24 +139,57 @@ for base in urls:
 
 # Fallimenti LOCALI del retain: il worker non ha raggiunto il server, quindi non
 # esiste nessuna operation e il fan-out qui sopra non li vede. Li appende
-# hindsight-retain.sh. Da leggere SEMPRE, anche con raw vuoto: il caso peggiore
-# (server irraggiungibile) da' raw=[] proprio PERCHE' tutto e' fallito.
+# hindsight-retain-worker.py (note_post_failure). Da leggere SEMPRE, anche con
+# raw vuoto: il caso peggiore (server irraggiungibile) da' raw=[] proprio
+# PERCHE' tutto e' fallito.
+# Anti-race (ICH-86): il produttore gira nello STESSO evento UserPromptSubmit,
+# dentro hindsight-recall.sh, quindi puo' appendere mentre noi leggiamo/
+# tronchiamo. Invece di leggere e poi troncare il file vivo, lo si RINOMINA in
+# .reading (os.replace: atomico; una append successiva ricrea il file vivo e non
+# va persa), si legge il rinominato e lo si cancella dopo il print. Un .reading
+# lasciato da un run precedente crashato viene riletto e fuso. Se il rename
+# fallisce (es. sharing violation su Windows) si legge in place e si tronca come
+# prima (best-effort).
 local_file = os.path.join(cache_dir(), "hs-retain-failed.log")
+local_reading = local_file + ".reading"
 local_fails = []
-try:
-    with open(local_file, encoding="utf-8") as f:
-        for line in f:
-            ts, _, msg = line.strip().partition("\t")
-            if not ts:
-                continue
-            when = _parse(ts.replace("Z", "+00:00"))
-            if when is not None and when < cutoff:
-                continue  # fuori finestra: stessa politica delle failed server-side
-            local_fails.append((ts, msg))
-except FileNotFoundError:
-    pass
-except Exception:
-    pass  # marker illeggibile: best-effort, non deve rompere il prompt
+local_in_place = False  # True = fallback: letto il file vivo, da troncare
+if os.path.exists(local_file):
+    try:
+        if os.path.exists(local_reading):
+            # .reading orfano di un run crashato: accoda il vivo in coda al
+            # vecchio (le righe restano in ordine) e togli il vivo di mezzo.
+            with open(local_file, encoding="utf-8") as src, \
+                    open(local_reading, "a", encoding="utf-8") as dst:
+                dst.write(src.read())
+            os.remove(local_file)
+        else:
+            os.replace(local_file, local_reading)
+    except Exception:
+        local_in_place = True
+for _path in ([local_reading] + ([local_file] if local_in_place else [])):
+    try:
+        with open(_path, encoding="utf-8") as f:
+            for line in f:
+                ts, _, msg = line.strip().partition("\t")
+                if not ts:
+                    continue
+                when = _parse(ts.replace("Z", "+00:00"))
+                if when is not None and when < cutoff:
+                    continue  # fuori finestra: stessa politica delle failed server-side
+                local_fails.append((ts, msg))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass  # marker illeggibile: best-effort, non deve rompere il prompt
+if not local_fails:
+    # Solo righe fuori finestra (o nessuna): il .reading non ha piu' nulla da
+    # dire, via subito — altrimenti resterebbe li' finche' non arriva un
+    # fallimento nuovo. Il file vivo (fallback) resta com'e', come prima.
+    try:
+        os.remove(local_reading)
+    except OSError:
+        pass
 
 # Degrado del reranker (ICH-65): marker scritti da hindsight-recall.sh quando il
 # recall risponde ma senza rerank neurale (failover chain server-side su RRF, o
@@ -240,7 +273,7 @@ for r in fresh.values():
 # I fallimenti locali sono retain a tutti gli effetti: memoria non salvata. Vanno
 # in crit con provenienza esplicita. Il "cosa e' andato storto" lo porta il messaggio,
 # non l'etichetta: nel file scrivono due produttori con cause diverse — la POST mai
-# partita (hindsight-retain.sh) e l'estrazione non completata prima dello stop del
+# partita (hindsight-retain-worker.py) e l'estrazione non completata prima dello stop del
 # server (hindsight-drain-retain.py). In entrambi i casi non c'e' nessuna operation
 # failed da ri-controllare lato server.
 for ts, msg in local_fails:
@@ -279,15 +312,22 @@ print(json.dumps({
     }
 }, ensure_ascii=False))
 
-# Marker locali: il de-dup e' il troncamento del file, DOPO il print (stessa regola
-# dello state file sotto). Race teorica: un retain async potrebbe appendere tra la
-# lettura e il troncamento e perdere quella riga — finestra di millisecondi tra Stop
-# e UserPromptSubmit, che in pratica non si sovrappongono; non vale un lock.
+# Marker locali: il de-dup e' la cancellazione del .reading (gia' staccato dal
+# file vivo: le append arrivate nel frattempo sono in un file nuovo e vengono
+# raccolte al prossimo prompt), DOPO il print (stessa regola dello state file
+# sotto). Solo nel fallback in-place si tronca il file vivo come prima: li' la
+# race con hindsight-recall.sh (stesso evento UserPromptSubmit) resta
+# possibile ma e' best-effort.
 if local_fails:
     try:
-        open(local_file, "w").close()
-    except Exception:
+        os.remove(local_reading)
+    except OSError:
         pass
+    if local_in_place:
+        try:
+            open(local_file, "w").close()
+        except Exception:
+            pass
 
 # Marker del reranker: tronca e registra l'orario di notifica (cooldown) solo se
 # l'avviso e' partito; senza notifica il file resta e riprova al prompt successivo.

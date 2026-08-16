@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # UserPromptSubmit hook: recupera memorie rilevanti da Hindsight via REST e
-# filtra semanticamente i risultati prima di iniettarli.
+# filtra semanticamente i risultati prima di iniettarli. Da ICH-86 ospita
+# anche la valutazione DIFFERITA del retain dello Stop precedente (vedi
+# hindsight-retain.sh): consenso del pending -> gate sull'entry in coda ->
+# recall, con UN SOLO oggetto JSON su stdout.
 set -uo pipefail
 
 HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
@@ -13,6 +16,8 @@ export HOOK_INPUT HOOKS_DIR
 . "$HOOKS_DIR/lib/hs-python.sh"
 
 PYTHONUTF8=1 "$HS_PY" <<'PY' 2>"$HS_CACHE_DIR/hs-recall-stderr.log"
+import contextlib
+import importlib.util
 import json
 import os
 import sys
@@ -78,6 +83,77 @@ if retain_outcome:
         context_source=retain_outcome.get("context_source"),
         preview=(retain_outcome.get("preview") or "")[:300],
     )
+
+# Valutazione DIFFERITA del retain (ICH-86): lo Stop precedente ha solo accodato
+# il suo payload; qui il worker prende l'entry piu' recente di QUESTA sessione,
+# la passa dal gate e fa la POST — oppure salva un pending e chiede a Claude di
+# porre la domanda in coda alla risposta (additionalContext). Ordine voluto:
+# PRIMA il consenso (risponde alla domanda del turno precedente e consuma il
+# suo pending), POI il gate differito (puo' creare il pending successivo), e
+# solo dopo il recall. Cosi' un "si'" non viene mai letto come risposta a una
+# domanda non ancora posta e il pending nuovo non calpesta quello in attesa.
+# Il worker e' caricato per path (non e' in lib/) dentro un try: un worker
+# rotto non deve mai uccidere il recall. Il suo output va fuso in QUALUNQUE
+# uscita dell'hook (emit()/finish() sotto): lo stdout resta un solo JSON.
+# redirect_stdout: le righe di log '[retain] ...' del worker finirebbero su
+# stdout in mezzo al JSON; le dirottiamo sullo stderr (hs-recall-stderr.log).
+# Eccezione: se il "si'" e' fallito e il pending e' stato RIMESSO in attesa
+# (restored), un nuovo pending della stessa sessione lo sovrascriverebbe (un
+# file per session+cwd): l'entry in coda resta e si valuta al prompt dopo.
+RETAIN_EXTRA: dict = {}
+try:
+    if not (retain_outcome and retain_outcome.get("restored")):
+        _spec = importlib.util.spec_from_file_location(
+            "hindsight_retain_worker",
+            os.path.join(os.environ["HOOKS_DIR"], "hindsight-retain-worker.py"),
+        )
+        _worker = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_worker)
+        with contextlib.redirect_stdout(sys.stderr):
+            RETAIN_EXTRA = _worker.evaluate_queued(session_id) or {}
+except Exception as exc:
+    debug_log(
+        cfg,
+        "retain_error",
+        where="recall_hook_import",
+        error=f"{type(exc).__name__}: {exc}"[:300],
+        session=session_id[:8],
+    )
+    RETAIN_EXTRA = {}
+
+_emitted = False
+
+
+def emit(output: dict) -> None:
+    """Unico punto di stampa: fonde nella stessa uscita la notifica del pending
+    retain scartato e l'output del gate differito (systemMessage a righe,
+    additionalContext a blocchi), creando hookSpecificOutput se manca."""
+    global _emitted
+    extra_msg = RETAIN_EXTRA.get("systemMessage") or ""
+    extra_ctx = (RETAIN_EXTRA.get("hookSpecificOutput") or {}).get("additionalContext") or ""
+    if RETAIN_NOTICE or extra_msg:
+        output["systemMessage"] = "\n".join(
+            filter(None, [RETAIN_NOTICE, extra_msg, output.get("systemMessage")])
+        )
+    if extra_ctx:
+        hso = output.setdefault("hookSpecificOutput", {"hookEventName": "UserPromptSubmit"})
+        hso.setdefault("hookEventName", "UserPromptSubmit")
+        hso["additionalContext"] = "\n\n".join(
+            filter(None, [extra_ctx, hso.get("additionalContext")])
+        )
+    print(json.dumps(output, ensure_ascii=False))
+    _emitted = True
+
+
+def finish() -> None:
+    """Uscita senza contenuto recall: stampa solo notifica/gate differito, se
+    ci sono e non sono gia' usciti."""
+    if (RETAIN_NOTICE or RETAIN_EXTRA) and not _emitted:
+        emit({})
+    sys.exit(0)
+
+
+if retain_outcome:
     if retain_outcome["action"] == "saved":
         # Lo stesso "si'" non deve autorizzare anche le memorie medium rimaste
         # in pending dal recall: la domanda a cui risponde e' quella del retain.
@@ -95,7 +171,7 @@ if retain_outcome:
                 "fallback": "ricavato da repo/branch",
             }.get(source, source)
             message += f" [context «{retain_outcome.get('context') or ''}», {label}]"
-        print(json.dumps({
+        emit({
             "systemMessage": message,
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
@@ -104,7 +180,7 @@ if retain_outcome:
                     "salvata nel bank. Non serve alcun retain manuale."
                 ),
             },
-        }, ensure_ascii=False))
+        })
         sys.exit(0)
     if retain_outcome["action"] == "error":
         # Il pending e' stato rimesso in attesa (restored): l'utente puo'
@@ -115,12 +191,12 @@ if retain_outcome:
         )
         if retain_outcome.get("restored"):
             message += " Rispondi «sì» al prossimo prompt per riprovare."
-        print(json.dumps({"systemMessage": message}, ensure_ascii=False))
+        emit({"systemMessage": message})
         sys.exit(0)
     # "discarded": col "no" resta silenzioso; su prompt NUOVO l'utente deve
     # sapere che la domanda del gate e' decaduta (altrimenti crede di aver
     # salvato). La notifica viaggia con QUALUNQUE uscita successiva dell'hook,
-    # via emit()/finish() qui sotto: lo stdout resta un solo oggetto JSON.
+    # via emit()/finish() qui sopra: lo stdout resta un solo oggetto JSON.
     if retain_outcome.get("reason") == "new_prompt":
         preview = retain_outcome.get("preview") or ""
         RETAIN_NOTICE = (
@@ -128,24 +204,6 @@ if retain_outcome:
             if preview
             else "Hindsight: memoria in attesa scartata"
         )
-
-_emitted = False
-
-
-def emit(output: dict) -> None:
-    """Unico punto di stampa: aggancia la notifica del pending retain scartato."""
-    global _emitted
-    if RETAIN_NOTICE:
-        output["systemMessage"] = "\n".join(filter(None, [RETAIN_NOTICE, output.get("systemMessage")]))
-    print(json.dumps(output, ensure_ascii=False))
-    _emitted = True
-
-
-def finish() -> None:
-    """Uscita senza contenuto recall: stampa la sola notifica, se c'e' e non e' gia' uscita."""
-    if RETAIN_NOTICE and not _emitted:
-        print(json.dumps({"systemMessage": RETAIN_NOTICE}, ensure_ascii=False))
-    sys.exit(0)
 
 
 if not cfg.get("recall_enabled", True):

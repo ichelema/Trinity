@@ -7,6 +7,12 @@ end-to-end, fail-open su classificatore rotto e su save_pending impossibile, e
 il consenso del RETAIN pending (ICH-73): scarto visibile su prompt nuovo, context
 dalla proposta di Claude nel transcript o dalla risposta `context: ...`, sempre
 con UN SOLO oggetto JSON su stdout.
+
+ICH-86: copre anche il retain DIFFERITO — lo Stop hook (hindsight-retain.sh,
+eseguito anch'esso come subprocess) accoda soltanto; l'entry viene valutata
+dall'hook recall al prompt successivo (gate stubbato dallo stesso mock via
+HS_OPENAI_URL): POST /memories, oppure pending + domanda in coda alla risposta
+fusa nello stesso JSON del recall.
 """
 
 import glob
@@ -24,6 +30,7 @@ from lib.hindsight_retain_gate import save_retain_pending
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 HOOK = os.path.join(HOOKS_DIR, "hindsight-recall.sh")
+STOP_HOOK = os.path.join(HOOKS_DIR, "hindsight-retain.sh")
 # Path esplicito: su Windows CreateProcess cerca in System32 PRIMA del PATH e
 # "bash" diventerebbe la bash WSL. shutil.which cerca solo nel PATH (MSYS).
 BASH = shutil.which("bash") or "bash"
@@ -31,11 +38,15 @@ BASH = shutil.which("bash") or "bash"
 
 class MockBackend(BaseHTTPRequestHandler):
     """Un solo server per tutti gli endpoint: /memories/recall, chat/completions
-    e la POST /memories eseguita dal consenso del retain pending (ICH-73)."""
+    (classificatore del recall E gate del retain, distinti dal nome dello schema
+    json_schema nella richiesta) e la POST /memories eseguita dal consenso del
+    retain pending (ICH-73) o dal retain differito (ICH-86)."""
 
     recall_results: list = []
     classifier_spec: object = None  # lista di classifications | ("status", int) | "garbage"
     classifier_calls = 0
+    gate_spec: dict = {}  # decisione del gate retain (action/reason/preview/context)
+    gate_calls = 0
     retain_posts: list = []  # body JSON delle POST /memories, in ordine
 
     def do_POST(self):
@@ -46,6 +57,10 @@ class MockBackend(BaseHTTPRequestHandler):
         elif self.path.endswith("/memories"):
             cls.retain_posts.append(json.loads(body.decode("utf-8")))
             self._send(200, json.dumps({"success": True}))
+        elif self.path.endswith("/chat/completions") and self._schema_name(body) == "retain_gate_decision":
+            cls.gate_calls += 1
+            decision = {"duplicate_of": [], "context": "", **cls.gate_spec}
+            self._send(200, json.dumps({"choices": [{"message": {"content": json.dumps(decision)}}]}))
         elif self.path.endswith("/chat/completions"):
             cls.classifier_calls += 1
             if isinstance(cls.classifier_spec, tuple):
@@ -57,6 +72,13 @@ class MockBackend(BaseHTTPRequestHandler):
                 self._send(200, json.dumps({"choices": [{"message": {"content": content}}]}))
         else:
             self._send(404, "{}")
+
+    @staticmethod
+    def _schema_name(body: bytes) -> str:
+        try:
+            return json.loads(body.decode("utf-8"))["response_format"]["json_schema"]["name"]
+        except Exception:
+            return ""
 
     def _send(self, status, body):
         data = body.encode("utf-8")
@@ -86,15 +108,23 @@ class HookE2ETests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.pending_dir = os.path.join(self.tmp.name, "pending")
         self.retain_pending_dir = os.path.join(self.tmp.name, "retain-pending")
+        # Coda dello Stop hook e stato del throttling del retain differito (ICH-86):
+        # dir temporanee, cosi' nessun test tocca la cache reale dell'utente.
+        self.queue_dir = os.path.join(self.tmp.name, "retain-queue")
+        self.state_dir = os.path.join(self.tmp.name, "retain-state")
+        os.makedirs(self.queue_dir)
+        os.makedirs(self.state_dir)
         MockBackend.recall_results = []
         MockBackend.classifier_spec = []
         MockBackend.classifier_calls = 0
+        MockBackend.gate_spec = {}
+        MockBackend.gate_calls = 0
         MockBackend.retain_posts = []
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_hook(self, prompt, session_id="e2e-session", transcript_path=None):
+    def run_hook(self, prompt, session_id="e2e-session", transcript_path=None, extra_env=None):
         hook = {"prompt": prompt, "session_id": session_id, "cwd": self.tmp.name}
         if transcript_path is not None:
             hook["transcript_path"] = transcript_path
@@ -110,6 +140,17 @@ class HookE2ETests(unittest.TestCase):
             "HS_CFG_RECALL_TIMEOUT": "5",
             "HS_CFG_RECALL_RESULT_FILTER_TIMEOUT": "5",
             "HS_CFG_RECALL_DEBUG_IN_CONTEXT": "false",
+            # Retain differito (ICH-86): coda/stato/pending isolati, gate stubbato
+            # dal mock, throttling bypassato, debug spento (la config del plugin
+            # lo accende), retain acceso a prescindere dalla config di progetto.
+            "HS_RETAIN_QUEUE_DIR": self.queue_dir,
+            "HS_RETAIN_STATE_DIR": self.state_dir,
+            "HS_RETAIN_FORCE": "1",
+            "API_URL": f"http://127.0.0.1:{self.port}/banks/t",
+            "HS_CFG_RETAIN_ENABLED": "true",
+            "HS_CFG_RETAIN_DEBUG_IN_CONTEXT": "false",
+            "HS_CFG_RETAIN_GATE_TIMEOUT": "5",
+            **(extra_env or {}),
         }
         proc = subprocess.run(
             [BASH, HOOK], input=hook_input, env=env,
@@ -154,8 +195,10 @@ class HookE2ETests(unittest.TestCase):
             )
         self.assertTrue(saved)
 
-    def write_transcript(self, assistant_text):
-        """Transcript JSONL il cui ultimo messaggio assistant e' assistant_text."""
+    def write_transcript(self, assistant_text, trailing_user=None):
+        """Transcript JSONL il cui ultimo messaggio assistant e' assistant_text.
+        trailing_user: prompt utente NUOVO in coda (a UserPromptSubmit il
+        transcript puo' gia' contenerlo): non e' un turno completato."""
         path = os.path.join(self.tmp.name, "transcript.jsonl")
         records = [
             {"type": "user", "message": {"role": "user", "content": "domanda dell'utente"}},
@@ -167,10 +210,34 @@ class HookE2ETests(unittest.TestCase):
                 },
             },
         ]
+        if trailing_user is not None:
+            records.append(
+                {"type": "user", "message": {"role": "user", "content": trailing_user}}
+            )
         with open(path, "w", encoding="utf-8") as handle:
             for record in records:
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
         return path
+
+    def enqueue(self, session_id="e2e-session", transcript_path=None, name="1700000000000000-1.json"):
+        """Entry di coda come la lascia hindsight-retain.sh allo Stop: HOOK_INPUT
+        dello Stop verbatim (session_id, transcript_path, cwd)."""
+        entry = {
+            "session_id": session_id,
+            "transcript_path": transcript_path or self.write_transcript("risposta e2e"),
+            "cwd": self.tmp.name,
+            "hook_event_name": "Stop",
+        }
+        path = os.path.join(self.queue_dir, name)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(entry, handle)
+        return path
+
+    def queue_files(self):
+        return sorted(glob.glob(os.path.join(self.queue_dir, "*.json")))
+
+    def retain_pending_files(self):
+        return glob.glob(os.path.join(self.retain_pending_dir, "*.json"))
 
     PROMPT = "dimmi qualcosa di rilevante sul progetto per favore"
 
@@ -321,6 +388,139 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(MockBackend.retain_posts, [])
         retain_pending = glob.glob(os.path.join(self.retain_pending_dir, "*.json"))
         self.assertEqual(len(retain_pending), 1)
+
+    # ----- retain differito (ICH-86): coda dello Stop valutata a UserPromptSubmit -----
+
+    def test_queued_stop_retain_posts_and_recall_unaffected(self):
+        # Gate "retain" con context: POST diretta e silenziosa, entry consumata,
+        # e il recall dello stesso run esce come sempre (nessun 'decision').
+        # Il transcript puo' avere o no il prompt nuovo in coda: stessa finestra.
+        MockBackend.gate_spec = {
+            "action": "retain",
+            "reason": "durable_decision",
+            "preview": "Salvo la decisione differita e2e.",
+            "context": "dominio differito e2e",
+        }
+        MockBackend.recall_results = [
+            {"text": "kappa memo", "type": "world", "scores": {"reranker": 0.95}},
+        ]
+        for trailing in (None, self.PROMPT):
+            with self.subTest(trailing_user=trailing):
+                MockBackend.retain_posts = []
+                MockBackend.gate_calls = 0
+                transcript = self.write_transcript("risposta e2e", trailing_user=trailing)
+                self.enqueue(transcript_path=transcript)
+                output = self.run_hook(self.PROMPT, transcript_path=transcript)
+                self.assertNotIn("decision", output)
+                self.assertNotIn("systemMessage", output)
+                self.assertIn("kappa memo", self.context(output))
+                self.assertNotIn("Vuoi che salvi", self.context(output))
+                self.assertEqual(MockBackend.gate_calls, 1)
+                self.assertEqual(len(MockBackend.retain_posts), 1)
+                item = MockBackend.retain_posts[0]["items"][0]
+                self.assertEqual(item["context"], "dominio differito e2e")
+                self.assertIn("[user] domanda dell'utente", item["content"])
+                self.assertIn("[assistant] risposta e2e", item["content"])
+                self.assertNotIn(self.PROMPT, item["content"])  # prompt nuovo escluso
+                self.assertEqual(self.queue_files(), [])
+                self.assertEqual(self.retain_pending_files(), [])
+
+    def test_queued_stop_uncertain_asks_at_end_of_reply_merged_with_recall(self):
+        # Gate "uncertain": pending salvato e istruzione in additionalContext
+        # (domanda verbatim, "as the very last thing in your reply"), fusa nello
+        # STESSO oggetto JSON del contesto recall — un solo print.
+        MockBackend.gate_spec = {
+            "action": "uncertain",
+            "reason": "borderline",
+            "preview": "Forse salvo la scelta e2e.",
+            "context": "dominio incerto e2e",
+        }
+        MockBackend.recall_results = [
+            {"text": "lambda memo", "type": "world", "scores": {"reranker": 0.95}},
+        ]
+        self.enqueue()
+        output = self.run_hook(self.PROMPT)
+        context = self.context(output)
+        self.assertIn("Vuoi che salvi questa memoria? — Forse salvo la scelta e2e. (sì/no)", context)
+        self.assertIn("as the very last thing in your reply", context)
+        self.assertIn("lambda memo", context)
+        self.assertNotIn("decision", output)
+        self.assertEqual(output["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit")
+        self.assertEqual(MockBackend.retain_posts, [])
+        self.assertEqual(len(self.retain_pending_files()), 1)
+        self.assertEqual(self.queue_files(), [])
+        # Senza contenuto recall l'istruzione esce da sola (path finish()).
+        MockBackend.recall_results = []
+        self.enqueue()
+        alone = self.run_hook(self.PROMPT)
+        self.assertIn("as the very last thing in your reply", self.context(alone))
+
+    def test_queued_stop_of_other_session_is_left_alone(self):
+        MockBackend.gate_spec = {
+            "action": "retain",
+            "reason": "durable_decision",
+            "preview": "Non dovrei essere valutato.",
+            "context": "altra sessione",
+        }
+        other = self.enqueue(session_id="other-session")
+        output = self.run_hook(self.PROMPT)
+        self.assertIsNone(output)
+        self.assertEqual(MockBackend.gate_calls, 0)
+        self.assertEqual(MockBackend.retain_posts, [])
+        self.assertEqual(self.queue_files(), [other])
+
+    def test_queued_stop_retain_disabled_drops_entry_without_work(self):
+        # retain_enabled false: l'entry viene consumata e basta — nessun gate,
+        # nessuna POST, output identico al run senza coda.
+        MockBackend.gate_spec = {
+            "action": "retain",
+            "reason": "durable_decision",
+            "preview": "Non dovrei essere valutato.",
+            "context": "retain spento",
+        }
+        self.enqueue()
+        output = self.run_hook(self.PROMPT, extra_env={"HS_CFG_RETAIN_ENABLED": "false"})
+        self.assertIsNone(output)
+        self.assertEqual(MockBackend.gate_calls, 0)
+        self.assertEqual(MockBackend.retain_posts, [])
+        self.assertEqual(self.queue_files(), [])
+        self.assertEqual(self.retain_pending_files(), [])
+
+    def test_stop_hook_enqueues_hook_input_verbatim(self):
+        # hindsight-retain.sh (Stop): risponde '{}' e scrive UNA entry con il
+        # HOOK_INPUT verbatim sotto $XDG_CACHE_HOME/trinity/hs-retain-queue/.
+        cache_home = os.path.join(self.tmp.name, "xdg-cache")
+        hook_input = json.dumps({
+            "session_id": "stop-session",
+            "transcript_path": "/x/transcript.jsonl",
+            "cwd": "/y",
+            "hook_event_name": "Stop",
+            "stop_hook_active": False,
+        })
+        proc = subprocess.run(
+            [BASH, STOP_HOOK], input=hook_input,
+            env={**os.environ, "XDG_CACHE_HOME": cache_home},
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout), {})
+        self.assertEqual(proc.stdout.strip(), "{}")
+        queue = glob.glob(os.path.join(cache_home, "trinity", "hs-retain-queue", "*.json"))
+        self.assertEqual(len(queue), 1)
+        with open(queue[0], encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), hook_input)
+        # HOOK_INPUT vuoto: '{}' e nessuna entry nuova.
+        proc = subprocess.run(
+            [BASH, STOP_HOOK], input="",
+            env={**os.environ, "XDG_CACHE_HOME": cache_home},
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30,
+        )
+        self.assertEqual(proc.stdout.strip(), "{}")
+        self.assertEqual(
+            len(glob.glob(os.path.join(cache_home, "trinity", "hs-retain-queue", "*.json"))), 1
+        )
 
 
 if __name__ == "__main__":
