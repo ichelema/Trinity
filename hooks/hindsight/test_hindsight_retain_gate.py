@@ -511,6 +511,17 @@ class GateModuleTests(unittest.TestCase):
         self.assertIn("A covered window is a duplicate", GATE_PROMPT)
         self.assertNotIn("duplicate_of", GATE_PROMPT)
 
+    def test_check_stub_verdict_covers_schema_required_fields(self):
+        """Lo stub e2e di hindsight-check.sh fabbrica la risposta del gate:
+        se perde un campo required il gate reale va in gate_error fail-closed
+        e la diagnostica riporta KO permanente (review ICH-84)."""
+        script = (
+            Path(__file__).resolve().parent / "tools" / "hindsight-check.sh"
+        ).read_text(encoding="utf-8")
+        for field in GATE_SCHEMA["required"]:
+            self.assertIn(f'"{field}"', script)
+        self.assertNotIn('"duplicate_of"', script)
+
     def test_empty_candidates_force_empty_coverage(self):
         """Contratto esplicito del caso "nessuna memoria fornita": con 0
         candidati qualunque indice in covered_by e' fuori range."""

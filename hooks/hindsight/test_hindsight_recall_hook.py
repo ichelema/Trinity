@@ -73,7 +73,7 @@ class MockBackend(BaseHTTPRequestHandler):
             cls.gate_calls += 1
             if cls.gate_delay_s:
                 time.sleep(cls.gate_delay_s)
-            decision = {"duplicate_of": [], "context": "", **cls.gate_spec}
+            decision = {"durable_claims": [], "covered_by": [], "context": "", **cls.gate_spec}
             self._send(200, json.dumps({"choices": [{"message": {"content": json.dumps(decision)}}]}))
         elif self.path.endswith("/chat/completions"):
             cls.classifier_calls += 1

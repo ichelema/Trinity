@@ -244,7 +244,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 VERDICT = json.dumps({
     "action": "retain", "reason": "durable_decision", "preview": "check e2e",
-    "duplicate_of": [],
+    "durable_claims": [], "covered_by": [],
     "context": "diagnostica end-to-end del retain hook nel plugin Trinity",
 })
 BODY = json.dumps({"choices": [{"message": {"content": VERDICT}}]}).encode("utf-8")
