@@ -99,17 +99,21 @@ def build_dry_run_report(
     """Assembla il report dry-run a partire da dati gia' letti dal DB dal
     chiamante (nessun I/O qui). totals_by_table: tabella -> bank_id -> conteggio
     di TUTTE le righe. interested_rows_by_table: tabella -> righe con almeno
-    un tag branch:* (id/bank_id/tags)."""
+    un tag branch:* (id/bank_id/tags). Nel JSON finiscono anche gli id delle
+    righe interessate (interested_ids_by_bank): il dry-run elenca OGNI
+    documento/memoria che la migrazione toccherebbe, non solo i conteggi."""
     tables_report: dict[str, dict] = {}
     total_interested = 0
     all_tags: set[str] = set()
     for table, totals in totals_by_table.items():
         rows = interested_rows_by_table.get(table, [])
         interested_by_bank: dict[str, int] = {}
+        interested_ids_by_bank: dict[str, list[str]] = {}
         tags_by_bank: dict[str, dict[str, int]] = {}
         for row in rows:
             bank = row["bank_id"]
             interested_by_bank[bank] = interested_by_bank.get(bank, 0) + 1
+            interested_ids_by_bank.setdefault(bank, []).append(str(row["id"]))
             for tag in row.get("tags") or []:
                 if tag.startswith("branch:"):
                     all_tags.add(tag)
@@ -119,6 +123,7 @@ def build_dry_run_report(
         tables_report[table] = {
             "totals_by_bank": totals,
             "interested_by_bank": interested_by_bank,
+            "interested_ids_by_bank": interested_ids_by_bank,
             "branch_tags_by_bank": tags_by_bank,
         }
     return {

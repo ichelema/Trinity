@@ -91,6 +91,8 @@ class BuildDryRunReportTests(unittest.TestCase):
         docs = report["tables"]["documents"]
         self.assertEqual(docs["totals_by_bank"], {"trinity-project": 10, "other-bank": 2})
         self.assertEqual(docs["interested_by_bank"], {"trinity-project": 3})
+        # ogni documento interessato e' elencato per id (non solo contato)
+        self.assertEqual(docs["interested_ids_by_bank"], {"trinity-project": ["d1", "d2", "d3"]})
         self.assertEqual(
             docs["branch_tags_by_bank"]["trinity-project"],
             {"branch:master": 2, "branch:feature-1": 1},
