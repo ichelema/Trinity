@@ -21,10 +21,12 @@ per restare ermetici — il vero processo e' coperto da test_hindsight_recall_ho
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
 import os
+import re
 import tempfile
 import threading
 import time
@@ -514,13 +516,16 @@ class GateModuleTests(unittest.TestCase):
     def test_check_stub_verdict_covers_schema_required_fields(self):
         """Lo stub e2e di hindsight-check.sh fabbrica la risposta del gate:
         se perde un campo required il gate reale va in gate_error fail-closed
-        e la diagnostica riporta KO permanente (review ICH-84)."""
+        e la diagnostica riporta KO permanente (review ICH-84). Il confronto
+        e' strutturale sul dict del VERDICT (non testuale sull'intero script):
+        con additionalProperties false anche un campo di troppo e' fatale."""
         script = (
             Path(__file__).resolve().parent / "tools" / "hindsight-check.sh"
         ).read_text(encoding="utf-8")
-        for field in GATE_SCHEMA["required"]:
-            self.assertIn(f'"{field}"', script)
-        self.assertNotIn('"duplicate_of"', script)
+        match = re.search(r"VERDICT = json\.dumps\((\{.*?\})\)", script, re.S)
+        self.assertIsNotNone(match, "blocco VERDICT non trovato nello stub")
+        verdict = ast.literal_eval(match.group(1))
+        self.assertEqual(set(verdict), set(GATE_SCHEMA["required"]))
 
     def test_empty_candidates_force_empty_coverage(self):
         """Contratto esplicito del caso "nessuna memoria fornita": con 0

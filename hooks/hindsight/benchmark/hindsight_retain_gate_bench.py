@@ -353,7 +353,12 @@ def evaluate(args) -> int:
     false_duplicates = [
         (l, w, r)
         for l, w, r in rows
-        if l.get("expected_action") != "skip" and r.action == "skip" and r.reason == "duplicate"
+        # Le finestre etichettate duplicate sono escluse: il loro skip e' il
+        # successo che i target contano gia', qualunque sia l'expected_action.
+        if not l.get("duplicate_of")
+        and l.get("expected_action") != "skip"
+        and r.action == "skip"
+        and r.reason == "duplicate"
     ]
     guards_ok = not duplicates or (not coverage_ignored and not false_duplicates)
     print(f"  copertura ignorata     : {len(coverage_ignored)}")

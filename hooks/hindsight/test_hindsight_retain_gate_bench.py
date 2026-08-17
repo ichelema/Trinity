@@ -233,12 +233,19 @@ class RetainGateBenchmarkTests(unittest.TestCase):
 
     def test_guards_stay_silent_without_knowledge_loss(self):
         # Retain corretto con copertura parziale citata (finestra NON
-        # etichettata duplicate) e skip corretto con reason "duplicate" su
-        # una finestra comunque da scartare: nessuna conoscenza persa,
-        # nessuna guardia, exit 0.
+        # etichettata duplicate), skip corretto con reason "duplicate" su
+        # una finestra comunque da scartare, e duplicato etichettato
+        # "uncertain" soppresso correttamente (il target lo conta gia' come
+        # successo): nessuna conoscenza persa, nessuna guardia, exit 0.
         labels = self.labels() + [
             {"id": "keep", "expected_action": "retain"},
             {"id": "drop", "expected_action": "skip"},
+            {
+                "id": "borderline",
+                "expected_action": "uncertain",
+                "duplicate_of": ["memory-borderline"],
+                "duplicate_kind": "semantic",
+            },
         ]
         results = {
             "exact": FakeResult("skip", "duplicate", [0], [{"id": "memory-exact"}]),
@@ -247,10 +254,60 @@ class RetainGateBenchmarkTests(unittest.TestCase):
                 "retain", "durable_decision", [], [{"id": "part"}], covered_by=[0]
             ),
             "drop": FakeResult("skip", "duplicate", [0], [{"id": "other"}]),
+            "borderline": FakeResult(
+                "skip", "duplicate", [0], [{"id": "memory-borderline"}]
+            ),
         }
         rc, output = self.run_evaluate(labels, results)
         self.assertEqual(rc, 0)
         self.assertIn("copertura ignorata     : 0", output)
+        self.assertIn("falsi duplicati        : 0", output)
+
+    def test_coverage_ignored_guard_counts_uncertain(self):
+        # Il pattern ICH-84 includeva anche verdetti "uncertain" con la
+        # copertura in vista: la guardia copre ogni action != skip.
+        labels = [
+            dict(self.labels()[0], id=f"exact{i}", duplicate_of=[f"mem{i}"])
+            for i in range(6)
+        ] + [self.labels()[1]]
+        results = {
+            f"exact{i}": FakeResult("skip", "duplicate", [0], [{"id": f"mem{i}"}])
+            for i in range(5)
+        }
+        results["exact5"] = FakeResult(
+            "uncertain", "borderline", [], [{"id": "mem5"}], covered_by=[0]
+        )
+        results["semantic"] = FakeResult(
+            "skip", "duplicate", [0], [{"id": "memory-semantic"}]
+        )
+        rc, output = self.run_evaluate(labels, results)
+        self.assertEqual(rc, 1)
+        self.assertIn("copertura ignorata     : 1", output)
+
+    def test_false_duplicate_guard_counts_uncertain_labels(self):
+        # Anche una finestra attesa "uncertain" (non etichettata duplicate)
+        # cestinata come duplicato e' conoscenza potenzialmente persa.
+        labels = self.labels() + [{"id": "ask", "expected_action": "uncertain"}]
+        results = {
+            "exact": FakeResult("skip", "duplicate", [0], [{"id": "memory-exact"}]),
+            "semantic": FakeResult("skip", "duplicate", [0], [{"id": "memory-semantic"}]),
+            "ask": FakeResult("skip", "duplicate", [0], [{"id": "unrelated"}]),
+        }
+        rc, output = self.run_evaluate(labels, results)
+        self.assertEqual(rc, 1)
+        self.assertIn("falsi duplicati        : 1", output)
+
+    def test_false_duplicate_guard_requires_duplicate_reason(self):
+        # Un falso negativo con un'altra reason e' un errore diverso (visibile
+        # nella copertura retain-worthy), non un falso duplicato.
+        labels = self.labels() + [{"id": "keep", "expected_action": "retain"}]
+        results = {
+            "exact": FakeResult("skip", "duplicate", [0], [{"id": "memory-exact"}]),
+            "semantic": FakeResult("skip", "duplicate", [0], [{"id": "memory-semantic"}]),
+            "keep": FakeResult("skip", "no_durable_knowledge", []),
+        }
+        rc, output = self.run_evaluate(labels, results)
+        self.assertEqual(rc, 0)
         self.assertIn("falsi duplicati        : 0", output)
 
     def test_guard_conditions_without_duplicate_labels_keep_exit_zero(self):
