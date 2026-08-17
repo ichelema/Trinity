@@ -39,22 +39,17 @@ from lib.hindsight_retain_gate import (
     GATE_PROMPT,
     GATE_REASONS,
     GATE_SCHEMA,
-    GATE_TAG_DESCRIPTIONS,
     REASONS_BY_ACTION,
     GateResult,
     dedup_query,
     evaluate_retain,
     fallback_context,
     fetch_duplicate_candidates,
-    gate_prompt,
-    gate_schema,
     handle_retain_consent,
-    merge_gate_tags,
     retain_consent_context,
     retain_consent_decision,
     retain_context_from_transcript,
     save_retain_pending,
-    validate_gate_tag,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -427,125 +422,6 @@ class GateModuleTests(unittest.TestCase):
         # ogni reason del validatore devono comparirvi (niente drift silenzioso).
         for name in sorted(GATE_ACTIONS | GATE_REASONS):
             self.assertIn(name, GATE_PROMPT, name)
-
-    # --- ICH-85: tag opzionale del gate (vocabolario chiuso) ----------------
-
-    def test_gate_schema_tag_vocabulary(self):
-        vocab = ["topic:data", "topic:config"]
-        self.assertIs(gate_schema(None), GATE_SCHEMA)
-        self.assertIs(gate_schema([]), GATE_SCHEMA)
-        schema = gate_schema(vocab)
-        self.assertEqual(schema["properties"]["tag"]["enum"], sorted(vocab))
-        self.assertIn("tag", schema["required"])
-        self.assertIs(schema["additionalProperties"], False)
-        # GATE_SCHEMA (la costante) resta invariata: gate_schema ne fa una copia.
-        self.assertNotIn("tag", GATE_SCHEMA["properties"])
-        self.assertNotIn("tag", GATE_SCHEMA["required"])
-
-    def test_gate_prompt_tag_vocabulary(self):
-        self.assertEqual(gate_prompt(None), GATE_PROMPT)
-        self.assertEqual(gate_prompt([]), GATE_PROMPT)
-        vocab = ["topic:data", "topic:config"]
-        prompt = gate_prompt(vocab)
-        self.assertTrue(prompt.startswith(GATE_PROMPT))
-        for value in vocab:
-            self.assertIn(value, prompt, value)
-            self.assertIn(GATE_TAG_DESCRIPTIONS[value], prompt, value)
-
-    def test_validate_gate_tag(self):
-        vocab = ["topic:data", "topic:config"]
-        self.assertEqual(validate_gate_tag("topic:data", vocab), "topic:data")
-        for bad in ("debugging", "topic:foo", "", None, 3, ["topic:config"]):
-            self.assertEqual(validate_gate_tag(bad, vocab), "", bad)
-
-    def test_merge_gate_tags(self):
-        self.assertEqual(
-            merge_gate_tags(["claude-code", "repo:T"], "topic:data"),
-            ["claude-code", "repo:T", "topic:data"],
-        )
-        # tag gia' presente: nessun duplicato
-        self.assertEqual(
-            merge_gate_tags(["claude-code", "topic:data"], "topic:data"),
-            ["claude-code", "topic:data"],
-        )
-        # tag vuoto: base invariata
-        self.assertEqual(merge_gate_tags(["claude-code"], ""), ["claude-code"])
-        # base con duplicati: deduplicata mantenendo il primo ordine
-        self.assertEqual(merge_gate_tags(["a", "b", "a"], "c"), ["a", "b", "c"])
-
-    def test_evaluate_retain_with_gate_tag_enabled(self):
-        cfg = {
-            "retain_gate_model": "m",
-            "retain_gate_timeout": 5,
-            "retain_gate_tag_enabled": True,
-            "retain_gate_tag_vocabulary": ["topic:data", "topic:config"],
-        }
-        summary = {"turns": []}
-        captured = {}
-
-        def fake_tag_api(response):
-            def _call(model, system, user, schema_name, schema, timeout):
-                captured["schema"] = schema
-                return response, 3.0
-
-            return _call
-
-        # (i) tag valido -> GateResult.tag valorizzato, schema con "tag"
-        result = evaluate_retain(
-            "finestra",
-            summary,
-            [],
-            cfg,
-            fake_tag_api({
-                "action": "retain",
-                "reason": "durable_decision",
-                "preview": "Salvo X.",
-                "duplicate_of": [],
-                "context": "dominio",
-                "tag": "topic:data",
-            }),
-        )
-        self.assertEqual(result.tag, "topic:data")
-        self.assertIn("tag", captured["schema"]["properties"])
-        self.assertIsNone(result.error)
-
-        # (ii) tag fuori vocabolario -> tag "", action/reason invariati, error None
-        result = evaluate_retain(
-            "finestra",
-            summary,
-            [],
-            cfg,
-            fake_tag_api({
-                "action": "retain",
-                "reason": "durable_decision",
-                "preview": "Salvo X.",
-                "duplicate_of": [],
-                "context": "dominio",
-                "tag": "topic:nonexistent",
-            }),
-        )
-        self.assertEqual(result.tag, "")
-        self.assertEqual(result.action, "retain")
-        self.assertEqual(result.reason, "durable_decision")
-        self.assertIsNone(result.error)
-
-        # (iii) cfg disabilitata -> schema SENZA "tag", GateResult.tag == ""
-        cfg_disabled = dict(cfg, retain_gate_tag_enabled=False)
-        result = evaluate_retain(
-            "finestra",
-            summary,
-            [],
-            cfg_disabled,
-            fake_tag_api({
-                "action": "skip",
-                "reason": "trivial_or_ephemeral",
-                "preview": "",
-                "duplicate_of": [],
-                "context": "",
-            }),
-        )
-        self.assertNotIn("tag", captured["schema"]["properties"])
-        self.assertEqual(result.tag, "")
 
 
 class FakeResponse:

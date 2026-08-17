@@ -19,21 +19,24 @@ consolidation tramite `observation_scopes`.
 
 ## Vocabolario provato
 
-`retain_gate_tag_vocabulary` in `hindsight.config.json`, 8 valori:
+`GATE_TAG_VOCABULARY` in `hindsight_gate_tag_bench.py`, 8 valori:
 `topic:environment`, `topic:config`, `topic:workflow`, `topic:debugging`,
 `topic:architecture`, `topic:data`, `topic:integration`, `topic:evaluation`.
 Nessun bucket `other`. Le descrizioni per il prompt sono in
-`GATE_TAG_DESCRIPTIONS` (`lib/hindsight_retain_gate.py`).
+`GATE_TAG_DESCRIPTIONS`, nello stesso script. Il bench estende il prompt e lo
+schema di produzione (`GATE_PROMPT`/`GATE_SCHEMA` di
+`lib/hindsight_retain_gate.py`) con la regola 8 e la enum `tag`, e rifiuta ogni
+valore fuori enum (`validate_gate_tag`).
 
 ## Metodo
 
 - Campione: i 150 documenti più recenti del bank core `trinity-project`
   (399 documenti totali al momento del test), esportati con `original_text`,
   `context`, `event_date` e `metadata` originali.
-- Tag: una chiamata reale del gate per documento (`evaluate_retain` con
-  `retain_gate_tag_enabled: true`, stessa libreria di produzione, schema JSON
-  strict con `enum` del vocabolario). 150 su 150 taggati, 0 errori, 0 valori
-  fuori vocabolario. Latenza p50 3.5 s, p95 7.9 s.
+- Tag: una chiamata reale del gate per documento (`ask_gate_tag`: stesso
+  modello, prompt e schema di produzione più la regola e la enum del tag,
+  schema JSON strict). 150 su 150 taggati, 0 errori, 0 valori fuori
+  vocabolario. Latenza p50 3.5 s, p95 7.9 s.
 - Tre bank replica costruiti dagli STESSI documenti (stesso `document_id`,
   contenuto, context, timestamp, metadata), diversi solo per tag e scope:
   - **A** baseline: `[claude-code, repo:<repo>]`, scope di default.
@@ -117,15 +120,15 @@ Note di lettura:
 
 ## Decisione
 
-**Rifiutato**: il gate NON produce il tag aggiuntivo in produzione.
-`retain_gate_tag_enabled` resta `false`. I tag automatici sono soltanto
-`claude-code` + `repo:<nome>`.
+**Rifiutato**: il gate NON produce il tag aggiuntivo in produzione. I tag
+automatici sono soltanto `claude-code` + `repo:<nome>`.
 
-Il codice del tag (schema/prompt estesi, `validate_gate_tag`,
-`merge_gate_tags`, chiavi di config) resta nella libreria, spento e coperto
-dai test, per poter ripetere la misura con un altro vocabolario o quando il
-recall saprà usare il topic come filtro. Il worker non lo unisce ai tag e non
-imposta `observation_scopes`.
+Il codice di produzione (gate, worker, config) non contiene nulla del tag:
+niente chiave di config, niente campo `tag` nello schema, niente merge nel
+worker. Vocabolario, regola del prompt, enum, `validate_gate_tag` e
+`merge_gate_tags` vivono solo in `hindsight_gate_tag_bench.py`, coperti da
+`test_hindsight_gate_tag_bench.py`, così la misura è ripetibile con un altro
+vocabolario o quando il recall saprà usare il topic come filtro.
 
 ## Cosa servirebbe per riconsiderarlo
 

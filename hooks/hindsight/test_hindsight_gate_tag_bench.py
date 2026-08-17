@@ -30,14 +30,96 @@ def load_bench():
     return module
 
 
-class FakeGateResult:
-    def __init__(self, tag="", action="retain", reason="durable_decision", context="", latency_ms=1.0, error=None):
-        self.tag = tag
-        self.action = action
-        self.reason = reason
-        self.context = context
-        self.latency_ms = latency_ms
-        self.error = error
+def fake_gate_row(tag="", action="retain", reason="durable_decision", context="", latency_ms=1.0, error=None):
+    """Stessa forma del dict restituito da ask_gate_tag."""
+    return {"tag": tag, "action": action, "reason": reason, "context": context,
+            "latency_ms": latency_ms, "error": error}
+
+
+class GateTagVocabularyTests(unittest.TestCase):
+    """Vocabolario CHIUSO del tag: schema/prompt estesi sopra quelli di
+    produzione, validazione che rifiuta il free-form, merge senza duplicati,
+    ask_gate_tag con API finta (una sola chiamata, stesso nome schema)."""
+
+    def setUp(self):
+        self.bench = load_bench()
+        self.vocab = ["topic:data", "topic:config"]
+
+    def test_vocabulary_is_closed_and_low_cardinality(self):
+        vocab = self.bench.GATE_TAG_VOCABULARY
+        self.assertEqual(len(vocab), 8)
+        self.assertEqual(len(set(vocab)), 8)
+        self.assertTrue(all(v.startswith("topic:") for v in vocab))
+        self.assertNotIn("topic:other", vocab)
+        for v in vocab:
+            self.assertIn(v, self.bench.GATE_TAG_DESCRIPTIONS)
+
+    def test_schema_extends_production_schema_with_tag_enum(self):
+        schema = self.bench.gate_tag_schema(self.vocab)
+        prod = self.bench.GATE_SCHEMA
+        self.assertEqual(schema["properties"]["tag"]["enum"], sorted(self.vocab))
+        self.assertIn("tag", schema["required"])
+        self.assertIs(schema["additionalProperties"], False)
+        # lo schema di produzione resta intatto (nessun campo tag)
+        self.assertNotIn("tag", prod["properties"])
+        self.assertNotIn("tag", prod["required"])
+
+    def test_prompt_extends_production_prompt(self):
+        prompt = self.bench.gate_tag_prompt(self.vocab)
+        self.assertTrue(prompt.startswith(self.bench.GATE_PROMPT))
+        for value in self.vocab:
+            self.assertIn(value, prompt, value)
+            self.assertIn(self.bench.GATE_TAG_DESCRIPTIONS[value], prompt, value)
+        self.assertNotIn("8. tag", self.bench.GATE_PROMPT)
+
+    def test_validate_gate_tag_rejects_free_form(self):
+        self.assertEqual(self.bench.validate_gate_tag("topic:data", self.vocab), "topic:data")
+        for bad in ("debugging", "topic:foo", "", None, 3, ["topic:config"]):
+            self.assertEqual(self.bench.validate_gate_tag(bad, self.vocab), "", bad)
+
+    def test_merge_gate_tags(self):
+        merge = self.bench.merge_gate_tags
+        self.assertEqual(merge(["claude-code", "repo:T"], "topic:data"),
+                         ["claude-code", "repo:T", "topic:data"])
+        self.assertEqual(merge(["claude-code", "topic:data"], "topic:data"),
+                         ["claude-code", "topic:data"])
+        self.assertEqual(merge(["claude-code"], ""), ["claude-code"])
+        self.assertEqual(merge(["a", "b", "a"], "c"), ["a", "b", "c"])
+
+    def test_ask_gate_tag_single_call_and_out_of_enum_discarded(self):
+        captured = []
+
+        def fake_api(model, system, user, schema_name, schema, timeout):
+            captured.append((model, schema_name, schema))
+            return {"action": "retain", "reason": "durable_decision", "preview": "x",
+                    "duplicate_of": [], "context": "dominio",
+                    "tag": fake_api.tag}, 12.5
+
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        with mock.patch.object(self.bench, "api_json", side_effect=fake_api):
+            fake_api.tag = "topic:data"
+            row = self.bench.ask_gate_tag("finestra", cfg, self.vocab)
+            self.assertEqual(row["tag"], "topic:data")
+            self.assertEqual(row["action"], "retain")
+            self.assertIsNone(row["error"])
+            fake_api.tag = "topic:nonexistent"
+            row = self.bench.ask_gate_tag("finestra", cfg, self.vocab)
+            self.assertEqual(row["tag"], "")
+            self.assertEqual(row["action"], "retain")
+            self.assertIsNone(row["error"])
+        self.assertEqual(len(captured), 2)
+        self.assertEqual(captured[0][0], "m")
+        self.assertEqual(captured[0][1], "retain_gate_decision")
+        self.assertIn("tag", captured[0][2]["properties"])
+
+    def test_ask_gate_tag_error_gives_untagged_row(self):
+        def boom(*a, **kw):
+            raise TimeoutError("timeout")
+
+        with mock.patch.object(self.bench, "api_json", side_effect=boom):
+            row = self.bench.ask_gate_tag("finestra", {}, self.vocab)
+        self.assertEqual(row["tag"], "")
+        self.assertIn("TimeoutError", row["error"])
 
 
 class BuildVariantItemsTests(unittest.TestCase):
@@ -247,14 +329,14 @@ class ResumeArtifactsTests(unittest.TestCase):
 
             calls = []
 
-            def fake_evaluate_retain(content, summary, bank_urls, cfg):
+            def fake_ask_gate_tag(content, cfg, vocabulary=None):
                 calls.append(content)
-                return FakeGateResult(tag="topic:debugging", action="retain")
+                return fake_gate_row(tag="topic:debugging", action="retain")
 
             with mock.patch.object(self.bench, "DOCS_FILE", docs_file), mock.patch.object(
                 self.bench, "ASSIGN_FILE", assign_file
             ), mock.patch.object(self.bench, "ARTIFACTS", artifacts), mock.patch.object(
-                self.bench, "evaluate_retain", side_effect=fake_evaluate_retain
+                self.bench, "ask_gate_tag", side_effect=fake_ask_gate_tag
             ):
                 rc = self.bench.tag_phase({"retain_gate_model": "test"}, workers=1)
 
@@ -277,11 +359,11 @@ class ResumeArtifactsTests(unittest.TestCase):
                                      "error": None}) + "\n")
 
             def boom(*a, **kw):
-                raise AssertionError("evaluate_retain non doveva essere chiamato")
+                raise AssertionError("ask_gate_tag non doveva essere chiamato")
 
             with mock.patch.object(self.bench, "DOCS_FILE", docs_file), mock.patch.object(
                 self.bench, "ASSIGN_FILE", assign_file
-            ), mock.patch.object(self.bench, "evaluate_retain", side_effect=boom):
+            ), mock.patch.object(self.bench, "ask_gate_tag", side_effect=boom):
                 rc = self.bench.tag_phase({}, workers=1)
             self.assertEqual(rc, 0)
 

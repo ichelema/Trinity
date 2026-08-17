@@ -570,14 +570,13 @@ scarta, `context: <testo>` salva col context indicato. Lo scarto per prompt nuov
 pending viene rimesso in attesa e l'avviso invita a rispondere di nuovo sì. Il content della fetta non porta più
 l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
 `retain_gate_model`, `retain_gate_timeout`. **Tag semantico del gate (ICH-85, valutato e
-rifiutato)**: la libreria può chiedere allo stesso gate, nella stessa chiamata, un tag
-`topic:*` da un vocabolario chiuso (`retain_gate_tag_vocabulary`, 8 valori; interruttore
-`retain_gate_tag_enabled`, default `false`; un valore fuori enum viene scartato, mai
-free-form). Il bench `hooks/hindsight/benchmark/hindsight_gate_tag_bench.py` su 150 documenti
-reali (`benchmark/GATE_TAG_EVALUATION.md`) ha misurato +39% di observation e `proof_count`
-−32% con il tag nel recinto di consolidation, e MRR −27% con il doppio recinto
-`observation_scopes`, senza alcun guadagno di recall: il worker quindi non lo usa e i tag
-automatici restano `claude-code` + `repo:<nome>`. Il lato agente (retain MCP proattivo): il formato
+rifiutato)**: il bench `hooks/hindsight/benchmark/hindsight_gate_tag_bench.py` ha chiesto allo
+stesso gate, nella stessa chiamata, un tag `topic:*` da un vocabolario chiuso di 8 valori e ha
+ricopiato 150 documenti reali su tre bank replica (`benchmark/GATE_TAG_EVALUATION.md`): +39% di
+observation e `proof_count` −32% con il tag nel recinto di consolidation, MRR −27% con il doppio
+recinto `observation_scopes`, nessun guadagno di recall. Il tag quindi non esiste nel codice di
+produzione (né nel gate né in config): vocabolario, regola del prompt, enum e validazione vivono
+solo nel bench, e i tag automatici restano `claude-code` + `repo:<nome>`. Il lato agente (retain MCP proattivo): il formato
 di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni
 sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain_enabled` è
 `false` (col gate attivo produrrebbero salvataggi doppi).

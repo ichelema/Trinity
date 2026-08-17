@@ -1,12 +1,18 @@
 #!/usr/bin/env python
-"""Benchmark A/B/D del tag opzionale del gate pre-retain (ICH-85).
+"""Benchmark A/B/D di un tag semantico generato dal gate pre-retain (ICH-85).
 
-Il gate semantico pre-retain (hindsight_retain_gate.py) puo' restituire, nella
-STESSA chiamata LLM, un tag `topic:*` da un vocabolario CHIUSO (config
-retain_gate_tag_enabled/_vocabulary). Prima di accendere questo interruttore in
-produzione serve capire come quel tag in piu' cambia la consolidation (fatti
-piu' frammentati o meno) e il recall (piu' o meno preciso), non solo se il
-gate lo produce in modo affidabile.
+Domanda: conviene far restituire al gate semantico pre-retain
+(hindsight_retain_gate.py), nella STESSA chiamata LLM, un tag `topic:*` da un
+vocabolario CHIUSO da unire ai tag fissi `claude-code` + `repo:<nome>`? Prima
+di cablarlo in produzione serve capire come quel tag in piu' cambia la
+consolidation (fatti piu' frammentati o meno) e il recall (piu' o meno
+preciso), non solo se il gate lo produce in modo affidabile.
+
+Esito misurato il 17 agosto 2026 (GATE_TAG_EVALUATION.md): RIFIUTATO. Il
+codice di produzione non conosce il tag: il vocabolario, la regola aggiuntiva
+del prompt, la enum dello schema e la validazione vivono SOLO qui, sopra il
+prompt/schema di produzione (GATE_PROMPT/GATE_SCHEMA + gate_input), cosi' il
+benchmark resta riproducibile senza codice morto nella libreria.
 
 Questo script copia lo STESSO corpus di documenti reali su tre bank:
   A  tags = [claude-code, repo:<repo>]                    (baseline oggi)
@@ -19,8 +25,9 @@ Fasi (ognuna riavviabile: gli artefatti in artifacts/ fanno da cache):
   export       esporta i --limit documenti piu' recenti del bank sorgente
                (stesse funzioni di tools/hindsight_export.py) in
                artifacts/gate_tag_docs.jsonl.
-  tag          per ogni documento chiama evaluate_retain con il tag abilitato
-               (nessun bank di dedup: bank_urls=[]) e salva l'esito in
+  tag          per ogni documento chiama il gate (ask_gate_tag: stesso modello,
+               prompt e schema di produzione piu' la regola/enum del tag, senza
+               candidati di dedup) e salva l'esito in
                artifacts/gate_tag_assignments.jsonl. Riprende da dove si era
                fermato (salta i document_id gia' presenti).
   retain       costruisce gli item A/B/D (build_variant_items) e li invia in
@@ -84,7 +91,13 @@ LIB_DIR = PLUGIN_ROOT / "hooks" / "hindsight" / "lib"
 sys.path.insert(0, str(LIB_DIR))
 
 from hindsight_config import bank_url, load_config  # pyright: ignore[reportMissingImports]  # noqa: E402
-from hindsight_retain_gate import evaluate_retain, merge_gate_tags  # pyright: ignore[reportMissingImports]  # noqa: E402
+from hindsight_recall_filter import api_json  # pyright: ignore[reportMissingImports]  # noqa: E402
+from hindsight_retain_gate import (  # pyright: ignore[reportMissingImports]  # noqa: E402
+    GATE_ACTIONS,
+    GATE_PROMPT,
+    GATE_SCHEMA,
+    gate_input,
+)
 
 ARTIFACTS = HERE / "artifacts"
 DOCS_FILE = ARTIFACTS / "gate_tag_docs.jsonl"
@@ -106,6 +119,126 @@ DEFAULT_REPO_FALLBACK = "Trinity"
 # Ritentativi POST /memories su errore 5xx/timeout (backoff in secondi).
 RETAIN_RETRIES = 3
 RETAIN_BACKOFF = (2.0, 5.0, 10.0)
+
+
+# ---------------------------------------------------------------------------
+# Tag del gate: vocabolario CHIUSO a bassa cardinalita' (8 valori, prefisso
+# topic:, nessun bucket "other"), regola aggiuntiva del prompt e enum dello
+# schema. Vive solo qui: in produzione il gate non conosce il tag (rifiutato
+# dal bench, vedi GATE_TAG_EVALUATION.md).
+# ---------------------------------------------------------------------------
+
+GATE_TAG_VOCABULARY = [
+    "topic:environment",
+    "topic:config",
+    "topic:workflow",
+    "topic:debugging",
+    "topic:architecture",
+    "topic:data",
+    "topic:integration",
+    "topic:evaluation",
+]
+
+# Una riga inglese per valore: entra nella regola 8 del prompt.
+GATE_TAG_DESCRIPTIONS: dict[str, str] = {
+    "topic:environment": "OS, shell, PATH, installs, tool versions, host quirks (Windows/MSYS2, Linux)",
+    "topic:config": "settings, config files, flags, hook and skill wiring",
+    "topic:workflow": "processes, conventions, git/PR/issue/release procedures, working and communication preferences",
+    "topic:debugging": "bugs, root causes, workarounds, incidents",
+    "topic:architecture": "technical design decisions with their rationale, discarded approaches",
+    "topic:data": "databases, migrations, schemas, memory banks, backups",
+    "topic:integration": "external services, APIs, MCP servers, LLM providers and models",
+    "topic:evaluation": "tests, benchmarks, measured results",
+}
+
+
+def gate_tag_schema(vocabulary: list[str]) -> dict:
+    """GATE_SCHEMA di produzione piu' la enum "tag" (strict json_schema:
+    additionalProperties False e OGNI proprieta' in required)."""
+    return {
+        **GATE_SCHEMA,
+        "properties": {
+            **GATE_SCHEMA["properties"],
+            "tag": {"type": "string", "enum": sorted(vocabulary)},
+        },
+        "required": [*GATE_SCHEMA["required"], "tag"],
+    }
+
+
+def gate_tag_prompt(vocabulary: list[str]) -> str:
+    """GATE_PROMPT di produzione piu' la regola 8: esattamente UN valore dal
+    vocabolario, il dominio tecnico della finestra (non il tipo di conoscenza,
+    gia' espresso da reason)."""
+    entries = "; ".join(
+        f"{value}: {GATE_TAG_DESCRIPTIONS.get(value, value)}" for value in vocabulary
+    )
+    rule = (
+        "8. tag: exactly ONE value from the allowed list, the technical domain "
+        "the window is mostly about (not the kind of knowledge, which is already "
+        f"expressed by reason): {entries}."
+    )
+    return f"{GATE_PROMPT}\n{rule}"
+
+
+def validate_gate_tag(value, vocabulary: list[str]) -> str:
+    """Il tag se e' una str presente nel vocabolario, altrimenti "": un valore
+    fuori enum (free-form) si scarta, MAI un'eccezione."""
+    if isinstance(value, str) and vocabulary and value in vocabulary:
+        return value
+    return ""
+
+
+def merge_gate_tags(base: list[str], tag: str) -> list[str]:
+    """Nuova lista con l'ordine di base preservato (deduplicato) e il tag
+    appeso una sola volta se non vuoto e non gia' presente."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in base:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    if tag and tag not in seen:
+        out.append(tag)
+    return out
+
+
+def ask_gate_tag(content: str, cfg: dict, vocabulary: list[str] | None = None) -> dict:
+    """Una chiamata al gate (stesso modello/timeout di produzione, api_json)
+    con prompt e schema estesi dal tag; nessun candidato di dedup. Ritorna
+    {tag, action, reason, context, latency_ms, error}: un errore tecnico o un
+    tag fuori vocabolario danno tag "" (il documento resta "untagged")."""
+    vocab = list(vocabulary or GATE_TAG_VOCABULARY)
+    model = str(cfg.get("retain_gate_model", "gpt-5.6-luna"))
+    timeout = float(cfg.get("retain_gate_timeout", 15))
+    try:
+        data, latency = api_json(
+            model,
+            gate_tag_prompt(vocab),
+            gate_input(content, []),
+            "retain_gate_decision",
+            gate_tag_schema(vocab),
+            timeout,
+        )
+        action = data.get("action")
+        if not isinstance(action, str) or action not in GATE_ACTIONS:
+            raise ValueError(f"action non valida: {action!r}")
+        return {
+            "tag": validate_gate_tag(data.get("tag"), vocab),
+            "action": action,
+            "reason": str(data.get("reason") or ""),
+            "context": str(data.get("context") or "").strip(),
+            "latency_ms": round(float(latency), 2),
+            "error": None,
+        }
+    except Exception as exc:  # noqa: BLE001 - qualunque errore = documento non taggato, riportato
+        return {
+            "tag": "",
+            "action": "",
+            "reason": "",
+            "context": "",
+            "latency_ms": 0.0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -355,8 +488,8 @@ def build_report(metrics: dict, meta: dict) -> str:
     lines.append("")
     lines.append(
         "Nessuna decisione automatica: valutare i numeri sopra (frammentazione "
-        "vs qualita' del recall) prima di abilitare retain_gate_tag_enabled in "
-        "produzione."
+        "vs qualita' del recall) prima di cablare il tag nel worker di "
+        "produzione (esito del 2026-08-17: rifiutato, vedi GATE_TAG_EVALUATION.md)."
     )
     return "\n".join(lines)
 
@@ -497,12 +630,10 @@ def tag_phase(cfg: dict, workers: int) -> int:
     if not pending:
         return 0
 
-    cfg_tag = dict(cfg)
-    cfg_tag["retain_gate_tag_enabled"] = True
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
 
     def run(doc: dict):
-        result = evaluate_retain(doc["content"], {"turns": []}, [], cfg_tag)
+        result = ask_gate_tag(doc["content"], cfg)
         return doc, result
 
     done = 0
@@ -510,15 +641,7 @@ def tag_phase(cfg: dict, workers: int) -> int:
         "a", encoding="utf-8"
     ) as handle:
         for doc, result in pool.map(run, pending):
-            row = {
-                "document_id": doc["document_id"],
-                "tag": result.tag,
-                "action": result.action,
-                "reason": result.reason,
-                "context": result.context,
-                "latency_ms": result.latency_ms,
-                "error": result.error,
-            }
+            row = {"document_id": doc["document_id"], **result}
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
             handle.flush()
             done += 1

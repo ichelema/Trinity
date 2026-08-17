@@ -899,7 +899,6 @@ def gate_debug_context(gate, bank: str) -> str:
         f"Gate latency: {gate.latency_ms:.1f} ms\n"
         f"Bank: {bank}"
         + (f"\nPreview: {gate.preview}" if gate.preview else "")
-        + (f"\nTag: {gate.tag}" if gate.tag else "")
         + (f"\nGate error (fail-closed): {gate.error}" if gate.error else "")
         + "\n\nUse as consultative context. Verify mutable facts against the repo."
     )

@@ -44,17 +44,6 @@
   "retain_text_truncate": 2000,
   "retain_gate_model": "gpt-5.6-luna",
   "retain_gate_timeout": 15,
-  "retain_gate_tag_enabled": false,
-  "retain_gate_tag_vocabulary": [
-    "topic:environment",
-    "topic:config",
-    "topic:workflow",
-    "topic:debugging",
-    "topic:architecture",
-    "topic:data",
-    "topic:integration",
-    "topic:evaluation"
-  ],
   "retain_debug_in_context": true,
 
   "promote_model": "gpt-5.6-luna",
