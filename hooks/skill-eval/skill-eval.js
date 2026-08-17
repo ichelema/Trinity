@@ -16,7 +16,7 @@ const fs = require("fs");
 const path = require("path");
 
 const RULES_PATH = path.join(__dirname, "skill-rules.json");
-const SKILLS_DIR = path.join(__dirname, "..", "skills");
+const SKILLS_DIR = path.join(__dirname, "..", "..", "skills");
 
 /**
  * Una skill è disabilitata se la sua cartella esiste in skills/ ma non contiene

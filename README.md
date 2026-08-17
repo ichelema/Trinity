@@ -114,14 +114,14 @@ fratelli relativamente alla loro posizione, quindi il plugin è rilocabile.
 
 ### Caricamento skill via skill-eval
 
-A ogni prompt l'hook `UserPromptSubmit` esegue **`hooks/skill-eval.sh`**, che delega a un motore 
+A ogni prompt l'hook `UserPromptSubmit` esegue **`hooks/skill-eval/skill-eval.sh`**, che delega a un motore 
 Node.js (`skill-eval.js`). Il motore analizza il testo del prompt e, se trova corrispondenze 
 sufficienti, inietta nel contesto del modello un blocco `SKILL ACTIVATION REQUIRED` con le skill 
 più rilevanti — così Claude sa quali skill caricare senza che l'utente debba invocarle a mano.
 
 **Come funziona il punteggio**
 
-Le regole stanno in `hooks/skill-rules.json`. Ogni skill ha una lista di trigger; ogni tipo di 
+Le regole stanno in `hooks/skill-eval/skill-rules.json`. Ogni skill ha una lista di trigger; ogni tipo di 
 trigger vale un certo numero di punti:
 
 | Tipo trigger | Punti | Esempio |
@@ -1331,7 +1331,7 @@ Trinity/
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
-│   ├── skill-eval.*         suggerimento skill
+│   ├── skill-eval/          suggerimento skill (skill-eval.js/sh + skill-rules.json/schema)
 │   ├── windows-toast.sh     toast Windows (entry point hook → chiama il .ps1)
 │   ├── windows-toast.ps1    toast Windows (PowerShell, invocato da .sh)
 │   ├── claudish/            riscrittura display in italiano semplice (capture-model, gate, rewrite, providers — §3.1)
