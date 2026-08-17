@@ -54,7 +54,7 @@ Claude Code dopo ogni modifica al repo.
 
 Con lo stesso meccanismo si caricano anche i **plugin di terze parti vendorizzati** in
 `vendor/` (§8): una junction per ciascuno, così ogni plugin mantiene il proprio namespace
-(`ui-craft:*`) separato da `trinity:*`.
+(`ui-craft:*`, `mattpocock-skills:*`) separato da `trinity:*`.
 
 **Ricreare le junction** (su un nuovo PC o dopo averle rimosse; su Linux le crea
 `scripts/setup/bootstrap-linux.sh` come symlink, funzione `link_skill`):
@@ -66,6 +66,9 @@ MSYS_NO_PATHCONV=1 cmd /c mklink /J \
 MSYS_NO_PATHCONV=1 cmd /c mklink /J \
   "%USERPROFILE%\.claude\skills\ui-craft" \
   "E:\AI\Claude\Trinity\vendor\ui-craft"
+MSYS_NO_PATHCONV=1 cmd /c mklink /J \
+  "%USERPROFILE%\.claude\skills\mattpocock-skills" \
+  "E:\AI\Claude\Trinity\vendor\mattpocock-skills"
 ```
 
 ---
@@ -406,7 +409,7 @@ Dal 2026-07-31 i plugin Claude Code di **terze parti** non passano più dal mark
 (`enabledPlugins` è vuoto): sono **vendorizzati** dentro il repo in `vendor/<nome>/` e
 caricati con lo stesso meccanismo skills-dir di Trinity (§2), una junction/symlink per
 plugin. Così viaggiano con `git push/pull` e ogni macchina è allineata senza install
-per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`).
+per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`, `mattpocock-skills:*`).
 
 | Plugin | Versione | Cosa fa | Upstream |
 |---|---|---|---|
@@ -1319,7 +1322,7 @@ Trinity/
 ├── commands/                slash command (/trinity:*)
 ├── config/
 │   └── claude/              settings.shared.json + overlay per OS → genera ~/.claude/settings.json (mise run sync-settings, §10)
-├── vendor/                  plugin terzi vendorizzati: ui-craft (junction/symlink in ~/.claude/skills/, §8)
+├── vendor/                  plugin terzi vendorizzati: ui-craft · mattpocock-skills (junction/symlink in ~/.claude/skills/, §8)
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)

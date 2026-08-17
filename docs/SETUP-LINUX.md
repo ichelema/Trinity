@@ -29,7 +29,7 @@ bash scripts/setup/bootstrap-linux.sh
 Il bootstrap e' **idempotente** (rieseguibile). Fa: mise + runtime del repo,
 `hindsight-api` via pip, `mcp-remote` via npm, i symlink skills-dir
 (`~/.claude/skills/trinity -> ~/ai/trinity` **piu' uno per ogni plugin
-vendorizzato** in `vendor/`: `ui-craft` — funzione
+vendorizzato** in `vendor/`: `ui-craft`, `mattpocock-skills` — funzione
 `link_skill`, README §8), la generazione di `~/.claude/settings.json` da
 `config/claude/` (shared + overlay `settings.linux.json`, con
 `TRINITY_PLUGIN_DIR` calcolata dal path del repo — stesso script del task
