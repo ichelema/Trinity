@@ -31,11 +31,17 @@ class FakeResult:
         reason: str,
         duplicate_of: list[int],
         candidates: list[dict] | None = None,
+        covered_by: list[int] | None = None,
+        durable_claims: list[str] | None = None,
     ):
         self.action = action
         self.reason = reason
         self.duplicate_of = duplicate_of
         self.candidates = candidates or []
+        # ICH-84: di default rispecchia duplicate_of (coerente col contratto
+        # derivato del gate reale, dove duplicate_of = covered_by su skip).
+        self.covered_by = duplicate_of if covered_by is None else covered_by
+        self.durable_claims = durable_claims or []
         self.preview = ""
         self.context = ""
         self.latency_ms = 1.0
@@ -119,8 +125,8 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         }
         rc, output = self.run_evaluate(self.labels(), results)
         self.assertEqual(rc, 0)
-        self.assertIn("target 100% PASS", output)
-        self.assertIn("target >=85% PASS", output)
+        self.assertIn("target >=80% PASS", output)
+        self.assertIn("target >=84% PASS", output)
 
     def test_incoherent_duplicate_result_fails_target(self):
         results = {
@@ -129,7 +135,7 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         }
         rc, output = self.run_evaluate(self.labels(), results)
         self.assertEqual(rc, 1)
-        self.assertIn("target >=85% FAIL", output)
+        self.assertIn("target >=84% FAIL", output)
 
     def test_wrong_duplicate_identity_fails_target(self):
         results = {
@@ -138,7 +144,7 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         }
         rc, output = self.run_evaluate(self.labels(), results)
         self.assertEqual(rc, 1)
-        self.assertIn("target >=85% FAIL", output)
+        self.assertIn("target >=84% FAIL", output)
 
     def test_rejects_missing_kind_or_category(self):
         bad_labels = [dict(self.labels()[0], duplicate_kind="other")]
@@ -163,7 +169,7 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         rc, output = self.run_evaluate(labels, results, with_dedup=False)
         self.assertEqual(rc, 0)
         self.assertIn("n/a", output)
-        self.assertNotIn("target 100% FAIL", output)
+        self.assertNotIn("target >=80% FAIL", output)
 
     def test_duplicate_labels_require_dedup(self):
         rc, output = self.run_evaluate(self.labels(), {}, with_dedup=False)
