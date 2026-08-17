@@ -146,9 +146,16 @@ repository. Restano in inglese soltanto i messaggi di commit e il titolo e la
 descrizione della PR. Cita pure i termini tecnici e le stringhe della issue
 nella loro forma originale.
 
+Se trovi specifiche contrastanti o hai dei dubbi che potrebbero compromettere la implementazione fermati e chiedi 
+maggiori dettagli all'utente, solo quando le specifiche sono completamente chiare passa alla implementazione.
+
+Mostra il piano ben definito ordinato chiaro non usare tecnicismi, se utile fai uso di bullet point e sottosessioni e tabelle.
+
 Attendi l'ok dell'utente sul piano prima di scrivere codice.
 
 ## Implementazione
+
+Obiettivo, lavorare sulla issue `$issue_id`. Sei il lead. Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker, i problemi con prospettiva fresca a DeepSeek. 
 
 Mantieni tutte le modifiche entro lo scope di `$issue_id`. Ogni riga modificata
 deve essere riconducibile a un requisito della issue: le deviazioni vanno

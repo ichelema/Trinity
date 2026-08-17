@@ -1,5 +1,5 @@
 ---
-description: Due review indipendenti in parallelo (deepseek + deep-reasoner) su worktree isolati, loop di fix minimi e report finale
+description: Due review indipendenti in parallelo (deepseek + trinity:deep-reasoner) su worktree isolati, loop di fix minimi e report finale
 argument-hint: <issue-id> <model>
 arguments:
   - issue_id
@@ -11,7 +11,7 @@ Esegui due review indipendenti e parallele della PR della issue `$issue_id` su
 worktree isolati, poi applica i fix che meritano di essere fatti in un loop,
 finché non emergono più finding. In uscita, report sintetico.
 
-Le due review girano su modelli diversi: `deepseek` e `deep-reasoner`.
+Le due review girano su modelli diversi: `deepseek` e `trinity:deep-reasoner`.
 
 `$model` identifica il worktree di implementazione creato da `/1_create-worktree`
 (e quindi il branch della PR). Non sceglie il modello di esecuzione.
