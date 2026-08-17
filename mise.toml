@@ -305,11 +305,6 @@ description = "Restore del DB hindsight dall'ultimo dump (guardrail anti-perdita
 shell = "bash -c"
 run = "bash hooks/hindsight/tools/hs-db-restore.sh"
 
-[tasks.strip-branch-tags]
-description = "ICH-85: migrazione tag branch:* nel DB Hindsight (default --dry-run; --apply --backup <dump> dopo mise run db-dump; --verify; --revert <undo>). Uso: mise run strip-branch-tags [-- --apply --backup E:/var/backups/hindsight/hindsight-<UTC>.dump]"
-shell = "bash -c"
-run = "python hooks/hindsight/ops/hindsight-strip-branch-tags.py"
-
 # --- Control Plane (Web UI Hindsight) --------------------------------------
 [tasks.control-plane]
 description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:9999, collegato all'API :8888. Foreground: Ctrl-C per fermarlo."
