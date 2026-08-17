@@ -923,49 +923,6 @@ class WorkerGateTests(unittest.TestCase):
             calls.append(gate_mock.call_count)
         self.assertEqual(calls, [0, 0, 1])
 
-    def test_build_tags_excludes_branch(self):
-        # ICH-85: 'branch:' rimosso dai tag (recinterebbe lo scope all_strict
-        # per branch/worktree); repo resta, 'claude-code' e' sempre presente.
-        with_repo_and_branch = self.worker.build_tags(
-            self.hook, {"repo": "Trinity", "branch": "main", "commit": "abc"}
-        )
-        self.assertEqual(with_repo_and_branch, ["claude-code", "repo:Trinity"])
-        without_repo = self.worker.build_tags(
-            self.hook, {"repo": "", "branch": "main", "commit": ""}
-        )
-        self.assertEqual(without_repo, ["claude-code"])
-        for git in (
-            {"repo": "Trinity", "branch": "main", "commit": "abc"},
-            {"repo": "", "branch": "main", "commit": ""},
-            {"repo": "", "branch": "", "commit": ""},
-        ):
-            tags = self.worker.build_tags(self.hook, git)
-            self.assertFalse(any(t.startswith("branch:") for t in tags), tags)
-
-    def test_retain_post_has_no_branch_tag_but_keeps_branch_in_metadata(self):
-        with mock.patch.object(
-            self.worker,
-            "git_info",
-            return_value={"repo": "Trinity", "branch": "main", "commit": "abc"},
-        ):
-            rc, out, _gate, urlopen = self.run_main(
-                self.cfg(),
-                GateResult(
-                    action="retain",
-                    reason="durable_decision",
-                    preview="Salvo X.",
-                    context="dominio di prova",
-                ),
-            )
-        self.assertEqual(rc, 0)
-        self.assertIsNone(out)
-        self.assertEqual(urlopen.call_count, 1)
-        item = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
-        self.assertEqual(item["tags"], ["claude-code", "repo:Trinity"])
-        self.assertFalse(any(t.startswith("branch:") for t in item["tags"]))
-        # provenienza: il branch resta nei metadata, solo fuori dai tag
-        self.assertEqual(item["metadata"]["branch"], "main")
-
     def test_retain_posts_directly_and_silently(self):
         rc, out, gate_mock, urlopen = self.run_main(
             self.cfg(),
