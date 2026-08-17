@@ -22,7 +22,7 @@
   "recall_min_final": null,
   "recall_types": ["observation", "world", "experience"],
   "recall_include_entities": false,
-  "recall_min_prompt_chars": 20,
+  "recall_min_prompt_chars": 24,
   "recall_max_prompt_chars": 1500,
   "recall_tags": ["claude-code"],
   "recall_tags_match": "any",
@@ -33,7 +33,7 @@
   "recall_pending_ttl": 900,
   "recall_timeout": 10,
   "recall_rerank_timeout": 6,
-  "recall_debug_in_context": true,
+  "recall_debug_in_context": false,
 
   "retain_mode": "chunked",
   "retain_overlap_turns": 1,
