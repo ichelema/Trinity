@@ -182,10 +182,6 @@ def build_tags(hook: dict, git: dict) -> list[str]:
         tags.append(
             f"repo:{git['repo']}"
         )  # scoping progetto (nome repo dal remote, stabile)
-    if git["branch"]:
-        tags.append(
-            f"branch:{git['branch']}"
-        )  # scoping branch (portabile, bassa card.)
     return tags
 
 
