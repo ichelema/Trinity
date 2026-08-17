@@ -192,6 +192,82 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         self.assertTrue(all(urls == ["http://bench-bank"] for urls in seen))
         self.bench.recall_bank_urls.assert_not_called()
 
+    def test_coverage_ignored_guard_blocks_despite_passing_targets(self):
+        # 5/6 exact (83.3% >= 80) e 1/1 semantic: target PASS; l'unico miss
+        # e' un duplicato etichettato ritenuto CON copertura citata -> la
+        # guardia blocca da sola l'exit code.
+        labels = [
+            dict(self.labels()[0], id=f"exact{i}", duplicate_of=[f"mem{i}"])
+            for i in range(6)
+        ] + [self.labels()[1]]
+        results = {
+            f"exact{i}": FakeResult("skip", "duplicate", [0], [{"id": f"mem{i}"}])
+            for i in range(5)
+        }
+        results["exact5"] = FakeResult(
+            "retain", "durable_decision", [], [{"id": "mem5"}], covered_by=[0]
+        )
+        results["semantic"] = FakeResult(
+            "skip", "duplicate", [0], [{"id": "memory-semantic"}]
+        )
+        rc, output = self.run_evaluate(labels, results)
+        self.assertEqual(rc, 1)
+        self.assertIn("target >=80% PASS", output)
+        self.assertIn("target >=84% PASS", output)
+        self.assertIn("copertura ignorata     : 1", output)
+
+    def test_false_duplicate_guard_blocks_despite_passing_targets(self):
+        # Target 100% PASS; una finestra retain-worthy scartata come
+        # duplicato (conoscenza nuova cestinata) -> guardia bloccante.
+        labels = self.labels() + [{"id": "keep", "expected_action": "retain"}]
+        results = {
+            "exact": FakeResult("skip", "duplicate", [0], [{"id": "memory-exact"}]),
+            "semantic": FakeResult("skip", "duplicate", [0], [{"id": "memory-semantic"}]),
+            "keep": FakeResult("skip", "duplicate", [0], [{"id": "unrelated"}]),
+        }
+        rc, output = self.run_evaluate(labels, results)
+        self.assertEqual(rc, 1)
+        self.assertIn("target >=80% PASS", output)
+        self.assertIn("target >=84% PASS", output)
+        self.assertIn("falsi duplicati        : 1", output)
+
+    def test_guards_stay_silent_without_knowledge_loss(self):
+        # Retain corretto con copertura parziale citata (finestra NON
+        # etichettata duplicate) e skip corretto con reason "duplicate" su
+        # una finestra comunque da scartare: nessuna conoscenza persa,
+        # nessuna guardia, exit 0.
+        labels = self.labels() + [
+            {"id": "keep", "expected_action": "retain"},
+            {"id": "drop", "expected_action": "skip"},
+        ]
+        results = {
+            "exact": FakeResult("skip", "duplicate", [0], [{"id": "memory-exact"}]),
+            "semantic": FakeResult("skip", "duplicate", [0], [{"id": "memory-semantic"}]),
+            "keep": FakeResult(
+                "retain", "durable_decision", [], [{"id": "part"}], covered_by=[0]
+            ),
+            "drop": FakeResult("skip", "duplicate", [0], [{"id": "other"}]),
+        }
+        rc, output = self.run_evaluate(labels, results)
+        self.assertEqual(rc, 0)
+        self.assertIn("copertura ignorata     : 0", output)
+        self.assertIn("falsi duplicati        : 0", output)
+
+    def test_guard_conditions_without_duplicate_labels_keep_exit_zero(self):
+        # ICH-67 blindato contro le guardie: senza label duplicate l'exit
+        # resta 0 anche con un predicato di guardia vero (solo stampato).
+        labels = [
+            {"id": "keep", "expected_action": "retain"},
+            {"id": "drop", "expected_action": "skip"},
+        ]
+        results = {
+            "keep": FakeResult("skip", "duplicate", [0], [{"id": "x"}]),
+            "drop": FakeResult("skip", "ephemeral", []),
+        }
+        rc, output = self.run_evaluate(labels, results, with_dedup=False)
+        self.assertEqual(rc, 0)
+        self.assertIn("falsi duplicati        : 1", output)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,9 +30,11 @@ guardie bloccanti a zero — "copertura ignorata" e "falsi duplicati". Tutto
 applicato solo quando il dataset contiene label duplicate; in quel caso il
 dataset deve contenere entrambe le categorie e l'evaluate richiede
 --with-dedup; input incompleto o target mancati restituiscono un codice di
-uscita non zero. Protocollo di misura: 3 run e mediana (la varianza su 10-13
-finestre e' di +-1-2 finestre a run). Un dataset senza duplicati mantiene il
-contratto storico ICH-67: exit 0 se la run tecnica va a buon fine.
+uscita non zero. Protocollo di misura: 3 run e mediana, per i target E per le
+guardie (la varianza su 10-13 finestre e' di +-1-2 finestre a run: un exit 1
+su una run singola chiede di completare il protocollo, non e' da solo un FAIL
+del gate di merge). Un dataset senza duplicati mantiene il contratto storico
+ICH-67: exit 0 se la run tecnica va a buon fine.
 
 I contenuti restano negli artefatti locali ignorati da Git; su stdout solo
 avanzamento, conteggi e metriche aggregate.
@@ -309,7 +311,9 @@ def evaluate(args) -> int:
     # coprono davvero), non errori di giudizio; e su 10-13 finestre il 100%
     # boccia ~40% delle run sane per pura varianza (P(10/10)~0.6 con tasso
     # vero 92-95%). La quota ammessa e' ~2 miss per categoria; un terzo miss
-    # e' per costruzione una regressione. Protocollo: 3 run e mediana.
+    # e' per costruzione una regressione. Le soglie percentuali equivalgono a
+    # ~2 miss SOLO sul corpus corrente (10 exact / 13 semantic): ricalibrarle
+    # se cambia la cardinalita' delle label. Protocollo: 3 run e mediana.
     exact_pct = pct(exact_suppressed, exact_duplicates)
     exact_ok = not exact_duplicates or exact_pct >= 80
     if exact_duplicates:
@@ -332,17 +336,24 @@ def evaluate(args) -> int:
         print("  duplicati semantic     : n/a (0 label) target >=84%")
     print(f"  quota uncertain        : {pct(uncertain, rows):5.1f}%")
     print(f"  errori tecnici gate    : {pct(tech_errors, rows):5.1f}%  ({len(tech_errors)})")
-    # Guardie ICH-84, bloccanti sui dataset con label duplicate: copertura
-    # dichiarata dal modello ma non su skip (il modello ha VISTO la copertura
-    # e ha salvato lo stesso — knowledge non persa ma giudizio incoerente), e
-    # skip "duplicate" senza alcuna label duplicate_of a supporto (conoscenza
-    # nuova cestinata come duplicato: il costo peggiore). Sui dataset senza
-    # duplicati restano solo stampate: il contratto storico ICH-67 non cambia.
-    coverage_ignored = [(l, w, r) for l, w, r in rows if r.covered_by and r.action != "skip"]
+    # Guardie ICH-84, bloccanti sui dataset con label duplicate e ristrette al
+    # danno dimostrato (review ICH-84): copertura dichiarata su un duplicato
+    # etichettato ma senza skip (il modello ha VISTO la copertura e ha salvato
+    # lo stesso — il pattern esatto dei miss ICH-84), e skip "duplicate" su una
+    # finestra che andava salvata (conoscenza nuova cestinata come duplicato:
+    # il costo peggiore). Esiti corretti con giudizio rumoroso — retain giusto
+    # con copertura parziale citata, skip giusto con reason discutibile — non
+    # scattano. Sui dataset senza duplicati restano solo stampate: il
+    # contratto storico ICH-67 non cambia.
+    coverage_ignored = [
+        (l, w, r)
+        for l, w, r in rows
+        if l.get("duplicate_of") and r.covered_by and r.action != "skip"
+    ]
     false_duplicates = [
         (l, w, r)
         for l, w, r in rows
-        if not l.get("duplicate_of") and r.action == "skip" and r.reason == "duplicate"
+        if l.get("expected_action") != "skip" and r.action == "skip" and r.reason == "duplicate"
     ]
     guards_ok = not duplicates or (not coverage_ignored and not false_duplicates)
     print(f"  copertura ignorata     : {len(coverage_ignored)}")
