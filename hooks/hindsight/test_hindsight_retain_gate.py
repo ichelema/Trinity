@@ -36,7 +36,9 @@ from pathlib import Path
 from unittest import mock
 
 from lib import hindsight_config
+from lib.hindsight_recall_lib import _VALID_RECALL_TYPES
 from lib.hindsight_retain_gate import (
+    DEDUP_CANDIDATE_TYPES,
     GATE_ACTIONS,
     GATE_PROMPT,
     GATE_REASONS,
@@ -417,12 +419,23 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(calls[0][1]["query"]), 1500)
         self.assertEqual(calls[0][1]["limit"], 8)
+        # ICH-89: solo raw fact come candidati (niente observation di
+        # consolidamento) ed entita' spente alla fonte, come nel recall.
+        self.assertEqual(calls[0][1]["types"], ["world", "experience"])
+        self.assertEqual(calls[0][1]["include"], {"entities": None})
 
         with mock.patch(
             "lib.hindsight_retain_gate.fetch_bank_results"
         ) as fetch:
             self.assertEqual(fetch_duplicate_candidates(["http://b1"], "", 4), [])
             fetch.assert_not_called()
+
+    def test_dedup_candidate_types_are_raw_facts_only(self):
+        """ICH-89: i tipi del filtro sono quelli accettati dall'endpoint recall
+        e non includono le observation (layer derivato, senza document_id)."""
+        self.assertTrue(set(DEDUP_CANDIDATE_TYPES) <= set(_VALID_RECALL_TYPES))
+        self.assertNotIn("observation", DEDUP_CANDIDATE_TYPES)
+        self.assertEqual(sorted(DEDUP_CANDIDATE_TYPES), ["experience", "world"])
 
     def test_schema_and_enums_consistent(self):
         self.assertEqual(set(GATE_SCHEMA["properties"]["action"]["enum"]), GATE_ACTIONS)
