@@ -130,7 +130,8 @@ in attesa.
 - `context`: una riga descrittiva del dominio (es. "gestione bank e config
   Hindsight nel progetto Trinity") — MAI una categoria secca né il nome del bank.
 - `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del
-  progetto e `branch:<nome>` solo se davvero legato al branch. NIENTE tag
-  semantici (bug, convention, preferenze…): frammentano la consolidation.
+  progetto. MAI `branch:<nome>` (ICH-85: recinta la consolidation per branch; il
+  branch va nei metadata). NIENTE tag semantici (bug, convention, preferenze…):
+  frammentano la consolidation.
 
 

@@ -59,6 +59,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
 | `hindsight-set-mission.sh`   | manuale                                                           | imposta retain/reflect mission sul bank                      |
 | `hindsight-reflect.sh`       | slash-command `/reflect` (fallback)                               | sintesi strategica via `reflect`                             |
+| `hindsight-strip-branch-tags.py` | `mise run strip-branch-tags` (ICH-85)                         | migrazione una tantum: toglie i tag `branch:*` dal DB (dry-run, backup guard, undo, verify) |
 
 ## 📁 `tools/` — manutenzione manuale
 
@@ -71,12 +72,13 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 
 ## 📁 `data/` — artefatti
 
-Vuota di default (non versionata): accoglie gli `exports/` di `tools/hindsight_export.py`.
+Vuota di default (non versionata): accoglie gli `exports/` di `tools/hindsight_export.py` e i
+report/undo di `ops/hindsight-strip-branch-tags.py` in `migrations/`.
 I vecchi dump SQL del lab non sono stati migrati (dismessi nella fusione del 2026-06-12).
 
 ## 📁 altre sottocartelle
 
-- `benchmark/` — corpora e script di benchmark embedding/reranker (task `mise embed-bench`, `rerank-bench`).
+- `benchmark/` — corpora e script di benchmark embedding/reranker (task `mise embed-bench`, `rerank-bench`), gate di recall/retain e tag del gate (`hindsight_gate_tag_bench.py`, esito in `GATE_TAG_EVALUATION.md`).
 - `hindsight-dashboard/` — web app Ruby/Roda per analizzare `hindsight-debug.log` (task `mise dashboard`).
 
 ## Convenzione di risoluzione path

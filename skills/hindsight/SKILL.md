@@ -249,7 +249,7 @@ Altri esempi:
 }
 ```
 
-> I tag nel bank reale sono SOLO quelli universali (`claude-code`, `repo:<nome>`, `branch:<nome>`): filtrare per tag semantici come `project` o `preferences` non matcherebbe nulla. La selettività la fa la **query semantica**, non il filtro tag.
+> I tag nel bank reale sono SOLO quelli universali (`claude-code`, `repo:<nome>`; `branch:<nome>` è stato rimosso da ICH-85): filtrare per tag semantici come `project` o `preferences` non matcherebbe nulla. La selettività la fa la **query semantica**, non il filtro tag.
 
 Usa recall per recuperare:
 
@@ -368,7 +368,10 @@ Usa SOLO i tag universali, identici a quelli del retain worker automatico
 
 - `claude-code` — sempre (ancora di recall del bank)
 - `repo:<nome>` — scoping di progetto (nome dal remote origin, stabile)
-- `branch:<nome>` — solo se il fatto è davvero specifico del branch
+
+MAI `branch:<nome>` (ICH-85): nello scope `all_strict` recinta le memorie per
+branch/worktree e impedisce la fusione delle observation gemelle dello stesso
+repo. Il branch va nei `metadata` (`branch`), non nei tag.
 
 NON aggiungere tag semantici (`project`, `preferences`, `learning`, linguaggi,
 sottosistemi…): la selettività del recall la fa la query semantica; il dominio

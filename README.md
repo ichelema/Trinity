@@ -503,8 +503,15 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   cappato a ±10%, fatti a 60 giorni neutri — i near-duplicate superati perdono contro la
   versione fresca a parità di rilevanza.
 - **Retrocompat**: un `api_url` esplicito in un override (file o env) vince sul blocco bank e
-  ripristina il comportamento single-bank. I tag (`claude-code`, `repo:`, `branch:`) restano
+  ripristina il comportamento single-bank. I tag (`claude-code`, `repo:`) restano
   invariati.
+- **Tag automatici** (`build_tags()` nel worker): solo `claude-code` + `repo:<nome>`. Da ICH-85
+  `branch:<nome>` non viene più generato: nello scope `all_strict` della consolidation recintava
+  le memorie per branch/worktree e impediva la fusione delle observation gemelle dello stesso
+  repo. Il branch resta in `metadata.branch`. I tag `branch:*` storici sono stati rimossi dal DB
+  con `mise run strip-branch-tags` (`hooks/hindsight/ops/hindsight-strip-branch-tags.py`:
+  dry-run → `mise run db-dump` → `--apply --backup <dump>` con guardia sul backup → verifica;
+  undo JSON + `--revert`).
 
 Per vedere su quali bank si risolve il progetto corrente (debug):
 
@@ -562,7 +569,15 @@ scarta, `context: <testo>` salva col context indicato. Lo scarto per prompt nuov
 (*"Hindsight: memoria in attesa scartata — …"*); se la POST del sì fallisce (bank giù) il
 pending viene rimesso in attesa e l'avviso invita a rispondere di nuovo sì. Il content della fetta non porta più
 l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
-`retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain MCP proattivo): il formato
+`retain_gate_model`, `retain_gate_timeout`. **Tag semantico del gate (ICH-85, valutato e
+rifiutato)**: la libreria può chiedere allo stesso gate, nella stessa chiamata, un tag
+`topic:*` da un vocabolario chiuso (`retain_gate_tag_vocabulary`, 8 valori; interruttore
+`retain_gate_tag_enabled`, default `false`; un valore fuori enum viene scartato, mai
+free-form). Il bench `hooks/hindsight/benchmark/hindsight_gate_tag_bench.py` su 150 documenti
+reali (`benchmark/GATE_TAG_EVALUATION.md`) ha misurato +39% di observation e `proof_count`
+−32% con il tag nel recinto di consolidation, e MRR −27% con il doppio recinto
+`observation_scopes`, senza alcun guadagno di recall: il worker quindi non lo usa e i tag
+automatici restano `claude-code` + `repo:<nome>`. Il lato agente (retain MCP proattivo): il formato
 di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni
 sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain_enabled` è
 `false` (col gate attivo produrrebbero salvataggi doppi).
