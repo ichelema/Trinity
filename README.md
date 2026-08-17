@@ -54,7 +54,7 @@ Claude Code dopo ogni modifica al repo.
 
 Con lo stesso meccanismo si caricano anche i **plugin di terze parti vendorizzati** in
 `vendor/` (§8): una junction per ciascuno, così ogni plugin mantiene il proprio namespace
-(`ui-craft:*`, `claude-bionify:*`) separato da `trinity:*`.
+(`ui-craft:*`) separato da `trinity:*`.
 
 **Ricreare le junction** (su un nuovo PC o dopo averle rimosse; su Linux le crea
 `scripts/setup/bootstrap-linux.sh` come symlink, funzione `link_skill`):
@@ -66,9 +66,6 @@ MSYS_NO_PATHCONV=1 cmd /c mklink /J \
 MSYS_NO_PATHCONV=1 cmd /c mklink /J \
   "%USERPROFILE%\.claude\skills\ui-craft" \
   "E:\AI\Claude\Trinity\vendor\ui-craft"
-MSYS_NO_PATHCONV=1 cmd /c mklink /J \
-  "%USERPROFILE%\.claude\skills\claude-bionify" \
-  "E:\AI\Claude\Trinity\vendor\claude-bionify"
 ```
 
 ---
@@ -409,12 +406,11 @@ Dal 2026-07-31 i plugin Claude Code di **terze parti** non passano più dal mark
 (`enabledPlugins` è vuoto): sono **vendorizzati** dentro il repo in `vendor/<nome>/` e
 caricati con lo stesso meccanismo skills-dir di Trinity (§2), una junction/symlink per
 plugin. Così viaggiano con `git push/pull` e ogni macchina è allineata senza install
-per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`, `claude-bionify:*`).
+per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`).
 
 | Plugin | Versione | Cosa fa | Upstream |
 |---|---|---|---|
 | `ui-craft` | 1.0.0 | design engineering per agenti: anti-slop UI, spec-driven design (`/sddesign`), agent design-review + a11y, MCP quality gates | [educlopez/ui-craft](https://github.com/educlopez/ui-craft) |
-| `claude-bionify` | 1.0.3 | bionic reading: hook `MessageDisplay` (script Python) che grasseta la parte iniziale delle parole nelle risposte | [abullard1/claude-bionify](https://github.com/abullard1/claude-bionify) |
 | `mattpocock-skills` | 1.2.0 | 22 skill di ingegneria curate dal plugin.json upstream (grilling, TDD, code review, domain modelling, spec/ticket flow) | [mattpocock/skills](https://github.com/mattpocock/skills) |
 
 Com'è fatta una cartella `vendor/<nome>/`:
@@ -422,17 +418,13 @@ Com'è fatta una cartella `vendor/<nome>/`:
 - **copia snella** dell'upstream: solo `skills/`, `commands/`, `agents/`, `hooks/`,
   `.claude-plugin/plugin.json`, `.mcp.json`, `LICENSE` — niente CLI, e2e, asset;
 - **`VENDOR.txt`**: upstream, versione/commit e procedura di aggiornamento. Due metodi:
-  gli upstream **snelli** (`mattpocock-skills`, `claude-bionify`) sono vendorizzati interi
+  gli upstream **snelli** (`mattpocock-skills`) sono vendorizzati interi
   via **`git subtree --squash`** e si aggiornano con
   `git subtree pull --prefix vendor/<nome> <url upstream> main --squash`;
   `ui-craft` (upstream pesante: CLI Go, e2e — e subtree non sa prendere una
   sottocartella) resta a **copia manuale** delle sole dir utili.
-  NB `claude-bionify`: l'upstream è un repo-marketplace, il plugin root è
-  `vendor/claude-bionify/plugins/claude-bionify` — junction e `link_skill` puntano lì;
 - il server MCP di `ui-craft` (`npx -y ui-craft-mcp`) è dichiarato nel suo `.mcp.json`
   e viene caricato anche via skills-dir;
-- l'hook di `claude-bionify` richiede `python3` nel PATH (su Linux: verificare).
-
 > `yt-extract` non è più in questo elenco: dal 2026-07-03 è una **skill** di Trinity
 > (`/trinity:yt-extract`, §5); il suo runtime esterno resta in
 > `E:/AI/tools/claude-code-youtube-extract` (aggiornamenti: job `yt-check`, §11).
@@ -1327,7 +1319,7 @@ Trinity/
 ├── commands/                slash command (/trinity:*)
 ├── config/
 │   └── claude/              settings.shared.json + overlay per OS → genera ~/.claude/settings.json (mise run sync-settings, §10)
-├── vendor/                  plugin terzi vendorizzati: ui-craft · claude-bionify (junction/symlink in ~/.claude/skills/, §8)
+├── vendor/                  plugin terzi vendorizzati: ui-craft (junction/symlink in ~/.claude/skills/, §8)
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)

@@ -29,15 +29,12 @@ bash scripts/setup/bootstrap-linux.sh
 Il bootstrap e' **idempotente** (rieseguibile). Fa: mise + runtime del repo,
 `hindsight-api` via pip, `mcp-remote` via npm, i symlink skills-dir
 (`~/.claude/skills/trinity -> ~/ai/trinity` **piu' uno per ogni plugin
-vendorizzato** in `vendor/`: `ui-craft`, `claude-bionify` — funzione
+vendorizzato** in `vendor/`: `ui-craft` — funzione
 `link_skill`, README §8), la generazione di `~/.claude/settings.json` da
 `config/claude/` (shared + overlay `settings.linux.json`, con
 `TRINITY_PLUGIN_DIR` calcolata dal path del repo — stesso script del task
 `mise run sync-settings`), `core.hooksPath .githooks`, registrazione MCP
 `hindsight` a scope user, `~/backups/hindsight`.
-
-> L'hook `MessageDisplay` di `claude-bionify` invoca `python3` dal PATH: su un
-> server Linux standard c'e' gia'; se manca, installalo con il package manager.
 
 ## 3. Chiavi API (mai nel repo)
 
