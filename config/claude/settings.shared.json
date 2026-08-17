@@ -1,5 +1,10 @@
 {
   "cleanupPeriodDays": 20,
+  "skillOverrides": {
+    "simplify": "off",
+    "dataviz": "off",
+    "claude-in-chrome": "off"
+  },
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "90",
     "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1",
@@ -14,7 +19,7 @@
     "CLAUDISH_MODEL": "gpt-5.6-luna",
     "CLAUDISH_ENABLED": "1",
     "CLAUDISH_MODE": "replace",
-    "CLAUDISH_ONLY_MODELS": "claude-fable-5,claude-opus-5"
+    "CLAUDISH_ONLY_MODELS": "fable,claude-opus-5"
   },
   "attribution": {
     "commit": "",
