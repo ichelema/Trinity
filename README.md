@@ -288,7 +288,6 @@ collidono con i comandi locali del progetto:
 | `/trinity:promote` | promozione curata dei fatti dai bank di progetto al bank core |
 | `/trinity:hindsight-create-agent` | crea un subagent con memoria Hindsight isolata per namespace tag |
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
-| `/trinity:ccr_model` | elenca i modelli configurati in ccr e le route attuali |
 | `/trinity:release` | versiona il plugin (bump, commit, tag) e push dopo conferma |
 | `/trinity:adhd-cli` | lancia la CLI `adhd-agent` (§12.3) con parametri formali (`--frames`, `--ideas`, `--top`, `--json`, …) |
 | `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
@@ -1054,15 +1053,14 @@ Ogni run fa più chiamate LLM (minuti e quota reali: per prove usare
 
 ---
 
-## 13. Modelli alternativi: LiteLLM e claude-code-router
+## 13. Modelli alternativi: LiteLLM
 
 Claude Code punta di default all'API Anthropic. Per usare altri provider (GPT, DeepSeek, Gemini)
-esistono due approcci complementari, entrambi attivi su questa macchina:
+esiste un approccio attivo su questa macchina:
 
 | Approccio | Quando usarlo |
 |---|---|
 | **LiteLLM proxy** | approccio corrente; GPT (ChatGPT Max OAuth) e DeepSeek; più semplice da mantenere |
-| **claude-code-router (CCR)** | router con pipeline di transformer per provider; richiede patch e rebuild del bundle |
 
 ---
 
@@ -1242,75 +1240,6 @@ DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due mod
 
 ---
 
-### 13.2 claude-code-router (CCR)
-
-CCR (`@musistudio/claude-code-router`, comando `ccr`) è un proxy con pipeline di **transformer**
-che converte le richieste Claude Code nel formato di ciascun provider. Il fork usato è
-`ichelema/claude-code-router` (upstream: `musistudio/claude-code-router`), con patch custom
-mantenute nel branch `trinity-patches`.
-
-**Path di configurazione.** Su Windows, `os.homedir()` di Node.js segue `USERPROFILE`
-(non `HOME`). Su questa macchina `USERPROFILE` è dirottato alla chiavetta
-(`E:\msys64\home\Sphynx`) dal launcher WezTerm e dall'alias `claude`, quindi `os.homedir()`
-cade già sulla home MSYS: il config vive in `~/.claude-code-router`
-(= `E:\msys64\home\Sphynx\.claude-code-router`). Nessuna junction necessaria — quella
-storica `C:\Users\EN27553\.claude-code-router` (target morto `C:\msys64\...`) è stata rimossa.
-
-**File persistenti** (sopravvivono agli aggiornamenti npm, non vanno persi):
-
-| File | Ruolo |
-|---|---|
-| `~/.claude-code-router/config.json` | routing + ordine transformer per provider |
-| `~/.claude-code-router/transformers/skill-rehydrate.js` | skill/Hindsight per provider non-Anthropic |
-| `~/.claude-code-router/transformers/effort-transformer.js` | mappa `output_config.effort` → `reasoning.effort` per GPT |
-
-**Transformer chain per provider** (ordine critico — alcuni transformer distruggono `request.messages`):
-
-| Provider | Transformer (in ordine) | Note |
-|---|---|---|
-| `deepseek` | `deepseek → enhancetool → skill-rehydrate` | skill-rehydrate può stare in fondo: deepseek/enhancetool non toccano messages |
-| `openai` | `effort-from-outputconfig → skill-rehydrate → openai-responses` | skill-rehydrate deve precedere openai-responses (che cancella request.messages) |
-| `gemini` | `skill-rehydrate → gemini` | skill-rehydrate deve precedere gemini (che restituisce `{body,config}` senza messages) |
-| `anthropic` | — | nessun transformer personalizzato |
-
-**skill-rehydrate.js** — perché esiste. Gli hook `UserPromptSubmit` (skill-eval, hindsight-recall)
-consegnano il loro `additionalContext` via messaggi `role:system` inline, che il transformer
-Anthropic di CCR scartava silenziosamente. Fix a due livelli:
-
-1. **Patch core** (`anthropic.transformer.ts`): rifonde i messaggi `role:system` inline
-   nell'ultimo messaggio `user`, avvolti in `<injected-system-context>`.
-2. **Transformer esterno** (`skill-rehydrate.js`): per provider non-Anthropic (che non hanno il
-   tool meta `Skill`), riscrive l'istruzione `"Invoke the Skill tool"` in `"read the matched
-   SKILL.md with the Read tool"`, iniettando `<skill-instructions>` direttamente. Dedup via
-   ispezione della history `tool_calls` (self-healing sui compact).
-
-**Patch core — build e deploy.** Le patch si trovano nel branch `trinity-patches` del clone
-locale (`/c/Download/claude-code-router`). Dopo ogni reinstall dal registry npm vanno
-riapplicate:
-
-```bash
-# 1. ferma ccr (file lock su Windows)
-# 2. rebuild (node MSYS2 fa crashare tsc — usare il node di mise)
-mise exec node@24.16.0 -- pnpm build:core && pnpm build:cli   # NO build:ui
-
-# 3. copia il bundle
-cp dist/cli.js \
-  ~/.local/share/mise/installs/node/24.16.0/node_modules/@musistudio/claude-code-router/dist/cli.js
-```
-
-Il bundle originale va tenuto come `.bak` per rollback rapido. Le patch includono 3 commit:
-`anthropic system-inline merge`, `deepseek reasoning_content roundtrip`,
-`openai reasoning_effort mapping`.
-
-> **Gotcha chiave:** CCR è installato nel node di mise — un bump della versione Node lo fa
-> sparire e richiede reinstallazione. Le API key devono essere nelle env var al momento
-> dell'avvio del processo `ccr`; un `export KEY=... && ccr code` non aggiorna le chiavi se il
-> server è già in esecuzione.
-
-**Skill correlata:** `/trinity:ccr_model` mostra i modelli configurati in `config.json` con le
-route attuali (utile per debug del routing).
-
----
 
 ## Struttura del repo
 
