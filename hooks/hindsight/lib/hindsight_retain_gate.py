@@ -18,6 +18,12 @@ uncertain) il worker mette comunque la POST in pending e Claude propone una
 riga di dominio: al prompt successivo handle_retain_consent risolve il context
 nell'ordine esplicito (`context: …`) -> gate -> proposta nel transcript ->
 riga repo/branch (fallback_context, zero rete).
+
+ICH-85: la stessa chiamata puo' restituire anche un `tag` opzionale, scelto da
+un vocabolario CHIUSO letto dalla config (retain_gate_tag_enabled/_vocabulary).
+Nessuna chiamata LLM in piu': gate_schema/gate_prompt estendono lo schema e il
+prompt esistenti solo quando il tag e' abilitato; un valore fuori vocabolario
+si scarta (validate_gate_tag) senza mai toccare action/reason.
 """
 
 from __future__ import annotations
@@ -87,6 +93,37 @@ GATE_SCHEMA = {
     "required": ["action", "reason", "preview", "duplicate_of", "context"],
 }
 
+
+def gate_schema(vocabulary: list[str] | None) -> dict:
+    """Schema del gate. Senza vocabolario (None/vuoto) e' GATE_SCHEMA invariato;
+    con vocabolario copia lo schema aggiungendo la enum "tag" (ICH-85), sempre
+    in required: lo strict json_schema impone additionalProperties False e
+    OGNI proprieta' in required."""
+    if not vocabulary:
+        return GATE_SCHEMA
+    return {
+        **GATE_SCHEMA,
+        "properties": {
+            **GATE_SCHEMA["properties"],
+            "tag": {"type": "string", "enum": sorted(vocabulary)},
+        },
+        "required": [*GATE_SCHEMA["required"], "tag"],
+    }
+
+
+# Descrizioni inglesi del vocabolario del tag (ICH-85), una per valore: usate
+# da gate_prompt per costruire la regola 8 quando il tag e' abilitato.
+GATE_TAG_DESCRIPTIONS: dict[str, str] = {
+    "topic:environment": "OS, shell, PATH, installs, tool versions, host quirks (Windows/MSYS2, Linux)",
+    "topic:config": "settings, config files, flags, hook and skill wiring",
+    "topic:workflow": "processes, conventions, git/PR/issue/release procedures, working and communication preferences",
+    "topic:debugging": "bugs, root causes, workarounds, incidents",
+    "topic:architecture": "technical design decisions with their rationale, discarded approaches",
+    "topic:data": "databases, migrations, schemas, memory banks, backups",
+    "topic:integration": "external services, APIs, MCP servers, LLM providers and models",
+    "topic:evaluation": "tests, benchmarks, measured results",
+}
+
 # Derivato dal draft di ICH-67. Il preview e' nella lingua della conversazione:
 # e' il testo che Claude mostra all'utente e ri-usa per il retain MCP.
 GATE_PROMPT = """You decide whether a Claude Code session window deserves to be persisted to Hindsight long-term memory.
@@ -110,6 +147,48 @@ Rules:
 7. context: ONE short line, in the same language as the conversation, describing the technical domain the window is about — subject and project, not an activity and not a bare category (e.g. "architettura del recall automatico Hindsight nel plugin Trinity", NOT "tooling"). Fill it for every action; empty string only if the window has no technical subject."""
 
 
+def gate_prompt(vocabulary: list[str] | None) -> str:
+    """Prompt del gate. Senza vocabolario (None/vuoto) e' GATE_PROMPT invariato;
+    con vocabolario aggiunge la regola 8 (ICH-85): il vocabolario CHIUSO del tag,
+    con la descrizione inglese di ogni valore (GATE_TAG_DESCRIPTIONS, o il valore
+    nudo se manca)."""
+    if not vocabulary:
+        return GATE_PROMPT
+    entries = "; ".join(
+        f"{value}: {GATE_TAG_DESCRIPTIONS.get(value, value)}" for value in vocabulary
+    )
+    rule = (
+        "8. tag: exactly ONE value from the allowed list, the technical domain "
+        "the window is mostly about (not the kind of knowledge, which is already "
+        f"expressed by reason): {entries}."
+    )
+    return f"""{GATE_PROMPT}
+{rule}"""
+
+
+def validate_gate_tag(value, vocabulary: list[str] | None) -> str:
+    """Il tag del gate (ICH-85) se valido: str presente nel vocabolario;
+    altrimenti stringa vuota. MAI un'eccezione: un tag fuori enum non e' un
+    errore tecnico del gate, si scarta e restano i tag fissi."""
+    if isinstance(value, str) and vocabulary and value in vocabulary:
+        return value
+    return ""
+
+
+def merge_gate_tags(base: list[str], tag: str) -> list[str]:
+    """Nuova lista con l'ordine di base preservato (deduplicato): il tag del
+    gate (ICH-85) viene appeso una sola volta se non vuoto e non gia' presente."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in base:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    if tag and tag not in seen:
+        out.append(tag)
+    return out
+
+
 @dataclass
 class GateResult:
     action: str
@@ -119,6 +198,9 @@ class GateResult:
     # campo `context` del retain (vuota = il worker mette il retain in pending e
     # chiede un context all'utente).
     context: str = ""
+    # Tag opzionale (ICH-85) dal vocabolario chiuso di config; "" se il gate non
+    # lo produce, se e' disabilitato o se il valore ricevuto non e' in vocabolario.
+    tag: str = ""
     duplicate_of: list[int] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
@@ -210,17 +292,25 @@ def evaluate_retain(
     worker tratta come fail-closed (nessun salvataggio + notifica). Le
     violazioni SEMANTICHE (action e reason entrambe valide ma male accoppiate)
     vengono invece normalizzate senza errore: la action decisa dal modello non
-    cambia mai."""
+    cambia mai. ICH-85: con retain_gate_tag_enabled e un vocabolario non vuoto
+    in config, la STESSA chiamata include anche il tag opzionale (gate_schema/
+    gate_prompt); un tag fuori vocabolario si scarta (validate_gate_tag) senza
+    mai toccare action/reason ne' produrre error — non e' una violazione
+    strutturale."""
     timeout = float(cfg.get("retain_gate_timeout", 15))
     model = str(cfg.get("retain_gate_model", "gpt-5.6-luna"))
     candidates = fetch_duplicate_candidates(bank_urls, dedup_query(summary), timeout)
+    enabled = bool(cfg.get("retain_gate_tag_enabled"))
+    vocab = list(cfg.get("retain_gate_tag_vocabulary") or [])
+    if not (enabled and vocab):
+        vocab = []
     try:
         data, latency = api_call(
             model,
-            GATE_PROMPT,
+            gate_prompt(vocab),
             gate_input(content, candidates),
             "retain_gate_decision",
-            GATE_SCHEMA,
+            gate_schema(vocab),
             timeout,
         )
         action = data.get("action")
@@ -228,6 +318,7 @@ def evaluate_retain(
         preview = data.get("preview")
         duplicate_of = data.get("duplicate_of")
         context = data.get("context")
+        tag = validate_gate_tag(data.get("tag"), vocab)
         if not isinstance(action, str) or action not in GATE_ACTIONS:
             raise ValueError(f"action non valida: {action!r}")
         if not isinstance(reason, str) or reason not in GATE_REASONS:
@@ -267,6 +358,7 @@ def evaluate_retain(
             reason=reason,
             preview=preview.strip(),
             context=context.strip(),
+            tag=tag,
             duplicate_of=duplicate_of,
             candidates=candidates,
             latency_ms=round(latency, 2),

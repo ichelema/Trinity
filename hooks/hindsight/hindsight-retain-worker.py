@@ -176,16 +176,17 @@ def build_tags(hook: dict, git: dict) -> list[str]:
       - source:claude-code-hook  → ridondante con 'claude-code' (stesso insieme)
       - cwd:<dir>                → ridondante + fragile (nome cartella); resta in metadata
       - commit:<hash>            → cardinalita' illimitata, zero uso nel recall (gia' nel git)
+      - branch:<name>            → RIMOSSO (ICH-85): nello scope all_strict recinta le
+                                   memorie per branch/worktree e impedisce la fusione delle
+                                   observation gemelle dello stesso repo (proof_count non
+                                   cresce mai tra branch diversi, pur essendo lo stesso
+                                   fatto). Resta in metadata.branch per provenienza.
     """
     tags = ["claude-code"]  # filtro principale del recall
     if git["repo"]:
         tags.append(
             f"repo:{git['repo']}"
         )  # scoping progetto (nome repo dal remote, stabile)
-    if git["branch"]:
-        tags.append(
-            f"branch:{git['branch']}"
-        )  # scoping branch (portabile, bassa card.)
     return tags
 
 
@@ -898,6 +899,7 @@ def gate_debug_context(gate, bank: str) -> str:
         f"Gate latency: {gate.latency_ms:.1f} ms\n"
         f"Bank: {bank}"
         + (f"\nPreview: {gate.preview}" if gate.preview else "")
+        + (f"\nTag: {gate.tag}" if gate.tag else "")
         + (f"\nGate error (fail-closed): {gate.error}" if gate.error else "")
         + "\n\nUse as consultative context. Verify mutable facts against the repo."
     )

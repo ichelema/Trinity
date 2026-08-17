@@ -172,6 +172,21 @@ DEFAULTS = {
     # notifica non bloccante, vedi hindsight_retain_gate.py.
     "retain_gate_model": "gpt-5.6-luna",
     "retain_gate_timeout": 15,
+    # Tag opzionale del gate (ICH-85): vocabolario CHIUSO e a bassa cardinalita',
+    # letto da qui. Un valore fuori lista viene scartato dal gate (validate_gate_tag
+    # in hindsight_retain_gate.py), mai un errore. retain_gate_tag_enabled si
+    # accende solo dopo il bench ICH-85.
+    "retain_gate_tag_enabled": False,
+    "retain_gate_tag_vocabulary": [
+        "topic:environment",
+        "topic:config",
+        "topic:workflow",
+        "topic:debugging",
+        "topic:architecture",
+        "topic:data",
+        "topic:integration",
+        "topic:evaluation",
+    ],
     # Se attivo, ogni valutazione del gate produce un blocco
     # "## Hindsight retain debug" visibile (systemMessage) e nel contesto,
     # speculare a recall_debug_in_context.
@@ -332,10 +347,21 @@ def _valid_override(key: str, value) -> bool:
             and not isinstance(value, bool)
             and 0 <= value <= 1
         )
-    if key in {"recall_result_filter_enabled", "recall_debug_in_context", "retain_debug_in_context"}:
+    if key in {
+        "recall_result_filter_enabled",
+        "recall_debug_in_context",
+        "retain_debug_in_context",
+        "retain_gate_tag_enabled",
+    }:
         return isinstance(value, bool)
     if key in {"recall_result_filter_model", "retain_gate_model"}:
         return isinstance(value, str) and bool(value.strip())
+    if key == "retain_gate_tag_vocabulary":
+        return (
+            isinstance(value, list)
+            and bool(value)
+            and all(isinstance(v, str) and v.strip() for v in value)
+        )
     return True
 
 
