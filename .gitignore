@@ -30,3 +30,7 @@ data/playwright-mcp/
 !/docs/PLAN-MENTAL-MODELS-PER-PROJECT.md
 
 .claude/worktrees/
+
+# File locali generati, non da versionare.
+/CLAUDE_Fable.md
+/commands/workflow/prompt.txt
