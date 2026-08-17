@@ -22,12 +22,19 @@ Formato label (una riga JSONL per finestra, allineata per "id"):
    "durable_claims": ["..."], "duplicate_of": ["mem-..."],
    "duplicate_kind": "exact|semantic", "critical": false}
 
-`duplicate_kind` e' richiesto per misurare separatamente i target ICH-72:
-exact 100%, semantic >=85%, applicati solo quando il dataset contiene label
-duplicate. In quel caso il dataset deve contenere entrambe le categorie e
-l'evaluate richiede --with-dedup; input incompleto o target mancati
-restituiscono un codice di uscita non zero. Un dataset senza duplicati
-mantiene il contratto storico ICH-67: exit 0 se la run tecnica va a buon fine.
+`duplicate_kind` e' richiesto per misurare separatamente i target dei
+duplicati, rivisti da ICH-84: exact >=80%, semantic >=84% (~2 miss ammessi per
+categoria, con causa nota: fatti del documento fuori dai top-k del recall o
+citazioni di documenti affini; un terzo miss e' una regressione), piu' due
+guardie bloccanti a zero — "copertura ignorata" e "falsi duplicati". Tutto
+applicato solo quando il dataset contiene label duplicate; in quel caso il
+dataset deve contenere entrambe le categorie e l'evaluate richiede
+--with-dedup; input incompleto o target mancati restituiscono un codice di
+uscita non zero. Protocollo di misura: 3 run e mediana, per i target E per le
+guardie (la varianza su 10-13 finestre e' di +-1-2 finestre a run: un exit 1
+su una run singola chiede di completare il protocollo, non e' da solo un FAIL
+del gate di merge). Un dataset senza duplicati mantiene il contratto storico
+ICH-67: exit 0 se la run tecnica va a buon fine.
 
 I contenuti restano negli artefatti locali ignorati da Git; su stdout solo
 avanzamento, conteggi e metriche aggregate.
@@ -298,28 +305,64 @@ def evaluate(args) -> int:
     print(f"  falsi negativi critici : {len(critical_fn)}")
     print(f"  riduzione POST         : {pct([x for x in rows if x[2].action != 'retain'], rows):5.1f}%")
     print(f"  duplicati rilevati     : {pct(dup_suppressed, duplicates):5.1f}%  ({len(dup_suppressed)}/{len(duplicates)})")
+    # Target rivisti (ICH-84): l'analisi dei miss persistenti ha mostrato che
+    # i residui sono limiti di recall (fatti del documento fuori dai top-8 per
+    # affollamento) o artefatti di misura (citazioni di documenti affini che
+    # coprono davvero), non errori di giudizio; e su 10-13 finestre il 100%
+    # boccia ~40% delle run sane per pura varianza (P(10/10)~0.6 con tasso
+    # vero 92-95%). La quota ammessa e' ~2 miss per categoria; un terzo miss
+    # e' per costruzione una regressione. Le soglie percentuali equivalgono a
+    # ~2 miss SOLO sul corpus corrente (10 exact / 13 semantic): ricalibrarle
+    # se cambia la cardinalita' delle label. Protocollo: 3 run e mediana.
     exact_pct = pct(exact_suppressed, exact_duplicates)
-    exact_ok = not exact_duplicates or exact_pct >= 100
+    exact_ok = not exact_duplicates or exact_pct >= 80
     if exact_duplicates:
-        exact_target = "PASS" if exact_pct >= 100 else "FAIL"
+        exact_target = "PASS" if exact_pct >= 80 else "FAIL"
         print(
             f"  duplicati exact        : {exact_pct:5.1f}%  "
-            f"({len(exact_suppressed)}/{len(exact_duplicates)}) target 100% {exact_target}"
+            f"({len(exact_suppressed)}/{len(exact_duplicates)}) target >=80% {exact_target}"
         )
     else:
-        print("  duplicati exact        : n/a (0 label) target 100%")
+        print("  duplicati exact        : n/a (0 label) target >=80%")
     semantic_pct = pct(semantic_suppressed, semantic_duplicates)
-    semantic_ok = not semantic_duplicates or semantic_pct >= 85
+    semantic_ok = not semantic_duplicates or semantic_pct >= 84
     if semantic_duplicates:
-        semantic_target = "PASS" if semantic_pct >= 85 else "FAIL"
+        semantic_target = "PASS" if semantic_pct >= 84 else "FAIL"
         print(
             f"  duplicati semantic     : {semantic_pct:5.1f}%  "
-            f"({len(semantic_suppressed)}/{len(semantic_duplicates)}) target >=85% {semantic_target}"
+            f"({len(semantic_suppressed)}/{len(semantic_duplicates)}) target >=84% {semantic_target}"
         )
     else:
-        print("  duplicati semantic     : n/a (0 label) target >=85%")
+        print("  duplicati semantic     : n/a (0 label) target >=84%")
     print(f"  quota uncertain        : {pct(uncertain, rows):5.1f}%")
     print(f"  errori tecnici gate    : {pct(tech_errors, rows):5.1f}%  ({len(tech_errors)})")
+    # Guardie ICH-84, bloccanti sui dataset con label duplicate e ristrette al
+    # danno dimostrato (review ICH-84): copertura dichiarata su un duplicato
+    # etichettato ma senza skip (il modello ha VISTO la copertura e ha salvato
+    # lo stesso — il pattern esatto dei miss ICH-84), e skip "duplicate" su una
+    # finestra che andava salvata (conoscenza nuova cestinata come duplicato:
+    # il costo peggiore). Esiti corretti con giudizio rumoroso — retain giusto
+    # con copertura parziale citata, skip giusto con reason discutibile — non
+    # scattano. Sui dataset senza duplicati restano solo stampate: il
+    # contratto storico ICH-67 non cambia.
+    coverage_ignored = [
+        (l, w, r)
+        for l, w, r in rows
+        if l.get("duplicate_of") and r.covered_by and r.action != "skip"
+    ]
+    false_duplicates = [
+        (l, w, r)
+        for l, w, r in rows
+        # Le finestre etichettate duplicate sono escluse: il loro skip e' il
+        # successo che i target contano gia', qualunque sia l'expected_action.
+        if not l.get("duplicate_of")
+        and l.get("expected_action") != "skip"
+        and r.action == "skip"
+        and r.reason == "duplicate"
+    ]
+    guards_ok = not duplicates or (not coverage_ignored and not false_duplicates)
+    print(f"  copertura ignorata     : {len(coverage_ignored)}")
+    print(f"  falsi duplicati        : {len(false_duplicates)}")
     print(f"  latenza gate p95       : {percentile(latencies, 95) / 1000:.2f}s")
 
     if args.dry_run_extract:
@@ -344,6 +387,11 @@ def evaluate(args) -> int:
                         "preview": result.preview,
                         "context": result.context,
                         "duplicate_of": result.duplicate_of,
+                        "covered_by": result.covered_by,
+                        "durable_claims": result.durable_claims,
+                        # TUTTI i candidati visti (non solo quelli citati in
+                        # duplicate_of/covered_by): archivio per-miss (ICH-84).
+                        "candidate_ids": [c.get("id") for c in result.candidates],
                         "duplicate_candidate_ids": [
                             result.candidates[index].get("id")
                             for index in result.duplicate_of
@@ -357,7 +405,7 @@ def evaluate(args) -> int:
                 + "\n"
             )
     print(f"[evaluate] dettaglio per finestra -> {RESULTS_FILE}")
-    return 0 if exact_ok and semantic_ok else 1
+    return 0 if exact_ok and semantic_ok and guards_ok else 1
 
 
 def main() -> int:

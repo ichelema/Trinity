@@ -77,14 +77,25 @@ GATE_REASONS = set().union(*REASONS_BY_ACTION.values())
 GATE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
+    # Ordine deliberato (ICH-84): con response_format strict il modello emette
+    # le chiavi nell'ordine dello schema, quindi scrive il giudizio di
+    # copertura PRIMA della action e la condiziona su quello. Non riordinare.
     "properties": {
+        "durable_claims": {"type": "array", "items": {"type": "string"}},
+        "covered_by": {"type": "array", "items": {"type": "integer"}},
         "action": {"type": "string", "enum": sorted(GATE_ACTIONS)},
         "reason": {"type": "string", "enum": sorted(GATE_REASONS)},
         "preview": {"type": "string"},
-        "duplicate_of": {"type": "array", "items": {"type": "integer"}},
         "context": {"type": "string"},
     },
-    "required": ["action", "reason", "preview", "duplicate_of", "context"],
+    "required": [
+        "durable_claims",
+        "covered_by",
+        "action",
+        "reason",
+        "preview",
+        "context",
+    ],
 }
 
 # Derivato dal draft di ICH-67. Il preview e' nella lingua della conversazione:
@@ -93,20 +104,24 @@ GATE_PROMPT = """You decide whether a Claude Code session window deserves to be 
 
 Choose action "retain" ONLY if the window contains durable, verified knowledge likely useful in future sessions: decisions or conventions with their rationale, domain rules, non-obvious constraints, root causes and workarounds, relevant discarded approaches, environment quirks.
 
-Choose action "skip" for: temporary or trivial information, anything easily recoverable from the repository or git history, ordinary command output, intermediate attempts, work still in progress with no conclusion, or content already covered by one of the existing memories provided.
+Choose action "skip" for: temporary or trivial information, anything easily recoverable from the repository or git history, ordinary command output, intermediate attempts, work still in progress with no conclusion, or content whose durable part is already covered by the existing memories provided, even when the window wraps it in fresh ephemeral material.
 
 Ask yourself: "Could this information avoid work, mistakes or repeated analysis in the future?"
+
+Duplicate check — fill these two fields BEFORE choosing the action:
+- durable_claims: the durable facts this window states, at most 3, one short sentence each, in the same language as the conversation. List them even when you believe memory already contains them — covered_by is where you say so. Ephemeral material — command output, intermediate attempts, anything recoverable from the repository or git history — is not a durable claim; leave the list empty when the window states none.
+- covered_by: indices of the existing memories that, taken together, already cover EVERY claim you listed. Judge substance, not wording: a memory that is phrased differently, is more general, or is written in another language still covers a claim. Extra ephemeral material in the window never prevents coverage. If you listed no durable claim but the window's content is already reflected by the existing memories, set covered_by to the memories that reflect it. Leave it empty when at least one claim is missing from the existing memories, or when no existing memory was provided.
 
 Rules:
 1. action "retain": set preview to ONE short self-contained sentence, in the same language as the conversation, stating WHAT gets stored and WHY it matters (favour the why over the what).
 2. action "skip": set preview to "".
-3. action "uncertain": when the window contains knowledge that WOULD be durable but is not yet confirmed — an unverified hypothesis with concrete value, a provisional decision, conflicting sources — or when retain and skip both seem defensible; set preview to the short summary you would store.
+3. action "uncertain": when the window contains knowledge that WOULD be durable but is not yet confirmed — an unverified hypothesis with concrete value, a provisional decision, conflicting sources — or when retain and skip both seem defensible; set preview to the short summary you would store. Coverage is never borderline: when covered_by is not empty, choose "skip" with reason "duplicate" instead of "uncertain".
 4. reason must match the action:
    - action "retain": durable_decision, root_cause_or_workaround, environment_constraint, convention_or_preference, discarded_approach
    - action "skip": trivial_or_ephemeral, repo_recoverable, intermediate_attempt, duplicate, no_durable_knowledge
    - action "uncertain": borderline (the only reason it admits)
-5. duplicate_of: indices of the provided existing memories that already cover the same facts. Set it ONLY with action "skip" and reason "duplicate"; if the window adds something beyond the existing memories, leave it empty. If the window adds nothing beyond them, use action "skip" with reason "duplicate".
-6. Judge the window as a whole: one durable fact is enough to retain.
+5. A covered window is a duplicate: whenever covered_by is not empty the window adds nothing durable, so the verdict is action "skip" with reason "duplicate" — not "repo_recoverable", not "no_durable_knowledge", not "intermediate_attempt". Conversely, never report reason "duplicate" with an empty covered_by.
+6. Judge the window as a whole: ONE durable claim that is not already covered is enough to retain, and the ephemeral material around it does not matter. A window whose durable claims are all covered is never retained, however much extra text it contains.
 7. context: ONE short line, in the same language as the conversation, describing the technical domain the window is about — subject and project, not an activity and not a bare category (e.g. "architettura del recall automatico Hindsight nel plugin Trinity", NOT "tooling"). Fill it for every action; empty string only if the window has no technical subject."""
 
 
@@ -120,6 +135,10 @@ class GateResult:
     # chiede un context all'utente).
     context: str = ""
     duplicate_of: list[int] = field(default_factory=list)
+    # Evidenza di copertura come l'ha dichiarata il modello (ICH-84): su skip
+    # alimenta duplicate_of, su retain/uncertain resta solo osservabilita'.
+    durable_claims: list[str] = field(default_factory=list)
+    covered_by: list[int] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
     error: str | None = None
@@ -164,12 +183,18 @@ def dedup_query(summary: dict) -> str:
 
 
 def fetch_duplicate_candidates(
-    bank_urls: list[str], query: str, timeout: float, max_candidates: int = 3
+    bank_urls: list[str], query: str, timeout: float, max_candidates: int = 8
 ) -> list[dict]:
     """Fino a max_candidates memorie esistenti vicine alla finestra, dai bank
     di lettura. Best-effort: bank giu' o query vuota => lista vuota (il gate
     valuta senza controllo duplicati). Il tetto alla query evita il 400
-    "Query too long" del query-embedder (vedi recall_max_prompt_chars)."""
+    "Query too long" del query-embedder (vedi recall_max_prompt_chars).
+    Otto candidati, non tre (ICH-84): il giudizio di copertura richiede che
+    OGNI claim della finestra sia in vista, e un documento duplicato produce
+    in media 4-13 fatti atomici — con tre slot la copertura era quasi sempre
+    parziale e il gate negava il duplicato pur avendo il documento giusto.
+    Misurato anche a 12: piu' candidati portano in vista piu' documenti
+    affini e le citazioni si disperdono, senza guadagno (bench ICH-84)."""
     if not query:
         return []
     payload = {"query": query[:DEDUP_QUERY_MAX_CHARS], "limit": max_candidates}
@@ -226,7 +251,8 @@ def evaluate_retain(
         action = data.get("action")
         reason = data.get("reason")
         preview = data.get("preview")
-        duplicate_of = data.get("duplicate_of")
+        durable_claims = data.get("durable_claims")
+        covered_by = data.get("covered_by")
         context = data.get("context")
         if not isinstance(action, str) or action not in GATE_ACTIONS:
             raise ValueError(f"action non valida: {action!r}")
@@ -238,28 +264,34 @@ def evaluate_retain(
             raise ValueError(f"context non valido: {context!r}")
         if action == "retain" and not preview.strip():
             raise ValueError("preview vuota su action retain")
-        if not isinstance(duplicate_of, list) or any(
-            isinstance(i, bool) or not isinstance(i, int) for i in duplicate_of
+        if not isinstance(durable_claims, list) or any(
+            not isinstance(claim, str) for claim in durable_claims
         ):
-            raise ValueError(f"duplicate_of non valido: {duplicate_of!r}")
-        if len(set(duplicate_of)) != len(duplicate_of) or any(
-            not 0 <= i < len(candidates) for i in duplicate_of
+            raise ValueError(f"durable_claims non valide: {durable_claims!r}")
+        if not isinstance(covered_by, list) or any(
+            isinstance(i, bool) or not isinstance(i, int) for i in covered_by
+        ):
+            raise ValueError(f"covered_by non valido: {covered_by!r}")
+        if len(set(covered_by)) != len(covered_by) or any(
+            not 0 <= i < len(candidates) for i in covered_by
         ):
             raise ValueError(
-                f"indici duplicato fuori range o duplicati: {duplicate_of!r} "
+                f"indici copertura fuori range o duplicati: {covered_by!r} "
                 f"su {len(candidates)} candidati"
             )
-        # Violazioni SEMANTICHE (reason valida ma male accoppiata alla action,
-        # duplicate_of fuori dal caso skip+duplicate): qui la action del
-        # modello e' affidabile e va rispettata — degradare a gate_error
-        # produrrebbe il fail-closed del worker, cioe' la perdita della finestra
-        # (anche di quelle giudicate retain). Si normalizzano i soli metadati:
-        # la reason dichiarata resta com'e' (finisce nel debug log del worker),
-        # duplicate_of vale solo per skip+duplicate (i candidati citati restano
-        # comunque in GateResult.candidates).
-        if duplicate_of and (action != "skip" or reason != "duplicate"):
-            duplicate_of = []
-        if action == "skip" and reason == "duplicate" and not duplicate_of:
+        # ICH-84: la copertura e' un giudizio a se' (covered_by), emesso dal
+        # modello PRIMA della action; la action resta comunque intoccabile
+        # (ICH-82) — degradare a gate_error produrrebbe il fail-closed del
+        # worker, cioe' la perdita della finestra. Su skip la copertura ha la
+        # precedenza sulle altre reason: e' li' che si perdevano i duplicati
+        # del bench ICH-72, gia' scartati ma etichettati repo_recoverable /
+        # no_durable_knowledge / intermediate_attempt. Su retain/uncertain la
+        # copertura resta sola evidenza (in GateResult): forzare skip qui
+        # significherebbe far decidere a un'euristica la perdita di conoscenza.
+        duplicate_of = covered_by if action == "skip" else []
+        if duplicate_of:
+            reason = "duplicate"
+        elif action == "skip" and reason == "duplicate":
             # Claim di duplicato senza indici a supporto: l'esito resta skip.
             reason = "no_durable_knowledge"
         return GateResult(
@@ -268,6 +300,8 @@ def evaluate_retain(
             preview=preview.strip(),
             context=context.strip(),
             duplicate_of=duplicate_of,
+            durable_claims=durable_claims,
+            covered_by=covered_by,
             candidates=candidates,
             latency_ms=round(latency, 2),
         )

@@ -21,10 +21,12 @@ per restare ermetici — il vero processo e' coperto da test_hindsight_recall_ho
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import io
 import json
 import os
+import re
 import tempfile
 import threading
 import time
@@ -63,6 +65,20 @@ def fake_api(response: dict, latency: float = 7.0):
     return _call
 
 
+def gate_payload(**overrides) -> dict:
+    """Risposta valida del gate; gli override cambiano i soli campi voluti."""
+    payload = {
+        "durable_claims": [],
+        "covered_by": [],
+        "action": "skip",
+        "reason": "trivial_or_ephemeral",
+        "preview": "",
+        "context": "",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def user_record(text: str) -> dict:
     return {"type": "user", "message": {"role": "user", "content": text}}
 
@@ -92,13 +108,12 @@ class GateModuleTests(unittest.TestCase):
             summary,
             [],
             cfg,
-            fake_api({
-                "action": "retain",
-                "reason": "durable_decision",
-                "preview": "Salvo la decisione X perché Y.",
-                "duplicate_of": [],
-                "context": "gestione bank e config Hindsight nel progetto Trinity",
-            }),
+            fake_api(gate_payload(
+                action="retain",
+                reason="durable_decision",
+                preview="Salvo la decisione X perché Y.",
+                context="gestione bank e config Hindsight nel progetto Trinity",
+            )),
         )
         self.assertEqual(result.action, "retain")
         self.assertEqual(result.reason, "durable_decision")
@@ -114,13 +129,7 @@ class GateModuleTests(unittest.TestCase):
             summary,
             [],
             cfg,
-            fake_api({
-                "action": "skip",
-                "reason": "trivial_or_ephemeral",
-                "preview": "",
-                "duplicate_of": [],
-                "context": "",
-            }),
+            fake_api(gate_payload()),
         )
         self.assertEqual(result.action, "skip")
         self.assertIsNone(result.error)
@@ -130,28 +139,32 @@ class GateModuleTests(unittest.TestCase):
             summary,
             [],
             cfg,
-            fake_api({
-                "action": "uncertain",
-                "reason": "borderline",
-                "preview": "Forse vale la pena salvare Z.",
-                "duplicate_of": [],
-                "context": "ipotesi sulla latenza del recall",
-            }),
+            fake_api(gate_payload(
+                action="uncertain",
+                reason="borderline",
+                preview="Forse vale la pena salvare Z.",
+                context="ipotesi sulla latenza del recall",
+            )),
         )
         self.assertEqual(result.action, "uncertain")
 
     def test_invalid_payloads_fail_closed(self):
         cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
         summary = {"turns": []}
+        missing_durable_claims = gate_payload()
+        del missing_durable_claims["durable_claims"]
         bad_payloads = [
             {},  # schema incompleto
-            {"action": "keep", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": ""},
-            {"action": "skip", "reason": "unknown_reason", "preview": "", "duplicate_of": [], "context": ""},
-            {"action": "retain", "reason": "durable_decision", "preview": "  ", "duplicate_of": [], "context": ""},
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": ["0"], "context": ""},
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [True], "context": ""},
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [0], "context": ""},  # fuori range: 0 candidati
-            {"action": "skip", "reason": "duplicate", "preview": "", "duplicate_of": [], "context": 5},  # context non stringa
+            gate_payload(action="keep", reason="duplicate"),
+            gate_payload(reason="unknown_reason"),
+            gate_payload(action="retain", reason="durable_decision", preview="  "),
+            gate_payload(reason="duplicate", covered_by=["0"]),
+            gate_payload(reason="duplicate", covered_by=[True]),
+            gate_payload(reason="duplicate", covered_by=[0]),  # fuori range: 0 candidati
+            gate_payload(reason="duplicate", context=5),  # context non stringa
+            missing_durable_claims,  # durable_claims assente
+            gate_payload(durable_claims="x"),  # durable_claims non lista
+            gate_payload(durable_claims=[1]),  # elemento non stringa
         ]
         for payload in bad_payloads:
             result = evaluate_retain("finestra", summary, [], cfg, fake_api(payload))
@@ -159,7 +172,14 @@ class GateModuleTests(unittest.TestCase):
             self.assertEqual(result.reason, "gate_error", payload)
             self.assertIsNotNone(result.error, payload)
 
-    def test_duplicate_indices_validated_against_candidates(self):
+    def test_coverage_indices_validated_against_candidates(self):
+        """Rinominato da test_duplicate_indices_validated_against_candidates
+        (ICH-84): covered_by sostituisce duplicate_of nel payload del gate.
+        Cuore del fix, vedi stray_indices sotto: su skip, covered_by non
+        vuoto vince SEMPRE sulla reason dichiarata dal modello, non solo su
+        "duplicate". Prima (ICH-72) gli indici in una reason diversa da
+        "duplicate" venivano scartati e la reason originale restava intatta;
+        ora covered_by forza reason="duplicate" a prescindere."""
         cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
         summary = {"turns": [("assistant", "testo di chiusura")]}
         candidates = [{"text": "memoria uno"}, {"text": "memoria due"}]
@@ -172,13 +192,7 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "skip",
-                    "reason": "duplicate",
-                    "preview": "",
-                    "duplicate_of": [0, 1],
-                    "context": "",
-                }),
+                fake_api(gate_payload(reason="duplicate", covered_by=[0, 1])),
             )
             self.assertEqual(ok.action, "skip")
             self.assertEqual(ok.reason, "duplicate")
@@ -189,13 +203,7 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "skip",
-                    "reason": "duplicate",
-                    "preview": "",
-                    "duplicate_of": [5],
-                    "context": "",
-                }),
+                fake_api(gate_payload(reason="duplicate", covered_by=[5])),
             )
             self.assertEqual(out_of_range.reason, "gate_error")
 
@@ -204,13 +212,7 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "skip",
-                    "reason": "duplicate",
-                    "preview": "",
-                    "duplicate_of": [0, 0],
-                    "context": "",
-                }),
+                fake_api(gate_payload(reason="duplicate", covered_by=[0, 0])),
             )
             self.assertEqual(duplicated_index.reason, "gate_error")
 
@@ -221,13 +223,12 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "retain",
-                    "reason": "durable_decision",
-                    "preview": "Salvo X.",
-                    "duplicate_of": [0],
-                    "context": "",
-                }),
+                fake_api(gate_payload(
+                    action="retain",
+                    reason="durable_decision",
+                    preview="Salvo X.",
+                    covered_by=[0],
+                )),
             )
             self.assertEqual(retain_with_indices.action, "retain")
             self.assertEqual(retain_with_indices.duplicate_of, [])
@@ -239,13 +240,12 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "retain",
-                    "reason": "duplicate",
-                    "preview": "Memoria duplicata.",
-                    "duplicate_of": [0],
-                    "context": "",
-                }),
+                fake_api(gate_payload(
+                    action="retain",
+                    reason="duplicate",
+                    preview="Memoria duplicata.",
+                    covered_by=[0],
+                )),
             )
             self.assertEqual(retain_claiming_duplicate.action, "retain")
             self.assertEqual(retain_claiming_duplicate.duplicate_of, [])
@@ -256,35 +256,26 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "skip",
-                    "reason": "duplicate",
-                    "preview": "",
-                    "duplicate_of": [],
-                    "context": "",
-                }),
+                fake_api(gate_payload(reason="duplicate")),
             )
             self.assertEqual(unclaimed_duplicate.action, "skip")
             # claim di duplicato senza indici: degradato a skip "neutro"
             self.assertEqual(unclaimed_duplicate.reason, "no_durable_knowledge")
             self.assertIsNone(unclaimed_duplicate.error)
 
+            # CAMBIA rispetto a prima (cuore del fix ICH-84): reason di
+            # partenza "trivial_or_ephemeral", non "duplicate" — covered_by
+            # la sovrascrive comunque.
             stray_indices = evaluate_retain(
                 "finestra",
                 summary,
                 ["http://bank"],
                 cfg,
-                fake_api({
-                    "action": "skip",
-                    "reason": "trivial_or_ephemeral",
-                    "preview": "",
-                    "duplicate_of": [0],
-                    "context": "",
-                }),
+                fake_api(gate_payload(covered_by=[0])),
             )
             self.assertEqual(stray_indices.action, "skip")
-            self.assertEqual(stray_indices.reason, "trivial_or_ephemeral")
-            self.assertEqual(stray_indices.duplicate_of, [])
+            self.assertEqual(stray_indices.reason, "duplicate")
+            self.assertEqual(stray_indices.duplicate_of, [0])
             self.assertIsNone(stray_indices.error)
 
     def test_mismatched_reason_preserves_action(self):
@@ -308,18 +299,37 @@ class GateModuleTests(unittest.TestCase):
                 summary,
                 [],
                 cfg,
-                fake_api({
-                    "action": action,
-                    "reason": reason,
-                    "preview": preview,
-                    "duplicate_of": [],
-                    "context": "dominio di prova",
-                }),
+                fake_api(gate_payload(
+                    action=action, reason=reason, preview=preview, context="dominio di prova",
+                )),
             )
             self.assertEqual(result.action, action, (action, reason))
             self.assertEqual(result.reason, reason, (action, reason))
             self.assertEqual(result.preview, preview, (action, reason))
             self.assertIsNone(result.error, (action, reason))
+
+        # ICH-84: su uncertain covered_by resta solo osservabilita' (nel
+        # GateResult) e non tocca ne' la action ne' duplicate_of, riservato
+        # a skip.
+        with mock.patch(
+            "lib.hindsight_retain_gate.fetch_duplicate_candidates",
+            return_value=[{"text": "memoria uno"}],
+        ):
+            uncertain_with_coverage = evaluate_retain(
+                "finestra",
+                summary,
+                ["http://bank"],
+                cfg,
+                fake_api(gate_payload(
+                    action="uncertain",
+                    reason="borderline",
+                    preview="Forse salvo Z.",
+                    context="dominio di prova",
+                    covered_by=[0],
+                )),
+            )
+        self.assertEqual(uncertain_with_coverage.action, "uncertain")
+        self.assertEqual(uncertain_with_coverage.duplicate_of, [])
 
     def test_reason_map_covers_schema_without_overlap(self):
         self.assertEqual(set(REASONS_BY_ACTION), GATE_ACTIONS)
@@ -406,7 +416,7 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(len(out), 3)
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(calls[0][1]["query"]), 1500)
-        self.assertEqual(calls[0][1]["limit"], 3)
+        self.assertEqual(calls[0][1]["limit"], 8)
 
         with mock.patch(
             "lib.hindsight_retain_gate.fetch_bank_results"
@@ -422,6 +432,112 @@ class GateModuleTests(unittest.TestCase):
         # ogni reason del validatore devono comparirvi (niente drift silenzioso).
         for name in sorted(GATE_ACTIONS | GATE_REASONS):
             self.assertIn(name, GATE_PROMPT, name)
+        # ICH-84: idem per i nomi dei campi dello schema (durable_claims,
+        # covered_by compresi) — niente drift silenzioso tra schema e prompt.
+        for prop in GATE_SCHEMA["properties"]:
+            self.assertIn(prop, GATE_PROMPT, prop)
+        self.assertNotIn("duplicate_of", GATE_SCHEMA["properties"])
+
+    def test_coverage_outranks_other_skip_reasons(self):
+        """covered_by non vuoto forza reason="duplicate" su skip, qualunque
+        sia la reason dichiarata dal modello (ICH-84: e' li' che il bench
+        ICH-72 perdeva i duplicati etichettati con altre reason)."""
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        summary = {"turns": []}
+        candidates = [{"text": "memoria uno"}, {"text": "memoria due"}]
+        with mock.patch(
+            "lib.hindsight_retain_gate.fetch_duplicate_candidates",
+            return_value=candidates,
+        ):
+            for reason in (
+                "repo_recoverable",
+                "no_durable_knowledge",
+                "intermediate_attempt",
+                "trivial_or_ephemeral",
+            ):
+                result = evaluate_retain(
+                    "finestra",
+                    summary,
+                    ["http://bank"],
+                    cfg,
+                    fake_api(gate_payload(reason=reason, covered_by=[1])),
+                )
+                self.assertEqual(result.reason, "duplicate", reason)
+                self.assertEqual(result.duplicate_of, [1], reason)
+                self.assertIsNone(result.error, reason)
+
+    def test_coverage_never_flips_the_action(self):
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        summary = {"turns": []}
+        candidates = [{"text": "memoria uno"}]
+        cases = (
+            ("retain", "durable_decision", "Salvo X."),
+            ("uncertain", "borderline", "Forse salvo X."),
+        )
+        with mock.patch(
+            "lib.hindsight_retain_gate.fetch_duplicate_candidates",
+            return_value=candidates,
+        ):
+            for action, reason, preview in cases:
+                result = evaluate_retain(
+                    "finestra",
+                    summary,
+                    ["http://bank"],
+                    cfg,
+                    fake_api(gate_payload(
+                        action=action, reason=reason, preview=preview, covered_by=[0],
+                    )),
+                )
+                self.assertEqual(result.action, action, (action, reason))
+                self.assertEqual(result.duplicate_of, [], (action, reason))
+                self.assertEqual(result.covered_by, [0], (action, reason))
+                self.assertIsNone(result.error, (action, reason))
+
+    def test_durable_claims_preserved_in_result(self):
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        summary = {"turns": []}
+        claims = ["il bank X va interrogato prima di Y"]
+        result = evaluate_retain(
+            "finestra", summary, [], cfg, fake_api(gate_payload(durable_claims=claims))
+        )
+        self.assertEqual(result.durable_claims, claims)
+
+    def test_schema_field_order_puts_coverage_before_action(self):
+        self.assertEqual(
+            list(GATE_SCHEMA["properties"])[:3], ["durable_claims", "covered_by", "action"]
+        )
+
+    def test_prompt_states_coverage_precedence(self):
+        self.assertIn("durable_claims", GATE_PROMPT)
+        self.assertIn("covered_by", GATE_PROMPT)
+        self.assertIn("A covered window is a duplicate", GATE_PROMPT)
+        self.assertNotIn("duplicate_of", GATE_PROMPT)
+
+    def test_check_stub_verdict_covers_schema_required_fields(self):
+        """Lo stub e2e di hindsight-check.sh fabbrica la risposta del gate:
+        se perde un campo required il gate reale va in gate_error fail-closed
+        e la diagnostica riporta KO permanente (review ICH-84). Il confronto
+        e' strutturale sul dict del VERDICT (non testuale sull'intero script):
+        con additionalProperties false anche un campo di troppo e' fatale."""
+        script = (
+            Path(__file__).resolve().parent / "tools" / "hindsight-check.sh"
+        ).read_text(encoding="utf-8")
+        match = re.search(r"VERDICT = json\.dumps\((\{.*?\})\)", script, re.S)
+        self.assertIsNotNone(match, "blocco VERDICT non trovato nello stub")
+        verdict = ast.literal_eval(match.group(1))
+        self.assertEqual(set(verdict), set(GATE_SCHEMA["required"]))
+
+    def test_empty_candidates_force_empty_coverage(self):
+        """Contratto esplicito del caso "nessuna memoria fornita": con 0
+        candidati qualunque indice in covered_by e' fuori range."""
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        summary = {"turns": []}
+        result = evaluate_retain(
+            "finestra", summary, [], cfg,
+            fake_api(gate_payload(reason="duplicate", covered_by=[0])),
+        )
+        self.assertEqual(result.reason, "gate_error")
+        self.assertIsNotNone(result.error)
 
 
 class FakeResponse:
