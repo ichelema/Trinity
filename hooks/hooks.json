@@ -9,12 +9,12 @@
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/inject-core-behavior.sh",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh",
           "timeout": 5
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/inject-model-behavior.sh",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-model-behavior.sh",
           "timeout": 5
         },
         {
@@ -59,7 +59,7 @@
       "matcher": "",
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/play-sound.sh Windows_Proximity_Notification.wav",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/play-sound.sh Windows_Proximity_Notification.wav",
           "timeout": 10,
           "async": true
         },
@@ -74,12 +74,12 @@
       "matcher": "permission_prompt",
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/play-sound.sh Windows_Exclamation.wav",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/play-sound.sh Windows_Exclamation.wav",
           "timeout": 10
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/windows-toast.sh",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/windows-toast.sh",
           "timeout": 10
         }
       ]

@@ -8,7 +8,7 @@
 # un valore vuoto, così è evidente che la config va completata.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FILE="$ROOT/core-behavior.md"
 
 : "${OBSIDIAN_VAULT:=⚠️ imposta OBSIDIAN_VAULT in ~/.claude/settings.json}"

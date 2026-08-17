@@ -214,7 +214,7 @@ cd ~/ai/trinity
 bash hooks/hindsight/tools/hindsight-check.sh        # suite completa (attesi OK, KO recall se disabilitato)
 python hooks/hindsight/lib/hindsight_config.py --banks   # risoluzione bank (python3 se serve)
 echo '{"prompt":"test recall di prova sul server"}' | HS_CFG_RECALL_ENABLED=true bash hooks/hindsight/hindsight-recall.sh | head -c 200
-bash hooks/play-sound.sh Windows_Proximity_Notification.wav; echo "exit=$? (0 anche headless)"
+bash hooks/bin/play-sound.sh Windows_Proximity_Notification.wav; echo "exit=$? (0 anche headless)"
 ```
 
 In una sessione Claude Code: i tool `mcp__hindsight__*` devono comparire e

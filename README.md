@@ -204,7 +204,7 @@ regole operative shell/path, navigazione codice via LSP, Nushell, struttura dire
 Non è un file di sistema speciale: viene iniettato come **contesto** a ogni sessione da un hook 
 `SessionStart`, e il suo stdout entra nel contesto del modello.
 
-L'hook non fa un semplice `cat`: passa per lo script `hooks/inject-core-behavior.sh`, che **espande 
+L'hook non fa un semplice `cat`: passa per lo script `hooks/bin/inject-core-behavior.sh`, che **espande 
 solo le variabili machine-specific** (`${OBSIDIAN_VAULT}`, `${OBSIDIAN_VAULT_NAME}`) via `envsubst`, 
 lasciando letterale tutto il resto (inclusi gli esempi Nushell con `$PATH`/`$r`). Così il file 
 versionato non contiene path hardcoded → il plugin è portabile tra macchine.
@@ -213,7 +213,7 @@ versionato non contiene path hardcoded → il plugin è portabile tra macchine.
 // hooks/hooks.json → SessionStart
 {
   "type": "command",
-  "command": "${CLAUDE_PLUGIN_ROOT}/hooks/inject-core-behavior.sh",
+  "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh",
   "timeout": 5
 }
 ```
@@ -229,7 +229,7 @@ Conseguenze pratiche:
 
 Claude Code carica i `CLAUDE.md` senza guardare quale modello sta girando: nativamente non
 esiste un modo per dire "queste istruzioni solo con Fable". L'hook
-`hooks/inject-model-behavior.sh` colma quella lacuna.
+`hooks/bin/inject-model-behavior.sh` colma quella lacuna.
 
 **Ogni progetto può avere il suo file per modello**: basta creare nella root del progetto un
 `CLAUDE_<FAMIGLIA>.md`, e viene iniettato solo quando la sessione gira con quel modello.
@@ -1332,8 +1332,7 @@ Trinity/
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval/          suggerimento skill (skill-eval.js/sh + skill-rules.json/schema)
-│   ├── windows-toast.sh     toast Windows (entry point hook → chiama il .ps1)
-│   ├── windows-toast.ps1    toast Windows (PowerShell, invocato da .sh)
+│   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   ├── claudish/            riscrittura display in italiano semplice (capture-model, gate, rewrite, providers — §3.1)
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)

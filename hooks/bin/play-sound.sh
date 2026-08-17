@@ -9,7 +9,7 @@
 # (server headless) -> esce 0 in silenzio.
 set -uo pipefail
 
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 F="${1:?uso: play-sound.sh <file.wav>}"
 case "$F" in
 /* | ?:*) : ;;                  # gia' assoluto (POSIX o Windows)

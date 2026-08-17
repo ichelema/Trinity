@@ -7,7 +7,7 @@
 # Se manca, esce 0 senza fare nulla (il toast è best-effort, non deve mai bloccare).
 set -uo pipefail
 
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # Linux: notify-send se c'e' un desktop, altrimenti no-op (server headless).
 case "$(uname -s)" in
@@ -25,4 +25,4 @@ PWSH="$(command -v pwsh 2>/dev/null || echo "/c/Program Files/PowerShell/7/pwsh.
 [ -x "$PWSH" ] || exit 0
 
 exec "$PWSH" -NoProfile -ExecutionPolicy Bypass \
-	-File "$(cygpath -w "$PLUGIN_ROOT/hooks/windows-toast.ps1")"
+	-File "$(cygpath -w "$PLUGIN_ROOT/hooks/bin/windows-toast.ps1")"
