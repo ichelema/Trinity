@@ -7,8 +7,8 @@
     "promote_exclude_banks": ["obsidian"]
   },
 
-  "recall_enabled": true,
-  "retain_enabled": true,
+  "recall_enabled": false,
+  "retain_enabled": false,
 
   "recall_budget": "mid",
   "recall_max_tokens": 2048,
@@ -43,7 +43,7 @@
   "retain_max_cmds": 10,
   "retain_text_truncate": 2000,
   "retain_gate_model": "gpt-5.6-luna",
-  "retain_gate_timeout": 15,
+  "retain_gate_timeout": 20,
   "retain_debug_in_context": true,
 
   "promote_model": "gpt-5.6-luna",
