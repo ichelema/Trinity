@@ -39,15 +39,18 @@ from lib import hindsight_config
 from lib.hindsight_recall_lib import _VALID_RECALL_TYPES
 from lib.hindsight_retain_gate import (
     DEDUP_CANDIDATE_TYPES,
+    DEDUP_DOC_FACTS_CAP,
     GATE_ACTIONS,
     GATE_PROMPT,
     GATE_REASONS,
     GATE_SCHEMA,
     REASONS_BY_ACTION,
     GateResult,
+    complete_documents,
     dedup_query,
     evaluate_retain,
     fallback_context,
+    fetch_document_facts,
     fetch_duplicate_candidates,
     handle_retain_consent,
     retain_consent_context,
@@ -436,6 +439,245 @@ class GateModuleTests(unittest.TestCase):
         self.assertTrue(set(DEDUP_CANDIDATE_TYPES) <= set(_VALID_RECALL_TYPES))
         self.assertNotIn("observation", DEDUP_CANDIDATE_TYPES)
         self.assertEqual(sorted(DEDUP_CANDIDATE_TYPES), ["experience", "world"])
+
+    def test_complete_documents_fills_cited_documents(self):
+        """ICH-88: ogni documento citato dal top-k viene completato coi fatti
+        mancanti (id gia' visti e testi normalizzati gia' visti scartati);
+        fatti dello stesso documento contigui, documenti in ordine di prima
+        apparizione, candidati senza document_id al loro posto."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        A2 = {"id": "A2", "text": "fatto a2", "document_id": "doc-a"}
+        A3 = {"id": "A3", "text": "fatto a3", "document_id": "doc-a"}
+        A4 = {"id": "A4", "text": "fatto a4", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        B2 = {"id": "B2", "text": "Fatto B2", "document_id": "doc-b"}
+        B2bis = {"id": "B2bis", "text": "fatto   b2", "document_id": "doc-b"}
+        N0 = {"id": "N0", "text": "osservazione senza documento"}
+        ranked = [("http://b1", A1), ("http://b1", B1), ("http://b1", A2), ("http://b1", N0)]
+        calls = []
+
+        def fake_fetch(url, doc_id, timeout):
+            calls.append((url, doc_id, timeout))
+            return {"doc-a": [A1, A2, A3, A4], "doc-b": [B1, B2, B2bis]}[doc_id]
+
+        out = complete_documents(
+            ranked, timeout=4, fetch=fake_fetch, clock=lambda: 0.0
+        )
+        self.assertEqual(
+            [r["id"] for r in out], ["A1", "A2", "A3", "A4", "B1", "B2", "N0"]
+        )
+        self.assertEqual(
+            calls, [("http://b1", "doc-a", 4), ("http://b1", "doc-b", 4)]
+        )
+
+    def test_complete_documents_keeps_partial_when_fetch_fails_or_over_cap(self):
+        """Fetch None (GET fallita o documento oltre il cap) => il documento
+        resta esattamente com'era nel top-k."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        A2 = {"id": "A2", "text": "fatto a2", "document_id": "doc-a"}
+        N0 = {"id": "N0", "text": "osservazione"}
+        ranked = [("http://b1", A1), ("http://b1", N0), ("http://b1", A2)]
+        out = complete_documents(ranked, timeout=4, fetch=lambda u, d, t: None)
+        self.assertEqual(len(out), 3)
+        self.assertIs(out[0], A1)
+        self.assertIs(out[1], A2)
+        self.assertIs(out[2], N0)
+
+    def test_complete_documents_respects_total_budget(self):
+        """Tetto totale: gli extra di un documento che sforerebbe non vengono
+        aggiunti, ma i documenti successivi che ci stanno vengono completati."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        B2 = {"id": "B2", "text": "fatto b2", "document_id": "doc-b"}
+        full_a = [A1] + [
+            {"id": f"A{i}", "text": f"fatto a{i}", "document_id": "doc-a"}
+            for i in range(2, 6)
+        ]
+        ranked = [("http://b1", A1), ("http://b1", B1)]
+
+        def fake_fetch(url, doc_id, timeout):
+            return {"doc-a": full_a, "doc-b": [B1, B2]}[doc_id]
+
+        out = complete_documents(ranked, timeout=4, max_total=4, fetch=fake_fetch)
+        self.assertEqual([r["id"] for r in out], ["A1", "B1", "B2"])
+
+    def test_complete_documents_uses_origin_bank_per_document(self):
+        """Ogni documento viene completato dal bank del suo primo candidato."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        calls = []
+
+        def fake_fetch(url, doc_id, timeout):
+            calls.append((url, doc_id))
+            return []
+
+        complete_documents(
+            [("http://b1", A1), ("http://b2", B1)], timeout=4, fetch=fake_fetch
+        )
+        self.assertEqual(calls, [("http://b1", "doc-a"), ("http://b2", "doc-b")])
+
+    def test_fetch_document_facts_get_and_failures(self):
+        """GET /memories/list?document_id=...&state=valid&limit=cap+1
+        (urlencoded; solo fatti validi); None su eccezione, risposta senza
+        items o documento oltre il cap."""
+
+        class FakeListResponse:
+            def __init__(self, body):
+                self.body = body
+
+            def read(self):
+                return json.dumps(self.body).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeListResponse(
+                {"items": [{"id": "x", "text": "t"}], "total": 1}
+            ),
+        ) as urlopen:
+            out = fetch_document_facts("http://b1", "doc a", timeout=4)
+        self.assertEqual(out, [{"id": "x", "text": "t"}])
+        request = urlopen.call_args[0][0]
+        self.assertEqual(
+            request.full_url,
+            "http://b1/memories/list?document_id=doc%20a&state=valid&limit="
+            + str(DEDUP_DOC_FACTS_CAP + 1),
+        )
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(urlopen.call_args[1]["timeout"], 4)
+
+        too_many = [
+            {"id": f"x{i}", "text": f"t{i}"} for i in range(DEDUP_DOC_FACTS_CAP + 1)
+        ]
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeListResponse({"items": too_many}),
+        ):
+            self.assertIsNone(fetch_document_facts("http://b1", "doc-a", timeout=4))
+
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            side_effect=OSError("boom"),
+        ):
+            self.assertIsNone(fetch_document_facts("http://b1", "doc-a", timeout=4))
+
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeListResponse({}),
+        ):
+            self.assertIsNone(fetch_document_facts("http://b1", "doc-a", timeout=4))
+
+        # Pagina incompleta (total oltre gli item ricevuti): il documento non
+        # sarebbe intero in vista, resta com'e' nel top-k.
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeListResponse(
+                {"items": [{"id": "x", "text": "t"}], "total": 2}
+            ),
+        ):
+            self.assertIsNone(fetch_document_facts("http://b1", "doc-a", timeout=4))
+
+    def test_complete_documents_budget_rejected_doc_does_not_poison_dedup(self):
+        """Un documento rifiutato per budget non e' in vista: i suoi testi non
+        devono far scartare i fatti identici di un documento successivo."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        B2 = {"id": "B2", "text": "testo condiviso", "document_id": "doc-b"}
+        a_extra = [
+            {"id": f"A{i}", "text": f"fatto a{i}", "document_id": "doc-a"}
+            for i in range(2, 7)
+        ] + [{"id": "A9", "text": "testo condiviso", "document_id": "doc-a"}]
+
+        def fake_fetch(url, doc_id, timeout):
+            return {"doc-a": [A1] + a_extra, "doc-b": [B1, B2]}[doc_id]
+
+        out = complete_documents(
+            [("http://b1", A1), ("http://b1", B1)],
+            timeout=4,
+            max_total=5,
+            fetch=fake_fetch,
+        )
+        self.assertEqual([r["id"] for r in out], ["A1", "B1", "B2"])
+
+    def test_complete_documents_no_doc_candidates_keep_relative_position(self):
+        """I candidati senza document_id restano alla loro posizione relativa
+        (non vengono raggruppati fra loro)."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        A2 = {"id": "A2", "text": "fatto a2", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        N0 = {"id": "N0", "text": "osservazione zero", "document_id": None}
+        N1 = {"id": "N1", "text": "osservazione uno"}
+        ranked = [("http://b1", A1), ("http://b1", N0), ("http://b1", B1), ("http://b1", N1)]
+        calls = []
+
+        def fake_fetch(url, doc_id, timeout):
+            calls.append(doc_id)
+            return {"doc-a": [A1, A2], "doc-b": [B1]}[doc_id]
+
+        out = complete_documents(ranked, timeout=4, fetch=fake_fetch)
+        self.assertEqual([r["id"] for r in out], ["A1", "A2", "N0", "B1", "N1"])
+        self.assertEqual(calls, ["doc-a", "doc-b"])
+
+        # id None ripetuti fra gli extra: dedup solo per testo, non per id.
+        x1 = {"id": None, "text": "extra uno", "document_id": "doc-a"}
+        x2 = {"id": None, "text": "extra due", "document_id": "doc-a"}
+        out = complete_documents(
+            [("http://b1", A1)], timeout=4, fetch=lambda u, d, t: [A1, x1, x2]
+        )
+        self.assertEqual([r["text"] for r in out], ["fatto a1", "extra uno", "extra due"])
+
+    def test_complete_documents_shared_deadline_caps_fetch_timeout(self):
+        """Ogni GET riceve min(residuo della deadline, DEDUP_DOC_FETCH_TIMEOUT);
+        a deadline scaduta i documenti restanti non vengono completati."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        C1 = {"id": "C1", "text": "fatto c1", "document_id": "doc-c"}
+        ranked = [("http://b1", A1), ("http://b1", B1), ("http://b1", C1)]
+        ticks = iter([0.0, 0.0, 12.0, 20.0])
+        calls = []
+
+        def fake_fetch(url, doc_id, timeout):
+            calls.append((doc_id, timeout))
+            return []
+
+        out = complete_documents(
+            ranked, timeout=15, fetch=fake_fetch, clock=lambda: next(ticks)
+        )
+        self.assertEqual([r["id"] for r in out], ["A1", "B1", "C1"])
+        self.assertEqual(calls, [("doc-a", 5.0), ("doc-b", 3.0)])
+
+    def test_fetch_duplicate_candidates_completes_documents_after_top_k(self):
+        """Dopo il top-k tra bank, ogni documento in vista viene completato
+        dal bank di provenienza (ICH-88)."""
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        A2 = {"id": "A2", "text": "fatto a2", "document_id": "doc-a"}
+        B1 = {"id": "B1", "text": "fatto b1", "document_id": "doc-b"}
+        C1 = {"id": "C1", "text": "fatto c1", "document_id": "doc-c"}
+        C2 = {"id": "C2", "text": "fatto c2", "document_id": "doc-c"}
+        calls = []
+
+        def fake_bank(url, payload, timeout):
+            return {"http://b1": [A1, B1], "http://b2": [C1]}[url]
+
+        def fake_docs(url, doc_id, timeout):
+            calls.append((url, doc_id))
+            return {"doc-a": [A1, A2], "doc-b": [B1], "doc-c": [C1, C2]}[doc_id]
+
+        with mock.patch(
+            "lib.hindsight_retain_gate.fetch_bank_results", side_effect=fake_bank
+        ), mock.patch(
+            "lib.hindsight_retain_gate.fetch_document_facts", side_effect=fake_docs
+        ):
+            out = fetch_duplicate_candidates(["http://b1", "http://b2"], "q", timeout=4)
+        self.assertEqual([r["id"] for r in out], ["A1", "A2", "B1", "C1", "C2"])
+        self.assertEqual(
+            calls, [("http://b1", "doc-a"), ("http://b1", "doc-b"), ("http://b2", "doc-c")]
+        )
 
     def test_schema_and_enums_consistent(self):
         self.assertEqual(set(GATE_SCHEMA["properties"]["action"]["enum"]), GATE_ACTIONS)

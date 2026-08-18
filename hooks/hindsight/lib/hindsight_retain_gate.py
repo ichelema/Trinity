@@ -25,6 +25,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
@@ -190,19 +192,136 @@ def dedup_query(summary: dict) -> str:
     return query[:DEDUP_QUERY_MAX_CHARS]
 
 
+# Completamento per documento (ICH-88): un documento duplicato produce 4-13
+# fatti atomici e il top-k ne mostra solo una parte; il giudizio di copertura
+# (ICH-84) esige OGNI claim in vista, quindi ogni documento citato dal top-k
+# viene completato coi suoi fatti restanti. Tetti: per documento (oltre, il
+# documento resta parziale com'era nel top-k: scartarlo perderebbe recall) e
+# totale sui candidati (oltre, i documenti successivi restano parziali).
+# Le GET sono sequenziali (~15 ms l'una a server sano) ma condividono una
+# deadline pari al timeout del gate: un server appeso non somma 8 timeout.
+DEDUP_DOC_FACTS_CAP = 20
+DEDUP_MAX_TOTAL_CANDIDATES = 40
+DEDUP_DOC_FETCH_TIMEOUT = 5.0
+
+
+def _text_key(r: dict) -> str:
+    return " ".join((r.get("text") or "").lower().split())
+
+
+def fetch_document_facts(
+    url: str, document_id: str, timeout: float, cap: int = DEDUP_DOC_FACTS_CAP
+) -> list[dict] | None:
+    """Tutti i fatti validi del documento via GET
+    /memories/list?document_id=…&state=valid. `state=valid` e' una protezione
+    esplicita: il server 0.9.1 tiene gli invalidati in un archivio separato e
+    non li lista di default, ma la doc dell'API li dichiara inclusi; il filtro
+    rende il comportamento indipendente dalla versione (un fatto ritirato non
+    deve tornare in vista come copertura). I fatti sono restituiti piu' recenti
+    prima; per un documento sono i fatti estratti dallo stesso testo, l'ordine
+    non conta. None su
+    qualsiasi errore, se il documento supera il cap o se la pagina non lo
+    contiene per intero (`total` oltre gli item ricevuti): in tutti i casi il
+    chiamante lascia il documento com'e' nel top-k."""
+    query = urllib.parse.urlencode(
+        {"document_id": document_id, "state": "valid", "limit": cap + 1},
+        quote_via=urllib.parse.quote,
+    )
+    req = urllib.request.Request(url + "/memories/list?" + query, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            data = json.loads(res.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list) or len(items) > cap:
+        return None
+    total = data.get("total")
+    if isinstance(total, int) and total > len(items):
+        return None
+    return [r for r in items if isinstance(r, dict)]
+
+
+def complete_documents(
+    ranked: list[tuple[str, dict]],
+    timeout: float,
+    max_total: int = DEDUP_MAX_TOTAL_CANDIDATES,
+    fetch=None,
+    clock=time.monotonic,
+) -> list[dict]:
+    """Raggruppa i candidati del top-k per document_id (ordine di prima
+    apparizione) e completa ogni documento coi fatti mancanti, letti dal bank
+    da cui il candidato proviene. I fatti dello stesso documento restano
+    contigui; un candidato senza document_id (observation, entita') resta
+    alla sua posizione relativa, non completato. Best-effort: GET fallita,
+    deadline scaduta o documento oltre i tetti => il documento resta parziale,
+    esattamente com'era nel top-k. Un documento rifiutato per budget non
+    consuma il dedup dei successivi (i suoi fatti non sono in vista)."""
+    fetch = fetch or fetch_document_facts
+    groups: dict[str, list[dict]] = {}
+    origin: dict[str, str] = {}
+    order: list[str] = []
+    for i, (url, r) in enumerate(ranked):
+        doc_id = r.get("document_id")
+        is_doc = isinstance(doc_id, str) and bool(doc_id)
+        key = doc_id if is_doc else f"\x00{i}"
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
+        if is_doc:
+            origin.setdefault(key, url)
+    seen_ids = {r.get("id") for _u, r in ranked if r.get("id") is not None}
+    seen_text = {_text_key(r) for _u, r in ranked}
+    total = len(ranked)
+    deadline = clock() + timeout
+    out: list[dict] = []
+    for key in order:
+        facts = list(groups[key])
+        remaining = deadline - clock()
+        if key in origin and remaining > 0:
+            full = fetch(origin[key], key, min(remaining, DEDUP_DOC_FETCH_TIMEOUT))
+            if full is not None:
+                extra: list[dict] = []
+                extra_ids: set = set()
+                extra_text: set[str] = set()
+                for r in full:
+                    rid = r.get("id")
+                    text_key = _text_key(r)
+                    if not text_key or text_key in seen_text or text_key in extra_text:
+                        continue
+                    if rid is not None and (rid in seen_ids or rid in extra_ids):
+                        continue
+                    extra.append(r)
+                    extra_text.add(text_key)
+                    if rid is not None:
+                        extra_ids.add(rid)
+                if total + len(extra) <= max_total:
+                    facts.extend(extra)
+                    total += len(extra)
+                    seen_ids |= extra_ids
+                    seen_text |= extra_text
+        out.extend(facts)
+    return out
+
+
 def fetch_duplicate_candidates(
     bank_urls: list[str], query: str, timeout: float, max_candidates: int = 8
 ) -> list[dict]:
-    """Fino a max_candidates memorie esistenti vicine alla finestra, dai bank
-    di lettura. Best-effort: bank giu' o query vuota => lista vuota (il gate
-    valuta senza controllo duplicati). Il tetto alla query evita il 400
-    "Query too long" del query-embedder (vedi recall_max_prompt_chars).
+    """Memorie esistenti vicine alla finestra, dai bank di lettura: top-k di
+    max_candidates fatti, poi ogni documento in vista completato coi suoi
+    fatti restanti (ICH-88, vedi complete_documents). Best-effort: bank giu'
+    o query vuota => lista vuota (il gate valuta senza controllo duplicati).
+    Il tetto alla query evita il 400 "Query too long" del query-embedder
+    (vedi recall_max_prompt_chars).
     Otto candidati, non tre (ICH-84): il giudizio di copertura richiede che
     OGNI claim della finestra sia in vista, e un documento duplicato produce
     in media 4-13 fatti atomici — con tre slot la copertura era quasi sempre
     parziale e il gate negava il duplicato pur avendo il documento giusto.
     Misurato anche a 12: piu' candidati portano in vista piu' documenti
-    affini e le citazioni si disperdono, senza guadagno (bench ICH-84).
+    affini e le citazioni si disperdono, senza guadagno (bench ICH-84). Il
+    top-8 mostrava pero' solo 2-5 dei fatti del documento duplicato,
+    spiazzati dai fatti dei documenti affini: da qui il completamento.
     Il tetto lo applica il loop qui sotto: il server ignora `limit`, ma
     rispetta `types` (solo raw fact, vedi DEDUP_CANDIDATE_TYPES) e
     `include.entities` (spente come nel recall: rumore, e il gate legge solo
@@ -216,16 +335,18 @@ def fetch_duplicate_candidates(
         "include": {"entities": None},
     }
     seen: set[str] = set()
-    out: list[dict] = []
+    ranked: list[tuple[str, dict]] = []
     for url in bank_urls:
         for r in fetch_bank_results(url, payload, timeout):
-            key = " ".join((r.get("text") or "").lower().split())
+            key = _text_key(r)
             if key and key not in seen:
                 seen.add(key)
-                out.append(r)
-                if len(out) >= max_candidates:
-                    return out
-    return out
+                ranked.append((url, r))
+                if len(ranked) >= max_candidates:
+                    break
+        if len(ranked) >= max_candidates:
+            break
+    return complete_documents(ranked, timeout)
 
 
 def gate_input(content: str, candidates: list[dict]) -> str:
