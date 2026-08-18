@@ -212,14 +212,17 @@ def _text_key(r: dict) -> str:
 def fetch_document_facts(
     url: str, document_id: str, timeout: float, cap: int = DEDUP_DOC_FACTS_CAP
 ) -> list[dict] | None:
-    """Tutti i fatti del documento via GET /memories/list?document_id=… (i
-    fatti sono restituiti piu' recenti prima; per un documento sono i fatti
-    estratti dallo stesso testo, l'ordine non conta). None su qualsiasi errore,
-    se il documento supera il cap o se la pagina non lo contiene per intero
-    (`total` oltre gli item ricevuti): in tutti i casi il chiamante lascia il
-    documento com'e' nel top-k."""
+    """Tutti i fatti validi del documento via GET
+    /memories/list?document_id=…&state=valid (la doc dell'API dichiara gli
+    invalidati inclusi di default: un fatto ritirato non deve tornare in vista
+    come copertura; i fatti sono restituiti piu' recenti prima; per un documento
+    sono i fatti estratti dallo stesso testo, l'ordine non conta). None su
+    qualsiasi errore, se il documento supera il cap o se la pagina non lo
+    contiene per intero (`total` oltre gli item ricevuti): in tutti i casi il
+    chiamante lascia il documento com'e' nel top-k."""
     query = urllib.parse.urlencode(
-        {"document_id": document_id, "limit": cap + 1}, quote_via=urllib.parse.quote
+        {"document_id": document_id, "state": "valid", "limit": cap + 1},
+        quote_via=urllib.parse.quote,
     )
     req = urllib.request.Request(url + "/memories/list?" + query, method="GET")
     try:

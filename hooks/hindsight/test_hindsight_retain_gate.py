@@ -517,8 +517,9 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(calls, [("http://b1", "doc-a"), ("http://b2", "doc-b")])
 
     def test_fetch_document_facts_get_and_failures(self):
-        """GET /memories/list?document_id=...&limit=cap+1 (urlencoded); None su
-        eccezione, risposta senza items o documento oltre il cap."""
+        """GET /memories/list?document_id=...&state=valid&limit=cap+1
+        (urlencoded; solo fatti validi); None su eccezione, risposta senza
+        items o documento oltre il cap."""
 
         class FakeListResponse:
             def __init__(self, body):
@@ -544,7 +545,7 @@ class GateModuleTests(unittest.TestCase):
         request = urlopen.call_args[0][0]
         self.assertEqual(
             request.full_url,
-            "http://b1/memories/list?document_id=doc%20a&limit="
+            "http://b1/memories/list?document_id=doc%20a&state=valid&limit="
             + str(DEDUP_DOC_FACTS_CAP + 1),
         )
         self.assertEqual(request.get_method(), "GET")
