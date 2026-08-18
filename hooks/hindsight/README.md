@@ -67,7 +67,6 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | `hindsight-check.sh`        | **suite di diagnostica** dell'intero setup (server, endpoint, hook, config, mental model, debug log). Uso: `bash hooks/hindsight/tools/hindsight-check.sh` |
 | `hindsight_export.py`       | esporta i documenti del bank in JSON (output in `data/exports/`)                                                                                                   |
 | `hindsight_import.py`       | re-importa/re-retain i documenti (es. dopo cambio modello embedding)                                                                                               |
-| `hindsight-recall-bench.sh` | benchmark trasparente di rilevanza del recall                                                                                                                      |
 
 ## 📁 `data/` — artefatti
 

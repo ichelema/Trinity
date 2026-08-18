@@ -1,15 +1,8 @@
-"""Logica pura per il recall composto (step H mirato).
+"""Libreria di supporto per il recall Hindsight.
 
-Estratta dall'heredoc inline di hindsight-recall.sh per renderla unit-testabile
-(stesso pattern di hindsight_config.py). Quattro funzioni:
-  - needs_context: il prompt e' corto E referenziale → vale comporre col contesto?
-  - tail_turns:    estrae l'ultimo turno sostanzioso dalla coda del transcript
-  - compose_query: unisce contesto + prompt nella query di recall
-  - last_assistant_text: ultimo testo assistant del transcript (consenso retain,
-    ICH-73: ci si ripesca il context proposto da Claude)
-
-Nessuna dipendenza dalla rete: solo decisione + costruzione stringa. Il flag
-recall_compose_enabled vive nella config; qui needs_context lo rispetta.
+  - strip_memory_block: rimuove blocchi-memoria iniettati dai turni
+  - last_assistant_text: ultimo testo assistant del transcript
+  - build_recall_payload: costruisce il payload per POST /memories/recall
 """
 
 from __future__ import annotations
@@ -28,36 +21,10 @@ _MEMORY_BLOCK_RE = re.compile(
     re.DOTALL,
 )
 
-_WORD_RE = re.compile(r"\w+", re.UNICODE)
-
-
 def strip_memory_block(text: str) -> str:
     if not text:
         return text
     return _MEMORY_BLOCK_RE.sub("", text).strip()
-
-
-def needs_context(prompt: str, cfg: dict) -> tuple[bool, str]:
-    """True se il prompt e' corto e referenziale → conviene comporre col contesto.
-
-    Assume che il prompt abbia gia' passato il gate dei recall_min_prompt_chars.
-    Restituisce (decisione, motivo) per logging/diagnostica.
-    """
-    if not cfg.get("recall_compose_enabled"):
-        return (False, "compose disabilitato (flag)")
-    p = (prompt or "").strip().lower()
-    n = len(p)
-    if n > int(cfg.get("recall_compose_max_chars", 60)):
-        return (False, "prompt lungo → autosufficiente")
-    toks = set(_WORD_RE.findall(p))
-    deictics = set(cfg.get("recall_compose_deictics") or [])
-    hit = toks & deictics
-    if hit:
-        return (True, f"deittico: {sorted(hit)}")
-    for c in cfg.get("recall_compose_continuations") or []:
-        if c in p:
-            return (True, "continuazione del turno precedente")
-    return (False, "nessun deittico/continuazione → autosufficiente")
 
 
 def _iter_transcript_tail(transcript_path: str, max_lines: int = 80):
@@ -93,28 +60,6 @@ def _record_text(rec: dict) -> tuple[str, str]:
     return role, ""
 
 
-def tail_turns(transcript_path: str, cfg: dict) -> str:
-    """Estrae gli ultimi N turni sostanziosi (testo utente/assistente) dalla coda
-    del transcript, piu' recente per ultimo. Salta tool-call, blocchi-memoria e
-    turni troppo corti (< recall_compose_min_context_chars)."""
-    if not transcript_path or not os.path.exists(transcript_path):
-        return ""
-    n_turns = max(1, int(cfg.get("recall_compose_context_turns", 1)))
-    min_chars = int(cfg.get("recall_compose_min_context_chars", 40))
-    collected: list[str] = []
-    for rec in reversed(list(_iter_transcript_tail(transcript_path))):
-        role, txt = _record_text(rec)
-        if role not in ("user", "assistant"):
-            continue
-        if not txt or txt.startswith("<") or len(txt) < min_chars:
-            continue
-        collected.append(txt)
-        if len(collected) >= n_turns:
-            break
-    collected.reverse()
-    return " ".join(collected).strip()
-
-
 def last_assistant_text(transcript_path: str, max_lines: int = 80) -> str:
     """Testo (blocchi text concatenati, ripuliti da strip_memory_block) dell'ULTIMO
     record assistant CON testo nella coda del transcript JSONL. Claude Code scrive
@@ -127,19 +72,6 @@ def last_assistant_text(transcript_path: str, max_lines: int = 80) -> str:
         if role == "assistant" and txt:
             return txt
     return ""
-
-
-def compose_query(prompt: str, context: str, cfg: dict) -> str:
-    """Unisce contesto e prompt. Se il contesto e' vuoto restituisce il prompt nudo
-    (nessuna composizione → la cache del prompt resta utilizzabile)."""
-    context = (context or "").strip()
-    if not context:
-        return prompt
-    # Tronca il contesto per non far esplodere la query.
-    cap = int(cfg.get("recall_compose_max_chars", 60)) * 8
-    if len(context) > cap:
-        context = context[:cap]
-    return f"Contesto recente: {context} Domanda: {prompt}"
 
 
 # Tipi di fatto accettati dall'endpoint recall. Filtro difensivo: un valore non
