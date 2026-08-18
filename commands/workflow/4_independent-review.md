@@ -54,8 +54,29 @@ Trasforma poi la issue in una checklist verificabile di requisiti espliciti e im
 - compatibilità attesa;
 - casi limite;
 - requisiti non sufficientemente definiti.
+- semplificazione del codice
 
-## 2. Identifica esattamente il changeset
+## 2. Prima di controllare il codice
+
+Scorri questa lista in ordine. Fermati alla prima riga che corrisponde alla tua situazione.
+
+1. È davvero necessario? Se no, segnalalo.
+2. Questo repository lo contiene già? Segnala che di utilizzare la funzione di supporto.
+3. La libreria standard lo fa? Segnala di usarla.
+4. La piattaforma lo fa nativamente?  Segnala di usarla.
+5. Una dipendenza installata lo fa?  Segnala di usarla.
+6. Si può scrivere in una sola riga? Fallo notare che si puo scrivere in una sola riga.
+7. Altrimenti, controlla che nel codice sia scritto il minimo indispensabile che funzioni.
+
+Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di modificarlo, convalidare
+gli input che superano un confine di fiducia, gestire gli errori che altrimenti causerebbero la perdita
+di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io abbia specificato espressamente.
+
+Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza strettamente necessaria.
+
+È preferibile eliminare codice piuttosto che aggiungerne
+
+## 3. Identifica esattamente il changeset
 
 Determina quali commit e modifiche appartengono a `$issue_id` usando, nell'ordine:
 
@@ -76,7 +97,7 @@ Nel report indica:
 
 Se il changeset rimane ambiguo, fermati e chiedi chiarimenti invece di recensire un diff arbitrario.
 
-## 3. Esegui una review avversaria
+## 4. Esegui una review avversaria
 
 Analizza sia il diff sia il codice circostante necessario a comprenderne il comportamento. Non limitarti alle righe modificate.
 
@@ -100,7 +121,7 @@ Verifica almeno:
 
 Cerca attivamente controesempi che possano falsificare la correttezza dell'implementazione.
 
-## 4. Valuta i test in modo indipendente
+## 5. Valuta i test in modo indipendente
 
 Non considerare sufficiente il fatto che i test esistenti passino.
 
@@ -118,7 +139,7 @@ Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevan
 
 Per ogni test mancante importante, descrivi il caso da aggiungere e il risultato atteso, ma non scrivere né modificare il test.
 
-## 5. Valida rigorosamente ogni finding
+## 6. Valida rigorosamente ogni finding
 
 Prima di includere un problema nel report:
 

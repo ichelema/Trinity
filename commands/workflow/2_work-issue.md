@@ -29,7 +29,7 @@ Se ne manca uno, fermati e mostra:
 
 ## Localizzazione del worktree
 
-Non ricostruire il prefisso (`bug` / `improvments`) a partire dalla issue: è
+Non ricostruire il prefisso (`bug` / `improvements`) a partire dalla issue: è
 già stato deciso allo step 1 e potrebbe essere stato scelto dall'utente.
 Ricava il worktree dallo stato reale di Git:
 
@@ -38,7 +38,7 @@ git worktree list --porcelain
 ```
 
 Cerca l'entry il cui branch termina esattamente con `/$issue_id-$model`
-(es. `improvments/ICH-72-claude-opus-4.1`). Il suffisso esatto è ciò che
+(es. `improvements/ICH-72-claude-opus-4.1`). Il suffisso esatto è ciò che
 distingue il worktree di implementazione da quello di review, che termina con
 `/$issue_id-review-$model`.
 
@@ -155,15 +155,19 @@ Attendi l'ok dell'utente sul piano prima di scrivere codice.
 
 ## Implementazione
 
-Obiettivo, lavorare sulla issue `$issue_id`. Sei il lead. Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker, i problemi con prospettiva fresca a DeepSeek. 
+Obiettivo, lavorare sulla issue `$issue_id`. 
 
-Mantieni tutte le modifiche entro lo scope di `$issue_id`. Ogni riga modificata
-deve essere riconducibile a un requisito della issue: le deviazioni vanno
+Sei il lead. 
+
+Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker, i problemi con prospettiva fresca a DeepSeek. 
+
+Mantieni tutte le modifiche entro lo scope di `$issue_id`. 
+Ogni riga modificata deve essere riconducibile a un requisito della issue: le deviazioni vanno
 segnalate all'utente, non incluse in silenzio.
 
-Sono consentiti più commit quando rappresentano modifiche logiche distinte. I
-messaggi di commit vanno scritti in inglese, come il resto di ciò che resta nel
-repository e su Linear.
+Sono consentiti più commit quando rappresentano modifiche logiche distinte. 
+
+Imessaggi di commit vanno scritti in inglese.
 
 Quando l'implementazione è terminata:
 
@@ -176,6 +180,26 @@ Quando l'implementazione è terminata:
 
 Se i test falliscono, mostra l'output completo dell'errore prima di tentare un
 fix. Non aprire la PR con i test rossi senza dirlo esplicitamente.
+
+## Prima di scrivere il codice
+
+Scorri questa lista in ordine. Fermati alla prima riga che corrisponde alla tua situazione.
+
+1. È davvero necessario? Se no, non implementarlo.
+2. Questo repository lo contiene già? Riutilizza la funzione di supporto.
+3. La libreria standard lo fa? Usala.
+4. La piattaforma lo fa nativamente? Usala.
+5. Una dipendenza installata lo fa? Usala.
+6. Si può scrivere in una sola riga? Scrivi una sola riga.
+7. Altrimenti, scrivi il minimo indispensabile che funzioni.
+
+Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di modificarlo, convalidare
+gli input che superano un confine di fiducia, gestire gli errori che altrimenti causerebbero la perdita
+di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io abbia specificato espressamente.
+
+Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza strettamente necessaria.
+
+ È preferibile eliminare codice piuttosto che aggiungerne.
 
 ## Pull Request
 
@@ -192,10 +216,6 @@ Crea una sola PR verso il branch di default, senza `cd` nel worktree:
 gh repo view --json nameWithOwner -q .nameWithOwner
 gh pr create -R "<owner/repo>" --base "<default>" --head "<branch>" --title "..." --body "..."
 ```
-
-Se `gh auth status` fallisce, fermati: mostra il comando esatto da eseguire e
-l'URL di comparison `https://github.com/<owner/repo>/compare/<default>...<branch>`,
-lasciando all'utente l'apertura della PR.
 
 ### Magic words
 
@@ -237,9 +257,6 @@ Fermati qui. Il passo successivo è la review indipendente
 (`/3_create-review-worktree <branch> $issue_id <model-reviewer>`), poi il merge
 resta all'utente.
 
-Una PR mergiata è già entrata nella storia del branch di default; una PR aperta
-si corregge senza costo.
-
 ## Verifica finale
 
 ```bash
@@ -248,7 +265,7 @@ git -C "<wt-path>" log --oneline "<default>".."<branch>"
 ```
 
 Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i
-valori effettivi:
+valori effettivi, <model> è quello che ha eseguito il lavoro $model:
 
 ```
 ┌────────────────────────┬──────────────────────────────────────────────────────────┐
@@ -270,7 +287,7 @@ valori effettivi:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Pull Request           │ <url> (magic word: <Fixes/Refs> <issue-id>)              │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /3_create-review-worktree <branch> <issue-id> <model>     │
+│ Prossimo passo         │ /3_create-review-worktree <branch> <issue-id> <$model>   │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
