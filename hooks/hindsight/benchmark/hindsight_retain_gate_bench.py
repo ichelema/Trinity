@@ -36,6 +36,12 @@ su una run singola chiede di completare il protocollo, non e' da solo un FAIL
 del gate di merge). Un dataset senza duplicati mantiene il contratto storico
 ICH-67: exit 0 se la run tecnica va a buon fine.
 
+Il bank della misura controllata (--dedup-bank-url) resta production-like,
+observation di consolidamento COMPRESE: da ICH-89 il gate chiede al recall solo
+i raw fact (types world/experience), quindi le observation — derivate, senza
+document_id, riscritte in background — non entrano piu' fra i candidati ne' in
+bench ne' in produzione, e non vanno piu' disattivate sul bank di misura.
+
 I contenuti restano negli artefatti locali ignorati da Git; su stdout solo
 avanzamento, conteggi e metriche aggregate.
 """

@@ -146,6 +146,14 @@ class GateResult:
 
 DEDUP_QUERY_MAX_CHARS = 1500
 
+# Solo fatti grezzi come candidati di dedup (ICH-89). Le observation di
+# consolidamento sono un layer DERIVATO dai raw fact (che restano sempre nel
+# bank), non hanno document_id e vengono riscritte in background: come
+# candidati spiazzano i fatti atomici dai top-8, non si etichettano per
+# documento nel bench e non si espandono per documento (ICH-88). Filtrandole
+# alla fonte, bench e produzione vedono lo stesso mix di candidati.
+DEDUP_CANDIDATE_TYPES = ["world", "experience"]
+
 
 def _bounded_dedup_query(first_user: str, last_assistant: str) -> str:
     """Compone una query entro il limite conservando entrambe le estremità.
@@ -194,10 +202,19 @@ def fetch_duplicate_candidates(
     in media 4-13 fatti atomici — con tre slot la copertura era quasi sempre
     parziale e il gate negava il duplicato pur avendo il documento giusto.
     Misurato anche a 12: piu' candidati portano in vista piu' documenti
-    affini e le citazioni si disperdono, senza guadagno (bench ICH-84)."""
+    affini e le citazioni si disperdono, senza guadagno (bench ICH-84).
+    Il tetto lo applica il loop qui sotto: il server ignora `limit`, ma
+    rispetta `types` (solo raw fact, vedi DEDUP_CANDIDATE_TYPES) e
+    `include.entities` (spente come nel recall: rumore, e il gate legge solo
+    il testo)."""
     if not query:
         return []
-    payload = {"query": query[:DEDUP_QUERY_MAX_CHARS], "limit": max_candidates}
+    payload = {
+        "query": query[:DEDUP_QUERY_MAX_CHARS],
+        "limit": max_candidates,
+        "types": list(DEDUP_CANDIDATE_TYPES),
+        "include": {"entities": None},
+    }
     seen: set[str] = set()
     out: list[dict] = []
     for url in bank_urls:
