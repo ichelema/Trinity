@@ -2285,7 +2285,7 @@ class WorkerGateTests(unittest.TestCase):
         # l'entry in coda
         preview = self.make_pending()
         entry = self.enqueue(self.hook, "1700000000100000-1")
-        with mock.patch.object(
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
             self.worker, "_spawn_queued", side_effect=OSError("no python")
         ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
             result = self.worker.retain_at_prompt("sì", "sess-gate-test", self.tmp.name, "")

@@ -15,12 +15,11 @@ from lib import hindsight_config
 from lib.hindsight_recall_filter import (
     CLASSIFIER_SCHEMA,
     _SWEEP_AGE,
+    _pending_path,
     _sweep_stale,
     consent_decision,
     consume_pending,
-    discard_pending,
     discard_pending_if_present,
-    load_pending,
     read_with_deadline,
     result_score,
     route_results,
@@ -198,12 +197,18 @@ class PendingTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def read_pending(self, session_id, cwd):
+        """Legge il pending senza consumarlo: sonda dei test, la TTL non si applica."""
+        path = _pending_path(self.directory, session_id, cwd)
+        if path is None or not path.exists():
+            return None
+        with path.open(encoding="utf-8") as handle:
+            return json.load(handle)["memories"]
+
     def test_missing_pending_short_circuits_without_lock(self):
         os.makedirs(self.directory)
         self.assertIsNone(consume_pending(self.directory, "s1", "/a", 10))
-        self.assertIsNone(load_pending(self.directory, "s1", "/a", 10))
         self.assertFalse(discard_pending_if_present(self.directory, "s1", "/a", 10))
-        self.assertFalse(discard_pending(self.directory, "s1", "/a"))
         # fast-path: nessun file .lock creato nel caso comune "nessun pending"
         self.assertEqual(os.listdir(self.directory), [])
 
@@ -232,8 +237,8 @@ class PendingTests(unittest.TestCase):
 
     def test_permissions_ttl_isolation_and_single_consumption(self):
         self.assertTrue(save_pending(self.directory, "s1", "/a", self.memories, now=100))
-        self.assertIsNone(load_pending(self.directory, "s1", "/b", 10, now=101))
-        self.assertEqual(load_pending(self.directory, "s1", "/a", 10, now=101), self.memories)
+        self.assertIsNone(self.read_pending("s1", "/b"))
+        self.assertEqual(self.read_pending("s1", "/a"), self.memories)
 
         if os.name != "nt":
             self.assertEqual(stat.S_IMODE(os.stat(self.directory).st_mode), 0o700)
@@ -244,15 +249,12 @@ class PendingTests(unittest.TestCase):
         self.assertIsNone(consume_pending(self.directory, "s1", "/a", 10, now=103))
 
         save_pending(self.directory, "s1", "/a", self.memories, now=100)
-        self.assertIsNone(load_pending(self.directory, "s1", "/a", 10, now=111))
+        self.assertIsNone(consume_pending(self.directory, "s1", "/a", 10, now=111))
 
     def test_discard_and_concurrent_single_consumer(self):
-        save_pending(self.directory, "s1", "/a", self.memories)
-        self.assertTrue(discard_pending(self.directory, "s1", "/a"))
-        self.assertIsNone(load_pending(self.directory, "s1", "/a", 10))
-
         save_pending(self.directory, "s1", "/a", self.memories, now=100)
         self.assertTrue(discard_pending_if_present(self.directory, "s1", "/a", 10, now=101))
+        self.assertIsNone(self.read_pending("s1", "/a"))
         self.assertFalse(discard_pending_if_present(self.directory, "s1", "/a", 10, now=102))
 
         save_pending(self.directory, "s1", "/a", self.memories)
@@ -283,9 +285,9 @@ class PendingTests(unittest.TestCase):
             lock.return_value.__enter__.return_value = False
             lock.return_value.__exit__.return_value = False
             self.assertIsNone(consume_pending(self.directory, "s1", "/a", 10))
-            self.assertFalse(discard_pending(self.directory, "s1", "/a"))
+            self.assertFalse(discard_pending_if_present(self.directory, "s1", "/a", 10))
             self.assertFalse(save_pending(self.directory, "s2", "/a", self.memories))
-        self.assertEqual(load_pending(self.directory, "s1", "/a", 10), self.memories)
+        self.assertEqual(self.read_pending("s1", "/a"), self.memories)
 
 
 if __name__ == "__main__":
