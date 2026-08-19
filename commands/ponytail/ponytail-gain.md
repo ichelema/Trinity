@@ -1,0 +1,5 @@
+---
+description: Mostra lo scoreboard dell'impatto misurato di ponytail (meno codice, costo, tempo)
+---
+
+Mostra lo scoreboard dei guadagni ponytail. One-shot, non cambiare nulla: non cambiare modalità, non scrivere file flag, non persistere nulla. Renderizza le mediane dei benchmark pubblicati (5 task quotidiani; modelli Haiku, Sonnet, Opus; fonte benchmarks/ e il README) come barre ASCII semplici: Lines of code, no-skill 100% vs ponytail 6-20% (down 80-94%); Cost, no-skill 100% vs ponytail 23-53% (down 47-77%); Speed, ponytail 3-6x faster. La lunghezza della barra mostra l'intervallo misurato, l'etichetta porta la cifra esatta. Queste sono mediane di benchmark, non di questo repo. NON stampare MAI un numero di risparmio per-repo: la versione non costruita non è mai stata scritta, quindi non c'è una baseline reale da sottrarre in un repo live. Per cifre reali per-repo, punta a /trinity:ponytail:ponytail-debt (il ledger contato delle scorciatoie) e /trinity:ponytail:ponytail-audit (cosa è ancora tagliabile). Solo report.
