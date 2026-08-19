@@ -1352,7 +1352,9 @@ fi
 # alla riga di ripiego repo/branch. Da ICH-86 l'hook recall non chiama piu'
 # handle_retain_consent direttamente: passa transcript_path a retain_at_prompt,
 # che nel worker lo inoltra al consenso. Si verificano entrambi gli anelli.
-if grep -A3 'retain_at_prompt(' "$HOOKS_DIR/hindsight-recall.sh" | grep -q 'transcript_path' &&
+# Lato hook l'argomento e' posizionale, quindi si cerca il nome nudo: i commenti
+# vanno esclusi, o una catena rotta con la parola in un commento vicino passa.
+if grep -A6 'retain_at_prompt(' "$HOOKS_DIR/hindsight-recall.sh" | grep -v '^[[:space:]]*#' | grep -q 'transcript_path' &&
 	grep -A5 'handle_retain_consent(' "$HOOKS_DIR/hindsight-retain-worker.py" | grep -q 'transcript_path='; then
 	ok "transcript_path arriva al consenso retain: recall hook -> retain_at_prompt -> handle_retain_consent (ICH-73)"
 else

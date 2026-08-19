@@ -365,7 +365,7 @@ def _file_lock(path: Path, timeout: float = 2.0):
 
 # Età oltre la quale lo sweep elimina gli artefatti orfani. Volutamente molto
 # più ampia del recall_pending_ttl (900s): qui si fa igiene della directory,
-# non si applica la scadenza — quella resta a load/consume/discard.
+# non si applica la scadenza — quella resta a consume/discard_if_present.
 _SWEEP_AGE = 86400
 
 
