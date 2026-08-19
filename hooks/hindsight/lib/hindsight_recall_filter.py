@@ -436,36 +436,6 @@ def save_pending(
             return False
 
 
-def load_pending(
-    directory: str,
-    session_id: str,
-    cwd: str,
-    ttl: float,
-    now: float | None = None,
-) -> list[dict] | None:
-    path = _pending_path(directory, session_id, cwd)
-    if path is None or not path.exists():
-        return None
-    current = time.time() if now is None else now
-    with _file_lock(path) as locked:
-        if not locked:
-            return None
-        try:
-            with path.open(encoding="utf-8") as handle:
-                payload = json.load(handle)
-            created = float(payload["created_at"])
-            memories = payload["memories"]
-            if current - created <= ttl and isinstance(memories, list):
-                return memories
-        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
-            pass
-        try:
-            path.unlink()
-        except OSError:
-            pass
-    return None
-
-
 def consume_pending(
     directory: str,
     session_id: str,
@@ -496,20 +466,6 @@ def consume_pending(
         except OSError:
             pass
     return memories if valid else None
-
-
-def discard_pending(directory: str, session_id: str, cwd: str) -> bool:
-    path = _pending_path(directory, session_id, cwd)
-    if path is None or not path.exists():
-        return False
-    with _file_lock(path) as locked:
-        if not locked:
-            return False
-        try:
-            path.unlink()
-            return True
-        except OSError:
-            return False
 
 
 def discard_pending_if_present(
