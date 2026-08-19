@@ -26,5 +26,5 @@ if [ -n "${CLAUDISH_ONLY_MODELS:-}" ]; then
     [ "$ok" = "1" ] || exit 0
 fi
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DIR="${BASH_SOURCE[0]%/*}"; [ "$DIR" = "${BASH_SOURCE[0]}" ] && DIR="."
 exec "$DIR/rewrite.sh"

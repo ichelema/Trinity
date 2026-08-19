@@ -77,7 +77,7 @@ pass_through() { dbg "pass_through"; exit 0; }
 
 # Provider layer (ollama/anthropic/openai): MODEL/OLLAMA defaults,
 # llm_complete, llm_notice_why. Missing file -> fail open.
-. "$(cd "$(dirname "$0")" && pwd)/providers.sh" 2>/dev/null || pass_through
+. "${BASH_SOURCE[0]%/*}/providers.sh" 2>/dev/null || pass_through
 
 # Replace this chunk's on-screen text with $1 (a temp file, read and then
 # removed here — the opportunistic find below only sweeps buffer DIRECTORIES,
@@ -100,21 +100,13 @@ emit_empty() {
 command -v jq  >/dev/null 2>&1 || pass_through
 command -v curl >/dev/null 2>&1 || pass_through
 
-payload="$(cat)"
+IFS= read -r -d '' payload || true
 [ -n "$payload" ] || pass_through
 
-mid="$(printf '%s' "$payload"   | jq -r '.message_id // empty' 2>/dev/null)"
-sid="$(printf '%s' "$payload"   | jq -r '.session_id // "nosession"' 2>/dev/null)"
-idx="$(printf '%s' "$payload"   | jq -r '(.index // 0) | tostring' 2>/dev/null)"
-final="$(printf '%s' "$payload" | jq -r '.final // false' 2>/dev/null)"
-tpath="$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)"
+IFS=$'\t' read -r mid sid idx final tpath <<< \
+  "$(printf '%s' "$payload" | jq -r '[.message_id // "", .session_id // "nosession", ((.index // 0) | tostring), (.final // false), .transcript_path // ""] | @tsv' 2>/dev/null)"
 [ -n "$mid" ] || pass_through
 case "$idx" in ''|*[!0-9]*) idx=0 ;; esac
-
-# Opportunistic cleanup of abandoned buffers (older than 30 min), then of the
-# session directories they leave behind once empty.
-find "$BUF_ROOT" -mindepth 2 -maxdepth 2 -type d -mmin +30 -exec rm -rf {} + 2>/dev/null || true
-find "$BUF_ROOT" -mindepth 1 -maxdepth 1 -type d -empty -mmin +30 -exec rmdir {} + 2>/dev/null || true
 
 mdir="$BUF_ROOT/$sid/$mid"
 mkdir -p "$mdir" 2>/dev/null || pass_through
@@ -131,6 +123,11 @@ if [ "$final" != "true" ]; then
 fi
 
 # ---- final chunk: reconstruct + rewrite ----------------------------------
+# Opportunistic cleanup of abandoned buffers (older than 30 min). Solo sul
+# final chunk: evita 2 fork find su ogni chunk streamato.
+find "$BUF_ROOT" -mindepth 2 -maxdepth 2 -type d -mmin +30 -exec rm -rf {} + 2>/dev/null || true
+find "$BUF_ROOT" -mindepth 1 -maxdepth 1 -type d -empty -mmin +30 -exec rmdir {} + 2>/dev/null || true
+
 full="$(cat "$mdir"/*.part 2>/dev/null)"
 final_part="$mdir/$(printf '%08d' "$idx").part"
 
