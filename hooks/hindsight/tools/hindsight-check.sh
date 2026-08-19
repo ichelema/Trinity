@@ -173,15 +173,22 @@ fi
 
 # --- 8. END-TO-END RECALL HOOK ---
 sect "8. End-to-end: invoca recall hook"
-PROBE='{"prompt":"diagnostica setup hindsight check end to end","cwd":"'"$PROJ"'","session_id":"check-test"}'
-START=$(date +%s%N)
-RESP=$(echo "$PROBE" | "$HOOKS_DIR/hindsight-recall.sh" 2>/dev/null)
-EL=$((($(date +%s%N) - START) / 1000000))
-if echo "$RESP" | python -c "import json,sys; d=json.load(sys.stdin); assert 'hookSpecificOutput' in d" 2>/dev/null; then
-	ok "recall hook produce JSON valido in ${EL}ms"
+# Col recall off l'hook esce senza hookSpecificOutput: e' l'interruttore master,
+# non un guasto -> skip, come fa il 9b col retain.
+RECALL_ON=$(PYTHONUTF8=1 python "$HOOKS_DIR/lib/hindsight_config.py" --get recall_enabled 2>/dev/null)
+if [ "$RECALL_ON" = "False" ]; then
+	skip "recall disabilitato (recall_enabled:false) — e2e recall hook non applicabile"
 else
-	ko "recall hook non produce JSON valido (response vuota o malformata)"
-	note "primi 200 char: ${RESP:0:200}"
+	PROBE='{"prompt":"diagnostica setup hindsight check end to end","cwd":"'"$PROJ"'","session_id":"check-test"}'
+	START=$(date +%s%N)
+	RESP=$(echo "$PROBE" | "$HOOKS_DIR/hindsight-recall.sh" 2>/dev/null)
+	EL=$((($(date +%s%N) - START) / 1000000))
+	if echo "$RESP" | python -c "import json,sys; d=json.load(sys.stdin); assert 'hookSpecificOutput' in d" 2>/dev/null; then
+		ok "recall hook produce JSON valido in ${EL}ms"
+	else
+		ko "recall hook non produce JSON valido (response vuota o malformata)"
+		note "primi 200 char: ${RESP:0:200}"
+	fi
 fi
 
 # --- 9. END-TO-END RETAIN: Stop hook accoda, worker valuta (ICH-86) ---
@@ -1340,13 +1347,16 @@ else
 fi
 
 # ICH-73: quando il gate non produce un context, il pending si risolve al prompt
-# successivo leggendo dal transcript la riga proposta da Claude: l'hook recall
-# deve passare transcript_path a handle_retain_consent, altrimenti la catena
-# salta sempre alla riga di ripiego repo/branch.
-if grep -A5 'handle_retain_consent(' "$HOOKS_DIR/hindsight-recall.sh" | grep -q 'transcript_path='; then
-	ok "recall hook passa transcript_path al consenso retain (ICH-73)"
+# successivo leggendo dal transcript la riga proposta da Claude: transcript_path
+# deve arrivare fino a handle_retain_consent, altrimenti la catena salta sempre
+# alla riga di ripiego repo/branch. Da ICH-86 l'hook recall non chiama piu'
+# handle_retain_consent direttamente: passa transcript_path a retain_at_prompt,
+# che nel worker lo inoltra al consenso. Si verificano entrambi gli anelli.
+if grep -A3 'retain_at_prompt(' "$HOOKS_DIR/hindsight-recall.sh" | grep -q 'transcript_path' &&
+	grep -A5 'handle_retain_consent(' "$HOOKS_DIR/hindsight-retain-worker.py" | grep -q 'transcript_path='; then
+	ok "transcript_path arriva al consenso retain: recall hook -> retain_at_prompt -> handle_retain_consent (ICH-73)"
 else
-	ko "hindsight-recall.sh non passa transcript_path a handle_retain_consent (ICH-73)"
+	ko "transcript_path non arriva a handle_retain_consent (ICH-73)"
 fi
 
 GATE_TEST=$(cd "$HOOKS_DIR" && PYTHONUTF8=1 python test_hindsight_retain_gate.py 2>&1)

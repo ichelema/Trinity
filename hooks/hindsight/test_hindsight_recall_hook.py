@@ -159,6 +159,9 @@ class HookE2ETests(unittest.TestCase):
             "HS_OPENAI_URL": f"http://127.0.0.1:{self.port}/v1/chat/completions",
             "OPENAI_API_KEY": "test-key",
             "HS_CFG_BANK": '{"recall_banks": []}',
+            # Come per il retain sotto: l'e2e prova l'hook, non l'interruttore
+            # master, quindi il recall va acceso a prescindere dalla config.
+            "HS_CFG_RECALL_ENABLED": "true",
             "HS_CFG_RECALL_PENDING_DIR": self.pending_dir,
             "HS_RETAIN_PENDING_DIR": self.retain_pending_dir,
             "HS_CFG_RECALL_TIMEOUT": "5",
