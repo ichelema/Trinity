@@ -584,6 +584,24 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(MockBackend.retain_posts, [])
         self.assertEqual(self.queue_files(), [other])
 
+    def test_recall_disabled_emits_nothing_and_never_queries_the_bank(self):
+        # recall_enabled false — il valore committato in hindsight.config.json,
+        # quindi il ramo che gira davvero: l'hook esce a 0 senza contesto e
+        # senza interrogare nulla. Con il recall acceso lo stesso input
+        # inietterebbe "nu memo" (0.95 supera la soglia) e chiamerebbe il
+        # classificatore per il secondo risultato.
+        MockBackend.recall_results = [
+            {"text": "nu memo", "type": "world", "scores": {"reranker": 0.95}},
+            {"text": "xi memo", "type": "world", "scores": {"reranker": 0.5}},
+        ]
+        MockBackend.classifier_spec = [
+            {"index": 0, "confidence": "high", "reason": "directly_actionable"},
+        ]
+        output = self.run_hook(self.PROMPT, extra_env={"HS_CFG_RECALL_ENABLED": "false"})
+        self.assertIsNone(output)
+        self.assertEqual(MockBackend.classifier_calls, 0)
+        self.assertEqual(self.pending_files(), [])
+
     def test_queued_stop_retain_disabled_drops_entry_without_work(self):
         # retain_enabled false: l'entry viene consumata e basta — nessun gate,
         # nessuna POST, output identico al run senza coda.
