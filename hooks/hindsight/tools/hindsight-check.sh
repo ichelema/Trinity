@@ -1346,20 +1346,9 @@ else
 	ko "handle_retain_consent assente da hindsight-retain-worker.py"
 fi
 
-# ICH-73: quando il gate non produce un context, il pending si risolve al prompt
-# successivo leggendo dal transcript la riga proposta da Claude: transcript_path
-# deve arrivare fino a handle_retain_consent, altrimenti la catena salta sempre
-# alla riga di ripiego repo/branch. Da ICH-86 l'hook recall non chiama piu'
-# handle_retain_consent direttamente: passa transcript_path a retain_at_prompt,
-# che nel worker lo inoltra al consenso. Si verificano entrambi gli anelli.
-# Lato hook l'argomento e' posizionale, quindi si cerca il nome nudo: i commenti
-# vanno esclusi, o una catena rotta con la parola in un commento vicino passa.
-if grep -A6 'retain_at_prompt(' "$HOOKS_DIR/hindsight-recall.sh" | grep -v '^[[:space:]]*#' | grep -q 'transcript_path' &&
-	grep -A5 'handle_retain_consent(' "$HOOKS_DIR/hindsight-retain-worker.py" | grep -q 'transcript_path='; then
-	ok "transcript_path arriva al consenso retain: recall hook -> retain_at_prompt -> handle_retain_consent (ICH-73)"
-else
-	ko "transcript_path non arriva a handle_retain_consent (ICH-73)"
-fi
+# ICH-73 (transcript_path fino a handle_retain_consent) non ha un check testuale:
+# la proprieta' e' comportamentale e la copre test_retain_pending_yes_uses_transcript_proposal,
+# che gira qui sopra dentro l'e2e dell'hook recall.
 
 GATE_TEST=$(cd "$HOOKS_DIR" && PYTHONUTF8=1 python test_hindsight_retain_gate.py 2>&1)
 if [ "$?" -eq 0 ]; then
