@@ -1,62 +1,45 @@
 #!/usr/bin/env bash
-# Skill Evaluation Hook v2.0
-# Wrapper script that delegates to the Node.js evaluation engine
+# Skill Evaluation Hook v3.0
+# Wrapper che delega al motore Python (skill-eval.py)
 #
-# This hook runs on UserPromptSubmit and analyzes the prompt for:
-# - Keywords and patterns indicating skill relevance
-# - File paths mentioned in the prompt
-# - Intent patterns (what the user wants to do)
-# - Directory mappings (what directories map to which skills)
-#
-# Configuration is in skill-rules.json
-
 # `dirname` e la subshell $(cd && pwd) sono 2 fork (~600ms su MSYS); l'espansione
 # %/* e' interna a bash. Guardia: senza `/` nel path, %/* non taglia nulla -> ".".
 SCRIPT_DIR="${BASH_SOURCE[0]%/*}"; [ "$SCRIPT_DIR" = "${BASH_SOURCE[0]}" ] && SCRIPT_DIR="."
-NODE_SCRIPT="$SCRIPT_DIR/skill-eval.js"
+PY_SCRIPT="$SCRIPT_DIR/skill-eval.py"
 
-# Check if Node.js is available
-NODE_BIN="$(command -v node 2>/dev/null || true)"
-if [[ -z "$NODE_BIN" ]]; then
-	exit 0
+# Check if Python is available
+PY_BIN="$(command -v python 2>/dev/null || command -v python3 2>/dev/null || true)"
+if [[ -z "$PY_BIN" ]]; then
+  exit 0
 fi
 
-# Check if the Node script exists
-if [[ ! -f "$NODE_SCRIPT" ]]; then
-	exit 0
+# Check if the Python script exists
+if [[ ! -f "$PY_SCRIPT" ]]; then
+  exit 0
 fi
 
-# Bypass dello shim mise: lo shim rilancia mise.exe a OGNI invocazione (~300ms
-# misurati, benchmark 2026-07-10). Risolvi il binario reale una volta e cachalo
-# su file; il check -x invalida da solo la cache quando il path cambia.
-case "$NODE_BIN" in
-	*/mise/shims/*)
-		# Cache sotto $HOME e non in /tmp: su Linux /tmp e' 1777 e si svuota al reboot,
-		# quindi un altro utente puo' crearci il file per primo col path di un SUO
-		# eseguibile — il check -x qui sotto lo promuoverebbe a interprete e lo
-		# eseguirebbe coi nostri privilegi. In una dir 0700 sotto $HOME non entra nessuno.
-		_se_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
-		# La dir esiste gia' dal primo hook: `[ -d ]` e' un builtin (~0ms), mkdir e
-		# chmod sono due fork da ~400ms l'uno su Windows/MSYS. Solo alla creazione.
-		[ -d "$_se_cache_dir" ] || {
-			mkdir -p "$_se_cache_dir" 2>/dev/null && chmod 700 "$_se_cache_dir" 2>/dev/null
-		}
-		_se_cache="$_se_cache_dir/hs-node-real.path"
-		_se_real=""
-		[[ -f "$_se_cache" ]] && IFS= read -r _se_real <"$_se_cache"
-		if [[ ! -x "$_se_real" ]]; then
-			_se_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
-			_se_real="$("$_se_mise" which node 2>/dev/null | tr '\\' '/' || true)"
-			# || true: se la cache dir non e' scrivibile non cachiamo e basta.
-			[[ -n "$_se_real" && -x "$_se_real" ]] && { printf '%s' "$_se_real" >"$_se_cache" 2>/dev/null || true; }
-		fi
-		[[ -n "$_se_real" && -x "$_se_real" ]] && NODE_BIN="$_se_real"
-		;;
+# Bypass dello shim mise: lo shim rilancia mise.exe a OGNI invocazione. Risolvi il
+# binario reale una volta e cachalo su file; il check -x invalida da solo la cache.
+case "$PY_BIN" in
+  */mise/shims/*)
+    _se_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/trinity"
+    [ -d "$_se_cache_dir" ] || {
+      mkdir -p "$_se_cache_dir" 2>/dev/null && chmod 700 "$_se_cache_dir" 2>/dev/null
+    }
+    _se_cache="$_se_cache_dir/hs-python-real.path"
+    _se_real=""
+    [[ -f "$_se_cache" ]] && IFS= read -r _se_real <"$_se_cache"
+    if [[ ! -x "$_se_real" ]]; then
+      _se_mise="$(command -v mise 2>/dev/null || echo "$HOME/.local/bin/mise")"
+      _se_real="$("$_se_mise" which python 2>/dev/null | tr '\\' '/' || true)"
+      [[ -n "$_se_real" && -x "$_se_real" ]] && { printf '%s' "$_se_real" >"$_se_cache" 2>/dev/null || true; }
+    fi
+    [[ -n "$_se_real" && -x "$_se_real" ]] && PY_BIN="$_se_real"
+    ;;
 esac
 
-# Node eredita gia' lo stdin dell'hook: il `cat` era un fork inutile (~400ms su MSYS).
-# (stderr soppresso per il rumore di init di nvm/shell)
-"$NODE_BIN" "$NODE_SCRIPT" 2>/dev/null
+# Python eredita gia' lo stdin dell'hook.
+"$PY_BIN" "$PY_SCRIPT" 2>/dev/null
 
 # Always exit 0 to allow the prompt through
 exit 0
