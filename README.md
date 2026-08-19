@@ -114,8 +114,8 @@ fratelli relativamente alla loro posizione, quindi il plugin è rilocabile.
 
 ### Caricamento skill via skill-eval
 
-A ogni prompt l'hook `UserPromptSubmit` esegue **`hooks/skill-eval/skill-eval.sh`**, che delega a un motore 
-Node.js (`skill-eval.js`). Il motore analizza il testo del prompt e, se trova corrispondenze 
+A ogni prompt l'hook `UserPromptSubmit` esegue **`perl hooks/skill-eval/skill-eval.pl`**, un motore 
+Perl con zero dipendenze (regex native + `JSON::PP` core). Il motore analizza il testo del prompt e, se trova corrispondenze 
 sufficienti, inietta nel contesto del modello un blocco `SKILL ACTIVATION REQUIRED` con le skill 
 più rilevanti — così Claude sa quali skill caricare senza che l'utente debba invocarle a mano.
 
@@ -141,7 +141,7 @@ rinominato in `SKILL.md.disabled`), viene ignorata anche se avrebbe raggiunto il
 
 **Output**
 
-Se almeno una skill supera la soglia, `skill-eval.js` scrive su stdout un blocco come:
+Se almeno una skill supera la soglia, `skill-eval.pl` scrive su stdout un blocco come:
 
 ```
 SKILL ACTIVATION REQUIRED
@@ -1255,7 +1255,7 @@ Trinity/
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
-│   ├── skill-eval/          suggerimento skill (skill-eval.js/sh + skill-rules.json/schema)
+│   ├── skill-eval/          suggerimento skill (skill-eval.pl + skill-rules.json/schema)
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   ├── claudish/            riscrittura display in italiano semplice (capture-model, gate, rewrite, providers — §3.1)
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools

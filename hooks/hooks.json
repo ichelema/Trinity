@@ -50,7 +50,7 @@
     "UserPromptSubmit": [{
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval/skill-eval.sh",
+          "command": "perl ${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval/skill-eval.pl",
           "timeout": 20
         },
         {
