@@ -101,12 +101,14 @@
       "hooks": [{
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/play-sound.sh Windows_Exclamation.wav",
-          "timeout": 10
+          "timeout": 10,
+          "async": true
         },
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/windows-toast.sh",
-          "timeout": 10
+          "timeout": 10,
+          "async": true
         }
       ]
     }],
