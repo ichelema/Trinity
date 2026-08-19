@@ -44,7 +44,7 @@
   "retain_text_truncate": 2000,
   "retain_gate_model": "gpt-5.6-luna",
   "retain_gate_timeout": 20,
-  "retain_debug_in_context": true,
+  "retain_debug_in_context": false,
 
   "promote_model": "gpt-5.6-luna",
 

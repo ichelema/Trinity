@@ -132,5 +132,3 @@ in attesa.
 - `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del
   progetto e `branch:<nome>` solo se davvero legato al branch. NIENTE tag
   semantici (bug, convention, preferenze…): frammentano la consolidation.
-
-

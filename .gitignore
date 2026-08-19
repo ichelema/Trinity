@@ -33,4 +33,5 @@ data/playwright-mcp/
 
 # File locali generati, non da versionare.
 /CLAUDE_Fable.md
+/CLAUDE_OPUS.md
 /commands/workflow/prompt.txt
