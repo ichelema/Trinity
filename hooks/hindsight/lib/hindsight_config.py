@@ -215,6 +215,7 @@ DEFAULTS = {
     # "mental_models" di progetto clobbererebbe i 3 core, qui invece e' additivo.
     "project_mental_models": [],
     "project_mental_models_inject_ids": [],
+    "knowledge_pages": [],
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
     "debug_log_enabled": False,
