@@ -261,10 +261,33 @@ class HookE2ETests(unittest.TestCase):
         return path
 
     def queue_files(self):
-        return sorted(glob.glob(os.path.join(self.queue_dir, "*.json")))
+        # Come _queue_entries nel worker: l'outbox del gate (<session>.out.json)
+        # vive nella stessa dir ma non e' un'entry di coda. Se l'hook e' uscito
+        # prima del pickup (macchina lenta) resta su disco, e senza questo
+        # filtro le asserzioni "coda consumata" lo conterebbero (ICH-109).
+        return sorted(
+            path
+            for path in glob.glob(os.path.join(self.queue_dir, "*.json"))
+            if not path.endswith(".out.json")
+        )
 
     def retain_pending_files(self):
         return glob.glob(os.path.join(self.retain_pending_dir, "*.json"))
+
+    def wait_for_retain_posts(self, count, timeout_s=25.0):
+        """Il gate differito gira in un processo detached che POSTa *prima* di
+        scrivere l'outbox: se l'hook e' uscito prima del suo pickup (macchina
+        lenta o carica) la POST arriva dopo il ritorno di run_hook, e senza
+        questa attesa finirebbe nel test successivo (ICH-109)."""
+        deadline = time.monotonic() + timeout_s
+        while len(MockBackend.retain_posts) < count:
+            self.assertLess(
+                time.monotonic(),
+                deadline,
+                f"attese {count} POST del retain, arrivate {len(MockBackend.retain_posts)}",
+            )
+            time.sleep(0.1)
+        self.assertEqual(len(MockBackend.retain_posts), count)
 
     PROMPT = "dimmi qualcosa di rilevante sul progetto per favore"
 
@@ -464,7 +487,7 @@ class HookE2ETests(unittest.TestCase):
                 self.assertIn("kappa memo", self.context(output))
                 self.assertNotIn("Vuoi che salvi", self.context(output))
                 self.assertEqual(MockBackend.gate_calls, 1)
-                self.assertEqual(len(MockBackend.retain_posts), 1)
+                self.wait_for_retain_posts(1)
                 item = MockBackend.retain_posts[0]["items"][0]
                 self.assertEqual(item["context"], "dominio differito e2e")
                 self.assertIn("[user] domanda dell'utente", item["content"])
@@ -603,7 +626,7 @@ class HookE2ETests(unittest.TestCase):
         baseline_output = self.run_hook(self.PROMPT)
         baseline = time.monotonic() - t0
         self.assertIn("mu memo", self.context(baseline_output))
-        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.wait_for_retain_posts(1)
 
         MockBackend.retain_posts = []
         MockBackend.gate_calls = 0
@@ -618,7 +641,7 @@ class HookE2ETests(unittest.TestCase):
         self.assertIn("mu memo", self.context(output))
         self.assertNotIn("systemMessage", output)
         self.assertEqual(MockBackend.gate_calls, 1)
-        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.wait_for_retain_posts(1)
         self.assertEqual(self.queue_files(), [])
         # i ritardi sono stati davvero pagati (almeno una volta)...
         self.assertGreaterEqual(elapsed, DELAY)
