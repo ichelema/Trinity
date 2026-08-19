@@ -32,7 +32,7 @@
       "matcher": "startup|resume|clear|compact",
       "hooks": [{
           "type": "command",
-          "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-activate.js\"",
+          "command": "lua \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-activate.lua\"",
           "timeout": 5,
           "statusMessage": "Loading ponytail mode..."
         }
@@ -41,7 +41,7 @@
     "SubagentStart": [{
       "hooks": [{
           "type": "command",
-          "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-subagent.js\"",
+          "command": "lua \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-subagent.lua\"",
           "timeout": 5,
           "statusMessage": "Loading ponytail mode..."
         }
@@ -67,7 +67,7 @@
     }, {
       "hooks": [{
           "type": "command",
-          "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-mode-tracker.js\"",
+          "command": "lua \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-mode-tracker.lua\"",
           "timeout": 5,
           "statusMessage": "Tracking ponytail mode..."
         }
