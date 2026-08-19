@@ -87,5 +87,33 @@
       "source_query": "Quali bug ricorrenti, criticità, workaround e lezioni apprese sul campo si applicano a questo progetto e alla sua toolchain? Raggruppa per area (es. MSYS2/Windows, Linux, Hindsight, toolchain esterna). Ogni voce nella forma 'sintomo -> fix concreto (comando/file/variabile)'. Annota per quale OS/shell vale ogni voce tra parentesi alla fine. Max 15 voci totali. Niente introduzione, niente conclusione.",
       "tags": ["claude-code"]
     }
+  ],
+
+  "knowledge_pages": [
+    {
+      "name": "Feature Work",
+      "source_query": "Quali feature, iniziative o enhancement sono in corso o pianificati in questo progetto? Per ogni voce indica: obiettivo, stato attuale, decisioni aperte. Escludi bug-fix, chore e manutenzione ordinaria. Max 15 voci, una riga ciascuna. Niente introduzione, niente conclusione.",
+      "tags": ["knowledge:feature-work"]
+    },
+    {
+      "name": "Decisions",
+      "source_query": "Quali decisioni tecniche vincolanti sono state prese in questo progetto, e perché? Per ogni voce indica: la scelta fatta, le alternative scartate, la motivazione. Max 15 voci, una riga ciascuna. Niente introduzione, niente conclusione.",
+      "tags": ["knowledge:decision"]
+    },
+    {
+      "name": "Conventions",
+      "source_query": "Quali convenzioni operative segue questo progetto? Naming, struttura dei file, testing, error handling, stile di codice, pattern ricorrenti. Per ogni voce indica: ambito -> regola concreta (con esempio se utile). Max 15 voci, una riga ciascuna. Niente introduzione, niente conclusione.",
+      "tags": ["knowledge:convention"]
+    },
+    {
+      "name": "Components",
+      "source_query": "Quali sono i moduli, file, servizi o sottosistemi principali di questo progetto? Per ciascuno indica: responsabilità, dipendenze chiave, come si collega agli altri componenti. Max 15 voci, una riga ciascuna. Niente introduzione, niente conclusione.",
+      "tags": ["knowledge:component"]
+    },
+    {
+      "name": "Concepts",
+      "source_query": "Quali concetti di dominio, astrazioni chiave o termini di vocabolario specifici del progetto deve conoscere un nuovo contributore? Per ogni voce indica: termine -> definizione concreta e dove si usa nel codice. Max 15 voci, una riga ciascuna. Niente introduzione, niente conclusione.",
+      "tags": ["knowledge:concept"]
+    }
   ]
 }

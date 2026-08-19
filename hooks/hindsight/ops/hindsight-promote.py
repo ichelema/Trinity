@@ -258,6 +258,7 @@ def cmd_move(cfg: dict, args) -> int:
         "timestamp": rp.get("event_date"),
         "metadata": {**(rp.get("metadata") or {}), "promoted_from": bank},
         "tags": tags,
+        "observation_scopes": [tags],
         # document_id deterministico: un retry del move fa upsert sul core invece di
         # creare un doppione (l'item altrimenti prenderebbe un UUID casuale a ogni POST).
         "document_id": f"promoted:{bank}:{doc_id}",

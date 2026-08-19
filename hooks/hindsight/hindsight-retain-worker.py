@@ -53,7 +53,7 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from hindsight_config import cache_dir, load_config, recall_bank_urls, retain_bank_url
+from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url
 from hindsight_debug import debug_log
 from hindsight_recall_lib import last_assistant_text
 from hindsight_retain_gate import (
@@ -1071,6 +1071,15 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
     git = git_info(hook.get("cwd") or "")
     tags = build_tags(hook, git)
 
+    # observation_scopes: i tag knowledge:* aggiunti server-side dalle entity_labels
+    # frammentano la consolidation (all_strict). Lo scope esplicito dice al
+    # consolidatore di usare SOLO i tag fissi; knowledge:* resta sui fatti per il
+    # routing alle knowledge page, ma non genera observation separate (ICH-90).
+    _retain_kw = (CFG.get("bank") or {}).get("retain_bank", "core")
+    _core = (CFG.get("bank") or {}).get("core_bank", "")
+    _is_core = resolve_bank(_retain_kw, CFG, hook.get("cwd") or None) == _core
+    observation_scopes = [["claude-code"]] if _is_core else [tags]
+
     # context: riga descrittiva del dominio prodotta dal GATE (legge gia' tutta
     # la finestra: una chiamata LLM in meno e un frame piu' ricco per
     # l'estrattore della "categoria secca" claude-code/<slug>). Puo' essere
@@ -1128,6 +1137,7 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
         "content": content,
         "context": context,
         "tags": tags,
+        "observation_scopes": observation_scopes,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "metadata": metadata,
     }

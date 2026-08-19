@@ -149,8 +149,55 @@ elif cmd == "refresh":
         op = resp.get("operation_id") or "accepted"
         print(f"~ refresh {mid}: {op}")
 
+elif cmd == "seed-kp":
+    # Knowledge pages (ICH-90): pagine vive che si rigenerano dai fatti raw
+    # taggati knowledge:<label> (entity_labels server-side, tag: true).
+    # Le definizioni stanno in knowledge_pages nel config. Ogni page usa
+    # fact_types world/experience (non observation: le observation non portano
+    # tag knowledge:* grazie a observation_scopes espliciti).
+    tree = req("GET", "/knowledge-base/tree")
+    existing_names = set()
+    for node in tree.get("roots") or []:
+        if node.get("kind") == "page":
+            existing_names.add(node.get("name", ""))
+        for child in node.get("children") or []:
+            if child.get("kind") == "page":
+                existing_names.add(child.get("name", ""))
+    specs = cfg.get("knowledge_pages") or []
+    if not specs:
+        print("(nessuna knowledge_pages nel config)")
+        sys.exit(0)
+    created = skipped = 0
+    for spec in specs:
+        name = spec.get("name")
+        sq = spec.get("source_query")
+        if not name or not sq:
+            print(f"! definizione incompleta, salto: {spec}", file=sys.stderr)
+            continue
+        if name in existing_names:
+            print(f"= esiste: {name}")
+            skipped += 1
+            continue
+        body = {
+            "name": name,
+            "source_query": sq,
+            "tags": spec.get("tags") or [],
+            "max_tokens": 4096,
+            "trigger": {
+                "mode": "delta",
+                "fact_types": ["world", "experience"],
+                "exclude_mental_models": True,
+                "refresh_after_consolidation": True,
+            },
+        }
+        resp = req("POST", "/knowledge-base/pages", body)
+        op = resp.get("operation_id") or resp.get("page_id") or "?"
+        print(f"+ creata: {name}  (op/page: {op})")
+        created += 1
+    print(f"seed-kp: {created} create, {skipped} gia' presenti")
+
 else:
     print(f"comando sconosciuto: {cmd}", file=sys.stderr)
-    print("uso: seed | list | show <id> | refresh [<id>|--all|--stale]", file=sys.stderr)
+    print("uso: seed | seed-kp | list | show <id> | refresh [<id>|--all|--stale]", file=sys.stderr)
     sys.exit(1)
 PY
