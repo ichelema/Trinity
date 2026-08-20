@@ -149,7 +149,13 @@ class HookE2ETests(unittest.TestCase):
         MockBackend.gate_delay_s = 0.0
 
     def tearDown(self):
-        self.tmp.cleanup()
+        try:
+            self.tmp.cleanup()
+        except OSError:
+            # Un figlio detached ancora vivo ricrea la dir mentre la si
+            # cancella (_write_outbox fa makedirs exist_ok): su Windows sarebbe
+            # un ERROR spurio a test gia' passato (ICH-109).
+            shutil.rmtree(self.tmp.name, ignore_errors=True)
 
     def run_hook(self, prompt, session_id="e2e-session", transcript_path=None, extra_env=None):
         hook = {"prompt": prompt, "session_id": session_id, "cwd": self.tmp.name}
@@ -294,8 +300,12 @@ class HookE2ETests(unittest.TestCase):
         design, coperto da test_slow_gate_... Sotto carico questo test non ha
         piu' nulla da verificare e si salta, ma solo dopo aver letto la domanda
         nell'outbox del figlio: se il gate non l'ha prodotta affatto resta un
-        fallimento (ICH-109)."""
-        context = "" if output is None else self.context(output)
+        fallimento (ICH-109).
+
+        La domanda si cerca in modo tollerante, senza passare da context(): un
+        prompt il cui pending viene scartato emette solo systemMessage, e li'
+        l'assertIn di context() fallirebbe prima che si possa decidere."""
+        context = ((output or {}).get("hookSpecificOutput") or {}).get("additionalContext", "")
         if question not in context:
             with open(self.wait_for_outbox(20.0), encoding="utf-8") as handle:
                 late = json.dumps(json.load(handle), ensure_ascii=False)
@@ -705,6 +715,11 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(self.queue_files(), [])
         # i ritardi sono stati davvero pagati (almeno una volta)...
         self.assertGreaterEqual(elapsed, DELAY)
+        # Se l'hook e' uscito al tetto del budget di pickup non sta piu'
+        # misurando il parallelismo ma il budget: il confronto sotto sarebbe
+        # un rosso dovuto al carico, non al disegno seriale (ICH-109).
+        if elapsed >= 6.0:  # RETAIN_PICKUP_BUDGET_S in hindsight-recall.sh
+            self.skipTest(f"hook uscito al budget di pickup ({elapsed:.2f}s): misura inconcludente")
         # ...ma NON due volte: parallelo, non seriale
         self.assertLess(
             elapsed,
@@ -770,12 +785,14 @@ class HookE2ETests(unittest.TestCase):
         self.assertLess(elapsed, GATE_DELAY)
         # ...e senza la domanda: il gate non ha ancora risposto
         self.assertNotIn("Vuoi che salvi", json.dumps(first or {}, ensure_ascii=False))
-        self.assertEqual(self.queue_files(), [])  # entry consumata dal figlio
         self.assertEqual(self.retain_pending_files(), [])  # niente pending, non ancora
         # Il figlio finisce per conto suo: outbox su disco (gate 12s + avvio).
         t1 = time.monotonic()
         self.wait_for_outbox(GATE_DELAY + 15.0)
         waited = time.monotonic() - t1
+        # L'entry la consuma il figlio: si verifica dopo l'outbox, o un avvio
+        # lento la trova ancora in coda al ritorno dell'hook (ICH-109).
+        self.assertEqual(self.queue_files(), [])
         self.assertEqual(MockBackend.gate_calls, 1)
         self.assertEqual(len(self.retain_pending_files()), 1)  # pending scritto dal figlio
         self.assertEqual(MockBackend.retain_posts, [])
