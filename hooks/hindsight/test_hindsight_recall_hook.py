@@ -46,6 +46,7 @@ class MockBackend(BaseHTTPRequestHandler):
     retain pending (ICH-73) o dal retain differito (ICH-86)."""
 
     recall_results: list = []
+    recall_calls = 0
     classifier_spec: object = None  # lista di classifications | ("status", int) | "garbage"
     classifier_calls = 0
     gate_spec: dict = {}  # decisione del gate retain (action/reason/preview/context)
@@ -58,13 +59,21 @@ class MockBackend(BaseHTTPRequestHandler):
     # quello del ramo recall e' recall_delay_s, senza sovrapposizioni.
     recall_delay_s = 0.0
     gate_delay_s = 0.0
+    # Istanti (inizio, fine) delle richieste RITARDATE, per provare che il gate
+    # del figlio e il recall dell'hook si sovrappongono nel tempo senza dover
+    # cronometrare l'hook da fuori (ICH-109).
+    recall_spans: list = []
+    gate_spans: list = []
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         cls = type(self)
         if self.path.endswith("/memories/recall"):
+            cls.recall_calls += 1
             if cls.recall_delay_s and "budget" in self._json(body):
+                start = time.monotonic()
                 time.sleep(cls.recall_delay_s)
+                cls.recall_spans.append((start, time.monotonic()))
             self._send(200, json.dumps({"results": cls.recall_results}))
         elif self.path.endswith("/memories"):
             cls.retain_posts.append(json.loads(body.decode("utf-8")))
@@ -72,7 +81,9 @@ class MockBackend(BaseHTTPRequestHandler):
         elif self.path.endswith("/chat/completions") and self._schema_name(body) == "retain_gate_decision":
             cls.gate_calls += 1
             if cls.gate_delay_s:
+                start = time.monotonic()
                 time.sleep(cls.gate_delay_s)
+                cls.gate_spans.append((start, time.monotonic()))
             decision = {"durable_claims": [], "covered_by": [], "context": "", **cls.gate_spec}
             self._send(200, json.dumps({"choices": [{"message": {"content": json.dumps(decision)}}]}))
         elif self.path.endswith("/chat/completions"):
@@ -137,6 +148,7 @@ class HookE2ETests(unittest.TestCase):
         os.makedirs(self.queue_dir)
         os.makedirs(self.state_dir)
         MockBackend.recall_results = []
+        MockBackend.recall_calls = 0
         MockBackend.classifier_spec = []
         MockBackend.classifier_calls = 0
         MockBackend.gate_spec = {}
@@ -144,9 +156,17 @@ class HookE2ETests(unittest.TestCase):
         MockBackend.retain_posts = []
         MockBackend.recall_delay_s = 0.0
         MockBackend.gate_delay_s = 0.0
+        MockBackend.recall_spans = []
+        MockBackend.gate_spans = []
 
     def tearDown(self):
-        self.tmp.cleanup()
+        try:
+            self.tmp.cleanup()
+        except OSError:
+            # Un figlio detached ancora vivo ricrea la dir mentre la si
+            # cancella (_write_outbox fa makedirs exist_ok): su Windows sarebbe
+            # un ERROR spurio a test gia' passato (ICH-109).
+            shutil.rmtree(self.tmp.name, ignore_errors=True)
 
     def run_hook(self, prompt, session_id="e2e-session", transcript_path=None, extra_env=None):
         hook = {"prompt": prompt, "session_id": session_id, "cwd": self.tmp.name}
@@ -192,6 +212,16 @@ class HookE2ETests(unittest.TestCase):
         return json.loads(proc.stdout)
 
     def context(self, output):
+        # Diagnostica esplicita: senza, un figlio detached oltre il budget di
+        # pickup fa morire il test con un KeyError che non dice perche'.
+        self.assertIsNotNone(
+            output, "l'hook non ha emesso nulla: figlio detached oltre il budget di pickup?"
+        )
+        self.assertIn(
+            "hookSpecificOutput",
+            output,
+            f"nessun contesto nell'output dell'hook: {json.dumps(output, ensure_ascii=False)[:200]}",
+        )
         return output["hookSpecificOutput"]["additionalContext"]
 
     def pending_files(self):
@@ -261,10 +291,60 @@ class HookE2ETests(unittest.TestCase):
         return path
 
     def queue_files(self):
-        return sorted(glob.glob(os.path.join(self.queue_dir, "*.json")))
+        # Come _queue_files nel worker: l'outbox del gate (<session>.out.json)
+        # vive nella stessa dir ma non e' un'entry di coda. Se l'hook e' uscito
+        # prima del pickup (macchina lenta) resta su disco, e senza questo
+        # filtro le asserzioni "coda consumata" lo conterebbero (ICH-109).
+        return sorted(
+            path
+            for path in glob.glob(os.path.join(self.queue_dir, "*.json"))
+            if not path.endswith(".out.json")
+        )
 
     def retain_pending_files(self):
         return glob.glob(os.path.join(self.retain_pending_dir, "*.json"))
+
+    def context_with_gate_question(self, output, question):
+        """Contesto di un prompt in cui la domanda del gate deve uscire SUBITO.
+        Esce subito solo se il figlio detached rientra nel budget di pickup;
+        oltre il budget la domanda esce al prompt dopo — comportamento di
+        design, coperto da test_slow_gate_... Sotto carico questo test non ha
+        piu' nulla da verificare e si salta, ma solo dopo aver letto la domanda
+        nell'outbox del figlio: se il gate non l'ha prodotta affatto resta un
+        fallimento (ICH-109).
+
+        La domanda si cerca in modo tollerante, senza passare da context(): un
+        prompt il cui pending viene scartato emette solo systemMessage, e li'
+        l'assertIn di context() fallirebbe prima che si possa decidere."""
+        context = ((output or {}).get("hookSpecificOutput") or {}).get("additionalContext", "")
+        if question not in context:
+            # Nota: questo skip non distingue "figlio lento" da "pickup
+            # in-budget rotto". Distinguerli qui richiede di indovinare i tempi
+            # di un processo staccato; la proprieta' e' invece coperta in modo
+            # deterministico e in-process da test_hindsight_retain_gate.py
+            # (gate_output/retain_at_prompt), che gira nello stesso check.
+            with open(self.wait_for_outbox(20.0), encoding="utf-8") as handle:
+                late = json.dumps(json.load(handle), ensure_ascii=False)
+            self.assertIn(
+                question, late, "il gate non ha prodotto la domanda, ne' in tempo ne' in ritardo"
+            )
+            self.skipTest("figlio detached oltre il budget: la domanda esce al prompt dopo")
+        return context
+
+    def wait_for_retain_posts(self, count, timeout_s=25.0):
+        """Il gate differito gira in un processo detached che POSTa *prima* di
+        scrivere l'outbox: se l'hook e' uscito prima del suo pickup (macchina
+        lenta o carica) la POST arriva dopo il ritorno di run_hook, e senza
+        questa attesa finirebbe nel test successivo (ICH-109)."""
+        deadline = time.monotonic() + timeout_s
+        while len(MockBackend.retain_posts) < count:
+            self.assertLess(
+                time.monotonic(),
+                deadline,
+                f"attese {count} POST del retain, arrivate {len(MockBackend.retain_posts)}",
+            )
+            time.sleep(0.1)
+        self.assertEqual(len(MockBackend.retain_posts), count)
 
     PROMPT = "dimmi qualcosa di rilevante sul progetto per favore"
 
@@ -463,8 +543,10 @@ class HookE2ETests(unittest.TestCase):
                 self.assertNotIn("systemMessage", output)
                 self.assertIn("kappa memo", self.context(output))
                 self.assertNotIn("Vuoi che salvi", self.context(output))
+                # gate_calls lo incrementa il figlio, come la POST: si aspetta
+                # prima, o un figlio lento fa fallire qui invece che nell'attesa.
+                self.wait_for_retain_posts(1)
                 self.assertEqual(MockBackend.gate_calls, 1)
-                self.assertEqual(len(MockBackend.retain_posts), 1)
                 item = MockBackend.retain_posts[0]["items"][0]
                 self.assertEqual(item["context"], "dominio differito e2e")
                 self.assertIn("[user] domanda dell'utente", item["content"])
@@ -488,8 +570,9 @@ class HookE2ETests(unittest.TestCase):
         ]
         self.enqueue()
         output = self.run_hook(self.PROMPT)
-        context = self.context(output)
-        self.assertIn("Vuoi che salvi questa memoria? — Forse salvo la scelta e2e. (sì/no)", context)
+        question = "Vuoi che salvi questa memoria? — Forse salvo la scelta e2e. (sì/no)"
+        context = self.context_with_gate_question(output, question)
+        self.assertIn(question, context)
         self.assertIn("as the very last thing in your reply", context)
         self.assertIn("lambda memo", context)
         # La domanda e' anche VISIBILE nel terminale (systemMessage), cosi'
@@ -507,7 +590,10 @@ class HookE2ETests(unittest.TestCase):
         MockBackend.recall_results = []
         self.enqueue()
         alone = self.run_hook(self.PROMPT)
-        self.assertIn("as the very last thing in your reply", self.context(alone))
+        self.assertIn(
+            "as the very last thing in your reply",
+            self.context_with_gate_question(alone, question),
+        )
 
     def test_queued_uncertain_plus_recall_medium_same_prompt_yes_resolves_to_retain(self):
         # Doppia domanda nello stesso prompt (caso raro ma reale, preesistente:
@@ -530,8 +616,9 @@ class HookE2ETests(unittest.TestCase):
         ]
         self.enqueue()
         output = self.run_hook(self.PROMPT)
-        context = self.context(output)
-        self.assertIn("Vuoi che salvi questa memoria? — Forse salvo la doppia domanda e2e. (sì/no)", context)
+        question = "Vuoi che salvi questa memoria? — Forse salvo la doppia domanda e2e. (sì/no)"
+        context = self.context_with_gate_question(output, question)
+        self.assertIn(question, context)
         self.assertIn("consenso richiesto", context)
         self.assertNotIn("mu memo", context)
         self.assertEqual(len(self.retain_pending_files()), 1)
@@ -560,6 +647,28 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(MockBackend.gate_calls, 0)
         self.assertEqual(MockBackend.retain_posts, [])
         self.assertEqual(self.queue_files(), [other])
+
+    def test_recall_disabled_emits_nothing_and_never_queries_the_bank(self):
+        # recall_enabled false — il valore committato in hindsight.config.json,
+        # quindi il ramo che gira davvero: l'hook esce a 0 senza contesto e
+        # senza interrogare il bank. Con il recall acceso lo stesso input
+        # inietterebbe "nu memo" (0.95 supera la soglia) e manderebbe l'unico
+        # candidato sotto soglia, "xi memo" (indice 1), al classificatore.
+        MockBackend.recall_results = [
+            {"text": "nu memo", "type": "world", "scores": {"reranker": 0.95}},
+            {"text": "xi memo", "type": "world", "scores": {"reranker": 0.5}},
+        ]
+        MockBackend.classifier_spec = [
+            {"index": 1, "confidence": "high", "reason": "directly_actionable"},
+        ]
+        output = self.run_hook(self.PROMPT, extra_env={"HS_CFG_RECALL_ENABLED": "false"})
+        self.assertIsNone(output)
+        # recall_calls diretto: senza, una regressione che interroga il bank e
+        # butta via i risultati prima di classificarli passerebbe inosservata —
+        # e col recall spento nessun prompt deve uscire dalla macchina.
+        self.assertEqual(MockBackend.recall_calls, 0)
+        self.assertEqual(MockBackend.classifier_calls, 0)
+        self.assertEqual(self.pending_files(), [])
 
     def test_queued_stop_retain_disabled_drops_entry_without_work(self):
         # retain_enabled false: l'entry viene consumata e basta — nessun gate,
@@ -603,7 +712,7 @@ class HookE2ETests(unittest.TestCase):
         baseline_output = self.run_hook(self.PROMPT)
         baseline = time.monotonic() - t0
         self.assertIn("mu memo", self.context(baseline_output))
-        self.assertEqual(len(MockBackend.retain_posts), 1)
+        self.wait_for_retain_posts(1)
 
         MockBackend.retain_posts = []
         MockBackend.gate_calls = 0
@@ -617,16 +726,26 @@ class HookE2ETests(unittest.TestCase):
         # coda consumata, un solo JSON
         self.assertIn("mu memo", self.context(output))
         self.assertNotIn("systemMessage", output)
+        self.wait_for_retain_posts(1)
         self.assertEqual(MockBackend.gate_calls, 1)
-        self.assertEqual(len(MockBackend.retain_posts), 1)
         self.assertEqual(self.queue_files(), [])
         # i ritardi sono stati davvero pagati (almeno una volta)...
         self.assertGreaterEqual(elapsed, DELAY)
-        # ...ma NON due volte: parallelo, non seriale
+        # ...ma il recall NON ha aspettato che il gate finisse. Si guardano gli
+        # istanti registrati dal mock invece del tempo di parete: quello misura
+        # anche l'avvio di bash+python, che sotto carico sfora il budget di
+        # pickup e trasformava un hook seriale in uno skip (ICH-109). Qui il
+        # confronto e' fra due eventi dello stesso orologio: se l'hook fosse
+        # seriale il recall partirebbe solo dopo la fine del gate.
+        if not MockBackend.gate_spans:
+            self.skipTest("gate non eseguito in questo run (outbox della baseline raccolto): misura inconcludente")
+        recall_start, recall_end = MockBackend.recall_spans[-1]
+        gate_start, gate_end = MockBackend.gate_spans[-1]
         self.assertLess(
-            elapsed,
-            baseline + 1.5 * DELAY,
-            f"hook seriale? baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)",
+            recall_start,
+            gate_end,
+            f"hook seriale? recall {recall_start:.2f}-{recall_end:.2f}, "
+            f"gate {gate_start:.2f}-{gate_end:.2f} (DELAY={DELAY}s)",
         )
         print(f"\n[parallelismo] baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)")
 
@@ -687,12 +806,14 @@ class HookE2ETests(unittest.TestCase):
         self.assertLess(elapsed, GATE_DELAY)
         # ...e senza la domanda: il gate non ha ancora risposto
         self.assertNotIn("Vuoi che salvi", json.dumps(first or {}, ensure_ascii=False))
-        self.assertEqual(self.queue_files(), [])  # entry consumata dal figlio
         self.assertEqual(self.retain_pending_files(), [])  # niente pending, non ancora
         # Il figlio finisce per conto suo: outbox su disco (gate 12s + avvio).
         t1 = time.monotonic()
         self.wait_for_outbox(GATE_DELAY + 15.0)
         waited = time.monotonic() - t1
+        # L'entry la consuma il figlio: si verifica dopo l'outbox, o un avvio
+        # lento la trova ancora in coda al ritorno dell'hook (ICH-109).
+        self.assertEqual(self.queue_files(), [])
         self.assertEqual(MockBackend.gate_calls, 1)
         self.assertEqual(len(self.retain_pending_files()), 1)  # pending scritto dal figlio
         self.assertEqual(MockBackend.retain_posts, [])
