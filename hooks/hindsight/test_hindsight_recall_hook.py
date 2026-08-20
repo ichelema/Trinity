@@ -59,6 +59,11 @@ class MockBackend(BaseHTTPRequestHandler):
     # quello del ramo recall e' recall_delay_s, senza sovrapposizioni.
     recall_delay_s = 0.0
     gate_delay_s = 0.0
+    # Istanti (inizio, fine) delle richieste RITARDATE, per provare che il gate
+    # del figlio e il recall dell'hook si sovrappongono nel tempo senza dover
+    # cronometrare l'hook da fuori (ICH-109).
+    recall_spans: list = []
+    gate_spans: list = []
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
@@ -66,7 +71,9 @@ class MockBackend(BaseHTTPRequestHandler):
         if self.path.endswith("/memories/recall"):
             cls.recall_calls += 1
             if cls.recall_delay_s and "budget" in self._json(body):
+                start = time.monotonic()
                 time.sleep(cls.recall_delay_s)
+                cls.recall_spans.append((start, time.monotonic()))
             self._send(200, json.dumps({"results": cls.recall_results}))
         elif self.path.endswith("/memories"):
             cls.retain_posts.append(json.loads(body.decode("utf-8")))
@@ -74,7 +81,9 @@ class MockBackend(BaseHTTPRequestHandler):
         elif self.path.endswith("/chat/completions") and self._schema_name(body) == "retain_gate_decision":
             cls.gate_calls += 1
             if cls.gate_delay_s:
+                start = time.monotonic()
                 time.sleep(cls.gate_delay_s)
+                cls.gate_spans.append((start, time.monotonic()))
             decision = {"durable_claims": [], "covered_by": [], "context": "", **cls.gate_spec}
             self._send(200, json.dumps({"choices": [{"message": {"content": json.dumps(decision)}}]}))
         elif self.path.endswith("/chat/completions"):
@@ -147,6 +156,8 @@ class HookE2ETests(unittest.TestCase):
         MockBackend.retain_posts = []
         MockBackend.recall_delay_s = 0.0
         MockBackend.gate_delay_s = 0.0
+        MockBackend.recall_spans = []
+        MockBackend.gate_spans = []
 
     def tearDown(self):
         try:
@@ -307,6 +318,11 @@ class HookE2ETests(unittest.TestCase):
         l'assertIn di context() fallirebbe prima che si possa decidere."""
         context = ((output or {}).get("hookSpecificOutput") or {}).get("additionalContext", "")
         if question not in context:
+            # Nota: questo skip non distingue "figlio lento" da "pickup
+            # in-budget rotto". Distinguerli qui richiede di indovinare i tempi
+            # di un processo staccato; la proprieta' e' invece coperta in modo
+            # deterministico e in-process da test_hindsight_retain_gate.py
+            # (gate_output/retain_at_prompt), che gira nello stesso check.
             with open(self.wait_for_outbox(20.0), encoding="utf-8") as handle:
                 late = json.dumps(json.load(handle), ensure_ascii=False)
             self.assertIn(
@@ -715,16 +731,21 @@ class HookE2ETests(unittest.TestCase):
         self.assertEqual(self.queue_files(), [])
         # i ritardi sono stati davvero pagati (almeno una volta)...
         self.assertGreaterEqual(elapsed, DELAY)
-        # Se l'hook e' uscito al tetto del budget di pickup non sta piu'
-        # misurando il parallelismo ma il budget: il confronto sotto sarebbe
-        # un rosso dovuto al carico, non al disegno seriale (ICH-109).
-        if elapsed >= 6.0:  # RETAIN_PICKUP_BUDGET_S in hindsight-recall.sh
-            self.skipTest(f"hook uscito al budget di pickup ({elapsed:.2f}s): misura inconcludente")
-        # ...ma NON due volte: parallelo, non seriale
+        # ...ma il recall NON ha aspettato che il gate finisse. Si guardano gli
+        # istanti registrati dal mock invece del tempo di parete: quello misura
+        # anche l'avvio di bash+python, che sotto carico sfora il budget di
+        # pickup e trasformava un hook seriale in uno skip (ICH-109). Qui il
+        # confronto e' fra due eventi dello stesso orologio: se l'hook fosse
+        # seriale il recall partirebbe solo dopo la fine del gate.
+        if not MockBackend.gate_spans:
+            self.skipTest("gate non eseguito in questo run (outbox della baseline raccolto): misura inconcludente")
+        recall_start, recall_end = MockBackend.recall_spans[-1]
+        gate_start, gate_end = MockBackend.gate_spans[-1]
         self.assertLess(
-            elapsed,
-            baseline + 1.5 * DELAY,
-            f"hook seriale? baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)",
+            recall_start,
+            gate_end,
+            f"hook seriale? recall {recall_start:.2f}-{recall_end:.2f}, "
+            f"gate {gate_start:.2f}-{gate_end:.2f} (DELAY={DELAY}s)",
         )
         print(f"\n[parallelismo] baseline={baseline:.2f}s con ritardi={elapsed:.2f}s (DELAY={DELAY}s)")
 
