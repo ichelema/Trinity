@@ -1231,7 +1231,6 @@ class WorkerGateTests(unittest.TestCase):
         base.update(
             {
                 "retain_enabled": True,
-                "retain_mode": "chunked",
                 "retain_every_n_turns": 1,
                 "retain_overlap_turns": 1,
                 "retain_tool_calls": False,

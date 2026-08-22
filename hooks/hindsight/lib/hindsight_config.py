@@ -157,7 +157,6 @@ DEFAULTS = {
     # Parametri di chunking del retain, consumati da hindsight-retain-worker.py.
     # Devono stare nei DEFAULTS o load_config li scarta dalla whitelist (riga "if
     # k in cfg"). I valori coincidono coi fallback hardcoded del worker.
-    "retain_mode": "chunked",
     "retain_overlap_turns": 1,
     "retain_tool_calls": False,
     "retain_every_n_turns": 3,

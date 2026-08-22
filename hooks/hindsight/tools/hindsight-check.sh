@@ -365,8 +365,8 @@ entries = [
     {"type": "user", "message": {"role": "user", "content": "domanda lunga a sufficienza per il retain del turno"}},
     {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": block + "\n\n" + legit}]}},
 ]
-s = w.summarize(entries)
-at = s["last_assistant_text"]
+s = w.summarize_window(entries, 1)
+at = next((t for r, t in s["turns"] if r == "assistant"), "")
 ok = ("Hindsight persistent memory" not in at) and (legit in at)
 # strip diretto
 direct = w.strip_memory_block(block + "\n\n" + legit)
@@ -379,32 +379,6 @@ if [ "$STRIP_OK" = "OK" ]; then
 else
 	ko "strip_memory_block NON rimuove il blocco-memoria (feedback-loop possibile)"
 fi
-
-# --- 13. DOCUMENT_ID stabile + guardia compaction (step D) ---
-sect "13. document_id anti-duplicati (step D)"
-WORKER_WIN="$(w "$HOOKS_DIR/hindsight-retain-worker.py")"
-DSTATE=$(mktemp -d /tmp/hs-dstate-XXXXXX)
-DSTATE_WIN=$(w "$DSTATE")
-DOC_OK=$(
-	HS_RETAIN_STATE_DIR="$DSTATE_WIN" PYTHONUTF8=1 python - "$WORKER_WIN" <<'PY' 2>/dev/null
-import sys, importlib.util
-spec = importlib.util.spec_from_file_location("w", sys.argv[1])
-w = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(w)
-a = w.compute_document_id("s1", 10)   # prima volta -> "s1"
-b = w.compute_document_id("s1", 14)   # transcript cresce -> stesso id (upsert)
-c = w.compute_document_id("s1", 6)    # transcript si accorcia (compaction) -> "s1-c1"
-d = w.compute_document_id("", 5)      # senza session_id -> None
-ok = a == "s1" and b == "s1" and c == "s1-c1" and d is None
-print("OK" if ok else f"KO a={a} b={b} c={c} d={d}")
-PY
-)
-if [ "$DOC_OK" = "OK" ]; then
-	ok "compute_document_id: id stabile per sessione + bump chunk su compaction"
-else
-	ko "compute_document_id logica errata ($DOC_OK)"
-fi
-rm -rf "$DSTATE"
 
 # --- 14. THROTTLING retain ogni N + force nel drain / HS_RETAIN_FORCE (step E) ---
 sect "14. Throttling retain (step E)"

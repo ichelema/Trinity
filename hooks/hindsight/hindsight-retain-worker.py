@@ -204,21 +204,10 @@ def load_transcript(path: str, max_lines: int = 200) -> list[dict]:
     return out
 
 
-def count_transcript_lines(path: str) -> int:
-    """Conta le righe non vuote del transcript (cheap, niente parse JSON).
-    Misura robusta per rilevare la compaction anche oltre il window di load_transcript."""
-    if not path or not os.path.exists(path):
-        return 0
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return sum(1 for line in f if line.strip())
-    except Exception:
-        return 0
-
-
 def _retain_state_path() -> str:
-    """File di stato per il tracking compaction. In cache_dir() (per-utente, 0700):
-    su Linux /tmp e' scrivibile da tutti. Override per i test via HS_RETAIN_STATE_DIR."""
+    """File di stato del worker (stop_count, gate_error_notified per sessione).
+    In cache_dir() (per-utente, 0700): su Linux /tmp e' scrivibile da tutti.
+    Override per i test via HS_RETAIN_STATE_DIR."""
     d = os.environ.get("HS_RETAIN_STATE_DIR") or cache_dir()
     return os.path.join(d, "hs-retain-state.json")
 
@@ -453,7 +442,7 @@ def _state_lock(path: str, timeout: float = 5.0):
     """Lock interprocesso best-effort sul file di stato condiviso (flock su POSIX,
     msvcrt su Windows). Serializza il read-modify-write di piu' worker Stop concorrenti
     (piu' finestre Claude Code sullo stesso utente): senza, l'ultimo writer sovrascrive
-    l'update dell'altra sessione (lost update su stop_count e line_count/chunk).
+    l'update dell'altra sessione (lost update su stop_count).
     Best-effort: se il lock non si prende entro timeout, procede senza — il throttling
     non e' critico e bloccare un worker async sarebbe peggio del lost update che evita.
     Il lock e' legato al fd, quindi si rilascia da solo se il worker viene killato."""
@@ -508,34 +497,6 @@ def _state_lock(path: str, timeout: float = 5.0):
                 except Exception:
                     pass
             f.close()
-
-
-def compute_document_id(session_id: str, line_count: int) -> str | None:
-    """document_id stabile per sessione → il server fa upsert invece di duplicare.
-    Guardia compaction: se il transcript si accorcia (line_count < ultimo visto),
-    incrementa un suffisso chunk per non sovrascrivere il documento pre-compaction.
-    Ritorna None se session_id assente (il server genera un id casuale)."""
-    if not session_id:
-        return None
-    path = _retain_state_path()
-    with _state_lock(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except Exception:
-            state = {}
-        if not isinstance(state, dict):
-            state = {}  # file avvelenato (JSON valido ma non-dict): auto-ripara
-        entry = state.get(session_id) or {}
-        chunk = entry.get("chunk", 0)
-        if line_count < entry.get("line_count", 0):
-            chunk += 1
-        # merge: preserva altri campi (es. stop_count del throttling)
-        entry["line_count"] = line_count
-        entry["chunk"] = chunk
-        state[session_id] = entry
-        _write_retain_state(path, state)
-    return session_id if chunk == 0 else f"{session_id}-c{chunk}"
 
 
 def _write_retain_state(path: str, state: dict) -> None:
@@ -665,97 +626,15 @@ def extract_text(content) -> str:
     return ""
 
 
-def summarize(entries: list[dict]) -> dict:
-    last_user_prompt = ""
-    last_assistant_text = ""
-    files_modified: list[str] = []
-    bash_cmds: list[str] = []
-
-    for e in entries:
-        etype = e.get("type")
-        msg = e.get("message") or {}
-        role = msg.get("role") or etype
-
-        if role == "user":
-            txt = strip_memory_block(extract_text(msg.get("content")))
-            if txt and not txt.startswith("<"):
-                last_user_prompt = txt
-
-        elif role == "assistant":
-            content = msg.get("content") or []
-            if isinstance(content, list):
-                for b in content:
-                    if not isinstance(b, dict):
-                        continue
-                    if b.get("type") == "text":
-                        t = strip_memory_block((b.get("text") or "").strip())
-                        if t:
-                            last_assistant_text = t
-                    elif (
-                        CFG.get("retain_tool_calls", False)
-                        and b.get("type") == "tool_use"
-                    ):
-                        tool = b.get("name") or ""
-                        inp = b.get("input") or {}
-                        if tool in ("Write", "Edit", "MultiEdit"):
-                            fp = inp.get("file_path") or ""
-                            if fp and fp not in files_modified:
-                                files_modified.append(fp)
-                        elif tool == "Bash":
-                            cmd = (inp.get("command") or "").strip()
-                            if not cmd:
-                                continue
-                            first = cmd.split("\n", 1)[0][:200]
-                            if any(first.startswith(p) for p in NOISY_BASH_PREFIXES):
-                                continue
-                            if any(p in first for p in INTERESTING_BASH_PATTERNS):
-                                if first not in bash_cmds:
-                                    bash_cmds.append(first)
-
-    trunc = CFG["retain_text_truncate"]
-    return {
-        "last_user_prompt": last_user_prompt[:trunc],
-        "last_assistant_text": last_assistant_text[:trunc],
-        "files_modified": files_modified[-CFG["retain_max_files"] :],
-        "bash_cmds": bash_cmds[-CFG["retain_max_cmds"] :],
-    }
-
-
-def build_content(hook: dict, summary: dict) -> str | None:
-    if not summary["last_user_prompt"] and not summary["files_modified"]:
-        return None
-    parts = [
-        "Claude Code session activity.",
-        f"Timestamp: {datetime.now(timezone.utc).isoformat()}",
-        f"CWD: {hook.get('cwd', '')}",
-        f"Session: {hook.get('session_id', '')}",
-        "",
-    ]
-    if summary["last_user_prompt"]:
-        parts += ["## Last user prompt", summary["last_user_prompt"], ""]
-    if summary["last_assistant_text"]:
-        parts += ["## Last assistant text", summary["last_assistant_text"], ""]
-    if summary["files_modified"]:
-        parts += (
-            ["## Files modified"] + [f"- {p}" for p in summary["files_modified"]] + [""]
-        )
-    if summary["bash_cmds"]:
-        parts += (
-            ["## Notable commands"] + [f"- {c}" for c in summary["bash_cmds"]] + [""]
-        )
-    return "\n".join(parts).strip()
-
-
 # ---------------------------------------------------------------------------
-# Modalita' "chunked" (sliding window) — ispirata al plugin ufficiale Hindsight.
-# Invece di sovrascrivere un unico documento-sessione con l'ultimo scambio
-# (lossy: vedi build_content/summarize), salva FETTE immutabili della
-# conversazione, ognuna con un document_id derivato dal contenuto (univoco tra
-# fette diverse, stabile sui replay della stessa finestra). La finestra
-# copre gli ultimi (retain_every_n_turns + retain_overlap_turns) turni: l'overlap
-# ricuce i confini tra fette consecutive cosi' nessun ragionamento a cavallo va
-# perso. La ridondanza tra fette viene assorbita dalla consolidation del server
-# (merge per proof_count). Un "turno" inizia a ogni messaggio user.
+# Retain "chunked" (sliding window) — ispirato al plugin ufficiale Hindsight.
+# Salva FETTE immutabili della conversazione, ognuna con un document_id
+# derivato dal contenuto (univoco tra fette diverse, stabile sui replay della
+# stessa finestra). La finestra copre gli ultimi (retain_every_n_turns +
+# retain_overlap_turns) turni: l'overlap ricuce i confini tra fette consecutive
+# cosi' nessun ragionamento a cavallo va perso. La ridondanza tra fette viene
+# assorbita dalla consolidation del server (merge per proof_count). Un "turno"
+# inizia a ogni messaggio user.
 # ---------------------------------------------------------------------------
 
 
@@ -802,8 +681,8 @@ def slice_last_turns_by_user_boundary(messages: list[dict], turns: int) -> list[
 
 
 def summarize_window(entries: list[dict], window_turns: int) -> dict:
-    """Come summarize() ma sull'intera finestra di window_turns turni: raccoglie
-    la sequenza (role, text) della conversazione + file/comandi della finestra."""
+    """Riassume l'intera finestra di window_turns turni: raccoglie la sequenza
+    (role, text) della conversazione + file/comandi della finestra."""
     window = slice_last_turns_by_user_boundary(
         _iter_role_messages(entries), window_turns
     )
@@ -946,8 +825,8 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
         debug_log(CFG, "retain_skip", reason="disabled")
         return 0, None
 
-    # Stop hook non passa 'prompt'; il filtro avviene in build_content (skip se
-    # last_user_prompt+files_modified entrambi vuoti = turno senza contenuto utile).
+    # Stop hook non passa 'prompt'; il filtro avviene in build_content_chunk (skip
+    # se turns+files_modified entrambi vuoti = finestra senza contenuto utile).
     # drop_unanswered_tail: a UserPromptSubmit il transcript puo' gia' contenere
     # il prompt nuovo; la finestra deve essere quella del turno COMPLETATO.
     transcript = drop_unanswered_tail(load_transcript(hook.get("transcript_path", "")))
@@ -955,19 +834,11 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
         debug_log(CFG, "retain_skip", reason="no_transcript")
         return 0, None
 
-    # Modalita': "chunked" (default) salva fette immutabili con sliding window;
-    # qualsiasi altro valore mantiene il vecchio comportamento legacy (un documento
-    # per sessione, upsert, solo ultimo scambio — lossy).
-    retain_mode = CFG.get("retain_mode", "chunked")
-    if retain_mode == "chunked":
-        window_turns = max(1, int(CFG.get("retain_every_n_turns", 3))) + int(
-            CFG.get("retain_overlap_turns", 1)
-        )
-        summary = summarize_window(transcript, window_turns)
-        content = build_content_chunk(hook, summary)
-    else:
-        summary = summarize(transcript)
-        content = build_content(hook, summary)
+    window_turns = max(1, int(CFG.get("retain_every_n_turns", 3))) + int(
+        CFG.get("retain_overlap_turns", 1)
+    )
+    summary = summarize_window(transcript, window_turns)
+    content = build_content_chunk(hook, summary)
     if not content:
         debug_log(CFG, "retain_skip", reason="no_content")
         return 0, None
@@ -1114,24 +985,16 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
             session=session_id[:8],
         )
 
-    # document_id: in chunked ogni fetta e' un documento con id derivato dal
-    # CONTENUTO (fette diverse = documenti diversi, niente perdita tra retain;
-    # fetta identica ri-presentata = stesso id, il server fa upsert invece di
+    # document_id: ogni fetta e' un documento con id derivato dal CONTENUTO
+    # (fette diverse = documenti diversi, niente perdita tra retain; fetta
+    # identica ri-presentata = stesso id, il server fa upsert invece di
     # duplicare — dedup replay esatto, ICH-67). Il content e' stabile per
-    # costruzione: build_content_chunk non contiene piu' righe volatili. In legacy
-    # resta l'id stabile per-sessione con guardia compaction (compute_document_id,
-    # che fa upsert — verificato lossy sul testo non-ultimo).
-    if retain_mode == "chunked":
-        if session_id:
-            digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
-            doc_id = f"{session_id}-{digest}"
-        else:
-            doc_id = None
+    # costruzione: build_content_chunk non contiene piu' righe volatili.
+    if session_id:
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+        doc_id = f"{session_id}-{digest}"
     else:
-        doc_id = compute_document_id(
-            session_id,
-            count_transcript_lines(hook.get("transcript_path", "")),
-        )
+        doc_id = None
 
     item = {
         "content": content,
@@ -1146,17 +1009,12 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
 
     payload = {"items": [item], "async": True}
 
-    # Per log/dashboard: in chunked il summary ha 'turns' (non last_user_prompt/
-    # last_assistant_text), quindi derivo prompt/assistant dal primo turno user e
-    # dall'ultimo turno assistant della finestra — altrimenti i campi apparirebbero
-    # vuoti nella dashboard pur essendo il content pieno. Fallback ai campi legacy.
+    # Per log/dashboard: derivo prompt/assistant dal primo turno user e
+    # dall'ultimo turno assistant della finestra — altrimenti i campi
+    # apparirebbero vuoti nella dashboard pur essendo il content pieno.
     _turns = summary.get("turns") or []
-    log_prompt = summary.get("last_user_prompt") or next(
-        (t for r, t in _turns if r == "user"), ""
-    )
-    log_assistant = summary.get("last_assistant_text") or next(
-        (t for r, t in reversed(_turns) if r == "assistant"), ""
-    )
+    log_prompt = next((t for r, t in _turns if r == "user"), "")
+    log_assistant = next((t for r, t in reversed(_turns) if r == "assistant"), "")
 
     # Bank di scrittura: env API_URL esplicita (test/override) ha precedenza,
     # poi bank.retain_bank risolto sul cwd della sessione ("auto" = slug repo;
@@ -1284,7 +1142,6 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
         context=context,
         tags=tags,
         content_chars=len(content),
-        mode=retain_mode,
         n_turns=len(_turns),
         prompt=log_prompt[:300],
         assistant=log_assistant[:300],
