@@ -404,3 +404,25 @@ bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh" 9999 control-plane
 
 Nota benigna: durante `bundle install` compare `$HOME is not writable` → bundler
 ripiega su una temp dir e completa comunque.
+
+---
+
+## 17. Gate pre-recall (ICH-66) — misurato e scartato
+
+> Valutazione del 2026-08-10 su 100 prompt reali; benchmark rimossi con ICH-97
+> (il write-up completo era `hooks/hindsight/benchmark/RECALL_GATE_EVALUATION.md`).
+
+Domanda: conviene un gate LLM prima del recall automatico, per saltare Hindsight
+quando il prompt è autosufficiente? **No, non è viabile.**
+
+- Baseline: solo il 47% dei recall restituiva memoria concretamente utile;
+  risparmio teorico best-case ~2 s per prompt.
+- Gate binario: il candidato migliore (`gpt-5.6-luna` + contesto) perdeva 11
+  richiami utili su 47 (~23%) ed era più lento del recall che doveva evitare;
+  i modelli veloci ne perdevano 20-38 su 47 (43-81%), l'euristica locale 43 su 47.
+- Variante prudente a tre esiti (`recall`/`uncertain`/`skip`): falsi negativi
+  quasi azzerati (1 su 47), ma evitava solo l'1% dei recall e aumentava il tempo
+  medio del 70% — nessun vantaggio reale.
+- Strada promettente alternativa: classificare i risultati DOPO il recall
+  (0 utili persi, rumore automatico 4,6%) — è il filone di
+  `hindsight_recall_result_filter_bench.py`, che resta in `benchmark/`.

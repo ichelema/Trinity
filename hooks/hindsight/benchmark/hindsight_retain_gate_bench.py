@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Benchmark offline del gate semantico pre-retain (ICH-67).
 
-Due fasi, stessa filosofia di hindsight_recall_gate_bench.py:
+Due fasi:
 
   --build-corpus   ricostruisce finestre Stop REALI dai transcript di Claude
                    Code alla cadenza di produzione (retain_every_n_turns=3,
