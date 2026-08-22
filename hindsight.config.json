@@ -35,7 +35,6 @@
   "recall_rerank_timeout": 6,
   "recall_debug_in_context": false,
 
-  "retain_mode": "chunked",
   "retain_overlap_turns": 1,
   "retain_tool_calls": false,
   "retain_every_n_turns": 3,
