@@ -1,20 +1,18 @@
 ---
-description: Review avversaria indipendente e read-only dell'implementazione di una issue Linear
-argument-hint: <issue-id>
-arguments:
-  - issue_id
+description: Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
+argument-hint: <issue-id...>
 disable-model-invocation: true
 ---
 
-Agisci come un Principal Software Engineer incaricato di eseguire una review avversaria indipendente dell'implementazione relativa alla issue Linear `$issue_id`.
+Agisci come un Principal Software Engineer incaricato di eseguire una review avversaria indipendente dell'implementazione relativa alle issue Linear elencate in `$ARGUMENTS` (uno o più ID separati da spazi).
 
 L'implementazione è stata realizzata da un altro agente. Il tuo obiettivo non è confermare che il lavoro sembri corretto, ma cercare sistematicamente errori, requisiti mancanti, assunzioni non valide, regressioni e casi limite.
 
 ## Validazione dell'argomento
 
-Se `$issue_id` è vuoto, fermati e mostra:
+Se `$ARGUMENTS` è vuoto, fermati e mostra:
 
-`/4_independent-review <issue-id>`
+`/4_independent-review <issue-id...>`
 
 Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 
@@ -34,9 +32,9 @@ In particolare:
 
 Puoi eseguire comandi di ispezione e test solo se non modificano file tracciati o lo stato del repository. Prima di iniziare registra lo stato Git corrente; al termine verifica che non sia cambiato. Non eliminare eventuali modifiche preesistenti dell'utente.
 
-## 1. Ricostruisci il contratto della issue
+## 1. Ricostruisci il contratto delle issue
 
-Leggi `$issue_id` direttamente da Linear, se hai accesso in sola lettura, includendo:
+Leggi ogni issue direttamente da Linear, se hai accesso in sola lettura, includendo:
 
 - descrizione;
 - acceptance criteria;
@@ -47,7 +45,7 @@ Leggi `$issue_id` direttamente da Linear, se hai accesso in sola lettura, includ
 
 Se non puoi accedere alla issue, dichiaralo immediatamente e chiedimi di fornirne il contenuto. Non tentare di dedurre i requisiti dal solo codice.
 
-Trasforma poi la issue in una checklist verificabile di requisiti espliciti e impliciti. Distingui chiaramente:
+Trasforma poi le issue in una checklist verificabile di requisiti espliciti e impliciti; con più issue, annota per ogni requisito l'issue di provenienza. Distingui chiaramente:
 
 - comportamento richiesto;
 - vincoli tecnici;
@@ -78,7 +76,7 @@ Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza
 
 ## 3. Identifica esattamente il changeset
 
-Determina quali commit e modifiche appartengono a `$issue_id` usando, nell'ordine:
+Determina quali commit e modifiche appartengono alle issue usando, nell'ordine:
 
 1. riferimenti alla issue nei commit, nel branch o nella cronologia;
 2. confronto con il branch base effettivo;
@@ -93,7 +91,7 @@ Nel report indica:
 - baseline utilizzata;
 - intervallo di commit o diff analizzato;
 - file inclusi;
-- eventuali modifiche presenti ma non chiaramente attribuibili a `$issue_id`.
+- eventuali modifiche presenti ma non chiaramente attribuibili alle issue.
 
 Se il changeset rimane ambiguo, fermati e chiedi chiarimenti invece di recensire un diff arbitrario.
 
@@ -177,7 +175,7 @@ Aggiungi una motivazione sintetica e concreta.
 
 ### Copertura dei requisiti
 
-Per ogni requisito di `$issue_id`, indica:
+Per ogni requisito di ogni issue, indica:
 
 - `Soddisfatto`;
 - `Parzialmente soddisfatto`;
@@ -240,5 +238,5 @@ Indica:
 - Verifica il comportamento partendo dal codice e dai requisiti.
 - Cita sempre percorsi e numeri di riga quando disponibili.
 - Se non trovi problemi, non inventarne: spiega quali tentativi di falsificazione hai effettuato e perché non hanno prodotto finding.
-- Non proporre modifiche fuori dallo scope di `$issue_id`, salvo che evidenzino una regressione causata dal changeset.
+- Non proporre modifiche fuori dallo scope delle issue, salvo che evidenzino una regressione causata dal changeset.
 - Non modificare il codice in nessuna circostanza.

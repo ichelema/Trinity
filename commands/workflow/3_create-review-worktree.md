@@ -1,33 +1,29 @@
 ---
 description: Crea un branch e un worktree pulito per una review indipendente
-argument-hint: <source-branch> <issue-id> <model>
-arguments:
-  - source_branch
-  - issue_id
-  - model
+argument-hint: <source-branch> <issue-id...> <model>
 disable-model-invocation: true
 ---
 
 Crea un branch e un worktree separato per la review del branch remoto
-`$source_branch`, relativo alla issue Linear `$issue_id`.
+indicato, relativo a una o più issue Linear.
 
-Il modello che eseguirà la review è `$model`.
+Il modello che eseguirà la review è l'ultimo argomento.
 
 ## Validazione degli argomenti
 
-Verifica che siano presenti tutti gli argomenti:
+Dividi `$ARGUMENTS` in token separati da spazi:
 
-- source branch: `$source_branch`
-- issue ID: `$issue_id`
-- modello: `$model`
+- il primo token è il source branch;
+- l'ultimo token è il modello;
+- i token intermedi sono gli issue ID (almeno uno).
 
-Se ne manca uno, fermati e mostra:
+Se i token sono meno di 3, fermati e mostra:
 
-`/3_create-review-worktree <source-branch> <issue-id> <model>`
+`/3_create-review-worktree <source-branch> <issue-id...> <model>`
 
-## Determinazione del tipo dalla issue
+## Determinazione del tipo dalle issue
 
-Recupera la issue `$issue_id` da Linear in modalità esclusivamente read-only.
+Recupera ogni issue da Linear in modalità esclusivamente read-only.
 
 Esamina:
 
@@ -39,9 +35,13 @@ Esamina:
 Determina il prefisso usando queste regole:
 
 - se la issue è esplicitamente un bug, usa `bug`;
-- se la issue è esplicitamente un miglioramento, usa `improvments`;
+- se la issue è esplicitamente un miglioramento o un refactoring
+  (es. label `Refactor`), usa `improvments`;
 - se il tipo è assente, diverso o ambiguo, fermati e chiedi quale prefisso
   utilizzare.
+
+Con più issue, tutte devono risolvere allo stesso prefisso. Se i prefissi
+differiscono, fermati e chiedi quale usare.
 
 Dai priorità all'issue type strutturato di Linear. Usa label, titolo e
 descrizione solo come conferma, non per sovrascrivere un tipo esplicito.
@@ -52,24 +52,30 @@ Non modificare la issue, i commenti, lo stato o altri dati Linear.
 
 Costruisci il nome base:
 
-`$issue_id-review-$model`
+- una sola issue: `<issue-id>-review-<model>` (es. `ICH-72-review-fable`);
+- più issue con lo stesso prefisso team: prefisso una sola volta, poi i
+  numeri delle successive in ordine, quindi `review` e il modello
+  (`ICH-97` + `ICH-98` → `ICH-97-98-review-fable`);
+- issue con prefissi team diversi: fermati e chiedi come nominare.
+
+Nel resto del comando questo valore è `<base-name>`.
 
 Costruisci il branch di review:
 
-`<prefix>/$issue_id-review-$model`
+`<prefix>/<base-name>`
 
 Esempi:
 
 - `bug/ICH-72-review-gpt-5.6-sol`
-- `improvments/ICH-72-review-claude-opus-4.1`
+- `improvments/ICH-97-98-review-fable`
 
 La directory del worktree deve chiamarsi:
 
-`<prefix>+$issue_id-review-$model`
+`<prefix>+<base-name>`
 
 Il `+` sostituisce il `/` del branch (che non è valido nei nomi di
 directory) e mantiene il raggruppamento visivo coerente con gli altri
-worktree (es. `improvements+ICH-72-retain-gate-dedup`).
+worktree (es. `improvments+ICH-97-98-review-fable`).
 
 Verifica il nome del branch con:
 
@@ -87,7 +93,7 @@ Esegui:
 
 Non eseguire `git pull`.
 
-Accetta `$source_branch` con o senza il prefisso `origin/` e rimuovi
+Accetta il source branch con o senza il prefisso `origin/` e rimuovi
 l'eventuale prefisso prima di costruire il riferimento remoto.
 
 Verifica che esista esattamente:
@@ -113,7 +119,7 @@ Determina la root del repository.
 
 La directory di destinazione è dentro `.claude/worktrees/`:
 
-`<repo-root>/.claude/worktrees/<prefix>+$issue_id-review-$model`
+`<repo-root>/.claude/worktrees/<prefix>+<base-name>`
 
 Se il branch o la directory esistono già, fermati senza modificarli,
 riutilizzarli o eliminarli.
@@ -132,11 +138,11 @@ Prima della creazione mostra:
 Risolvi il percorso assoluto del worktree in formato Windows dentro
 `.claude/worktrees/`:
 
-`<repo-root>/.claude/worktrees/<prefix>+$issue_id-review-$model`
+`<repo-root>/.claude/worktrees/<prefix>+<base-name>`
 
 Esempio: se la root è `E:/AI/Claude/Trinity` e il prefisso è
-`improvements`, il worktree sarà
-`E:/AI/Claude/Trinity/.claude/worktrees/improvements+ICH-72-review-Fable`.
+`improvments`, il worktree sarà
+`E:/AI/Claude/Trinity/.claude/worktrees/improvments+ICH-97-98-review-fable`.
 
 Crea il branch e il worktree usando il percorso assoluto Windows:
 
@@ -183,7 +189,7 @@ con i valori effettivi:
 ┌────────────────────────┬──────────────────────────────────────────────────────────┐
 │         Campo          │                          Valore                          │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Issue Linear           │ <issue-id> — <titolo-issue>                             │
+│ Issue Linear           │ <issue-id> — <titolo-issue> (una riga per issue)        │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Tipo rilevato          │ <tipo> (<sorgente: label/type>)                         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
@@ -205,6 +211,7 @@ con i valori effettivi:
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
-Adatta la larghezza della colonna Valore al contenuto effettivo.
+Adatta la larghezza della colonna Valore al contenuto effettivo. Con più
+issue, la cella «Issue Linear» contiene una riga per ogni issue.
 
 Non iniziare la review e non modificare file nel nuovo worktree.

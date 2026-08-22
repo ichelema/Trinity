@@ -1,31 +1,28 @@
 ---
-description: Prende in carico una issue Linear e la implementa nel worktree creato allo step 1, fino alla PR (senza merge)
-argument-hint: <issue-id> <model>
-arguments:
-  - issue_id
-  - model
+description: Prende in carico una o più issue Linear e le implementa nel worktree creato allo step 1, fino alla PR (senza merge)
+argument-hint: <issue-id...> <model>
 disable-model-invocation: true
 ---
 
-Prendi in carico la issue Linear `$issue_id` e implementala nel worktree già
-creato da `/1_create-worktree` per il modello `$model`.
+Prendi in carico le issue Linear indicate e implementale nel worktree già
+creato da `/1_create-worktree`.
 
 Il worktree e il branch esistono già: **non crearli, non ricrearli, non fare
 checkout nel repository principale**.
 
-`$model` qui serve solo a identificare il worktree corretto, non a scegliere il
-modello di esecuzione.
+Il modello qui serve solo a identificare il worktree corretto, non a scegliere
+il modello di esecuzione.
 
 ## Validazione degli argomenti
 
-Verifica che siano presenti tutti gli argomenti:
+Dividi `$ARGUMENTS` in token separati da spazi:
 
-- issue ID: `$issue_id`
-- modello: `$model`
+- l'ultimo token è il modello;
+- i token precedenti sono gli issue ID (almeno uno).
 
-Se ne manca uno, fermati e mostra:
+Se i token sono meno di 2, fermati e mostra:
 
-`/2_work-issue <issue-id> <model>`
+`/2_work-issue <issue-id...> <model>`
 
 ## Localizzazione del worktree
 
@@ -37,10 +34,13 @@ Ricava il worktree dallo stato reale di Git:
 git worktree list --porcelain
 ```
 
-Cerca l'entry il cui branch termina esattamente con `/$issue_id-$model`
-(es. `improvements/ICH-72-claude-opus-4.1`). Il suffisso esatto è ciò che
-distingue il worktree di implementazione da quello di review, che termina con
-`/$issue_id-review-$model`.
+Cerca l'entry il cui branch termina esattamente con `/<base-name>`, dove
+`<base-name>` segue la regola dello step 1: una sola issue →
+`<issue-id>-<model>` (es. `improvments/ICH-72-fable`); più issue → prefisso
+team una sola volta, poi i numeri delle successive, infine il modello
+(es. `ICH-97` + `ICH-98` + `fable` → `improvments/ICH-97-98-fable`).
+Il suffisso esatto è ciò che distingue il worktree di implementazione da
+quello di review, il cui nome contiene `-review-`.
 
 Da quella entry ricava:
 
@@ -49,7 +49,7 @@ Da quella entry ricava:
 
 Se non esiste nessuna entry corrispondente, fermati e mostra:
 
-`/1_create-worktree <source-branch> $issue_id $model`
+`/1_create-worktree <source-branch> <issue-id...> <model>`
 
 Non cercare worktree simili, non riutilizzare un worktree di review, non
 lavorare nel repository principale.
@@ -74,9 +74,9 @@ decidere da solo e non eseguire mai `git checkout .`, `git reset --hard` o
 `git stash` senza risposta: quel lavoro non versionato può essere l'unica copia
 esistente.
 
-## Recupero della issue
+## Recupero delle issue
 
-Recupera `$issue_id` con `get_issue`, passando `includeRelations: true`.
+Recupera ogni issue con `get_issue`, passando `includeRelations: true`.
 
 Leggi:
 
@@ -93,7 +93,7 @@ Senza quel flag il campo `relations` non compare affatto, e una issue con dei
 blocker è indistinguibile da una libera: è un falso negativo silenzioso, non un
 errore.
 
-Se la issue è bloccata da una o più issue non completate:
+Se una delle issue è bloccata da una o più issue non completate:
 
 1. NON iniziare l'implementazione.
 2. Mostra quali issue la stanno bloccando e il loro stato.
@@ -105,14 +105,14 @@ quella. Il compito qui è rendere quella decisione informata, non prenderla.
 
 ## Segnalare l'inizio del lavoro
 
-Il branch creato allo step 1 è `<prefix>/$issue_id-$model`, **non** il
+Il branch creato allo step 1 è `<prefix>/<base-name>`, **non** il
 `gitBranchName` fornito da Linear: il collegamento automatico branch → issue
 non scatta. Per tutta l'implementazione la board non mostra nulla, a meno che
 non lo segnali tu.
 
 Una volta sola, prima di iniziare a modificare file:
 
-- se lo `statusType` della issue è `backlog` o `unstarted`, portala a
+- per ogni issue: se lo `statusType` è `backlog` o `unstarted`, portala a
   **In Progress** con `save_issue`;
 - se è già `started`, non toccarla: qualcuno ci sta già lavorando, oppure
   l'automazione è già intervenuta.
@@ -134,7 +134,7 @@ transizione appena avvenuta.
 
 Prima di modificare qualsiasi file mostra:
 
-- issue: `$issue_id` — titolo;
+- le issue: ID e titolo, una per riga;
 - branch e percorso del worktree;
 - requisiti estratti dalla issue, come checklist verificabile;
 - breve piano di implementazione (file coinvolti e modifiche previste);
@@ -155,15 +155,15 @@ Attendi l'ok dell'utente sul piano prima di scrivere codice.
 
 ## Implementazione
 
-Obiettivo, lavorare sulla issue `$issue_id`. 
+Obiettivo: implementare tutte le issue indicate. 
 
 Sei il lead. 
 
 Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker, i problemi con prospettiva fresca a DeepSeek. 
 
-Mantieni tutte le modifiche entro lo scope di `$issue_id`. 
-Ogni riga modificata deve essere riconducibile a un requisito della issue: le deviazioni vanno
-segnalate all'utente, non incluse in silenzio.
+Mantieni tutte le modifiche entro lo scope delle issue.
+Ogni riga modificata deve essere riconducibile a un requisito di una delle
+issue: le deviazioni vanno segnalate all'utente, non incluse in silenzio.
 
 Sono consentiti più commit quando rappresentano modifiche logiche distinte. 
 
@@ -227,7 +227,10 @@ corpo. Senza, la PR resta scollegata e nessuna transizione di stato avviene.
 `resolve` / `resolves` / `complete` / `completes` / `implement` / `implements`
 (anche nelle forme `-d` e `-ing`).
 
-    Fixes $issue_id
+    Fixes ICH-97
+    Fixes ICH-98
+
+Con più issue, una magic word per ogni issue, ciascuna sulla propria riga.
 
 **Per collegare senza chiudere** — issue correlate, parent, contesto:
 `ref` / `refs` / `references` / `part of` / `related to` / `relates to` /
@@ -245,7 +248,7 @@ La PR deve contenere:
 - riepilogo conciso;
 - dettagli di implementazione importanti;
 - test eseguiti;
-- riferimento a `$issue_id`.
+- riferimento a ogni issue.
 
 Titolo e descrizione della PR vanno sempre scritti in inglese: Linear usa il
 titolo della PR come titolo dell'attachment agganciato alla issue, quindi
@@ -254,7 +257,7 @@ diventa testo del workspace a tutti gli effetti.
 ## Non fare il merge
 
 Fermati qui. Il passo successivo è la review indipendente
-(`/3_create-review-worktree <branch> $issue_id <model-reviewer>`), poi il merge
+(`/3_create-review-worktree <branch> <issue-id...> <model-reviewer>`), poi il merge
 resta all'utente.
 
 ## Verifica finale
@@ -265,13 +268,13 @@ git -C "<wt-path>" log --oneline "<default>".."<branch>"
 ```
 
 Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i
-valori effettivi, <model> è quello che ha eseguito il lavoro $model:
+valori effettivi; `<model>` è l'ultimo argomento ricevuto:
 
 ```
 ┌────────────────────────┬──────────────────────────────────────────────────────────┐
 │         Campo          │                          Valore                          │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Issue Linear           │ <issue-id> — <titolo-issue>                              │
+│ Issue Linear           │ <issue-id> — <titolo-issue> (una riga per issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Stato Linear           │ <stato-precedente> → <stato-attuale> / invariato: <motivo>│
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
@@ -285,10 +288,12 @@ valori effettivi, <model> è quello che ha eseguito il lavoro $model:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Test                   │ <comando> — <esito>                                      │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Pull Request           │ <url> (magic word: <Fixes/Refs> <issue-id>)              │
+│ Pull Request           │ <url> (magic words: <Fixes/Refs> per ogni issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /3_create-review-worktree <branch> <issue-id> <$model>   │
+│ Prossimo passo         │ /3_create-review-worktree <branch> <issue-id...> <model> │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
-Adatta la larghezza della colonna Valore al contenuto effettivo.
+Adatta la larghezza della colonna Valore al contenuto effettivo. Con più
+issue, le celle «Issue Linear» e «Stato Linear» contengono una riga per ogni
+issue.
