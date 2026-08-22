@@ -76,7 +76,12 @@ I vecchi dump SQL del lab non sono stati migrati (dismessi nella fusione del 202
 ## 📁 altre sottocartelle
 
 - `benchmark/` — corpora e script di benchmark embedding/reranker (task `mise embed-bench`, `rerank-bench`).
-- `hindsight-dashboard/` — web app Ruby/Roda per analizzare `hindsight-debug.log` (task `mise dashboard`).
+
+Per analizzare `hindsight-debug.log` (JSONL) basta una riga di Nushell:
+
+```bash
+nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"
+```
 
 ## Convenzione di risoluzione path
 

@@ -336,19 +336,19 @@ i tool `agent_knowledge_*` nei tool locali `mcp__hindsight__*`.
 
 ---
 
-## 16. Interfacce web (Control Plane + dashboard log) — task mise
+## 16. Interfaccia web (Control Plane) — task mise
 
 > Sessione del 2026-05-26.
 
-Due UI **opzionali** e indipendenti dal server MCP, avviate via task mise, **in foreground**
+Una UI **opzionale** e indipendente dal server MCP, avviata via task mise, **in foreground**
 (Ctrl-C; a differenza di `start-hindsight` che è daemon `setsid nohup`).
 
 | UI                | Porta | Avvio                    | Stop                          | Cos'è                                                                                                           |
 | ----------------- | ----- | ------------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | **Control Plane** | 9999  | `mise run control-plane` | `mise run stop-control-plane` | Web UI ufficiale Hindsight (Next.js via npx, **non nel repo**). Sfoglia bank/entità/operations, testa recall    |
-| **Dashboard log** | 9292  | `mise run dashboard`     | `mise run stop-dashboard`     | App Roda/Puma nel repo (`hindsight-dashboard/`). Analizza `hindsight-debug.log`: tail SSE, color-coding, filtri |
 
-Prerequisito dashboard (una tantum): `mise run install-dashboard`.
+Per analizzare `hindsight-debug.log` (JSONL) non serve una UI, basta una riga di Nushell:
+`nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
 
 ### Architettura Hindsight: 3 servizi
 
@@ -356,7 +356,7 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
 
 - **API service** (`hindsight-api`, :8888) — il motore retain/recall/reflect. È quello che avviamo con `start-hindsight`. È il "data plane".
 - **Worker** — processore task in background; qui è interno all'API (default, ok per uso singolo).
-- **Control Plane** (:9999) — solo la UI. Non ha dati propri: si collega all'API. ≠ dalla dashboard log (che legge i _log_ degli hook, non l'API).
+- **Control Plane** (:9999) — solo la UI. Non ha dati propri: si collega all'API.
 
 ### Gotcha d'ambiente Windows/MSYS2 (tutti risolti in `.mise.toml`)
 
@@ -370,19 +370,8 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
    `localhost`. → Il task forza `HOSTNAME=localhost ... --hostname localhost` (anche per non esporlo
    in LAN: la UI non ha API key di default, vedi `HINDSIGHT_CP_ACCESS_KEY`).
 
-3. **Trappola doppio-Ruby.** `bundle install` lanciato a mano (shell senza mise attivo) usa il Ruby
-   MSYS2 (`/ucrt64/bin/ruby`), ma `mise run` attiva il Ruby mise (`[tools] ruby = "4.0.1"`): le gem
-   installate per uno non esistono per l'altro (`Bundler::GemNotFound`). → Installare SEMPRE via
-   `mise run install-dashboard`, così usa lo stesso Ruby del task `dashboard`. NB: il `.ruby-version`
-   della dashboard (3.3.8) è stale rispetto al pin mise.
-
-4. **Hook `mise reshim`.** Il Ruby mise, dopo `bundle install`, chiama `mise reshim` per gli shim
-   degli eseguibili gem (puma); ma `mise` non è nel PATH MSYS2 → bundler aborta con
-   `No such file or directory - mise reshim`. → Aggiunto `$HOME/.local/bin` a
-   `_.path` in `[env]` di `.mise.toml`.
-
-5. **Stop dei processi nativi Windows.** Node e Puma sono processi Windows nativi: il `netstat` MSYS
-   non vede sempre le loro porte. → I task `stop-*` usano `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh
+3. **Stop dei processi nativi Windows.** Node è un processo Windows nativo: il `netstat` MSYS
+   non vede sempre la sua porta. → Il task `stop-control-plane` usa `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh
    <porta> [label]`, che risolve il PID via `Get-NetTCPConnection` (PowerShell 7,
    `C:/Appl/PowerShell/pwsh.exe`) e fa `Stop-Process -Force`.
 
@@ -393,14 +382,28 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
 mise run control-plane          # foreground; → http://localhost:9999
 mise run stop-control-plane
 
-# Dashboard log (:9292)
-mise run install-dashboard      # una tantum (bundle install sotto Ruby mise 4.0.1)
-mise run dashboard              # foreground; → http://localhost:9292
-mise run stop-dashboard
-
 # Stop manuale di una porta qualsiasi
 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh" 9999 control-plane
 ```
 
-Nota benigna: durante `bundle install` compare `$HOME is not writable` → bundler
-ripiega su una temp dir e completa comunque.
+---
+
+## 17. Gate pre-recall (ICH-66) — misurato e scartato
+
+> Valutazione del 2026-08-10 su 100 prompt reali; benchmark rimossi con ICH-97
+> (il write-up completo era `hooks/hindsight/benchmark/RECALL_GATE_EVALUATION.md`).
+
+Domanda: conviene un gate LLM prima del recall automatico, per saltare Hindsight
+quando il prompt è autosufficiente? **No, non è viabile.**
+
+- Baseline: solo il 47% dei recall restituiva memoria concretamente utile;
+  risparmio teorico best-case ~2 s per prompt.
+- Gate binario: il candidato migliore (`gpt-5.6-luna` + contesto) perdeva 11
+  richiami utili su 47 (~23%) ed era più lento del recall che doveva evitare;
+  i modelli veloci ne perdevano 20-38 su 47 (43-81%), l'euristica locale 43 su 47.
+- Variante prudente a tre esiti (`recall`/`uncertain`/`skip`): falsi negativi
+  quasi azzerati (1 su 47), ma evitava solo l'1% dei recall e aumentava il tempo
+  medio del 70% — nessun vantaggio reale.
+- Strada promettente alternativa: classificare i risultati DOPO il recall
+  (0 utili persi, rumore automatico 4,6%) — è il filone di
+  `hindsight_recall_result_filter_bench.py`, che resta in `benchmark/`.
