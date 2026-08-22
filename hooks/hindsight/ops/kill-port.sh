@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Termina il processo (nativo Windows) in ascolto su una porta TCP.
-# Usato dai task mise stop-control-plane (:9999) e stop-dashboard (:9292).
+# Usato dal task mise stop-control-plane (:9999).
 #
-# Perche' PowerShell e non lsof/netstat: Control Plane (Node) e dashboard (Ruby/Puma)
-# sono processi nativi Windows; il netstat di MSYS2 non vede sempre le loro porte,
-# mentre Get-NetTCPConnection le risolve in modo affidabile con il PID owner.
+# Perche' PowerShell e non lsof/netstat: il Control Plane (Node) e' un processo
+# nativo Windows; il netstat di MSYS2 non vede sempre la sua porta, mentre
+# Get-NetTCPConnection la risolve in modo affidabile con il PID owner.
 #
 # Uso: kill-port.sh <porta> [etichetta]
 set -euo pipefail

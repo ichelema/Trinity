@@ -6,9 +6,9 @@
 # l'env qui sotto serve SOLO al processo server al momento del lancio, i progetti
 # parlano con il server già configurato via HTTP.
 #
-# La dashboard log (Roda/Puma), i benchmark (embed-bench/rerank-bench) e i check
-# aggiornamenti (api-check/cp-check, in scheduler/) sono stati migrati
-# qui dal repo Trinity. I task relativi sono in fondo a questo file.
+# I benchmark (embed-bench/rerank-bench) e i check aggiornamenti (api-check/cp-check,
+# in scheduler/) sono stati migrati qui dal repo Trinity. I task relativi sono in
+# fondo a questo file.
 
 [tools]
 python = "3.13"
@@ -16,9 +16,9 @@ python = "3.13"
 # via `npx @vectorize-io/hindsight-control-plane`). NB: l'npx del Node MSYS2 UCRT64
 # (/ucrt64/bin) crasha (segfault/bad_weak_ptr) — questo Node mise lo rimpiazza.
 node = "lts"
-# Ruby per la dashboard log (Roda/Puma): `bundle install` e `puma` girano con questo
-# Ruby gestito da mise, NON quello MSYS2 (le gem vanno installate con lo stesso Ruby
-# che le esegue). L'hook reshim richiede `mise` nel PATH — garantito da _.path in [env].
+# Ruby per l'hook PostToolUse excalidraw-to-obsidian.rb, i check dello scheduler e i
+# benchmark Ruby (hindsight_bench.rb, hindsight_rerank_bench.rb). Ruby gestito da
+# mise, NON quello MSYS2.
 ruby = "4.0.1"
 
 [env]
@@ -324,29 +324,6 @@ run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane --host
 description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
 shell = "bash -c"
 run = "bash hooks/hindsight/ops/kill-port.sh 9999 control-plane"
-
-# --- Dashboard log (Roda/Puma) ---------------------------------------------
-# Web app Ruby per analizzare hindsight-debug.log (JSONL): tail SSE realtime,
-# color-coding, filtri, vista memories[]. Gira sul Ruby mise (4.0.1), non MSYS2.
-# Il default del log in app.rb è portabile (<plugin_root>/logs/hindsight-debug.log),
-# coerente con lib/hindsight_debug.py — quindi il task non passa LOG_FILE.
-[tasks.install-dashboard]
-description = "Installa le gem della dashboard log (bundle install) sotto il Ruby mise (4.0.1). Eseguire una tantum prima di `dashboard`."
-shell = "bash -c"
-run = "cd hooks/hindsight/hindsight-dashboard && bundle install"
-
-[tasks.dashboard]
-description = "Avvia la dashboard log Hindsight (Roda/Puma) su http://localhost:9292. Foreground: Ctrl-C per fermarla. Richiede prima `mise run install-dashboard`."
-shell = "bash -c"
-# -b invece di -p: senza host esplicito Puma ascolta su tutte le interfacce, e la
-# dashboard non ha autenticazione — /api/events servirebbe alla LAN il debug log,
-# che contiene i prompt e le memorie.
-run = "cd hooks/hindsight/hindsight-dashboard && bundle exec puma -b tcp://127.0.0.1:9292"
-
-[tasks.stop-dashboard]
-description = "Ferma la dashboard log (processo Puma in ascolto su :9292)"
-shell = "bash -c"
-run = "bash hooks/hindsight/ops/kill-port.sh 9292 dashboard"
 
 # --- Benchmark qualità (embedding / reranker) ------------------------------
 # Ereditano l'[env] del plugin (provider + chiavi) → girano con la config di produzione.

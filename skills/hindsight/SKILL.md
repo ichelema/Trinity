@@ -105,25 +105,23 @@ come `additionalContext` a ogni SessionStart dall'hook `hindsight-mm-inject.sh`
 | `tools/hindsight_export.py` / `hindsight_import.py` | cambio provider embedding | Export dei documenti → re-retain sul nuovo embedding (il cambio di dimensione obbliga al rebuild del bank) |
 | `mise run api-check` / `cp-check` | scheduler | Segnalano nuove release di `hindsight-api(-slim)` su PyPI e del Control Plane su npm (exit 10 se disponibili; cp-check usa lo state file `cp-last-seen.state`) |
 
-### Interfacce web: Control Plane e dashboard log
+### Interfaccia web: Control Plane
 
-Due UI **opzionali**, indipendenti dal server MCP, entrambe via task mise e **in foreground** (Ctrl-C per fermarle, a differenza di `start-hindsight` che è daemon):
+Una UI **opzionale**, indipendente dal server MCP, via task mise e **in foreground** (Ctrl-C per fermarla, a differenza di `start-hindsight` che è daemon):
 
 | UI                                             | Porta | Avvio                    | Stop                          | A cosa serve                                                                                                    |
 | ---------------------------------------------- | ----- | ------------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | **Control Plane** (Web UI ufficiale Hindsight) | 9999  | `mise run control-plane` | `mise run stop-control-plane` | Sfogliare bank/agent, entità e relazioni, storico operations, testare query di recall. Si collega all'API :8888 |
-| **Dashboard log** (Roda/Puma, nel repo)        | 9292  | `mise run dashboard`     | `mise run stop-dashboard`     | Analizzare `hindsight-debug.log` (JSONL): tail SSE realtime, color-coding, filtri, vista `memories[]`           |
 
 ```bash
 mise run control-plane    # → http://localhost:9999  (bind 127.0.0.1)
-mise run dashboard         # → http://localhost:9292
 ```
 
 - **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `127.0.0.1` (no LAN; non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi).
-- **Dashboard**: prima volta esegui `mise run install-dashboard` (bundle install). Gira sul **Ruby gestito da mise** (`[tools] ruby = "4.0.1"`), non quello MSYS2 — le gem vanno installate con lo stesso Ruby che le esegue.
 - Stop affidabile via `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh <porta>` (su Windows usa `Get-NetTCPConnection` perché il netstat MSYS non vede sempre i processi nativi; su Linux usa `lsof`/`fuser`).
+- Per analizzare `hindsight-debug.log` (JSONL) non serve una UI: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
 
-> Dettagli e gotcha d'ambiente (npx MSYS2 rotto, doppio-Ruby, hook `mise reshim`, bind `HOSTNAME`): vedi `README.md` §16.
+> Dettagli e gotcha d'ambiente (npx MSYS2 rotto, bind `HOSTNAME`): vedi `README.md` §16.
 
 ### Operazioni di memoria via MCP
 

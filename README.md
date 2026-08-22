@@ -17,7 +17,7 @@ E:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strument
 | Parte | Ruolo |
 |---|---|
 | **Runtime del plugin** | ciò che i progetti ereditano: hook, skill, comandi, `core-behavior.md`, `mise.toml` di servizio, `.mcp.json` |
-| **Strumenti di sviluppo** | servono alla manutenzione di Trinity, non ai progetti: benchmark (`hooks/hindsight/benchmark/`), dashboard log (`hooks/hindsight/hindsight-dashboard/`), check aggiornamenti (`scheduler/`) |
+| **Strumenti di sviluppo** | servono alla manutenzione di Trinity, non ai progetti: benchmark (`hooks/hindsight/benchmark/`), check aggiornamenti (`scheduler/`) |
 
 La env var **`TRINITY_PLUGIN_DIR`** (definita nell'env utente, vedi §10) punta alla root di 
 questo repo: la usano i comandi documentati nelle skill e, come override opzionale, gli script — 
@@ -1259,8 +1259,7 @@ Trinity/
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   ├── claudish/            riscrittura display in italiano semplice (capture-model, gate, rewrite, providers — §3.1)
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
-│       ├── benchmark/       benchmark embedding/reranker/recall (sviluppo)
-│       └── hindsight-dashboard/  dashboard log Roda/Puma :9292 (sviluppo)
+│       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 ├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh, sync-claude-settings.py) · bin/adhd · deploy litellm
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
