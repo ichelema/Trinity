@@ -2,8 +2,8 @@
 # Utility (NON hook): gestione delle "knowledge page" Hindsight (mental model).
 # Un mental model e' una reflection pinnata: documento vivo rigenerato eseguendo
 # una source_query via reflect. Le definizioni stanno in hindsight.config.json
-# (chiave "mental_models" per i modelli CORE, "project_mental_models" per quelli
-# del progetto); qui si fanno seed/list/show/refresh via REST sul bank risolto dal cwd.
+# (chiave "mental_models"); qui si fanno seed/list/show/refresh via REST sul
+# bank risolto dal cwd.
 #
 # Uso:
 #   bash hindsight-mental-models.sh seed                # crea le pagine mancanti (idempotente)
@@ -22,7 +22,7 @@ export HOOKS_DIR
 import json, os, sys, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "..", "lib"))
-from hindsight_config import load_config, resolve_bank, retain_bank_url
+from hindsight_config import load_config, retain_bank_url
 
 # Config per-progetto: gli hook ricevono CLAUDE_PROJECT_DIR da Claude Code, ma
 # questo script gira a mano. Risali dal cwd fino alla prima dir con ".git"
@@ -40,10 +40,6 @@ while True:
 
 cfg = load_config()
 cwd = os.getcwd()
-_core = (cfg.get("bank") or {}).get("core_bank", "")
-# _bank resta calcolato (anche con api_url esplicito) per la scelta delle specs
-# nel ramo non-esplicito del seed, sotto.
-_bank = resolve_bank((cfg.get("bank") or {}).get("retain_bank", "auto"), cfg, cwd)
 # retain_bank_url onora la retrocompat api_url esplicito (vedi hindsight_config.py):
 # con HINDSIGHT_API_URL o api_url nel config fidato, vince su tutto il blocco bank.
 BASE = retain_bank_url(cfg, cwd)
@@ -98,14 +94,7 @@ elif cmd == "show":
 elif cmd == "seed":
     existing = {m.get("id") for m in list_models()}
     created = skipped = 0
-    # Quali modelli? I modelli CORE vivono nel core; quelli del PROGETTO
-    # (project_mental_models) nel bank del progetto. La scelta segue il bank
-    # risolto per il cwd (speculare a dove scrivono i fatti via retain_bank).
-    # Con api_url esplicito (retrocompat single-bank) i modelli sono sempre i CORE.
-    if cfg.get("_api_url_explicit"):
-        specs = cfg.get("mental_models", [])
-    else:
-        specs = cfg.get("mental_models", []) if _bank == _core else cfg.get("project_mental_models", [])
+    specs = cfg.get("mental_models", [])
     for spec in specs:
         mid = spec.get("id")
         if not mid or not spec.get("source_query"):

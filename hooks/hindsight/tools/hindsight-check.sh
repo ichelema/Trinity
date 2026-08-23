@@ -572,10 +572,8 @@ else
 	ko "definizioni mental_models mancanti in config ($MM_CFG)"
 fi
 
-# Per-progetto (ICH-77): le chiavi devono avere la FORMA attesa (non i valori di
-# default, che un progetto che ha seguito la procedura per-progetto legittimamente
-# sovrascrive) e mental_model_bank_urls deve tornare URL bank-scoped, deduplicati,
-# non vuoti.
+# Multi-bank (ICH-77): mental_model_inject_banks deve avere la FORMA attesa e
+# mental_model_bank_urls deve tornare URL bank-scoped, deduplicati, non vuoti.
 MM_BANKS=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import sys
@@ -586,22 +584,15 @@ ok = True
 banks = cfg.get("mental_model_inject_banks")
 if not (isinstance(banks, list) and banks and all(isinstance(b, str) for b in banks)):
     ok = False
-models = cfg.get("project_mental_models") or []
-if not (isinstance(models, list)
-        and all(isinstance(m, dict) and m.get("id") and m.get("source_query") for m in models)):
-    ok = False
-ids = cfg.get("project_mental_models_inject_ids") or []
-if not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
-    ok = False
 urls = hc.mental_model_bank_urls(cfg)
 ok = ok and bool(urls) and all("/banks/" in u for u in urls) and len(urls) == len(set(urls))
 print("OK" if ok else "KO")
 PY
 )
 if [ "$MM_BANKS" = "OK" ]; then
-	ok "chiavi mental model per-progetto (forma) + mental_model_bank_urls coerenti"
+	ok "mental_model_inject_banks (forma) + mental_model_bank_urls coerenti"
 else
-	ko "chiavi mental model per-progetto o helper incoerenti ($MM_BANKS)"
+	ko "mental_model_inject_banks o mental_model_bank_urls incoerenti ($MM_BANKS)"
 fi
 
 # Retrocompat (F2): con api_url esplicito (config fidato o HINDSIGHT_API_URL),

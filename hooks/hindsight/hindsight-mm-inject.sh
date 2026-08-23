@@ -36,23 +36,15 @@ else:
     core = (cfg.get("bank") or {}).get("core_bank", "trinity-project")
     names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
 
-    # (url, [ids]) per ogni bank risolto, dedup per NOME. I modelli CORE sono filtrati
-    # da mental_models_inject_ids, quelli di PROGETTO da project_mental_models_inject_ids.
-    targets = []
-    _seen = set()
-    for n in names:
-        b = resolve_bank(n, cfg)
-        if not b or b in _seen:
-            continue
-        _seen.add(b)
-        if b == core:
-            _ids = cfg.get("mental_models_inject_ids") or []
-        else:
-            _ids = cfg.get("project_mental_models_inject_ids") or []
-        if _ids:
-            targets.append((bank_url(cfg, b), _ids))
+    # Solo il core definisce mental model (ICH-104): inietta gli id CORE se uno
+    # dei bank configurati risolve al core, altrimenti niente.
+    _ids = cfg.get("mental_models_inject_ids") or []
+    if _ids and any(resolve_bank(n, cfg) == core for n in names):
+        targets = [(bank_url(cfg, core), _ids)]
+    else:
+        targets = []
 
-# Coppie (url, id) da iniettare, in ordine di bank (progetto poi core).
+# Coppie (url, id) da iniettare.
 pairs = []
 for url, _ids in targets:
     for mid in _ids:

@@ -207,13 +207,6 @@ DEFAULTS = {
     # recall_banks: "auto" = bank del progetto, "core" = core condiviso. Dedup
     # per nome: in Trinity "auto" collassa sul core -> resta il solo core.
     "mental_model_inject_banks": ["auto", "core"],
-    # Modelli DEL PROGETTO (definiti nel hindsight.config.json del progetto):
-    # vivono nel bank del progetto, non nel core. I modelli CORE restano nella
-    # chiave "mental_models" (definiti dal plugin) e sono iniettati ovunque.
-    # Chiave separata perche' il merge a strati SOSTITUISCE le liste: un
-    # "mental_models" di progetto clobbererebbe i 3 core, qui invece e' additivo.
-    "project_mental_models": [],
-    "project_mental_models_inject_ids": [],
     "knowledge_pages": [],
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
@@ -284,9 +277,8 @@ def _project_config_path() -> str | None:
 # recall_banks: seleziona i bank SORGENTE dell'iniezione mental model a
 # SessionStart, quindi lasciarla al progetto riaprirebbe lo stesso info-leak
 # cross-bank da un'altra porta (il progetto potrebbe farsi iniettare i mental
-# model del core o di un bank altrui). project_mental_models* restano libere:
-# sono self-scoped, si applicano solo al bank del progetto stesso. Restano
-# impostabili da config plugin/utente e da env (HINDSIGHT_API_URL, HS_CFG_*).
+# model del core o di un bank altrui). Restano impostabili da config
+# plugin/utente e da env (HINDSIGHT_API_URL, HS_CFG_*).
 PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank", "mental_model_inject_banks"}
 
 
