@@ -650,7 +650,9 @@ bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a `re
 è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto).
 
 Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16), lanciato **dal repo del
-plugin** — valida forma di `mental_model_inject_banks` e seed/show sul bank core.
+plugin** — valida forma di `mental_model_inject_banks` e seed/show sul bank core. Il check è la
+diagnostica live (server, endpoint, hook end-to-end: sezioni 1-9, 11, 16, 17); i test unit puri
+vivono in `hooks/hindsight/test_*.py` (`python -m unittest`, senza server — ICH-99).
 
 ---
 
