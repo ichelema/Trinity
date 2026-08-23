@@ -258,32 +258,43 @@ def _normalize_prompt(prompt: str) -> str:
     return " ".join(value.split())
 
 
-def consent_decision(prompt: str) -> str | None:
-    """Riconosce consenso standalone o riferito esplicitamente alle memorie."""
+def _consent_decision(
+    prompt: str, explicit_positive: str, explicit_negative: tuple[str, ...]
+) -> str | None:
+    """Parser unico del consenso: lessico standalone condiviso, verbi espliciti
+    passati dal chiamante (recall: usare/mostrare; retain gate: salvare)."""
     text = _normalize_prompt(prompt)
     if not text:
         return None
     standalone_negative = {"no", "no grazie"}
     standalone_positive = {"si", "sì", "si grazie", "sì grazie", "va bene", "d accordo", "certo",
                            "ok", "okay", "vai", "procedi", "yes", "perfetto"}
-    explicit_negative = (
-        r"\bnon\s+(?:le\s+)?(?:usare|usarle|mostrare|mostrarle|iniettare|iniettarle)\b",
-        r"\b(?:ignorale|scartale|dimenticale)\b",
-    )
     if text in standalone_negative or any(re.search(pattern, text) for pattern in explicit_negative):
         return "negative"
     if text in standalone_positive:
         return "positive"
-    explicit_positive = r"\b(?:usale|utilizzale|mostrale|mostramele|iniettale)\b"
     pos_match = re.search(explicit_positive, text)
     if pos_match:
         prefix = text[:pos_match.start()]
         if re.search(r"\bnon\b", prefix):
             return "negative"
-        consent_filler = r"(?:(?:si|sì|va bene|d accordo|certo|grazie)\s*)*"
+        filler_words = standalone_positive | {"grazie", "e"}
+        consent_filler = r"(?:(?:%s)\s*)*" % "|".join(re.escape(w) for w in sorted(filler_words))
         if re.fullmatch(consent_filler, prefix.strip()):
             return "positive"
     return None
+
+
+def consent_decision(prompt: str) -> str | None:
+    """Riconosce consenso standalone o riferito esplicitamente alle memorie."""
+    return _consent_decision(
+        prompt,
+        explicit_positive=r"\b(?:usale|utilizzale|mostrale|mostramele|iniettale)\b",
+        explicit_negative=(
+            r"\bnon\s+(?:le\s+)?(?:usare|usarle|mostrare|mostrarle|iniettare|iniettarle)\b",
+            r"\b(?:ignorale|scartale|dimenticale)\b",
+        ),
+    )
 
 
 def _pending_path(directory: str, session_id: str, cwd: str) -> Path | None:
