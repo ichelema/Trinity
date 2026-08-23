@@ -281,7 +281,7 @@ class PendingTests(unittest.TestCase):
 
     def test_lock_timeout_fails_closed(self):
         save_pending(self.directory, "s1", "/a", self.memories)
-        with mock.patch("lib.hindsight_recall_filter._file_lock") as lock:
+        with mock.patch("lib.hindsight_recall_filter.file_lock") as lock:
             lock.return_value.__enter__.return_value = False
             lock.return_value.__exit__.return_value = False
             self.assertIsNone(consume_pending(self.directory, "s1", "/a", 10))

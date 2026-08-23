@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import math
@@ -13,6 +12,11 @@ import unicodedata
 import urllib.request
 from pathlib import Path
 from typing import Callable, Sequence
+
+try:
+    from hindsight_file_lock import file_lock
+except ImportError:
+    from .hindsight_file_lock import file_lock
 
 # Override solo via env (ambiente fidato): la config di progetto non può
 # dirottare l'endpoint. Usato dai test e2e per mockare il classificatore.
@@ -303,66 +307,6 @@ def _secure_directory(directory: str) -> Path:
     return path
 
 
-@contextlib.contextmanager
-def _file_lock(path: Path, timeout: float = 2.0):
-    lock_path = str(path) + ".lock"
-    handle = None
-    release = None
-    acquired = False
-    try:
-        handle = open(lock_path, "a+b")
-        try:
-            os.chmod(lock_path, 0o600)
-        except OSError:
-            pass
-        try:
-            import fcntl
-
-            def acquire(fd):
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            def unlock(fd):
-                fcntl.flock(fd, fcntl.LOCK_UN)
-
-        except ImportError:
-            import msvcrt
-
-            def acquire(fd):
-                os.lseek(fd, 0, os.SEEK_SET)
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-
-            def unlock(fd):
-                os.lseek(fd, 0, os.SEEK_SET)
-                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-
-        deadline = time.monotonic() + timeout
-        while True:
-            try:
-                acquire(handle.fileno())
-                acquired = True
-                release = unlock
-                break
-            except (BlockingIOError, OSError):
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(0.02)
-    except OSError:
-        if handle is not None:
-            handle.close()
-        handle = None
-
-    try:
-        yield acquired
-    finally:
-        if handle is not None:
-            if acquired and release is not None:
-                try:
-                    release(handle.fileno())
-                except OSError:
-                    pass
-            handle.close()
-
-
 # Età oltre la quale lo sweep elimina gli artefatti orfani. Volutamente molto
 # più ampia del recall_pending_ttl (900s): qui si fa igiene della directory,
 # non si applica la scadenza — quella resta a consume/discard_if_present.
@@ -411,7 +355,7 @@ def save_pending(
         "cwd": cwd,
         "memories": memories,
     }
-    with _file_lock(path) as locked:
+    with file_lock(path, chmod=0o600) as locked:
         if not locked:
             return False
         tmp = path.with_suffix(f".{os.getpid()}.tmp")
@@ -449,7 +393,7 @@ def consume_pending(
     if path is None or not path.exists():
         return None
     current = time.time() if now is None else now
-    with _file_lock(path) as locked:
+    with file_lock(path, chmod=0o600) as locked:
         if not locked:
             return None
         try:
@@ -480,7 +424,7 @@ def discard_pending_if_present(
     if path is None or not path.exists():
         return False
     current = time.time() if now is None else now
-    with _file_lock(path) as locked:
+    with file_lock(path, chmod=0o600) as locked:
         if not locked:
             return False
         try:
