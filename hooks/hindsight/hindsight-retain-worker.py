@@ -55,7 +55,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url
 from hindsight_debug import debug_log
-from hindsight_recall_lib import last_assistant_text
+from hindsight_recall_lib import last_assistant_text, strip_memory_block
 from hindsight_retain_gate import (
     evaluate_retain,
     fallback_context,
@@ -589,28 +589,6 @@ def note_gate_error(session_id: str) -> bool:
         state[session_id] = entry
         _write_retain_state(path, state)
     return first
-
-
-# Anti-feedback-loop: rimuove blocchi-memoria iniettati dal recall hook prima di
-# ritenere il testo. Senza strip, una memoria citata nel turno verrebbe ri-ritenuta
-# e la memoria "mangerebbe se stessa". Match precisi su marcatori che controlliamo:
-#   - <hindsight_memories>...</hindsight_memories>  (forma a tag, difensiva)
-#   - "## Hindsight persistent memory ... Verify mutable facts against the repo."
-#     (blocco markdown iniettato da hindsight-recall.sh: header e trailer fissi)
-#   - "## Hindsight knowledge pages ... Verify mutable facts against the repo."
-#     (blocco iniettato a SessionStart da hindsight-mm-inject.sh)
-_MEMORY_BLOCK_RE = re.compile(
-    r"<hindsight_memories>.*?</hindsight_memories>"
-    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug|retain debug).*?Verify mutable facts against the repo\.",
-    re.DOTALL,
-)
-
-
-def strip_memory_block(text: str) -> str:
-    """Rimuove i blocchi-memoria iniettati. Restituisce il testo ripulito."""
-    if not text:
-        return text
-    return _MEMORY_BLOCK_RE.sub("", text).strip()
 
 
 def extract_text(content) -> str:

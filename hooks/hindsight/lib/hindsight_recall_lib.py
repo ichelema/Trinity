@@ -11,13 +11,15 @@ import json
 import os
 import re
 
-# Rimozione blocchi-memoria iniettati (recall/knowledge-pages) dai turni passati,
-# per non comporre la query con memorie gia' iniettate (anti-feedback-loop). Stesso
-# marcatore usato dal retain worker; duplicato qui per non importare il worker (heavy)
-# nel path caldo del recall hook.
+# Anti-feedback-loop: rimuove blocchi-memoria iniettati prima di comporre la
+# query di recall o di ritenere il testo (usata anche dal retain worker, che
+# la importa da qui: unica fonte). Match precisi su marcatori che controlliamo:
+#   - <hindsight_memories>...</hindsight_memories>  (forma a tag, difensiva)
+#   - "## Hindsight persistent memory|knowledge pages|recall debug|retain debug
+#      ... Verify mutable facts against the repo."
 _MEMORY_BLOCK_RE = re.compile(
     r"<hindsight_memories>.*?</hindsight_memories>"
-    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug).*?Verify mutable facts against the repo\.",
+    r"|## Hindsight (?:persistent memory|knowledge pages|recall debug|retain debug).*?Verify mutable facts against the repo\.",
     re.DOTALL,
 )
 
