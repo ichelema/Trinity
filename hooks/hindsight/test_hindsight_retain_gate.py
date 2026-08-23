@@ -819,8 +819,9 @@ class ConsentTests(unittest.TestCase):
         self.addCleanup(env_patch.stop)
 
     def test_consent_vocabulary(self):
-        positives = ["si", "sì", "Sì grazie", "va bene", "certo", "procedi", "salvala", "salvala pure e poi continua"]
-        negatives = ["no", "No grazie", "non salvarla", "scartala", "non salvare nulla"]
+        positives = ["si", "sì", "Sì grazie", "va bene", "certo", "procedi", "ok",
+                     "salvala", "salvala pure e poi continua"]
+        negatives = ["no", "No grazie", "non salvarla", "non salvala", "scartala", "non salvare nulla"]
         neutral = ["", "com'è il meteo?", "sistemami il bug del parser"]
         for prompt in positives:
             self.assertEqual(retain_consent_decision(prompt), "positive", prompt)

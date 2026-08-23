@@ -258,23 +258,21 @@ def _normalize_prompt(prompt: str) -> str:
     return " ".join(value.split())
 
 
-def consent_decision(prompt: str) -> str | None:
-    """Riconosce consenso standalone o riferito esplicitamente alle memorie."""
+def _consent_decision(
+    prompt: str, explicit_positive: str, explicit_negative: tuple[str, ...]
+) -> str | None:
+    """Parser unico del consenso: lessico standalone condiviso, verbi espliciti
+    passati dal chiamante (recall: usare/mostrare; retain gate: salvare)."""
     text = _normalize_prompt(prompt)
     if not text:
         return None
     standalone_negative = {"no", "no grazie"}
     standalone_positive = {"si", "sì", "si grazie", "sì grazie", "va bene", "d accordo", "certo",
                            "ok", "okay", "vai", "procedi", "yes", "perfetto"}
-    explicit_negative = (
-        r"\bnon\s+(?:le\s+)?(?:usare|usarle|mostrare|mostrarle|iniettare|iniettarle)\b",
-        r"\b(?:ignorale|scartale|dimenticale)\b",
-    )
     if text in standalone_negative or any(re.search(pattern, text) for pattern in explicit_negative):
         return "negative"
     if text in standalone_positive:
         return "positive"
-    explicit_positive = r"\b(?:usale|utilizzale|mostrale|mostramele|iniettale)\b"
     pos_match = re.search(explicit_positive, text)
     if pos_match:
         prefix = text[:pos_match.start()]
@@ -284,6 +282,18 @@ def consent_decision(prompt: str) -> str | None:
         if re.fullmatch(consent_filler, prefix.strip()):
             return "positive"
     return None
+
+
+def consent_decision(prompt: str) -> str | None:
+    """Riconosce consenso standalone o riferito esplicitamente alle memorie."""
+    return _consent_decision(
+        prompt,
+        explicit_positive=r"\b(?:usale|utilizzale|mostrale|mostramele|iniettale)\b",
+        explicit_negative=(
+            r"\bnon\s+(?:le\s+)?(?:usare|usarle|mostrare|mostrarle|iniettare|iniettarle)\b",
+            r"\b(?:ignorale|scartale|dimenticale)\b",
+        ),
+    )
 
 
 def _pending_path(directory: str, session_id: str, cwd: str) -> Path | None:

@@ -37,7 +37,7 @@ try:
     from hindsight_multibank import fetch_bank_results
     from hindsight_recall_filter import (
         ApiCall,
-        _normalize_prompt,
+        _consent_decision,
         api_json,
         consume_pending,
         save_pending,
@@ -48,7 +48,7 @@ except ImportError:
     from .hindsight_multibank import fetch_bank_results
     from .hindsight_recall_filter import (
         ApiCall,
-        _normalize_prompt,
+        _consent_decision,
         api_json,
         consume_pending,
         save_pending,
@@ -466,8 +466,8 @@ RETAIN_PENDING_TTL = 900.0
 RETAIN_CONTEXT_PROPOSAL_RE = re.compile(r"context[^«»\n]{0,20}«([^«»]+)»", re.IGNORECASE)
 
 # Risposta esplicita dell'utente: l'intero prompt e' "context: <testo>" su UNA
-# sola riga, con prefisso opzionale di assenso (lo stesso lessico standalone di
-# retain_consent_decision: sì / si / va bene / d'accordo / certo / procedi)
+# sola riga, con prefisso opzionale di assenso (un sottoinsieme del lessico
+# standalone condiviso: sì / si / va bene / d'accordo / certo / procedi)
 # seguito da separatore opzionale (, . ; : ! -). Niente DOTALL: un prompt
 # multi-riga che apre con "context:" e prosegue con altro e' testo libero ->
 # new_prompt, come promesso dalla grammatica (mai un context implicito).
@@ -485,22 +485,15 @@ def retain_pending_dir() -> str:
 
 def retain_consent_decision(prompt: str) -> str | None:
     """Si'/no standalone o verbi espliciti di salvataggio nei prompt misti.
-    Speculare a consent_decision del recall, con il lessico del salvare."""
-    text = _normalize_prompt(prompt)
-    if not text:
-        return None
-    standalone_negative = {"no", "no grazie"}
-    standalone_positive = {"si", "sì", "si grazie", "sì grazie", "va bene", "d accordo", "certo", "procedi"}
-    explicit_negative = (
-        r"\bnon\s+salvar(?:la|lo|e)\b",
-        r"\b(?:scartala|scartalo|non\s+salvare)\b",
+    Stesso parser del recall (_consent_decision), col lessico del salvare."""
+    return _consent_decision(
+        prompt,
+        explicit_positive=r"\b(?:salvala|salvalo|salva\s+pure)\b",
+        explicit_negative=(
+            r"\bnon\s+salvar(?:la|lo|e)\b",
+            r"\b(?:scartala|scartalo|non\s+salvare)\b",
+        ),
     )
-    if text in standalone_negative or any(re.search(pattern, text) for pattern in explicit_negative):
-        return "negative"
-    explicit_positive = r"\b(?:salvala|salvalo|salva\s+pure)\b"
-    if text in standalone_positive or re.search(explicit_positive, text):
-        return "positive"
-    return None
 
 
 def retain_consent_context(prompt: str) -> str | None:
