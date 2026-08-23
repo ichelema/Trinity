@@ -18,7 +18,7 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 | `hindsight_recall_lib.py`                            | Helper del recall (`build_recall_payload`, `last_assistant_text`, `strip_memory_block`)                                                                          |
 | `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (sincrono, solo enqueue in `hs-retain-queue/`); il worker valuta l'entry al prompt successivo (da `hindsight-recall.sh`) o nel `--drain` della sentinella e salva un riassunto del turno nel bank (ICH-86) |
 | `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
-| `hindsight-check.sh`                                 | **Suite di test/diagnostica** (vedi §9)                                                                                                            |
+| `hindsight-check.sh`                                 | **Diagnostica live** server + hook (vedi §10)                                                                                                      |
 | `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                                                                       |
 | `benchmark/hindsight_bench.rb`                       | **Benchmark velocità/qualità provider LLM** (retain+recall su corpus dedicato). Vedi §13                                                           |
 
@@ -168,20 +168,27 @@ aspettarlo) e `picked_up` (il prompt successivo ha raccolto l'esito).
 
 ---
 
-## 10. Test — `hindsight-check.sh`
+## 10. Test — unittest + `hindsight-check.sh`
 
-La suite diagnostica è `hindsight-check.sh`; `test_hindsight_recall_filter.py` copre inoltre
-routing, fail-open, consenso e stato pending senza richiedere il server.
+I comportamenti puri (funzioni, config, wiring testuale dei file) vivono nella suite
+unittest in `hooks/hindsight/test_*.py`, eseguibile senza server:
+
+```bash
+cd "$TRINITY_PLUGIN_DIR/hooks/hindsight"
+PYTHONUTF8=1 python -m unittest discover -s . -p 'test_*.py'
+```
+
+`hindsight-check.sh` resta la diagnostica live, quella che un unittest non può fare:
+server e endpoint REST (sezioni 1-4), script hook e `hooks.json` (5-7), end-to-end
+recall/retain (8-9), bank mission (11), mental models/knowledge pages (16), debug
+log (17). Le ex sezioni unit-test dello script (10, 12, 14, 15, 18-21) sono migrate
+in `test_hindsight_check_migrated.py` (ICH-99); i numeri di sezione restanti sono
+invariati.
 
 ```bash
 PYTHONUTF8=1 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/tools/hindsight-check.sh"
 # exit 0 = tutto OK, 1 = problemi. Richiede il server up.
 ```
-
-Pattern dei test unit: importa i moduli via `importlib` e chiama le funzioni pure
-(`git_info`, `compute_document_id`, `should_retain_now`, `strip_memory_block`, `load_config`,
-`build_recall_payload`). La **sezione 18** (aggiunta in sessione) copre `recall_types` +
-`build_recall_payload`.
 
 ---
 
