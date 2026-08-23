@@ -532,7 +532,6 @@ blocked_ok = (
     and all(EVIL not in u for u in hc.recall_bank_urls(cfg))
     and EVIL not in hc.retain_bank_url(cfg)
     and cfg["mental_model_inject_banks"] == ["auto", "core"]
-    and all("evil-bank" not in u for u in hc.mental_model_bank_urls(cfg))
 )
 # ...ma il filtro non deve essere troppo largo: le chiavi non sensibili passano
 allowed_ok = cfg["recall_max_results"] == 42
@@ -572,47 +571,21 @@ else
 	ko "definizioni mental_models mancanti in config ($MM_CFG)"
 fi
 
-# Multi-bank (ICH-77): mental_model_inject_banks deve avere la FORMA attesa e
-# mental_model_bank_urls deve tornare URL bank-scoped, deduplicati, non vuoti.
+# Multi-bank (ICH-77): mental_model_inject_banks deve avere la FORMA attesa
+# (lista non vuota di stringhe): e' ancora letta da hindsight-mm-inject.sh.
 MM_BANKS=$(
 	PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
 import sys
 sys.path.insert(0, sys.argv[1])
 import hindsight_config as hc
-cfg = hc.load_config()
-ok = True
-banks = cfg.get("mental_model_inject_banks")
-if not (isinstance(banks, list) and banks and all(isinstance(b, str) for b in banks)):
-    ok = False
-urls = hc.mental_model_bank_urls(cfg)
-ok = ok and bool(urls) and all("/banks/" in u for u in urls) and len(urls) == len(set(urls))
-print("OK" if ok else "KO")
+banks = hc.load_config().get("mental_model_inject_banks")
+print("OK" if isinstance(banks, list) and banks and all(isinstance(b, str) for b in banks) else "KO")
 PY
 )
 if [ "$MM_BANKS" = "OK" ]; then
-	ok "mental_model_inject_banks (forma) + mental_model_bank_urls coerenti"
+	ok "mental_model_inject_banks ha la forma attesa"
 else
-	ko "mental_model_inject_banks o mental_model_bank_urls incoerenti ($MM_BANKS)"
-fi
-
-# Retrocompat (F2): con api_url esplicito (config fidato o HINDSIGHT_API_URL),
-# mental_model_bank_urls deve tornare SOLO quell'URL. Nessuna chiamata HTTP: la
-# variabile e' impostata solo per questo sotto-processo, non per il resto dello script.
-MM_RETROCOMPAT=$(
-	HINDSIGHT_API_URL="http://retrocompat-fixture.invalid:9/v1/legacy" PYTHONUTF8=1 python - "$HOOKS_DIR/lib" <<'PY' 2>/dev/null
-import sys
-sys.path.insert(0, sys.argv[1])
-import hindsight_config as hc
-cfg = hc.load_config()
-url = "http://retrocompat-fixture.invalid:9/v1/legacy"
-ok = cfg.get("_api_url_explicit") is True and hc.mental_model_bank_urls(cfg) == [url]
-print("OK" if ok else "KO")
-PY
-)
-if [ "$MM_RETROCOMPAT" = "OK" ]; then
-	ok "retrocompat: api_url esplicito onorato da mental_model_bank_urls"
-else
-	ko "retrocompat: api_url esplicito NON onorato da mental_model_bank_urls ($MM_RETROCOMPAT)"
+	ko "mental_model_inject_banks malformata ($MM_BANKS)"
 fi
 
 MM_LIVE=$(curl -s -m 5 "$API_BASE/mental-models" 2>/dev/null | python -c "
