@@ -491,7 +491,7 @@ def retain_consent_decision(prompt: str) -> str | None:
         explicit_positive=r"\b(?:salvala|salvalo|salva\s+pure)\b",
         explicit_negative=(
             r"\bnon\s+salvar(?:la|lo|e)\b",
-            r"\b(?:scartala|scartalo|non\s+salvare)\b",
+            r"\b(?:scartala|scartalo)\b",
         ),
     )
 

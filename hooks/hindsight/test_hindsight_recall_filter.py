@@ -164,7 +164,7 @@ class RoutingTests(unittest.TestCase):
 class ConsentTests(unittest.TestCase):
     def test_natural_positive_and_mixed_task(self):
         for prompt in ("sì", "Si, usale e correggi il bug", "mostramele", "va bene", "certo, mostramele",
-                       "ok", "OK", "Perfetto!", "procedi", "yes"):
+                       "ok", "OK", "Perfetto!", "procedi", "yes", "Ok, usale"):
             with self.subTest(prompt=prompt):
                 self.assertEqual(consent_decision(prompt), "positive")
 

@@ -278,7 +278,8 @@ def _consent_decision(
         prefix = text[:pos_match.start()]
         if re.search(r"\bnon\b", prefix):
             return "negative"
-        consent_filler = r"(?:(?:si|sì|va bene|d accordo|certo|grazie)\s*)*"
+        filler_words = standalone_positive | {"grazie", "e"}
+        consent_filler = r"(?:(?:%s)\s*)*" % "|".join(re.escape(w) for w in sorted(filler_words))
         if re.fullmatch(consent_filler, prefix.strip()):
             return "positive"
     return None
