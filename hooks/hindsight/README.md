@@ -27,6 +27,7 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | ------------------------- | -------------------------------------------------------------------------------- |
 | `hindsight_config.py`     | loader della config a strati: DEFAULTS → `<plugin_root>/hindsight.config.json` → `<progetto>/hindsight.config.json` (override) → env |
 | `hindsight_debug.py`      | logging strutturato JSONL su `logs/hindsight-debug.log`                          |
+| `hindsight_file_lock.py`  | lock interprocesso best-effort su file (`flock`/`msvcrt`), condiviso da retain worker e recall filter |
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
 | `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
 
