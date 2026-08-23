@@ -208,8 +208,8 @@ cookie del browser).
 
 ```bash
 cd ~/ai/trinity
-bash hooks/hindsight/tools/hindsight-check.sh        # diagnostica live (attesi OK, KO recall se disabilitato)
-python -m unittest discover -s hooks/hindsight -p 'test_*.py'   # test unit (senza server)
+bash hooks/hindsight/tools/hindsight-check.sh        # diagnostica live (attesi OK; SKIP recall/retain se disabilitati)
+python -m unittest discover -s hooks/hindsight -p 'test_*.py'   # test unit (senza server; python3 se serve)
 python hooks/hindsight/lib/hindsight_config.py --banks   # risoluzione bank (python3 se serve)
 echo '{"prompt":"test recall di prova sul server"}' | HS_CFG_RECALL_ENABLED=true bash hooks/hindsight/hindsight-recall.sh | head -c 200
 bash hooks/bin/play-sound.sh Windows_Proximity_Notification.wav; echo "exit=$? (0 anche headless)"
