@@ -39,7 +39,6 @@ Filtri rumore: niente output di tool, niente codice raw, niente env dump.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import os
@@ -55,6 +54,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url
 from hindsight_debug import debug_log
+from hindsight_file_lock import file_lock
 from hindsight_recall_lib import last_assistant_text, strip_memory_block
 from hindsight_retain_gate import (
     evaluate_retain,
@@ -437,68 +437,6 @@ def drop_unanswered_tail(entries: list[dict]) -> list[dict]:
     ]
 
 
-@contextlib.contextmanager
-def _state_lock(path: str, timeout: float = 5.0):
-    """Lock interprocesso best-effort sul file di stato condiviso (flock su POSIX,
-    msvcrt su Windows). Serializza il read-modify-write di piu' worker Stop concorrenti
-    (piu' finestre Claude Code sullo stesso utente): senza, l'ultimo writer sovrascrive
-    l'update dell'altra sessione (lost update su stop_count).
-    Best-effort: se il lock non si prende entro timeout, procede senza — il throttling
-    non e' critico e bloccare un worker async sarebbe peggio del lost update che evita.
-    Il lock e' legato al fd, quindi si rilascia da solo se il worker viene killato."""
-    lock_path = path + ".lock"
-    f = release = None
-    # Setup in un try SENZA yield: un errore qui (import, open, acquire) degrada a
-    # "procedi senza lock". Lo yield deve stare FUORI da questo try: se ci finisse
-    # dentro, un'eccezione nel CORPO del with rientrerebbe qui via throw(), l'except
-    # farebbe un secondo yield e il chiamante riceverebbe RuntimeError("generator
-    # didn't stop after throw()") che maschera l'errore originale.
-    try:
-        try:
-            import fcntl
-
-            def acquire(fd):
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            def _release(fd):
-                fcntl.flock(fd, fcntl.LOCK_UN)
-        except ImportError:
-            import msvcrt
-
-            def acquire(fd):
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-
-            def _release(fd):
-                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-        f = open(lock_path, "a+")
-        deadline = time.monotonic() + timeout
-        while True:
-            try:
-                # msvcrt.locking blocca dalla posizione corrente: seek(0) cosi' tutti
-                # i worker contendono lo stesso byte 0 (per flock la posizione e' ininfluente).
-                f.seek(0)
-                acquire(f.fileno())
-                release = _release
-                break
-            except OSError:
-                if time.monotonic() >= deadline:
-                    break  # timeout: procede senza lock (best-effort)
-                time.sleep(0.05)
-    except Exception:
-        pass  # qualunque problema col lock non deve bloccare il retain
-    try:
-        yield
-    finally:
-        if f is not None:
-            if release is not None:
-                try:
-                    f.seek(0)
-                    release(f.fileno())
-                except Exception:
-                    pass
-            f.close()
-
-
 def _write_retain_state(path: str, state: dict) -> None:
     """Scrive lo stato in modo atomico (best-effort). Cappa la crescita del file."""
     if len(state) > 5000:
@@ -510,7 +448,7 @@ def _write_retain_state(path: str, state: dict) -> None:
             json.dump(state, f)
         # os.replace su Windows fallisce con PermissionError se un altro processo
         # tiene aperto path per un istante (antivirus/indexer, o il worker Stop
-        # precedente): sotto _state_lock la RMW e' serializzata, ma questa flakiness
+        # precedente): sotto file_lock la RMW e' serializzata, ma questa flakiness
         # del rename resta e perderebbe l'update in silenzio. Ritenta brevemente.
         for attempt in range(5):
             try:
@@ -545,7 +483,10 @@ def should_retain_now(
         return True
     advance = max(1, int(advance))
     path = _retain_state_path()
-    with _state_lock(path):
+    # Best-effort (lost update su stop_count): su timeout il corpo gira comunque
+    # senza lock — il throttling non e' critico e bloccare un worker async
+    # sarebbe peggio del lost update che il lock evita.
+    with file_lock(path, timeout=5.0):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 state = json.load(f)
@@ -574,7 +515,7 @@ def note_gate_error(session_id: str) -> bool:
     if not session_id:
         return True
     path = _retain_state_path()
-    with _state_lock(path):
+    with file_lock(path, timeout=5.0):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 state = json.load(f)
