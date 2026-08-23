@@ -585,7 +585,15 @@ class PostRecallFilterTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr[:200])
         self.assertTrue((PLUGIN_ROOT / "commands" / "promote.md").is_file())
         sched = PLUGIN_ROOT / "scheduler" / "promote_scan"
-        self.assertTrue(os.access(sched / "promote-scan-scheduled.sh", os.X_OK))
+        # Il [ -x ] di bash MSYS riflette l'exec bit tracciato da git;
+        # os.access(..., X_OK) su Windows e' vero per qualunque file esistente,
+        # quindi si asserisce direttamente il mode git (100755).
+        mode = subprocess.check_output(
+            ["git", "-C", str(PLUGIN_ROOT), "ls-files", "-s", "--",
+             "scheduler/promote_scan/promote-scan-scheduled.sh"],
+            text=True,
+        ).split()[0]
+        self.assertEqual(mode, "100755")
         self.assertTrue((sched / "promote-scan-scheduled.cmd").is_file())
 
 
