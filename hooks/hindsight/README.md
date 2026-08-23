@@ -12,6 +12,7 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
 | `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: pickup dell'esito del gate del prompt precedente, consenso del retain pending, poi gate differito dell'entry accodata allo Stop precedente in un processo detached parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit (attesa max 6 s, altrimenti raccolto al prompt dopo) — un solo JSON in output |
+| `hindsight-failcheck.sh`     | UserPromptSubmit   | segnala via additionalContext i retain falliti in silenzio lato server (`GET .../operations?status=failed`: l'estrazione fatti è async e può fallire dopo l'accepted), i fallimenti locali del retain e la degradazione del reranker; de-dup via state file, una notifica per evento; indipendente da `recall_enabled` |
 | `hindsight-ensure-up.sh`     | SessionStart       | se il server :8888 è giù, lo avvia (`mise run start-hindsight`) e attende il boot; spawna la sentinella |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
 | `hindsight-retain.sh`        | Stop               | puro bash: accoda il payload del hook in `$HS_CACHE_DIR/hs-retain-queue/` e risponde `{}` (nessuna valutazione qui) |
@@ -28,8 +29,11 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | `hindsight_config.py`     | loader della config a strati: DEFAULTS → `<plugin_root>/hindsight.config.json` → `<progetto>/hindsight.config.json` (override) → env |
 | `hindsight_debug.py`      | logging strutturato JSONL su `logs/hindsight-debug.log`                          |
 | `hindsight_file_lock.py`  | lock interprocesso best-effort su file (`flock`/`msvcrt`), condiviso da retain worker e recall filter |
+| `hindsight_multibank.py`  | recall multi-bank: fan-out parallelo sui bank + fusione con rerank globale (Voyage) |
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
 | `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
+| `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank |
+| `hs-python.sh`            | sourced da ogni hook: risolve in `HS_PY` un interprete Python utilizzabile (indipendente dal PATH di sessione) ed esporta `PYTHONUTF8=1` |
 
 > `hindsight.config.json` (i parametri: api_url, budget, tag, mental model, …) vive nella **root del plugin**, non più in `lib/`. Un progetto può sovrascrivere singole chiavi con un proprio `hindsight.config.json` nella sua root (merge a strati).
 
@@ -55,6 +59,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 
 | File                         | Chi lo chiama                                                     | Cosa fa                                                      |
 | ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| `hindsight-drain-retain.py`  | `hindsight-sentinel.sh` (dopo il `--drain` del worker)            | attende che i retain in volo siano estratti dal server prima dello stop |
 | `hindsight-stop-services.sh` | `hindsight-sentinel.sh`, `mise run stop-hindsight`                | ferma server MCP + Postgres embedded                         |
 | `kill-port.sh`               | `mise` (control-plane/dashboard)                                  | uccide il processo su una porta (via `Get-NetTCPConnection`) |
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
@@ -68,6 +73,9 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | `hindsight-check.sh`        | **diagnostica live** del setup (server, endpoint, hook, mental model, debug log). Uso: `bash hooks/hindsight/tools/hindsight-check.sh` |
 | `hindsight_export.py`       | esporta i documenti del bank in JSON (output in `data/exports/`)                                                                                                   |
 | `hindsight_import.py`       | re-importa/re-retain i documenti (es. dopo cambio modello embedding)                                                                                               |
+| `hs-db-dump.sh`             | dump portabile del DB Hindsight (`pg_dump -Fc`) per il sync tra macchine — `mise run db-dump`                                                                      |
+| `hs-db-restore.sh`          | restore dal dump con guardrail anti-perdita (rifiuta se il DB locale ha scritture più recenti) — `mise run db-restore`                                             |
+| `hs-db-lib.sh`              | sourced da `hs-db-dump.sh`/`hs-db-restore.sh`: risolve binari Postgres del cluster e parametri di connessione per-OS                                               |
 
 ## 📁 `data/` — artefatti
 
