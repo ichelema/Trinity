@@ -236,35 +236,16 @@ module MyModule
   ##
   # Descrizione di cosa fa l'action
   #
-  # <div class="lsp">
-  #   <h2>Expects:</h2>
-  #   - some_input (Hash) Descrizione<br>
-  #   <h2>Promises:</h2>
-  #   - some_output (Array) Descrizione<br>
-  # </div>
-  #
+  # @example promises some_output value
+  #     # dump reale del dato, non inventato
   class MyAction
-    # @!parse
-    #   extend Switchyard::Action
     extend Switchyard::Action
 
+    # @expects some_input [Hash] Descrizione
     expects :some_input
+    # @promises some_output [Array<Hash>] Descrizione
     promises :some_output
 
-    # @!method MyAction(ctx)
-    #
-    #   @!scope class
-    #
-    #   @param ctx [Switchyard::Context]
-    #
-    #   @expects some_input [Hash] Descrizione
-    #
-    #   @promises some_output [Array] Descrizione
-    #
-    #   @example some_output
-    #       # dump reale del dato, non inventato
-    #
-    #   @return [Switchyard::Context, Switchyard::Context.fail_and_return!]
     executed do |ctx|
       try! do
         ctx.some_output = compute(ctx.some_input)
@@ -298,7 +279,28 @@ Regole:
   `private_class_method` in fondo;
 - `expects` / `promises` sono il contratto: se un dato serve allo step
   successivo passa dal `ctx`, altrimenti resta una variabile locale;
-- documentazione YARD con `@example` contenente **dump reali** dei dati.
+- un `expects` / `promises` per riga, con il tag YARD `@expects` / `@promises`
+  nel commento **immediatamente sopra** la chiamata;
+- gli `@example` stanno nel commento della classe, nella forma
+  `@example promises <nome> value`, e contengono **dump reali** dei dati.
+
+### Il contratto si scrive una volta sola
+
+Non ripetere il contratto in un blocco HTML (`<div class="lsp">`) né in un
+blocco `@!method Nome(ctx)` con `@!scope class`: sarebbe duplicato. I tag sopra
+la chiamata DSL bastano, perché due plugin li leggono e generano il resto:
+
+| Plugin | Caricato da | Genera |
+| ------------------------- | ---------------------------- | ------------------------------------- |
+| `yard-switchyard.rb`      | `-e` in `.yardopts`          | sezioni Expects/Promises nella doc HTML |
+| `solargraph-switchyard.rb`| `plugins:` in `.solargraph.yml` | contratto nell'hover LSP            |
+
+Copia entrambi i file nei progetti nuovi. Il template YARD della sezione
+"Contract" vive in `yard_templates/default/module/`.
+
+`@!parse` serve solo a dichiarare un `extend` fatto a runtime — per esempio i
+concern iniettati dal file `*_actions.rb` — non per l'`extend Switchyard::Action`,
+che è già letterale nel codice.
 
 ---
 
@@ -496,7 +498,9 @@ Altri anti-pattern:
 - `fmap` su un `Result`;
 - `bind` su un `Result` (non è alias di `map`: esegue il blocco anche su `Failure`);
 - dato messo nel `ctx` che nessuno step successivo legge;
-- action che restituisce a volte un valore, a volte `nil`, a volte un `Result`.
+- action che restituisce a volte un valore, a volte `nil`, a volte un `Result`;
+- contratto scritto a mano in `<div class="lsp">` o in `@!method`: i plugin YARD
+  e Solargraph lo generano già dai tag sopra la DSL.
 
 ---
 
