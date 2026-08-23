@@ -540,23 +540,6 @@ def recall_bank_urls(cfg: dict, cwd: str | None = None) -> list[str]:
     return out or [cfg["api_url"]]
 
 
-def mental_model_bank_urls(cfg: dict, cwd: str | None = None) -> list[str]:
-    """URL dei bank da cui iniettare i mental model (da mental_model_inject_banks).
-    Speculare a recall_bank_urls: "auto"/"core" risolti e deduplicati; con api_url
-    esplicito (retrocompat single-bank) restituisce solo quello."""
-    if cfg.get("_api_url_explicit"):
-        return [cfg["api_url"]]
-    names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
-    out: list[str] = []
-    seen: set[str] = set()
-    for n in names:
-        b = resolve_bank(n, cfg, cwd)
-        if b and b not in seen:
-            seen.add(b)
-            out.append(bank_url(cfg, b))
-    return out or [bank_url(cfg, (cfg.get("bank") or {}).get("core_bank", ""))]
-
-
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
 

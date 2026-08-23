@@ -650,8 +650,7 @@ bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a `re
 è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto).
 
 Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16), lanciato **dal repo del
-plugin** — valida forma di `mental_model_inject_banks`, helper `mental_model_bank_urls`,
-retrocompat `api_url` esplicito, seed/show sul bank core.
+plugin** — valida forma di `mental_model_inject_banks` e seed/show sul bank core.
 
 ---
 
