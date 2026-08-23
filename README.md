@@ -645,52 +645,13 @@ dal flusso dei prompt. Configurati in `hindsight.config.json` → `mental_models
 `mental_models_inject_on_start: true` e `mental_models_inject_ids` nel config del plugin
 controllano quali vengono caricati. Il token budget è `mental_model_max_tokens` (plugin: 2048).
 
-**Mental model per-progetto (ICH-77).** I mental model core sono condivisi e iniettati
-ovunque; un progetto può aggiungere i propri, che vivono nel **suo** bank (non nel core) e
-vengono iniettati **in aggiunta**. Due chiavi additivi nel `hindsight.config.json` del
-progetto:
-
-| Chiave | Ruolo |
-|---|---|
-| `project_mental_models` | array di modelli `{id, name, source_query, tags}` del progetto |
-| `project_mental_models_inject_ids` | id (da `project_mental_models`) da iniettare a SessionStart |
-
-La sorgente dei bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a
-`recall_banks`): `auto` = bank del progetto, `core` = core condiviso. Nel repo del plugin
-`auto` collassa sul core, quindi il comportamento resta identico. `mental_model_inject_banks`
-è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto):
-il `hindsight.config.json` di un progetto può impostare solo `project_mental_models*`. Esempio
-(`<progetto>/hindsight.config.json`):
-
-```json
-{
-  "project_mental_models": [
-    { "id": "my-project-architecture", "name": "Architettura del progetto",
-      "source_query": "Qual è l'architettura di questo progetto? Rispondi in max 10 voci.",
-      "tags": ["claude-code"] }
-  ],
-  "project_mental_models_inject_ids": ["my-project-architecture"]
-}
-```
-
-Procedura: scrivi il config, poi `bash hooks/hindsight/ops/hindsight-mental-models.sh seed`
-(`seed`/`list`/`show`/`refresh` ora sono bank-aware: risolvono il bank dal cwd). Un modello
-nel bank progetto, taggato `["claude-code"]` o senza tag, legge i fatti del progetto in
-refresh — nessun tag speciale serve. **Non riusare gli id core** (`user-profile`,
-`project-conventions`, `recurring-learnings`): il dedup per id fa vincere il primo bank.
+I mental model sono definiti dal plugin e vivono nel bank core condiviso. La sorgente dei
+bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a `recall_banks`);
+è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto).
 
 Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16), lanciato **dal repo del
-plugin** — valida il lato core/default (forma delle chiavi, helper `mental_model_bank_urls`,
-retrocompat `api_url` esplicito, seed/show sul bank core, pinnati al root del plugin a
-prescindere da dove giri il check). Non verifica il setup di un progetto specifico: per quello,
-dal cwd del progetto (gli script vivono nel repo del plugin: prefissa i path qui sotto col suo
-percorso, es. `~/.claude/skills/trinity/`),
-
-1. `bash hooks/hindsight/ops/hindsight-mental-models.sh seed` → crea i modelli nel bank del
-   progetto (idempotente: ri-eseguito non ricrea nulla);
-2. `bash hooks/hindsight/ops/hindsight-mental-models.sh list` → li mostra;
-3. `echo '{"hook_event_name":"SessionStart"}' | HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 bash hooks/hindsight/hindsight-mm-inject.sh` →
-   inject testabile: il JSON in output include core + progetto.
+plugin** — valida forma di `mental_model_inject_banks`, helper `mental_model_bank_urls`,
+retrocompat `api_url` esplicito, seed/show sul bank core.
 
 ---
 
