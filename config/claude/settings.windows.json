@@ -13,7 +13,7 @@
     "MCP_EXCALIDRAW_DIR": "e:/msys64/home/sphynx/.local/opt/mcp_excalidraw",
     "MCP_DEBUGGER_DIR": "e:/ai/tools/mcp-debugger",
     "MCP_NEOVIM_DIR": "e:/ai/tools/mcp-neovim-server",
-    "EDITOR": "gvim",
+    "EDITOR": "e:\\msys64\\home\\Sphynx\\.local\\bin\\vim-claude.cmd",
     "CLAUDE_ENV_FILE": "e:/msys64/home/sphynx/.local/bin/claude-msys2-env.sh"
   },
   "statusLine": {
