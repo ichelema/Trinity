@@ -26,6 +26,36 @@ set -uo pipefail
 # MSYS2 non lo risolve -> variabile vuota. Vedi hindsight-recall.sh per il dettaglio.
 IFS= read -r -d '' HOOK_INPUT || true
 
+# Guardia anti-coda-morta: con retain_enabled false nessuno consuma le entry.
+# Restano in coda fino allo sweep dei 24h del worker, che le segnala come
+# "la sentinella non ha drenato?" - falso allarme a ogni sessione. Zero fork
+# (`read` builtin, niente command substitution), stessa precedenza di
+# lib/hindsight_config.py: plugin -> progetto -> env. Fail-open: flag
+# illeggibile => si accoda come prima.
+HS_RETAIN_ON=""
+hs_read_retain_flag() {
+	local line
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+		*'"retain_enabled":'*false*) HS_RETAIN_ON=false; return ;;
+		*'"retain_enabled":'*true*) HS_RETAIN_ON=true; return ;;
+		esac
+	done <"$1"
+}
+HS_HOOKS_DIR="${BASH_SOURCE[0]%/*}"
+[ "$HS_HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HS_HOOKS_DIR="."
+hs_read_retain_flag "$HS_HOOKS_DIR/../../hindsight.config.json" 2>/dev/null
+[ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$CLAUDE_PROJECT_DIR/hindsight.config.json" ] &&
+	hs_read_retain_flag "$CLAUDE_PROJECT_DIR/hindsight.config.json" 2>/dev/null
+case "${HS_CFG_RETAIN_ENABLED:-}" in
+[fF]alse | 0) HS_RETAIN_ON=false ;;
+?*) HS_RETAIN_ON=true ;;
+esac
+if [ "$HS_RETAIN_ON" = false ]; then
+	echo '{}'
+	exit 0
+fi
+
 # Stesso path e stessa guardia di lib/hs-python.sh (per-utente, 0700: le entry
 # contengono cwd e path del transcript). `[ -d ]` e' un builtin (~0ms); mkdir e
 # chmod sono fork da ~400ms l'uno su MSYS, pagati solo alla creazione.
