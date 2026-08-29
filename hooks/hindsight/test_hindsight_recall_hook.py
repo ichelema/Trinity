@@ -858,7 +858,8 @@ class HookE2ETests(unittest.TestCase):
         })
         proc = subprocess.run(
             [BASH, STOP_HOOK], input=hook_input,
-            env={**os.environ, "XDG_CACHE_HOME": cache_home},
+            env={**os.environ, "XDG_CACHE_HOME": cache_home,
+                 "HS_CFG_RETAIN_ENABLED": "true"},
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=30,
         )
@@ -872,7 +873,8 @@ class HookE2ETests(unittest.TestCase):
         # HOOK_INPUT vuoto: '{}' e nessuna entry nuova.
         proc = subprocess.run(
             [BASH, STOP_HOOK], input="",
-            env={**os.environ, "XDG_CACHE_HOME": cache_home},
+            env={**os.environ, "XDG_CACHE_HOME": cache_home,
+                 "HS_CFG_RETAIN_ENABLED": "true"},
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=30,
         )
@@ -886,7 +888,8 @@ class HookE2ETests(unittest.TestCase):
         # con `unset` in un bash che poi sourcia lo script.
         proc = subprocess.run(
             [BASH, "-c", 'unset EPOCHREALTIME; . "$0"', STOP_HOOK], input=hook_input,
-            env={**os.environ, "XDG_CACHE_HOME": cache_home},
+            env={**os.environ, "XDG_CACHE_HOME": cache_home,
+                 "HS_CFG_RETAIN_ENABLED": "true"},
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=30,
         )
@@ -900,6 +903,25 @@ class HookE2ETests(unittest.TestCase):
         for name in names:
             stamp = name.split("-", 1)[0]
             self.assertTrue(stamp.isdigit() and len(stamp) == 16, name)
+
+    def test_stop_hook_skips_queue_when_retain_disabled(self):
+        # retain_enabled false: nessuno consuma la coda, quindi l'hook non deve
+        # accodare - le entry scadrebbero a 24h e lo sweep del worker le
+        # segnalerebbe come drain mancato. Sempre '{}' su stdout.
+        cache_home = os.path.join(self.tmp.name, "xdg-cache-off")
+        proc = subprocess.run(
+            [BASH, STOP_HOOK],
+            input=json.dumps({"session_id": "off", "transcript_path": "/x.jsonl", "cwd": "/y"}),
+            env={**os.environ, "XDG_CACHE_HOME": cache_home,
+                 "HS_CFG_RETAIN_ENABLED": "false"},
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "{}")
+        self.assertEqual(
+            glob.glob(os.path.join(cache_home, "trinity", "hs-retain-queue", "*.json")), []
+        )
 
 
 if __name__ == "__main__":
