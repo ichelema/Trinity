@@ -384,7 +384,7 @@ Sono **complementari**, con ruoli precisi:
   `README.md` dentro `${MCP_DEBUGGER_DIR}`.
 - **`neovim`** — fork [`ichelema/mcp-neovim-server`](https://github.com/ichelema/mcp-neovim-server)
   dell'upstream [`bigcodegen/mcp-neovim-server`](https://github.com/bigcodegen/mcp-neovim-server)
-  (dev in `E:/Sviluppo`, runtime in `${MCP_NEOVIM_DIR}`): **pair-debugging** sulla
+  (dev in `D:/Sviluppo/Progetti`, runtime in `${MCP_NEOVIM_DIR}`): **pair-debugging** sulla
   sessione nvim-dap che guida l'utente — Claude ispeziona variabili, muove step e
   breakpoint attraverso l'RPC di Neovim, nvim-dap resta l'unico client DAP (zero
   conflitti). Si collega alla named pipe per-progetto
@@ -711,7 +711,7 @@ una variabile separata.
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
 | CLI adhd (§12.3) | `${ADHD_LIB}` — **da definire per-macchina** (root dell'installazione di `adhd-agent`, non del repo); se manca, `scripts/bin/adhd` esce con errore esplicito |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
-| server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `E:/Sviluppo`) |
+| server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `D:/Sviluppo/Progetti`) |
 
 > Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
 > Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
