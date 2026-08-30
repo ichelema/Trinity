@@ -34,6 +34,9 @@ import hashlib
 import json
 import os
 import time
+import uuid
+
+import httpx
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(_DIR, "images")
@@ -41,6 +44,174 @@ GIORNI_RITENZIONE = int(os.environ.get("RESPONSES_BRIDGE_RETENTION_DAYS", "7"))
 SESSIONI = {s.strip() for s in os.environ.get(
     "RESPONSES_BRIDGE_SESSIONS", "typingmind").split(",") if s.strip()}
 PATH = "/v1/responses"
+MESSAGES_PATH = "/v1/messages"
+
+
+# --------------------------------------------------------------------------- #
+# WebSearch di Claude Code: /v1/messages -> /v1/responses (web_search nativo)
+# --------------------------------------------------------------------------- #
+# Claude Code invia la ricerca come richiesta autonoma /v1/messages con un
+# tool nativo `web_search_20260...`. Il bridge Messages->Responses di LiteLLM
+# 1.98 non lo traduce (usa `web_search_preview`, rifiutato dal backend, e non
+# converte `web_search_call`/citazioni). Qui si intercetta SOLO quel caso, si
+# inoltra a /v1/responses col tool `web_search` (accettato da ChatGPT Codex) e
+# si riconverte la risposta nel formato Anthropic atteso da Claude Code.
+# --------------------------------------------------------------------------- #
+
+
+def _is_web_search_only(tools):
+    """True se TUTTI i tool sono web_search nativi Anthropic (nessun tool misto)."""
+    if not tools:
+        return False
+    return all(
+        isinstance(t, dict)
+        and (str(t.get("type", "")).startswith("web_search_") or t.get("name") == "web_search")
+        for t in tools
+    )
+
+
+def _ultimo_testo_utente(messages):
+    """Testo dell'ultimo messaggio user (query della ricerca)."""
+    for m in reversed(messages or []):
+        if not isinstance(m, dict) or m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, str):
+            return c
+        if isinstance(c, list):
+            testi = [b.get("text", "") for b in c
+                     if isinstance(b, dict) and b.get("type") == "text"]
+            if testi:
+                return " ".join(testi)
+    return None
+
+
+def _estrai_web_search(testo_sse):
+    """Da un flusso SSE /v1/responses estrae (query, citazioni, testo finale).
+
+    ``query`` dall'azione del primo ``web_search_call``; ``citazioni`` dalle
+    annotation ``url_citation`` (deduplicate per URL); ``testo`` accumulando i
+    delta ``output_text.delta``.
+    """
+    query = None
+    citazioni = []
+    visti = set()
+    testo = []
+    for riga in testo_sse.splitlines():
+        if not riga.startswith("data: "):
+            continue
+        dato = riga[6:].strip()
+        if not dato or dato == "[DONE]":
+            continue
+        try:
+            ev = json.loads(dato)
+        except ValueError:
+            continue
+        tipo = ev.get("type")
+        if tipo == "response.output_item.done":
+            item = ev.get("item") or {}
+            if item.get("type") == "web_search_call":
+                azione = item.get("action") or {}
+                if query is None:
+                    query = azione.get("query") or (azione.get("queries") or [None])[0]
+        elif tipo == "response.output_text.delta":
+            testo.append(ev.get("delta", ""))
+        elif tipo == "response.output_text.annotation.added":
+            ann = ev.get("annotation") or {}
+            url = ann.get("url")
+            if url and url not in visti:
+                visti.add(url)
+                citazioni.append({"url": url, "title": ann.get("title", "")})
+    return query, citazioni, "".join(testo)
+
+
+def _costruisci_risposta(model, query, citazioni, testo):
+    """Risposta Anthropic non-streaming con server_tool_use + risultato + testo."""
+    tool_id = "srvtoolu_" + uuid.uuid4().hex[:24]
+    content = [
+        {"type": "server_tool_use", "id": tool_id, "name": "web_search",
+         "input": {"query": query or ""}},
+        {"type": "web_search_tool_result", "tool_use_id": tool_id,
+         "content": [
+             {"type": "web_search_result", "url": c["url"], "title": c["title"],
+              "page_age": None, "encrypted_content": "", "snippet": ""}
+             for c in citazioni
+         ]},
+    ]
+    if testo:
+        content.append({"type": "text", "text": testo})
+    return {
+        "id": "msg_" + uuid.uuid4().hex,
+        "type": "message",
+        "role": "assistant",
+        "model": model,
+        "content": content,
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "server_tool_use": {
+                "web_search_requests": 1 if query else 0,
+                "web_fetch_requests": 0,
+            },
+        },
+    }
+
+
+def _sse_antropico(risposta):
+    """Serializza la risposta Anthropic in eventi SSE streaming.
+
+    Formato: message_start -> (content_block_start/delta/stop per blocco) ->
+    message_delta -> message_stop. Per ``server_tool_use`` l'input non va nel
+    content_block_start ma in un ``input_json_delta`` (stessa regola del client
+    Anthropic nativo).
+    """
+    def evento(tipo, dato):
+        return f"event: {tipo}\ndata: {json.dumps(dato)}\n\n".encode("utf-8")
+
+    uso = risposta.get("usage", {}) or {}
+    chunks = [evento("message_start", {"type": "message_start", "message": {
+        "id": risposta.get("id"), "type": "message", "role": "assistant",
+        "model": risposta.get("model"), "content": [], "stop_reason": None,
+        "stop_sequence": None,
+        "usage": {"input_tokens": uso.get("input_tokens", 0), "output_tokens": 0},
+    }})]
+
+    for indice, blocco in enumerate(risposta.get("content", [])):
+        tipo = blocco.get("type")
+        if tipo == "text":
+            chunks.append(evento("content_block_start", {
+                "type": "content_block_start", "index": indice,
+                "content_block": {"type": "text", "text": ""}}))
+            chunks.append(evento("content_block_delta", {
+                "type": "content_block_delta", "index": indice,
+                "delta": {"type": "text_delta", "text": blocco.get("text", "")}}))
+        elif tipo == "server_tool_use":
+            chunks.append(evento("content_block_start", {
+                "type": "content_block_start", "index": indice,
+                "content_block": {"type": "server_tool_use", "id": blocco.get("id"),
+                                  "name": blocco.get("name")}}))
+            chunks.append(evento("content_block_delta", {
+                "type": "content_block_delta", "index": indice,
+                "delta": {"type": "input_json_delta",
+                          "partial_json": json.dumps(blocco.get("input", {}))}}))
+        else:  # web_search_tool_result: blocco completo nello start
+            chunks.append(evento("content_block_start", {
+                "type": "content_block_start", "index": indice,
+                "content_block": blocco}))
+        chunks.append(evento("content_block_stop", {
+            "type": "content_block_stop", "index": indice}))
+
+    delta_uso = {"output_tokens": uso.get("output_tokens", 0)}
+    if uso.get("input_tokens") is not None:
+        delta_uso["input_tokens"] = uso["input_tokens"]
+    chunks.append(evento("message_delta", {"type": "message_delta",
+        "delta": {"stop_reason": risposta.get("stop_reason"),
+                  "stop_sequence": risposta.get("stop_sequence")},
+        "usage": delta_uso}))
+    chunks.append(evento("message_stop", {"type": "message_stop"}))
+    return b"".join(chunks)
 
 
 LOG_FILE = os.path.join(_DIR, "bridge.log")
@@ -145,9 +316,98 @@ class _Ponte:
     def __init__(self, app):
         self.app = app
 
+    async def _gestisci_messages(self, scope, receive, send):
+        """Intercetta le richieste /v1/messages di sola ricerca web.
+
+        Se non è una ricerca web (o manca la query), riproduce il corpo
+        bufferizzato intatto e lascia fare a LiteLLM.
+        """
+        messaggi = []
+        corpo = b""
+        while True:
+            m = await receive()
+            messaggi.append(m)
+            corpo += m.get("body", b"") or b""
+            if not m.get("more_body"):
+                break
+
+        async def receive_replay():
+            if messaggi:
+                return messaggi.pop(0)
+            return await receive()
+
+        try:
+            dati = json.loads(corpo)
+        except ValueError:
+            return await self.app(scope, receive_replay, send)
+
+        tools = dati.get("tools")
+        if not _is_web_search_only(tools):
+            return await self.app(scope, receive_replay, send)
+
+        modello = dati.get("model")
+        query = _ultimo_testo_utente(dati.get("messages"))
+        if not modello or not query:
+            return await self.app(scope, receive_replay, send)
+
+        auth = self._auth_da_scope(scope)
+        try:
+            sse = await self._esegui_ricerca(modello, query, auth)
+            q, citazioni, testo = _estrai_web_search(sse)
+            risposta = _costruisci_risposta(modello, q or query, citazioni, testo)
+        except Exception as e:  # noqa: BLE001 - mai rompere /v1/messages
+            _log(f"websearch: ricerca fallita ({e}), passo al flusso normale")
+            return await self.app(scope, receive_replay, send)
+
+        corpo_out = _sse_antropico(risposta)
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [(b"content-type", b"text/event-stream"),
+                        (b"content-length", str(len(corpo_out)).encode())],
+        })
+        await send({"type": "http.response.body", "body": corpo_out, "more_body": False})
+        _log(f"websearch: ricerca completata ({len(citazioni)} fonte/i)")
+
+    @staticmethod
+    def _auth_da_scope(scope):
+        """Credenziali del chiamante, riusate per la chiamata interna."""
+        intestazioni = {k.lower(): v for k, v in scope.get("headers") or []}
+        auth = {}
+        for chiave in (b"authorization", b"x-api-key", b"x-litellm-api-key"):
+            if chiave in intestazioni:
+                auth[chiave.decode("latin-1")] = intestazioni[chiave].decode("latin-1")
+        if not auth:
+            master = os.environ.get("LITELLM_MASTER_KEY")
+            if master:
+                auth["Authorization"] = f"Bearer {master}"
+        return auth
+
+    @staticmethod
+    async def _esegui_ricerca(modello, query, auth):
+        """Chiama /v1/responses col tool nativo ``web_search`` e restituisce l'SSE."""
+        host = os.environ.get("LITELLM_HOST", "127.0.0.1")
+        port = os.environ.get("LITELLM_PORT", "4000")
+        url = f"http://{host}:{port}/v1/responses"
+        payload = {
+            "model": modello,
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": query}]}],
+            "tools": [{"type": "web_search"}],
+        }
+        headers = {"content-type": "application/json", **auth}
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"HTTP {resp.status_code}")
+        return resp.text
+
     async def __call__(self, scope, receive, send):
-        if scope.get("type") != "http" or scope.get("path") != PATH \
-                or scope.get("method") != "POST":
+        if scope.get("type") != "http" or scope.get("method") != "POST":
+            return await self.app(scope, receive, send)
+        path = scope.get("path")
+        if path == MESSAGES_PATH:
+            return await self._gestisci_messages(scope, receive, send)
+        if path != PATH:
             return await self.app(scope, receive, send)
 
         messaggi = []
@@ -305,6 +565,6 @@ def install(app):
 
         app.add_middleware(_Ponte)
         _log(f"attivo su POST {PATH} per sessioni {sorted(SESSIONI)}; "
-             f"immagini in {IMG_DIR}")
+             f"websearch su POST {MESSAGES_PATH}; immagini in {IMG_DIR}")
     except Exception as e:  # noqa: BLE001
         _log(f"NON attivato ({e}); il proxy parte normalmente")
