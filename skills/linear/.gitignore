@@ -1,0 +1,46 @@
+# Secrets — match any .env / .env.* / .envrc variant + common secret-file patterns
+.env
+.env.*
+!.env.example
+.envrc
+*.key
+*.pem
+*.p12
+*.pfx
+*.token
+secrets.*
+!secrets.example*
+id_rsa*
+id_ed25519*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv / venv
+.venv/
+venv/
+.uv-cache/
+
+# Tests / tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local data stores (Linear archive sqlite + failure logs)
+data/linear-archive/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
