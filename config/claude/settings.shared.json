@@ -70,8 +70,12 @@
     ],
     "defaultMode": "auto"
   },
+  "disableBundledSkills": true,
+  "disableWorkflows": true,
+  "disableRemoteControl": true,
+  "disableClaudeAiConnectors": true,
+  "enableArtifact": false,
   "model": "claude-fable-5[1m]",
-  "enableWorkflows": true,
   "enabledPlugins": {},
   "extraKnownMarketplaces": {},
   "outputStyle": "simple",
