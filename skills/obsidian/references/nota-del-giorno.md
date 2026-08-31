@@ -70,8 +70,8 @@ loro sessione nel riassunto. Forma obbligatoria: `[[#<header esatto>|<alias>]]`,
 
 - l'**ancora** (prima di `|`) è **identica** all'header `###` della sessione — è ciò
   che fa risolvere il link;
-- l'**alias** (dopo `|`) è il testo mostrato, nel formato `<Stato> - <descrizione>`, con
-  `<Stato>` che riflette l'esito del task (es. `Fixed`, `Commited`, `Aggiunto`, `Risolto`).
+- l'**alias** (dopo `|`) è il testo mostrato, nel formato `<Stato> - <Progetto> - <descrizione>`, con
+  `<Stato>` che riflette l'esito del task (es. `Fixed`, `Commited`, `Aggiunto`, `Risolto`), e `<Progetto> `  è il progetto che riguarda la modifica.
 
 ```markdown
 - [x] [[#Fix hook SessionEnd di Hindsight|Fixed - hook SessionEnd di Hindsight]]
