@@ -1,6 +1,7 @@
 ---
 name: github-pr-release
 version: "2.0.0"
+allowed-tools: Bash(git switch:*), Bash(git pull:*), Bash(git log:*), Bash(git add:*), Bash(git commit:*), Bash(git tag:*), Bash(git push:*), Bash(git status:*), Bash(git diff:*), Bash(gh repo view:*), Bash(gh release create:*), Bash(mise run:*), Bash(awk:*)
 description: >
   Release e versionamento di un progetto: scelta della versione SemVer, curatela
   del CHANGELOG.md, triage delle modifiche pendenti in commit atomici, tag annotato
