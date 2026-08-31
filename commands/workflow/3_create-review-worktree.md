@@ -23,7 +23,7 @@ Se i token sono meno di 3, fermati e mostra:
 
 ## Determinazione del tipo dalle issue
 
-Recupera ogni issue da Linear in modalità esclusivamente read-only.
+Recupera ogni issue da Linear (via `scripts/linear.py query`) in modalità esclusivamente read-only.
 
 Esamina:
 
