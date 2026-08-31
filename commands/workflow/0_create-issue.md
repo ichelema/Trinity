@@ -22,8 +22,8 @@ del working tree.
 Questo step **crea soltanto la issue**. Non creare branch, worktree, commit o
 PR: quello è compito di `/1_create-worktree` e `/2_work-issue`.
 
-Fino alla conferma esplicita dell'utente lavora in sola lettura su Linear: nessun
-`save_issue`, nessun `save_comment`.
+Fino alla conferma esplicita dell'utente lavora in sola lettura su Linear: nessuna
+mutation, nessun commento.
 
 ## Raccolta dei dati
 
@@ -43,16 +43,16 @@ Determina, a partire dalla descrizione:
 - dipendenze da altre issue (se presenti);
 - eventuale parent issue.
 
-Recupera i valori validi dal workspace con i tool MCP, mai a memoria:
+Recupera i valori validi dal workspace via `scripts/linear.py query`, mai a memoria:
 
-| Campo | Tool |
+| Campo | Query GraphQL |
 | --- | --- |
-| Progetti | `list_projects` |
-| Stati | `list_issue_statuses` |
-| Label | `list_issue_labels` |
-| Team | `list_teams` |
-| Assegnatari | `list_users` |
-| Scala estimate | `get_team` |
+| Progetti | `projects` |
+| Stati | `workflowStates` |
+| Label | `issueLabels` |
+| Team | `teams` |
+| Assegnatari | `users` |
+| Scala estimate | `teams` (campo `estimateScale`) |
 
 Stati e label sono configurabili per workspace e per team: gli elenchi di un
 progetto non valgono per un altro, e proporre un valore inesistente fa fallire
@@ -113,20 +113,21 @@ con un sì/no lì a valle non è controllabile da nessuno.
 ## Estimate
 
 La scala è configurata per team in Linear (lineare, fibonacci, t-shirt, ecc.) —
-non è fissa come la priorità. Recupera la configurazione con `get_team` per
-conoscere la scala attiva e i valori ammessi. Se il team non ha l'estimation
-attiva, salta il campo.
+non è fissa come la priorità. Recuperala con una query su `teams` (campo
+`estimateScale`) per conoscere la scala attiva e i valori ammessi. Se il team
+non ha l'estimation attiva, salta il campo.
 
-Passa il valore numerico a `save_issue` nel campo `estimate`.
+Passa il valore numerico a `issueCreate` nel campo `estimate`.
 
 ## Dipendenze
 
 Se la issue dipende da altre issue Linear, usa il campo `blockedBy` di
-`save_issue` passando gli identificativi delle issue bloccanti
+`issueCreate` passando gli identificativi delle issue bloccanti
 (es. `["ICH-42", "ICH-55"]`).
 
 Non inventare identificativi: verifica che le issue referenziate esistano con
-`get_issue` o `list_issues` prima di aggiungerle come dipendenza. Un ID
+`scripts/linear.py query` (query `issue(id:)` o `issues(filter:)`) prima di
+aggiungerle come dipendenza. Un ID
 inventato non fallisce in modo rumoroso: crea silenziosamente un collegamento
 sbagliato o nessun collegamento.
 
@@ -136,20 +137,20 @@ Quando serve una scelta, mostra i valori **letti da Linear in quel momento**,
 raggruppati per campo:
 
     Project:
-    - <valori da list_projects>
+    - <valori dalla query projects>
     - Nessuno
 
     Status:
-    - <valori da list_issue_statuses>
+    - <valori dalla query workflowStates>
 
     Labels:
-    - <valori da list_issue_labels>
+    - <valori dalla query issueLabels>
 
     Estimate:
     - <valori dalla scala del team>
 
 Questo è un formato di presentazione, non un elenco di valori: i nomi vanno
-sempre dalla risposta dei tool.
+sempre dalla risposta delle query.
 
 ## Lingua
 
@@ -176,13 +177,13 @@ Prima di creare la issue mostra:
 - Blocked by
 - Description (corpo completo, in inglese)
 
-Chiedi conferma esplicita. Solo dopo la conferma crea la issue con `save_issue`
-**senza `id`**: con un `id` aggiorneresti una issue esistente invece di crearne
-una nuova.
+Chiedi conferma esplicita. Solo dopo la conferma crea la issue con la mutation
+`issueCreate` via `scripts/linear.py mutation` (per aggiornare un'issue
+esistente usa invece `issueUpdate` con l'`id`).
 
 ## Verifica finale
 
-Rileggi la issue creata con `get_issue` e verifica che i campi salvati
+Rileggi la issue creata con `scripts/linear.py query` (`issue(id:)`) e verifica che i campi salvati
 corrispondano a quelli confermati. Un valore rifiutato da Linear non produce
 sempre un errore: può semplicemente restare vuoto.
 

@@ -76,22 +76,21 @@ esistente.
 
 ## Recupero delle issue
 
-Recupera ogni issue con `get_issue`, passando `includeRelations: true`.
+Recupera ogni issue con `scripts/linear.py query`, selezionando il campo `relations`.
 
 Leggi:
 
 - identificativo e titolo;
 - descrizione e acceptance criteria;
-- commenti rilevanti per l'implementazione (`list_comments`);
-- relazioni e relazioni parent/sub-issue;
-- `statusType` corrente.
+- commenti rilevanti per l'implementazione (campo `comments`);
+- relazioni e relazioni parent/sub-issue (campo `relations`);
+- lo stato corrente (campo `state { type }`).
 
 ### Dipendenze
 
-`get_issue` restituisce le relazioni **solo** con `includeRelations: true`.
-Senza quel flag il campo `relations` non compare affatto, e una issue con dei
-blocker è indistinguibile da una libera: è un falso negativo silenzioso, non un
-errore.
+La query deve selezionare esplicitamente il campo `relations`: senza, il campo
+non compare affatto, e una issue con dei blocker è indistinguibile da una
+libera: è un falso negativo silenzioso, non un errore.
 
 Se una delle issue è bloccata da una o più issue non completate:
 
@@ -112,8 +111,8 @@ non lo segnali tu.
 
 Una volta sola, prima di iniziare a modificare file:
 
-- per ogni issue: se lo `statusType` è `backlog` o `unstarted`, portala a
-  **In Progress** con `save_issue`;
+- per ogni issue: se lo stato (`state { type }`) è `backlog` o `unstarted`,
+  portala a **In Progress** con `issueUpdate`;
 - se è già `started`, non toccarla: qualcuno ci sta già lavorando, oppure
   l'automazione è già intervenuta.
 
@@ -126,9 +125,9 @@ subentra l'automazione GitHub → Linear:
 | PR pronta per il merge (check verdi, nessun conflitto) | In Review |
 | PR mergiata | Done |
 
-Queste transizioni arrivano via webhook in pochi secondi. Una `save_issue` sugli
-stessi stati è nel migliore dei casi ridondante, nel peggiore sovrascrive una
-transizione appena avvenuta.
+Queste transizioni arrivano via webhook in pochi secondi. Una `issueUpdate`
+sugli stessi stati è nel migliore dei casi ridondante, nel peggiore sovrascrive
+una transizione appena avvenuta.
 
 ## Piano prima dell'implementazione
 
