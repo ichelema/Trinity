@@ -629,7 +629,7 @@
       ]
     },
     "linear": {
-      "description": "Workflow issue Linear via MCP: creare, elencare, implementare su branch dedicato con PR collegata, merge dopo revisione",
+      "description": "Workflow issue Linear via GraphQL diretto (scripts/linear.py): creare, elencare, implementare su branch dedicato con PR collegata, merge dopo revisione",
       "priority": 7,
       "triggers": {
         "keywords": [
@@ -660,10 +660,11 @@
           "(?:mergia|merge|chiudi).{0,40}(?:pr|pull\\s?request).{0,40}(?:issue|linear|ICH-\\d+)"
         ],
         "contentPatterns": [
-          "mcp__linear__",
-          "list_issues",
-          "save_issue",
+          "scripts/linear.py",
+          "linear.py (query|mutation|introspect)",
+          "issueCreate|issueUpdate|issueDelete",
           "gitBranchName",
+          "LINEAR_API_KEY",
           "linear\\.app/",
           "(?:Fixes|Closes|Resolves|Refs)\\s+[A-Z]{2,5}-\\d+"
         ],

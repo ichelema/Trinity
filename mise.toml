@@ -241,6 +241,18 @@ HINDSIGHT_API_AUDIT_LOG_RETENTION_DAYS = "30"
 # result_metadata.extraction_errors_sample.
 HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS = "true"
 
+# --- MCP: filtra i tool esposti a Claude Code (2026-08-30) -------------------
+# HINDSIGHT_API_MCP_ENABLED_TOOLS = allowlist a virgole dei tool MCP registrati.
+# Default assente = tutti i 36. Qui teniamo solo quelli usati nelle sessioni:
+# core (retain/sync_retain/recall/reflect), async (get/list/cancel_operation),
+# ispezione (list/get_memories, list/get_documents), correzione
+# (update/invalidate_memory, delete_document), bank/tag (get_bank, list_tags).
+# Scartati: mental model, knowledge base, directives, i distruttivi
+# (clear_memories/delete_bank) e i multi-bank (list_banks/create_bank/
+# get_bank_stats — comunque non esposti dallo shim single-bank).
+# Risparmio ~4.5k token di context per sessione.
+HINDSIGHT_API_MCP_ENABLED_TOOLS = "retain,sync_retain,recall,reflect,get_operation,list_operations,cancel_operation,list_memories,get_memory,list_documents,get_document,update_memory,invalidate_memory,delete_document,list_tags,get_bank"
+
 [tasks.install-hindsight]
 description = "Installa/aggiorna hindsight-api-slim (server Python locale, espone MCP) tramite pip del Python mise."
 shell = "bash -c"
