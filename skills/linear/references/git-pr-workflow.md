@@ -51,6 +51,12 @@ Vale per ogni lavoro su issue Linear, indipendentemente dal backend.
 - Usa la strategia di merge configurata per il repo, non imporne una.
 - Dopo il merge: passa al default, `git pull`, elimina branch locale e remoto,
   verifica working tree pulito.
+- **Sync locale con working tree sporco.** `gh pr merge` esegue comunque il
+  merge su GitHub, ma fallisce la sincronizzazione locale
+  (`cannot pull with rebase: You have unstaged changes`) quando il working tree
+  ha modifiche non committate e `pull.rebase` è attivo. In quel caso il merge su
+  GitHub è già avvenuto: aggiorna con `git fetch origin` +
+  `git merge --ff-only origin/master`, poi elimina il branch locale.
 - Se le magic words erano corrette Linear chiude da sé le issue: verifica lo
   stato invece di aggiornarlo a mano.
 - Mai il merge senza richiesta esplicita: è l'operazione meno reversibile del
