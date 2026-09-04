@@ -21,7 +21,6 @@ data_modifica: "{{date:YYYY-MM-DD}}T{{time:HH:mm:ss}}"
 
 - 
 
----
 
 ## ✅ Issue chiuse
 
@@ -30,7 +29,6 @@ ids:
   - 
 ```
 
----
 
 ## ⚡ Inbox rapida
 
@@ -40,7 +38,6 @@ ids:
 - [ ] 
 - [ ] 
 
----
 
 ## 🪶 Appunti
 
@@ -48,7 +45,6 @@ ids:
 -
 -
 
----
 
 ## 📚 Cose apprese oggi
 
@@ -56,13 +52,11 @@ ids:
 -
 -
 
----
 
 ## Concetti da trasformare in note
  [[ ]]
  [[ ]]
  
- ---
 
 ## 🤖 Riassunto sessione Agente AI
 
@@ -84,7 +78,6 @@ repository toccati. Serve per mantere traccia come uno storico per un audit
 futuro, e per essere interrogato da LLM per avere maggiori dettagli
 Es: Questo commit si questo progetto cosa riguardava, quali sono i file che sono
 stati modificati.
-___
 
 
 

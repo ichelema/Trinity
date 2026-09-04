@@ -36,3 +36,5 @@ data/playwright-mcp/
 /CLAUDE_OPUS.md
 /CLAUDE_GPT.md
 /commands/workflow/prompt.txt
+/WATCHDOG.md
+/tmp/

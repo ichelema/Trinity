@@ -19,49 +19,40 @@ note_id: 0IbxxTWb05
 
 # Template-Literature
 
----
 
 ## 🎯 Obiettivo
 *Dove voglio arrivare (il futuro, il risultato)*
 
----
 
 ## 📌 Contesto
 *Da dove parto e perché (il presente, le condizioni)*
 
----
 
 ## ...
 
----
 
 # 📝 Todo
 
 - [ ] 
 
----
 
 # 🧩 Connessioni principali
 
 ## 🌿Note Evergreen
 - 
 
----
 
 ## ⚛️ Note Atomic
 - 
 
----
 
 ## 🪶Note Literature
 - 
 
----
 
 ## 🗃️ Note Reference
 - 
 
----
 
 # 🔗Base di conoscenza non collegate
 

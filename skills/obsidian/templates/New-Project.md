@@ -32,9 +32,6 @@ data_modifica: <% tp.date.now("YYYY-MM-DDTHH:mm") %>
 ## <% titolo %>
 <% tp.file.cursor(1) %>
 
----
 ## 🎯 Obiettivo
 
----
 ## 🔗 Collegamenti
----
