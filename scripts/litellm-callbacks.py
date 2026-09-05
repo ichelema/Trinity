@@ -30,9 +30,9 @@ class SystemToInstructions(CustomLogger):
     """
     Pre-call hook per i modelli ChatGPT (Codex OAuth) sul proxy LiteLLM.
 
-    Da LiteLLM 1.98 i messaggi `role:system` inline restano nella sequenza e il
-    bridge Anthropic -> Responses li traduce nel punto corretto. La callback
-    gestisce solo le integrazioni TypingMind ancora mancanti nel proxy.
+    Normalizza il system Anthropic a blocchi: LiteLLM 1.94 converte in
+    `instructions` solo il contenuto stringa. Gestisce inoltre le integrazioni
+    TypingMind ancora mancanti nel proxy.
 
     NB: nel pre-call hook il `model` è l'ALIAS del config (es. claude-gpt-5-5),
     non il nome reale (chatgpt/gpt-5.5): il routing avviene dopo. Per questo il
@@ -74,10 +74,16 @@ class SystemToInstructions(CustomLogger):
         if not self._is_chatgpt(data.get("model", "")):
             return data
 
-        # Da LiteLLM 1.98 il system top-level e i system inline restano intatti:
-        # il bridge Anthropic -> Responses li traduce nel punto corretto. Non va
-        # più fatto il flattening in `instructions`, che perderebbe la posizione
-        # dei messaggi mid-turn.
+        # Solo system top-level testuale; non spostare i messaggi mid-turn.
+        # cache_control è specifico Anthropic, non applicabile a Codex OAuth.
+        system = data.get("system")
+        if isinstance(system, list) and all(
+            isinstance(block, dict)
+            and block.get("type") == "text"
+            and isinstance(block.get("text"), str)
+            for block in system
+        ):
+            data["system"] = "\n\n".join(block["text"] for block in system)
 
         # TypingMind non sa inviare i tool provider-native, e aggiungerli come
         # body param sostituisce l'array dei plugin invece di fondersi con esso
