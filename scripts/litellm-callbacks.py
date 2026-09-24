@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 from litellm.caching.dual_cache import DualCache
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
@@ -25,6 +23,11 @@ TOOL_NATIVI = (
     {"type": "image_generation", "moderation": "low"},
 )
 
+NOTA_SYSTEM_INLINE = (
+    "Operator note (not from the user): the following was originally a "
+    "mid-conversation system-role reminder."
+)
+
 
 class SystemToInstructions(CustomLogger):
     """
@@ -41,9 +44,9 @@ class SystemToInstructions(CustomLogger):
 
     def _is_chatgpt(self, model: str) -> bool:
         m = (model or "").lower()
-        return m.startswith("chatgpt/") or m.startswith("claude-gpt-")
+        return m.startswith(("chatgpt/", "claude-gpt-"))
 
-    def _effort_configurato(self, model) -> Optional[str]:
+    def _effort_configurato(self, model) -> str | None:
         """Effort dichiarato nel config per l'alias, o None.
 
         Nel config convivono due forme: `reasoning_effort: high` e, per max,
@@ -60,7 +63,7 @@ class SystemToInstructions(CustomLogger):
                     valore = valore.get("effort")
                 if valore:
                     return str(valore)
-        except Exception:  # noqa: BLE001 - mai far fallire la richiesta per questo
+        except Exception:  # noqa: BLE001,S110 - mai far fallire la richiesta per questo
             pass
         return None
 
@@ -70,12 +73,13 @@ class SystemToInstructions(CustomLogger):
         cache: DualCache,
         data: dict,
         call_type: CallTypesLiteral,
-    ) -> Optional[Union[Exception, str, dict]]:
+    ) -> Exception | str | dict | None:
         if not self._is_chatgpt(data.get("model", "")):
             return data
 
-        # Solo system top-level testuale; non spostare i messaggi mid-turn.
-        # cache_control è specifico Anthropic, non applicabile a Codex OAuth.
+        # Il backend ChatGPT non accetta role=system nell'input. Il system
+        # top-level diventa instructions; i reminder inline restano in
+        # posizione come turni user esplicitamente marcati.
         system = data.get("system")
         if isinstance(system, list) and all(
             isinstance(block, dict)
@@ -84,6 +88,25 @@ class SystemToInstructions(CustomLogger):
             for block in system
         ):
             data["system"] = "\n\n".join(block["text"] for block in system)
+
+        messages = data.get("messages")
+        if isinstance(messages, list):
+            data["messages"] = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": NOTA_SYSTEM_INLINE},
+                        *(
+                            message.get("content")
+                            if isinstance(message.get("content"), list)
+                            else [{"type": "text", "text": str(message.get("content") or "")}]
+                        ),
+                    ],
+                }
+                if isinstance(message, dict) and message.get("role") == "system"
+                else message
+                for message in messages
+            ]
 
         # TypingMind non sa inviare i tool provider-native, e aggiungerli come
         # body param sostituisce l'array dei plugin invece di fondersi con esso
