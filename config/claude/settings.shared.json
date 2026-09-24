@@ -70,7 +70,7 @@
   "disableRemoteControl": true,
   "disableClaudeAiConnectors": true,
   "enableArtifact": false,
-  "model": "claude-fable-5[1m]",
+  "model": "haiku",
   "enabledPlugins": {},
   "extraKnownMarketplaces": {},
   "outputStyle": "simple",
