@@ -34,14 +34,18 @@ Used for fact extraction, entity resolution, mental model consolidation, and ans
 - z.ai
 - opencode-go
 - Atlas Cloud
+- Meta Model API
 - Volcano Engine
 - OpenRouter
 - Requesty
 - OpenAI Codex
 - Claude Code
+- Cursor
+- GitHub Copilot
 - AWS Bedrock
 - Fireworks AI
 - Nous Portal
+- SuperGrok (OAuth)
 - OpenAI Compatible
 - LiteLLM (100+)
 
@@ -49,7 +53,9 @@ Also supports **any OpenAI-compatible API** (e.g., Azure OpenAI, Together AI, Fi
 
 > **💡 OpenAI-Compatible Providers**
 >
-Hindsight works with any provider that exposes an OpenAI-compatible API (e.g., Azure OpenAI). Simply set `HINDSIGHT_API_LLM_PROVIDER=openai` and configure `HINDSIGHT_API_LLM_BASE_URL` to point to your provider's endpoint.
+Hindsight works with any provider that exposes an OpenAI-compatible API. Set `HINDSIGHT_API_LLM_PROVIDER=openai` and point `HINDSIGHT_API_LLM_BASE_URL` at the endpoint that serves `/chat/completions` — for most providers that is the URL ending in `/v1`, **not** the account or resource root.
+
+**Azure OpenAI does not serve the API at the resource root**, so `https://<resource>.openai.azure.com` on its own returns `404 Resource not found`. See [Azure OpenAI Setup](#azure-openai-setup) for the two URL shapes that work.
 
 The `openai` provider talks to the **Chat Completions API** (`/v1/chat/completions`). For the newer **Responses API** (`/v1/responses`), use `HINDSIGHT_API_LLM_PROVIDER=openai-responses` — see the tip below. Both accept a custom `HINDSIGHT_API_LLM_BASE_URL`, so an OpenAI-compatible endpoint that exposes `/v1/responses` works the same way as a Chat Completions one.
 
@@ -63,6 +69,13 @@ Why it exists: some reasoning models — e.g. `gpt-5.6-terra` — **reject `reas
 Recommended for reasoning models (gpt-5.x, o-series) that use tools. It also honors a custom `HINDSIGHT_API_LLM_BASE_URL`, so any OpenAI-compatible endpoint exposing `/v1/responses` (gateways, Azure-style deployments) can be used just like the Chat Completions path.
 
 See [Configuration](./configuration#llm-provider) for setup examples.
+> **ℹ️ Reasoning/thinking models and `max_tokens`**
+>
+On a thinking model (Gemini 2.5+/3.x, GPT-5/o-series, Grok reasoning, Claude extended thinking) the provider's output budget covers **reasoning tokens plus visible output** — the reasoning is billed against the same `max_output_tokens`/`max_completion_tokens` cap. A small cap can therefore be fully consumed by reasoning, leaving the visible answer truncated mid-word.
+
+Hindsight keeps the reflect/mental-model `max_tokens` meaning **visible page length**: it is applied as a prompt-level target plus a post-hoc rewrite, **not** as a hard cap on the provider call. Reflect's synthesis call is uncapped by default so reasoning never starves the answer. If you want a hard cost ceiling on that call, set `HINDSIGHT_API_REFLECT_MAX_COMPLETION_TOKENS` — but leave enough headroom above your page length for reasoning, or thinking models will truncate again.
+
+When a Gemini call does hit its cap, Hindsight logs a `truncated at max_output_tokens` warning instead of returning the half-written text as a silent success.
 > **💡 AWS Bedrock**
 >
 Set `HINDSIGHT_API_LLM_PROVIDER=bedrock` to use AWS Bedrock models directly. Model names use Bedrock model IDs (e.g., `us.amazon.nova-2-lite-v1:0`). No API key is required — authentication uses AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME`) or IAM roles. For 50% cost savings on throughput, set `HINDSIGHT_API_LLM_BEDROCK_SERVICE_TIER=flex` (see [Configuration](./configuration#llm-provider)).
@@ -106,14 +119,18 @@ Beyond basic generation, some providers support optional features that lower cos
 | z.ai (`zai`) | — | — |
 | opencode-go (`opencode-go`) | — | — |
 | Atlas Cloud (`atlas`) | — | — |
+| Meta Model API (`meta`) | — | — |
 | Volcano Engine (`volcano`) | — | — |
 | OpenRouter (`openrouter`) | — | — |
 | Requesty (`requesty`) | — | — |
 | OpenAI Codex (`openai-codex`) | — | — |
 | Claude Code (`claude-code`) | — | — |
+| Cursor (`cursor`) | — | — |
+| GitHub Copilot (`github-copilot`) | — | — |
 | AWS Bedrock (`bedrock`) | — | — |
 | Fireworks AI (`fireworks`) | ✅ | — |
 | Nous Portal (`nous`) | — | — |
+| SuperGrok (OAuth) (`xai-oauth`) | — | — |
 | LiteLLM (100+) (`litellm`) | — | — |
 
 - **Batch API** — submits bulk retain extraction through the provider's asynchronous batch endpoint, typically at ~50% lower cost. Used automatically when available; otherwise calls run synchronously.
@@ -148,6 +165,7 @@ The following models have been tested and verified to work correctly with Hindsi
 | **Gemini** | `gemini-3.1-flash-lite` |
 | **Groq** | `openai/gpt-oss-120b` |
 | **Groq** | `openai/gpt-oss-20b` |
+| **Meta** | `muse-spark-1.3` |
 
 ### Provider Default Models
 
@@ -170,14 +188,18 @@ Each provider has a recommended default model that's used when `HINDSIGHT_API_LL
 | `zai` | `glm-4.5-flash` |
 | `opencode-go` | `deepseek-v4-flash` |
 | `atlas` | `deepseek-ai/deepseek-v4-pro` |
+| `meta` | `muse-spark-1.3` |
 | `volcano` | `doubao-pro-32k` |
 | `openrouter` | `qwen/qwen3.5-9b` |
 | `requesty` | `openai/gpt-4o-mini` |
 | `openai-codex` | `gpt-5.4-mini` |
 | `claude-code` | `claude-sonnet-4-5-20250929` |
+| `cursor` | `auto` |
+| `github-copilot` | `gpt-5.6-terra` |
 | `bedrock` | `us.amazon.nova-2-lite-v1:0` |
 | `fireworks` | `accounts/fireworks/models/llama-v3p1-8b-instruct` |
 | `nous` | `deepseek/deepseek-v4-flash` |
+| `xai-oauth` | `grok-4.5` |
 | `litellm` | `gpt-4o-mini` |
 
 **Example:** Setting just the provider uses its default model:
@@ -295,10 +317,31 @@ export HINDSIGHT_API_LLM_PROVIDER=atlas
 export HINDSIGHT_API_LLM_API_KEY=your-atlascloud-api-key  # base_url defaults to https://api.atlascloud.ai/v1
 export HINDSIGHT_API_LLM_MODEL=deepseek-ai/deepseek-v4-pro  # reasoning model; also Qwen / GLM / Kimi / MiniMax, etc.
 
+# Meta Model API (OpenAI-compatible, https://ai.developer.meta.com)
+export HINDSIGHT_API_LLM_PROVIDER=meta
+export HINDSIGHT_API_LLM_API_KEY=your-meta-model-api-key  # base_url defaults to https://api.meta.ai/v1
+export HINDSIGHT_API_LLM_MODEL=muse-spark-1.3  # or muse-spark-1.2 / -contributor variants
+# Muse Spark always reasons — raise the deadlines (see "Meta Model API Setup" below)
+export HINDSIGHT_API_REFLECT_LLM_TIMEOUT=300
+export HINDSIGHT_API_LLM_TIMEOUT=300
+
 # Nous Portal (OpenAI-compatible; no API key — uses your `hermes portal` login)
 export HINDSIGHT_API_LLM_PROVIDER=nous
 export HINDSIGHT_API_LLM_MODEL=deepseek/deepseek-v4-flash  # any Nous-hosted slug
 # No API key needed — reads a rotating JWT from ~/.hermes/auth.json (see "Nous Portal Setup" below)
+
+# Cursor subscription via the cursor-agent CLI (no API key — uses `cursor-agent login`)
+export HINDSIGHT_API_LLM_PROVIDER=cursor
+export HINDSIGHT_API_LLM_MODEL=auto  # or any id from `cursor-agent --list-models`
+# An agent CLI turn takes 15-30s — raise the timeouts (see "Cursor Setup" below)
+export HINDSIGHT_API_LLM_TIMEOUT=300
+export HINDSIGHT_API_REFLECT_LLM_TIMEOUT=180
+
+# SuperGrok subscription via device-code OAuth (no API key; the subscription lane, not
+# xAI API support — for an api.x.ai API key use `openai` with a base URL instead)
+export HINDSIGHT_API_LLM_PROVIDER=xai-oauth
+# export HINDSIGHT_API_LLM_MODEL=grok-4.5  # defaults to grok-4.5
+# No API key needed — reads an OAuth grant from ~/.hindsight/xai_oauth.json (see "SuperGrok Subscription Setup" below)
 
 # Vertex AI (Google Cloud)
 export HINDSIGHT_API_LLM_PROVIDER=vertexai
@@ -311,6 +354,34 @@ export HINDSIGHT_API_LLM_VERTEXAI_PROJECT_ID=your-gcp-project-id
 ```
 
 **Note:** The LLM is the primary bottleneck for retain operations. See [Performance](./performance) for optimization strategies.
+
+---
+
+### GitHub Copilot Setup
+
+Use a GitHub Copilot subscription for Hindsight's extraction, consolidation, and reflection calls through the official GitHub Copilot SDK.
+
+**Prerequisites:**
+- An active GitHub Copilot entitlement
+- Copilot CLI signed in under the same operating-system user that runs Hindsight
+
+**Configure Hindsight:**
+
+```bash
+export HINDSIGHT_API_LLM_PROVIDER=github-copilot
+export HINDSIGHT_API_LLM_MODEL=gpt-5.6-terra
+# No HINDSIGHT_API_LLM_API_KEY is needed.
+```
+
+The provider starts one shared Copilot runtime for all Hindsight LLM lanes. That runtime uses a hook-free temporary `COPILOT_HOME` containing only the signed-in account selection; the credential itself is resolved by the runtime from the system keychain or an existing `gh` CLI login. Each call then uses an isolated transient session with repository instructions, skills, Copilot memory, built-in tools, and the cross-session store disabled. This prevents the memory integration from recursively retaining its own extraction calls.
+
+For automation, the Copilot SDK also accepts `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`. With one of those set, Copilot CLI never has to have been run on the host, so containers and CI images work with no `~/.copilot` at all. GitHub Actions and server-to-server deployments must have the appropriate Copilot organization policy and token permissions.
+
+**Important notes:**
+- Usage counts against the authenticated account or organization's Copilot allowance and AI Credits.
+- `HINDSIGHT_API_LLM_BASE_URL` optionally points to an existing headless Copilot runtime, such as `http://127.0.0.1:4321`; it is not an LLM-provider endpoint for this provider.
+- GitHub-hosted Copilot sessions do not expose temperature or maximum-output-token controls through the SDK, so those Hindsight settings are not applied.
+- Embeddings and reranking continue to use Hindsight's separately configured providers; their local defaults require no API key.
 
 ---
 
@@ -407,6 +478,77 @@ service, `/reflect` uses its own token that other Codex processes will not
 rotate out from under it.
 
 `CODEX_HOME` is also honored by the `openai-codex` embeddings provider.
+
+#### Two Codex profiles in one process
+
+`CODEX_HOME` is process-wide, so every Codex provider a Hindsight process builds
+resolves the same `auth.json`. To run more than one independently authorized
+ChatGPT account — for example, to fail over when the preferred account hits its
+usage limit — give each one its own credentials directory with
+`HINDSIGHT_API_LLM_CODEX_HOME` (primary) and `HINDSIGHT_API_LLM_<n>_CODEX_HOME`
+(indexed [multi-LLM chain](./configuration#multi-llm-strategies-failover--round-robin)
+members). Each falls back to `CODEX_HOME`, then `~/.codex`, when unset.
+
+```bash
+# Two profiles, logged in separately
+CODEX_HOME=/var/lib/hindsight/codex-a codex auth login
+CODEX_HOME=/var/lib/hindsight/codex-b codex auth login
+
+export HINDSIGHT_API_LLM_PROVIDER=openai-codex
+export HINDSIGHT_API_LLM_CODEX_HOME=/var/lib/hindsight/codex-a
+export HINDSIGHT_API_LLM_1_PROVIDER=openai-codex
+export HINDSIGHT_API_LLM_1_CODEX_HOME=/var/lib/hindsight/codex-b
+export HINDSIGHT_API_LLM_STRATEGY='{"mode": "failover"}'
+```
+
+Token refresh is coordinated per auth-file path, so the two profiles refresh
+independently and never overwrite each other's tokens. Failover is the generic
+multi-LLM behaviour: a member is tried after the previous one has exhausted its
+own retries and raised — there is no separate quota classifier or cooldown, so a
+rate-limited primary is re-tried (and fails) at the head of each request before
+the fallback serves it.
+
+---
+
+### Meta Model API Setup
+
+[Meta Model API](https://ai.developer.meta.com) serves the Muse Spark models over an
+OpenAI-compatible endpoint. Get a key from the Model API dashboard, then:
+
+```bash
+export HINDSIGHT_API_LLM_PROVIDER=meta
+export HINDSIGHT_API_LLM_API_KEY=your-meta-model-api-key
+export HINDSIGHT_API_LLM_MODEL=muse-spark-1.3
+```
+
+The base URL defaults to `https://api.meta.ai/v1`. Available models are
+`muse-spark-1.3` (recommended), `muse-spark-1.2`, `muse-spark-1.1`, and the
+discounted `-contributor` variants of 1.3 and 1.2, which permit training on your
+prompts and completions. All share a 1,048,576-token context window.
+
+#### Required knobs
+
+Muse Spark **always reasons** before it replies. That single property drives every
+setting below, so treat these as required rather than optional tuning:
+
+| Variable | Set it to | Why |
+|----------|-----------|-----|
+| `HINDSIGHT_API_REFLECT_LLM_TIMEOUT` | `300` | Reflect's default is 30s. Muse Spark's final synthesis exceeds that, and the call fails after its retries rather than degrading — reflect returns nothing. |
+| `HINDSIGHT_API_LLM_TIMEOUT` | `300` | The global deadline (default 120s) covers retain and consolidation, which are slower here than on a non-reasoning model. |
+| `HINDSIGHT_API_LLM_REASONING_EFFORT` | unset, or `minimal`/`low`/`medium`/`high`/`xhigh` | `none` is rejected with `HTTP 400`. Leave it unset to let the model choose its own depth. |
+| `HINDSIGHT_API_RETAIN_MAX_COMPLETION_TOKENS` | leave at the `64000` default | Reasoning tokens are billed against the **output** budget. Lower this too far and a reply comes back with no content at all. |
+
+#### Good to know
+
+- **Prompt caching is automatic.** There is no key, flag, or breakpoint to set — Meta
+  reuses a matching prompt prefix on its own, so the capability table below lists no
+  explicit prompt-caching support even though the benefit applies.
+- **No batch API and no embeddings endpoint.** Embeddings continue to come from
+  whichever `HINDSIGHT_API_EMBEDDINGS_PROVIDER` you configure.
+- **Recursive JSON schemas are rejected** with `HTTP 400`. No Hindsight code path
+  sends one, so this only matters if you add a self-referencing response model.
+- **Expect slower calls.** A trivial prompt can spend more tokens reasoning than it
+  returns as output.
 
 ---
 
@@ -525,6 +667,230 @@ You can use any model supported by Claude Code CLI.
 - Credentials managed securely by Claude Code
 - Usage billed to your Claude subscription (not separate API costs)
 - For personal development use only (see Claude Terms of Service)
+
+---
+
+### Cursor Setup (Cursor subscription)
+
+Serve Hindsight's extraction, consolidation and reflection calls from a **Cursor
+subscription**, by driving the `cursor-agent` CLI in its headless print mode. No API key
+and no second per-token billing relationship.
+
+This is the opposite direction from the [Cursor integration](../sdks/integrations/cursor.md),
+which makes Cursor a *client* of Hindsight. Here Cursor is the model backend Hindsight calls.
+
+**Prerequisites:**
+- An active Cursor subscription (a free plan works, but only with `auto` — see below)
+- `cursor-agent` installed and signed in under the same OS user that runs Hindsight
+
+**Setup Steps:**
+
+1. **Install the CLI:**
+   ```bash
+   curl https://cursor.com/install -fsS | bash
+   ```
+
+2. **Log in:**
+   ```bash
+   cursor-agent login
+   ```
+
+3. **Verify:**
+   ```bash
+   cursor-agent --version
+   cursor-agent --list-models
+   ```
+
+4. **Configure Hindsight:**
+   ```bash
+   export HINDSIGHT_API_LLM_PROVIDER=cursor
+   export HINDSIGHT_API_LLM_MODEL=auto
+   # An agent CLI turn takes 15-30s, well past the 30s reflect default.
+   export HINDSIGHT_API_LLM_TIMEOUT=300
+   export HINDSIGHT_API_REFLECT_LLM_TIMEOUT=180
+   # No API key needed. To authenticate with a key instead:
+   # export HINDSIGHT_API_LLM_API_KEY=...   # or CURSOR_API_KEY
+   ```
+
+**Important notes:**
+
+- **Raise the timeouts.** Each call spawns a `cursor-agent` turn, which takes 15-30s
+  against `auto` — slower than a chat-completions request and past the 30s
+  `HINDSIGHT_API_REFLECT_LLM_TIMEOUT` default. Left at the default, reflect spends its
+  first iteration on timeout retries before recovering.
+- **Structured output and tool calling are prompt-level emulations.** The CLI exposes no
+  `response_format`, JSON-schema, temperature or tool-definition flag — only
+  `--output-format text|json|stream-json`, which describes the envelope. Hindsight puts
+  the schema (or the tool list) in the prompt and parses the model's JSON back out,
+  retrying on a parse failure. That is less reliable than a native schema, so prefer a
+  strong named model over `auto` for reflect, the operation that leans hardest on tools.
+- **Free plans are limited to `auto`.** A named `--model` returns
+  `Named models unavailable Free plans can only use Auto`. Paid plans can use any id from
+  `cursor-agent --list-models`.
+- **The agent's own tools are turned off.** `cursor-agent` is an agent, not a completions
+  endpoint: it ships Shell, Read, Write, Delete, web fetch and more, and `--mode ask` is
+  *not* a tool switch — a headless run in ask mode will still read files out of its
+  working directory. Hindsight therefore runs the CLI in an empty scratch workspace, with
+  its own `CURSOR_CONFIG_DIR` (so it never sees your `~/.cursor` config, hooks or session
+  history), and writes a `cli-config.json` there that denies every tool by name. That is
+  the equivalent of the `tools=[]` the `claude-code` provider passes its SDK, and it
+  matters because retain prompts are built from whatever text you store in Hindsight.
+- Usage counts against your Cursor subscription.
+- Reasoning effort is not supported — the CLI has no such flag, and Hindsight warns once
+  at startup if `HINDSIGHT_API_LLM_REASONING_EFFORT` is set.
+- Embeddings and reranking continue to use Hindsight's separately configured providers.
+
+---
+
+### SuperGrok Subscription Setup (device-code OAuth)
+
+Serve LLM calls from a **SuperGrok subscription** (device-code OAuth) — no API
+key. For API-key access to `api.x.ai`, use `provider: openai` with
+`HINDSIGHT_API_LLM_BASE_URL=https://api.x.ai/v1`; **this provider is the
+subscription lane**, the same category as `openai-codex` (ChatGPT subscription)
+and `claude-code` (Claude subscription). Both routes reach the same published
+endpoint, so the credential is the whole difference: a flat-rate consumer
+subscription authorized once in a browser, instead of a per-token metered key.
+
+Authentication is xAI's own OIDC issuer at `https://auth.x.ai` using the RFC
+8628 device-code flow, with the public OAuth client id published in xAI's
+Apache-2.0 Grok CLI sources. Hindsight keeps its own credential file and never
+reads or writes the Grok CLI's `~/.grok/auth.json`.
+
+> **📝 Subscription entitlement**
+>
+
+xAI may restrict `api.x.ai` access by SuperGrok subscription tier: an OAuth
+grant can be valid and still be refused with HTTP 403. Hindsight reports that
+as a distinct entitlement error naming the cause rather than as a credential
+failure, and it neither re-tries nor discards the token. If you hit it, verify
+the account tier or use an API-key provider instead.
+
+Usage counts against your SuperGrok subscription limits. When the account's
+spending limit stops a call, Hindsight raises a distinct quota error and leaves
+the credential alone.
+
+**Prerequisites:**
+- An active SuperGrok subscription
+- A browser on the machine you run the login from (the device-code flow needs
+  an interactive approval; the running service never performs one)
+
+**Setup steps:**
+
+1. **Log in once, on the host that will own the credential:**
+   ```bash
+   python -m hindsight_api.engine.providers.xai_oauth_auth login
+   ```
+   The command prints a verification URL and a user code, waits for approval,
+   then writes `~/.hindsight/xai_oauth.json` with owner-only permissions.
+
+2. **Configure Hindsight:**
+   ```bash
+   export HINDSIGHT_API_LLM_PROVIDER=xai-oauth
+   # export HINDSIGHT_API_LLM_MODEL=grok-4.5   # defaults to grok-4.5
+   # No API key needed
+   ```
+
+3. **Start Hindsight:**
+   ```bash
+   hindsight-api
+   ```
+
+**Important notes:**
+- The access token is refreshed automatically: proactively 60 seconds before
+  expiry (or before the configured request timeout, whichever is longer), and
+  once reactively on an HTTP 401. Several configured lanes share one credential
+  file safely — the refresh takes an advisory lock and re-reads the file under
+  it, so siblings do not each refresh.
+- A running service **never** starts the device-code flow. When only a login can
+  restore service, calls fail with the exact command to run.
+- Unlike reaching `api.x.ai` through `provider: openai`, this provider sends the
+  member's configured `reasoning_effort`, so that setting takes effect here.
+  The one value not forwarded is `none`: xAI rejects it outright (HTTP 400),
+  so this lane expresses it the way the API expects — by omitting the field.
+- Only non-streaming calls are implemented. Streaming responses omit
+  `prompt_tokens_details`, so cached-token accounting would read low.
+
+**Optional environment overrides:**
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `HINDSIGHT_API_XAI_OAUTH_BASE_URL` | Point at a different upstream. Takes precedence over `HINDSIGHT_API_LLM_BASE_URL`. | `https://api.x.ai/v1` |
+| `HINDSIGHT_API_XAI_OAUTH_TOKEN_PATH` | Relocate the credential store. Both the read and the write follow it. | `~/.hindsight/xai_oauth.json` |
+| `HINDSIGHT_API_XAI_OAUTH_CLIENT_ID` | Override the OAuth client id used for login and refresh. | xAI's published public client id |
+| `HINDSIGHT_API_XAI_OAUTH_SCOPE` | Override the scope string requested at login. | `openid profile email offline_access grok-cli:access api:access` |
+| `HINDSIGHT_API_XAI_OAUTH_REFRESH_SKEW_SECONDS` | Refresh this many seconds before expiry. Widen it for deployments that touch the provider rarely. | `60` |
+| `HINDSIGHT_API_XAI_OAUTH_REFRESH_TIMEOUT_SECONDS` | Per-request timeout for discovery, login and refresh calls. | `20` |
+
+#### Deployment note
+
+The credential is a host-local file, and only the interactive login can create
+it. A containerized engine therefore needs the store mounted from a host where
+the login was run (or the login run inside the container once, interactively)
+and `HINDSIGHT_API_XAI_OAUTH_TOKEN_PATH` pointed at it. The mount must be
+**writable**: unlike the Grok CLI's own file, this store is where Hindsight
+persists each rotated token, so a read-only mount degrades to failing once the
+current token expires.
+
+xAI issues a **new refresh token on every refresh** and retires the one it
+replaces. Replicas must therefore share the one credential file rather than
+each starting from its own copy of a single login's output: a copy stops
+working as soon as another replica refreshes, and the login has to be repeated.
+A single shared writable volume is the supported shape; if you cannot provide
+one, run one replica on this provider and give the others an API-key lane.
+
+---
+
+### Azure OpenAI Setup
+
+Azure OpenAI is reached through the **`openai`** provider — there is no `azure`
+provider, and setting one fails at startup with
+`Invalid LLM provider: azure`.
+
+The one thing that trips people up is the base URL. Azure does not serve the
+OpenAI API at the resource root, so the endpoint shown in the Azure portal is
+not usable on its own:
+
+| `HINDSIGHT_API_LLM_BASE_URL` | Result |
+|---|---|
+| `https://<resource>.openai.azure.com` | `404 Resource not found` |
+| `https://<resource>.openai.azure.com/openai/deployments/<deployment>` | `404 Resource not found` (no `api-version`) |
+| `https://<resource>.openai.azure.com/openai/v1` | works |
+| `https://<resource>.openai.azure.com/openai/deployments/<deployment>?api-version=<version>` | works |
+
+**Recommended — the v1 surface:**
+
+```bash
+export HINDSIGHT_API_LLM_PROVIDER=openai
+export HINDSIGHT_API_LLM_API_KEY=<azure-openai-resource-key>
+export HINDSIGHT_API_LLM_MODEL=<deployment-name>
+export HINDSIGHT_API_LLM_BASE_URL=https://<resource>.openai.azure.com/openai/v1
+```
+
+**Or the deployment-scoped form.** Keep the `api-version` query string — Hindsight
+parses it out of the base URL and passes it to the SDK:
+
+```bash
+export HINDSIGHT_API_LLM_BASE_URL=https://<resource>.openai.azure.com/openai/deployments/<deployment>?api-version=2025-01-01-preview
+```
+
+**Important notes:**
+- `HINDSIGHT_API_LLM_MODEL` is your **deployment name**, not the model name. A
+  `gpt-4o` deployed as `my-gpt4o` is configured as `my-gpt4o`.
+- The key is the Azure OpenAI **resource** key (`az cognitiveservices account
+  keys list -n <resource> -g <group>`). An API Management subscription key is a
+  different credential: with APIM in front, the base URL must be the APIM route
+  and APIM has to forward the `api-key` header. Test against the Azure endpoint
+  directly first to isolate which layer is failing.
+- Gateways and proxies must preserve the same path shape (`/openai/v1` or
+  `/openai/deployments/...?api-version=`).
+- Azure OpenAI accepts `prompt_cache_key` on GPT deployments (it improves cache
+  routing on GPT-5.6 and later), but the same `*.openai.azure.com` endpoint also
+  serves non-OpenAI Foundry models (DeepSeek, Llama, Mistral) that reject it with
+  `unrecognized_request_argument`. The host alone can't tell the two apart, so
+  [`HINDSIGHT_API_LLM_CACHE_AFFINITY`](./configuration#llm-provider) resolves
+  `auto` to `none` for Azure hosts. If your deployment serves an OpenAI model,
+  set it explicitly to `openai_prompt_cache_key`.
 
 ---
 
@@ -698,9 +1064,32 @@ export HINDSIGHT_API_EMBEDDINGS_LITELLM_MODEL=text-embedding-3-small
 export HINDSIGHT_API_EMBEDDINGS_PROVIDER=litellm-sdk
 export HINDSIGHT_API_EMBEDDINGS_LITELLM_SDK_API_KEY=sk-xxxxxxxxxxxx
 export HINDSIGHT_API_EMBEDDINGS_LITELLM_SDK_MODEL=openai/text-embedding-3-small
+
+# AWS Bedrock (via LiteLLM SDK; credentials come from the environment or an IAM role)
+export HINDSIGHT_API_EMBEDDINGS_PROVIDER=litellm-sdk
+export HINDSIGHT_API_EMBEDDINGS_LITELLM_SDK_MODEL=bedrock/amazon.titan-embed-text-v2:0
 ```
 
+> **💡 AWS Bedrock application inference profiles**
+>
+
+If your org's Service Control Policy denies `bedrock:InvokeModel` on the bare model id once an [application inference profile](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html) exists, keep `..._MODEL` as-is and add the profile ARN separately:
+
+```bash
+export HINDSIGHT_API_EMBEDDINGS_PROVIDER=litellm-sdk
+# Stays a recognizable model id — this is what picks the request format
+export HINDSIGHT_API_EMBEDDINGS_LITELLM_SDK_MODEL=bedrock/amazon.titan-embed-text-v2:0
+# The profile actually invoked
+export HINDSIGHT_API_EMBEDDINGS_LITELLM_SDK_MODEL_ID=arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/abc123
+```
+
+The two are separate because Bedrock's embedding request and response formats differ per model family (Titan, Cohere, TwelveLabs, Nova), and the family is read off the model id. A profile ARN is opaque and account-scoped, so it can't be used for that — put it in `..._MODEL_ID` and leave `..._MODEL` naming the real model.
+
+Chat models don't need this: set `HINDSIGHT_API_LLM_MODEL=bedrock/converse/<arn>`, since the Converse API takes one format for every model.
+
 See [Configuration](./configuration#embeddings) for all options including Azure OpenAI and custom endpoints.
+
+For a runnable Docker Compose setup that serves both embeddings and reranking from self-hosted TEI sidecars, see [`docker/docker-compose/tei/`](https://github.com/vectorize-io/hindsight/tree/main/docker/docker-compose/tei).
 
 ---
 
@@ -719,6 +1108,7 @@ Reranks initial search results to improve precision.
 | `openrouter` | OpenRouter rerank API (Cohere-compatible gateway) | Multi-provider setups |
 | `zeroentropy` | ZeroEntropy rerank API (zerank-2) | Production, state-of-the-art accuracy |
 | `siliconflow` | SiliconFlow rerank API (Cohere-compatible `/rerank` endpoint) | Users in China or anyone on SiliconFlow's platform |
+| `typesafe` | TypeSafe typed-decision API (Jev) — ranks the whole pool in one question | Production, highest ranking quality; can also return only the relevant candidates |
 | `alibaba` | Alibaba Cloud DashScope rerank API (qwen3-rerank) | Users on Alibaba Cloud / DashScope |
 | `google` | Google Discovery Engine ranking API (REST + Google auth) | Production, GCP integration |
 | `tei` | HuggingFace Text Embeddings Inference | Production, self-hosted |
@@ -758,6 +1148,25 @@ SiliconFlow hosts a range of open-weight rerankers behind a Cohere-compatible `/
 |-------|----------|
 | `BAAI/bge-reranker-v2-m3` | Multilingual, strong default |
 | `Qwen/Qwen3-Reranker-8B` | Larger, higher accuracy |
+
+### TypeSafe Models
+
+TypeSafe is not a `/rerank` endpoint — it answers typed *questions* against a *state*.
+Hindsight makes the candidates the options of a Choice question, so the returned
+probability distribution is the ranking. When the candidate pool fits within the 250-option
+limit and context token budget, a single call ranks the entire pool. Larger pools or pools
+with long documents are partitioned into groups whose top candidates advance to a finals
+ranking round, with token truncation applied to fit context windows.
+
+| Model | Use Case |
+|-------|----------|
+| `jev-latest` | Default; tracks the current Jev release |
+
+Setting `HINDSIGHT_API_RERANKER_TYPESAFE_PRUNE_CANDIDATES=true` adds a second question
+that cuts the ranked list where relevance ends, so recall returns the relevant
+candidates and nothing else. It is off by default because it meaningfully shrinks what
+recall returns. See [Configuration](configuration.md#typesafe) for the full
+behaviour and its trade-offs.
 
 ### Alibaba Cloud Models
 
@@ -811,6 +1220,12 @@ export HINDSIGHT_API_RERANKER_ZEROENTROPY_MODEL=zerank-2  # default, can omit
 export HINDSIGHT_API_RERANKER_PROVIDER=siliconflow
 export HINDSIGHT_API_RERANKER_SILICONFLOW_API_KEY=your-api-key
 export HINDSIGHT_API_RERANKER_SILICONFLOW_MODEL=BAAI/bge-reranker-v2-m3  # default, can omit
+
+# TypeSafe (typed-decision API, ranks the whole pool in one question)
+export HINDSIGHT_API_RERANKER_PROVIDER=typesafe
+export HINDSIGHT_API_RERANKER_TYPESAFE_API_KEY=your-api-key
+export HINDSIGHT_API_RERANKER_TYPESAFE_MODEL=jev-latest  # default, can omit
+# export HINDSIGHT_API_RERANKER_TYPESAFE_PRUNE_CANDIDATES=true  # return only the relevant ones
 
 # Alibaba Cloud DashScope (qwen3-rerank)
 export HINDSIGHT_API_RERANKER_PROVIDER=alibaba

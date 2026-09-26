@@ -55,7 +55,15 @@ hindsight knowledge-base tree "$BANK_ID"
 ### Go
 
 ```go
-# Section 'get-tree' not found in api/knowledge-pages.go
+// Fetch the whole knowledge base as a nested folder/page tree (no page bodies)
+tree, _, _ := client.KnowledgeBaseAPI.GetKnowledgeBaseTree(ctx, kpBankID).Execute()
+
+for _, root := range tree.Roots {
+	fmt.Printf("%s: %s\n", root.Kind, root.Name)
+	for _, child := range root.Children {
+		fmt.Printf("  %s: %s (stale: %v)\n", child.Kind, child.Name, child.GetIsStale())
+	}
+}
 ```
 
 ```json
@@ -98,14 +106,17 @@ hindsight knowledge-base tree "$BANK_ID"
 | `mental_model_id` | The backing mental model (pages only) |
 | `description` | The page's source query — the question that rebuilds it |
 | `timestamp` | Last refresh for a page, last update for a folder |
-| `is_stale` | Pages only: `false` when the page is up to date, `true` when it *may* need a refresh (see below) |
+| `is_stale` | Pages only: `true` when a memory in *this page's* scope has been written since the page last read the memories (see below) |
+| `last_refresh_failed_at` | Pages only: when this page's last refresh failed, or `null` when it succeeded. While it is set the page does not rebuild itself on its trigger — an explicit refresh still runs, and a successful one clears it |
 | `managed` | `true` when the node is flagged as system-owned rather than hand-authored |
 
 ### How `is_stale` is decided
 
-The tree answers for every page at once, from a single bank-wide signal: the last time *any* memory was written, returned as `last_memory_write_at` by the bank stats endpoint. A page refreshed at or after that moment is up to date — nothing in the bank changed, so nothing in the page's scope did either. A page refreshed before it gets `is_stale: true`, which means *may* need a refresh: the write might well have been outside the page's tags.
+Each page is answered against its own scope — its tags and its `fact_types` — using the same [staleness check](./mental-models#staleness-gating) that decides whether a scheduled refresh does any work. A flagged page is one a refresh would actually rewrite; an unflagged one is a page a refresh would leave alone. Activity elsewhere in the bank does not flag a page whose own scope is quiet.
 
-Read the page's mental model when you need certainty — [`GET /mental-models/{id}`](./mental-models) evaluates the page's own tag and fact-type scope and returns an exact `is_stale`. It is the more expensive answer, which is why the tree does not compute it per page.
+The whole tree is answered in one query, so the flag costs the same whether the bank has three pages or three hundred, and [`GET /mental-models/{id}`](./mental-models) returns the identical value for the page's backing model.
+
+One thing it does not see: **deletions**. The check asks what has been *written* since the page last read the memories, and deleting an in-scope memory leaves no write behind — a page that cites a deleted fact keeps reporting itself up to date.
 
 ---
 
@@ -158,7 +169,17 @@ hindsight knowledge-base create-page "$BANK_ID" \
 ### Go
 
 ```go
-# Section 'create-page' not found in api/knowledge-pages.go
+// Create a page — content is generated in the background
+page, _, _ := client.KnowledgeBaseAPI.CreateKnowledgePage(ctx, kpBankID).
+	CreatePageRequest(hindsight.CreatePageRequest{
+		Name:        "Deploying the API",
+		SourceQuery: "How is the API deployed?",
+		ParentId:    *hindsight.NewNullableString(&folder.Id),
+		Tags:        []string{"ops", "type:runbook"},
+	}).Execute()
+
+// Poll the operation to know when the first build has finished
+fmt.Printf("Page ID: %s, operation: %s\n", page.PageId, page.GetOperationId())
 ```
 
 ```json
@@ -176,9 +197,39 @@ hindsight knowledge-base create-page "$BANK_ID" \
 | `name` | string | Yes | Page name. Must be unique within its folder, case-insensitively — a duplicate returns `409`. (Enforced on PostgreSQL only.) |
 | `source_query` | string | Yes | The question the page answers, re-asked on every refresh. |
 | `parent_id` | string | No | Folder to create the page in. `null` (or omitted) creates it at the root. |
-| `tags` | list | No | Tags that scope which memories the page is built from. A `type:<x>` tag also sets the page's rendered type. |
+| `tags` | list | No | Tags that scope which memories the page is built from — see [Tags Are a Filter](#tags-are-a-filter). A `type:<x>` tag also sets the page's rendered type, and still counts as part of the filter. |
 | `max_tokens` | int | No | Content budget. Defaults to `4096` (a plain mental model defaults to `2048`). |
 | `trigger` | object | No | Refresh configuration — see below. |
+
+### Tags Are a Filter
+
+`tags` are not labels on the page. They are the scope the page is built from, and a tagged page matches memories with **`all_strict`** by default: a memory must carry **every** one of the page's tags, and untagged memories are **excluded entirely**.
+
+So a page created like this:
+
+```json
+{
+  "name": "Homelab Infrastructure",
+  "source_query": "NAS, ThinkPad, docker containers, jellyfin",
+  "tags": ["type:runbook", "homelab", "infrastructure"]
+}
+```
+
+is built only from memories tagged `type:runbook` **and** `homelab` **and** `infrastructure`. If your memories were retained without those exact tags — which is the usual case when the tags are invented at page-creation time to describe the topic — the page matches nothing and generates as *"I don't have information about this."* A direct [recall](./recall) for the same query still returns everything, because recall was not given the same filter.
+
+The `type:<x>` tag makes this easy to trip over: it is documented as setting the page's rendered type, but it narrows retrieval like any other tag.
+
+Three ways to get this right:
+
+| You want | Do this |
+|---|---|
+| The page built from the whole bank | Omit `tags` (or pass `[]`) |
+| The tags to scope the page, but untagged memories still included | Keep `tags`, add `"trigger": {"tags_match": "all"}` |
+| Only memories carrying every tag (strict isolation, e.g. per-user pages) | Keep `tags` and the `all_strict` default |
+
+To repair a page that already generated empty, `PATCH` it with `{"tags": []}` or with the widened `tags_match`, then refresh it — the tags are stored on the backing mental model, not baked into the content.
+
+See [tag matching modes](./recall#tags) for the full semantics of `any`, `all`, `any_strict`, `all_strict`, and `exact`.
 
 ### Default Trigger
 
@@ -212,9 +263,9 @@ This makes the page a living document built from consolidated observations only,
 
 Observations are what a page is *built from*, but it can still inspect the evidence underneath them: the refresh agent can expand a memory to its original chunk or document (unless `store_document_text` is disabled for the bank), and if `HINDSIGHT_API_REFLECT_SOURCE_FACTS_MAX_TOKENS` is enabled — off by default — observation search also returns each observation's grounding facts.
 
-> **🚨 Caution**
+> **ℹ️ Info**
 >
-A supplied `trigger` **replaces** these defaults, it does not merge with them. Sending `{"trigger": {"mode": "full"}}` also resets `fact_types` to all types, `exclude_mental_models` to `false`, and `refresh_after_consolidation` to `false`. Repeat the fields you want to keep.
+A supplied `trigger` is a **patch**: only the fields you actually send are applied, and the rest keep the defaults above. Sending `{"trigger": {"tags_match": "all"}}` widens the tag filter and leaves `mode`, `fact_types`, `exclude_mental_models`, and `refresh_after_consolidation` as they are. The one exception is the two refresh triggers, which stay mutually exclusive: setting `refresh_cron` clears `refresh_after_consolidation`, and vice versa.
 Every [mental model trigger setting](./mental-models#trigger-settings) is accepted here — including `refresh_cron` for scheduled rebuilds instead of consolidation-driven ones, and `tag_groups` for compound tag scoping.
 
 ---
@@ -249,7 +300,12 @@ hindsight knowledge-base create-folder "$BANK_ID" "Operations"
 ### Go
 
 ```go
-# Section 'create-folder' not found in api/knowledge-pages.go
+// Create a folder (leave ParentId unset to create it at the root)
+folder, _, _ := client.KnowledgeBaseAPI.CreateKnowledgeFolder(ctx, kpBankID).
+	CreateFolderRequest(hindsight.CreateFolderRequest{Name: "Operations"}).
+	Execute()
+
+fmt.Printf("Folder ID: %s\n", folder.Id)
 ```
 
 | Parameter | Type | Required | Description |
@@ -297,7 +353,12 @@ hindsight knowledge-base get-page "$BANK_ID" "$PAGE_ID"
 ### Go
 
 ```go
-# Section 'get-page' not found in api/knowledge-pages.go
+// Read a page as a markdown document
+document, _, _ := client.KnowledgeBaseAPI.GetKnowledgePage(ctx, kpBankID, page.PageId).Execute()
+
+fmt.Println(document.Type)      // "runbook" — from the type:runbook tag
+fmt.Println(document.GetBody()) // the synthesized markdown body
+fmt.Println(document.Markdown)  // YAML frontmatter + body
 ```
 
 ```json
@@ -354,7 +415,13 @@ hindsight knowledge-base search "$BANK_ID" "how do we deploy" --limit 5
 ### Go
 
 ```go
-# Section 'search-pages' not found in api/knowledge-pages.go
+// Hybrid search (full-text + vector) over whole pages
+results, _, _ := client.KnowledgeBaseAPI.SearchKnowledgeBase(ctx, kpBankID).
+	Q("how do we deploy").Limit(5).Execute()
+
+for _, hit := range results.Results {
+	fmt.Printf("%.3f  %s: %s\n", hit.Score, hit.Name, hit.Snippet)
+}
 ```
 
 ```json
@@ -423,7 +490,13 @@ hindsight knowledge-base update "$BANK_ID" "$PAGE_ID" \
 ### Go
 
 ```go
-# Section 'update-node' not found in api/knowledge-pages.go
+// Rename a node, move it, and/or update a page's options.
+// Changing SourceQuery rebuilds the page against the new question.
+client.KnowledgeBaseAPI.UpdateKnowledgeNode(ctx, kpBankID, page.PageId).
+	UpdateNodeRequest(hindsight.UpdateNodeRequest{
+		Name: *hindsight.NewNullableString(hindsight.PtrString("Deploying the API (v2)")),
+		Tags: []string{"ops", "type:runbook", "reviewed"},
+	}).Execute()
 ```
 
 | Parameter | Type | Applies to | Description |
@@ -431,8 +504,9 @@ hindsight knowledge-base update "$BANK_ID" "$PAGE_ID" \
 | `name` | string | Both | New name |
 | `parent_id` | string \| null | Both | New parent folder. Pass `null` explicitly to move to the root. |
 | `source_query` | string | Pages | New question. Changing it schedules an async refresh so the page rebuilds against the new question. |
-| `tags` | list | Pages | Replaces the page's tags. Pass `[]` to clear them. |
+| `tags` | list | Pages | Replaces the page's tags, and so [the scope it is built from](#tags-are-a-filter). Pass `[]` to clear them and rebuild the page from the whole bank. |
 | `max_tokens` | int | Pages | New content budget |
+| `trigger` | object | Pages | Refresh settings to change, applied as a patch. `{"tags_match": "all"}` keeps the page's tags but stops excluding untagged memories. |
 
 Sending an empty body returns `400`; an unknown node returns `404`.
 
@@ -466,7 +540,8 @@ hindsight knowledge-base delete "$BANK_ID" "$FOLDER_ID" -y
 ### Go
 
 ```go
-# Section 'delete-node' not found in api/knowledge-pages.go
+// Delete a folder or page — deleting a folder removes its whole subtree
+client.KnowledgeBaseAPI.DeleteKnowledgeNode(ctx, kpBankID, folder.Id).Execute()
 ```
 
 ```json
@@ -510,7 +585,12 @@ hindsight knowledge-base export "$BANK_ID"
 ### Go
 
 ```go
-# Section 'export' not found in api/knowledge-pages.go
+// Export the knowledge base as a portable markdown bundle
+bundle, _, _ := client.KnowledgeBaseAPI.ExportKnowledgeBase(ctx, kpBankID).Execute()
+
+for _, file := range bundle.Files {
+	fmt.Println(file.Path) // index.md, <page-id>.md, <page-id>.log.md
+}
 ```
 
 ```json

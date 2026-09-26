@@ -76,7 +76,25 @@ hindsight memory recall my-bank "What does Alice do?"
 ### Go
 
 ```go
-# Section 'recall-basic' not found in api/recall.go
+response, _, _ := client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query: "What does Alice do?",
+	}).Execute()
+
+// response.Results is a slice of RecallResult, each with:
+// - Id:            fact ID
+// - Text:          the extracted fact
+// - Type:          "world", "experience", or "observation"
+// - Context:       context label set during retain
+// - Tags:          []string of tags
+// - Entities:      []string of entity names linked to this fact
+// - OccurredStart: ISO datetime of when the event started
+// - OccurredEnd:   ISO datetime of when the event ended
+// - MentionedAt:   ISO datetime of when the fact was retained
+// - DocumentId:    document this fact belongs to
+for _, r := range response.GetResults() {
+	fmt.Println(r.GetText())
+}
 ```
 
 ---
@@ -141,13 +159,28 @@ hindsight memory recall my-bank "query" --fact-type world,observation
 ### Go
 
 ```go
-# Section 'recall-world-only' not found in api/recall.go
+// Only world facts (objective information)
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query: "Where does Alice work?",
+		Types: []string{"world"},
+	}).Execute()
 ```
 ```go
-# Section 'recall-experience-only' not found in api/recall.go
+// Only experience (conversations and events)
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query: "What have I recommended?",
+		Types: []string{"experience"},
+	}).Execute()
 ```
 ```go
-# Section 'recall-observations-only' not found in api/recall.go
+// Only observations (consolidated knowledge)
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query: "What patterns have I learned?",
+		Types: []string{"observation"},
+	}).Execute()
 ```
 
 > **💡 About Observations**
@@ -196,13 +229,29 @@ hindsight memory recall my-bank "How are Alice and Bob connected?" --budget high
 ### Go
 
 ```go
-# Section 'recall-budget-levels' not found in api/recall.go
+budgetLow := hindsight.LOW
+// Quick lookup
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:  "Alice's email",
+		Budget: &budgetLow,
+	}).Execute()
+
+// Deep exploration
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:  "How are Alice and Bob connected?",
+		Budget: &budgetHigh,
+	}).Execute()
 ```
 
 ### max_tokens
 
-The maximum number of tokens the returned facts can collectively occupy. Defaults to `4096`. Only the `text` field of each fact is counted toward this budget — metadata, tags, entities, and other fields are not included. After reranking, facts are included in relevance order until this budget is exhausted — so you always get the most relevant memories that fit. Hindsight is designed for agents, which think in tokens rather than result counts: set `max_tokens` to however much of your context window you want to allocate to memories.
+The maximum number of tokens the returned facts can collectively occupy. Defaults to `4096`. Only the `text` field of each fact is counted toward this budget — metadata, tags, entities, and other fields are not included. After reranking, facts are included in relevance order until this budget is exhausted — so you always get the most relevant memories that fit. A fact too long for the remaining budget is skipped rather than ending the selection, so shorter facts ranked behind it still come back. Hindsight is designed for agents, which think in tokens rather than result counts: set `max_tokens` to however much of your context window you want to allocate to memories.
 
+> **📝 Note**
+>
+A query that matched something never comes back empty: if not even the top fact fits the budget, it is returned whole and over budget rather than clipped mid-sentence, because an empty result list would read as "this bank has no such memory" and a clipped fact would be a claim the memory never made. The one exception is `max_tokens=0`, which means "no facts" on purpose — it is how you ask for chunks alone.
 ### Python
 
 ```python
@@ -236,12 +285,38 @@ hindsight memory recall my-bank "Alice's email" --max-tokens 500
 ### Go
 
 ```go
-# Section 'recall-token-budget' not found in api/recall.go
+// Fill up to 4K tokens of context with relevant memories
+mt4k := int32(4096)
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:     "What do I know about Alice?",
+		MaxTokens: &mt4k,
+	}).Execute()
+
+// Smaller budget for quick lookups
+mt500 := int32(500)
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:     "Alice's email",
+		MaxTokens: &mt500,
+	}).Execute()
 ```
 
 ### query_timestamp
 
 An ISO 8601 datetime representing when the query is being asked, from the user's perspective. When provided, it is used as the anchor for resolving relative temporal expressions in the query and for recency scoring — for example, if the query says "last month" and `query_timestamp` is `2023-05-30`, the temporal search window becomes approximately April 2023, and recency boosts are calculated as of May 30, 2023. Without it, the server's current time is used as the anchor. This field matters most for replaying historical conversations or building agents that need time-anchored recall.
+
+### temporal_window
+
+An explicit `{ "start": ..., "end": ... }` pair of ISO 8601 datetimes for the temporal part of the search. Supply it when you already know the period you mean — a date picker in your UI, or an agent that has already worked out what "last quarter" resolves to — and Hindsight uses those bounds directly instead of reading dates out of the query text.
+
+```json
+{ "query": "what did we decide about pricing", "temporal_window": { "start": "2023-04-01T00:00:00Z", "end": "2023-06-30T23:59:59Z" } }
+```
+
+**This ranks, it does not filter.** Hindsight searches several ways at once, and the window steers only the time-aware part of that search: memories dated inside it are surfaced and ranked higher, while everything else keeps being searched normally. Results dated outside the window are still returned, so this is not a way to restrict an answer to a period. Note also that the dates being compared are the *memory's own* dates — when the memory says something happened — not when it was stored.
+
+Two smaller things worth knowing: bounds are inclusive and a naive datetime (one with no timezone) is read as UTC; and the window is ignored on banks that have time-aware search turned off. `temporal_window` replaces date extraction only — [`query_timestamp`](#query_timestamp) still anchors recency scoring, so it remains useful alongside it.
 
 ### include
 
@@ -258,6 +333,9 @@ When `include_chunks` is enabled, chunks are fetched based on the top-scored rer
 
 When enabled and `types` includes `observation`, each observation result is accompanied by the original contributing facts it was synthesized from. Source facts are returned in a top-level `source_facts` dict keyed by fact ID, and each observation result carries a `source_fact_ids` list for cross-referencing. Facts are deduplicated across observations. The `max_tokens` sub-option (default `4096`) limits the total token budget for source facts.
 
+> **📝 Note**
+>
+The budget is spent in result order, so when it runs out it is the lowest-ranked results that lose their source facts — the top results always keep theirs. `source_fact_ids` always lists every source, so an ID may have no entry in `source_facts`; the response sets `source_facts_truncated: true` when that is the budget's doing rather than a missing fact. Raise `max_tokens` (or set it to `-1`) if you need every source resolved.
 ### Python
 
 ```python
@@ -313,7 +391,26 @@ hindsight memory recall my-bank "What patterns have I learned about Alice?" \
 ### Go
 
 ```go
-# Section 'recall-source-facts' not found in api/recall.go
+// Recall observations and include their source facts
+maxSFTokens := int32(4096)
+sfOpts := hindsight.SourceFactsIncludeOptions{MaxTokens: &maxSFTokens}
+obsResponse, _, _ := client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query: "What patterns have I learned about Alice?",
+		Types: []string{"observation"},
+		Include: &hindsight.IncludeOptions{
+			SourceFacts: *hindsight.NewNullableSourceFactsIncludeOptions(&sfOpts),
+		},
+	}).Execute()
+
+for _, obs := range obsResponse.GetResults() {
+	fmt.Printf("Observation: %s\n", obs.GetText())
+	for _, factID := range obs.GetSourceFactIds() {
+		if fact, ok := obsResponse.GetSourceFacts()[factID]; ok {
+			fmt.Printf("  - [%s] %s\n", fact.GetType(), fact.GetText())
+		}
+	}
+}
 ```
 
 #### entities
@@ -322,7 +419,8 @@ Enabled by default. When active, each returned fact includes the canonical names
 
 ### tags
 
-Filters recall to only memories that match the specified tags. When omitted, all memories regardless of tags are eligible. Tag filtering is applied at the database level across all four retrieval strategies, not as a post-processing step.
+Filters recall to memories in the requested tag scope. `tags` defaults to `null` and
+`tags_match` defaults to `any`.
 
 The `tags_match` parameter controls the filtering logic:
 
@@ -334,6 +432,22 @@ The `tags_match` parameter controls the filtering logic:
 | `all_strict` | Excluded | Memory has **all** of the specified tags |
 | `exact` | Excluded | Memory has **exactly** the specified tag set |
 
+The defaults and empty-filter behavior are important:
+
+| `tags` | `tags_match` | Eligible memories |
+|--------|--------------|-------------------|
+| Omitted, `null`, or `[]` | Omitted (`any`) | All tagged and untagged memories |
+| Omitted, `null`, or `[]` | `any`, `all`, `any_strict`, or `all_strict` | All tagged and untagged memories; an empty tag list means no filter |
+| Omitted, `null`, or `[]` | `exact` | Only untagged/global memories |
+| Non-empty | `any` or `all` | Matching tagged memories plus untagged/global memories |
+| Non-empty | `any_strict` or `all_strict` | Matching tagged memories only |
+| Non-empty | `exact` | Memories whose complete tag set exactly equals `tags` |
+
+> **📝 MCP empty-scope behavior**
+>
+For the MCP `recall` tool, `tags_match` is forwarded only when `tags` is present.
+To select the untagged/global scope through MCP, pass both `tags: []` and
+`tags_match: "exact"` rather than omitting `tags`.
 #### Scenario setup
 
 Consider a bank with these four memories:
@@ -384,7 +498,14 @@ hindsight memory recall my-bank "communication preferences" \
 ### Go
 
 ```go
-# Section 'recall-with-tags' not found in api/recall.go
+// Filter recall to only memories tagged for a specific user
+tagsMatch := "any"
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:     "What feedback did the user give?",
+		Tags:      []string{"user:alice"},
+		TagsMatch: &tagsMatch,
+	}).Execute()
 ```
 
 Use this for **shared global knowledge + user-specific** patterns, where untagged memories represent information everyone should see.
@@ -428,7 +549,14 @@ hindsight memory recall my-bank "communication preferences" \
 ### Go
 
 ```go
-# Section 'recall-tags-strict' not found in api/recall.go
+// Strict mode: only return memories that have matching tags (exclude untagged)
+tagsMatchStrict := "any_strict"
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:     "What did the user say?",
+		Tags:      []string{"user:alice"},
+		TagsMatch: &tagsMatchStrict,
+	}).Execute()
 ```
 
 Use this when memories are **fully partitioned by tags** and untagged memories should never be visible.
@@ -472,7 +600,14 @@ hindsight memory recall my-bank "communication tools" \
 ### Go
 
 ```go
-# Section 'recall-tags-all-mode' not found in api/recall.go
+// AND matching, includes untagged memories
+tagsMatchAllMode := "all"
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:     "communication tools",
+		Tags:      []string{"user:alice", "team"},
+		TagsMatch: &tagsMatchAllMode,
+	}).Execute()
 ```
 
 Use this when memories must belong to a **specific intersection** of scopes (e.g., only memories relevant to both a user and a project), while still surfacing shared global knowledge.
@@ -516,7 +651,14 @@ hindsight memory recall my-bank "communication tools" \
 ### Go
 
 ```go
-# Section 'recall-tags-all' not found in api/recall.go
+// AND matching: require ALL specified tags to be present
+tagsMatchAll := "all_strict"
+client.MemoryAPI.RecallMemories(ctx, "my-bank").
+	RecallRequest(hindsight.RecallRequest{
+		Query:     "What bugs were reported?",
+		Tags:      []string{"user:alice", "bug-report"},
+		TagsMatch: &tagsMatchAll,
+	}).Execute()
 ```
 
 Use this for strict scope enforcement where a memory must explicitly belong to **all** specified contexts.
@@ -543,7 +685,13 @@ With any other `tags_match` mode, absent or empty `tags` means "no tag filter" (
 
 `tag_groups` is a list of compound boolean tag filters. The groups in the list are AND-ed together at the top level. Each group is a recursive boolean expression: a **leaf** node `{tags, match}`, or a **compound** node `{and: [...]}`, `{or: [...]}`, or `{not: ...}`.
 
-`tag_groups` and `tags` / `tags_match` can be used simultaneously — they are AND-ed together.
+`tag_groups` defaults to `null`. The public REST and MCP request models treat
+`tag_groups` and `tags` as mutually exclusive: if both are present, the request is
+rejected. Use `tag_groups` by itself for compound filtering and normally leave the
+top-level `tags_match` at its default, `any`. Each `tag_groups` leaf has its own
+`match` value. The exception is top-level `tags_match: "exact"`: because exact
+matching gives absent flat tags a meaning, it adds a global-only flat constraint
+that is AND-ed with the compound expression.
 
 #### Leaf node
 
@@ -552,6 +700,16 @@ With any other `tags_match` mode, absent or empty `tags` means "no tag filter" (
 ```
 
 `match` accepts the same values as `tags_match`: `any`, `all`, `any_strict`, `all_strict`, `exact`. Defaults to `any_strict`.
+
+#### Fuzzy leaves
+
+A leaf may set `resolve: "fuzzy"` (default `"exact"`) to match its tags against the bank's tags by trigram similarity instead of literally, so a filter on `typsecript` still reaches memories tagged `typescript`:
+
+```json
+{ "tags": ["typsecript"], "match": "any_strict", "resolve": "fuzzy" }
+```
+
+Each tag resolves to the bank tags scoring at least 0.45, and the leaf then matches those exactly — so `resolve` composes with every `match` mode. Similarity is length-sensitive: `kubernets` reaches `kubernetes`, but a short tag has too few trigrams to survive an edit (`kakfa` does not reach `kafka`). A tag that resolves to nothing matches nothing; the filter is never dropped. A 422 is returned if the bank has more than 5000 distinct tags, or if a `resolve: "fuzzy"` leaf with `match: "exact"` expands past 32 candidate scopes.
 
 #### Compound nodes
 
@@ -605,24 +763,36 @@ When set to `true`, the response includes a detailed debug trace covering the qu
 
 ### min_scores
 
-An optional object of per-stage score floors, each compared **inclusively** (`>=`) against the matching field of a result's [`scores`](#scores) and AND-ed together. Any field you leave unset imposes no floor; omitting `min_scores` entirely (the default) applies no score filtering at all. The four fields operate at **two different levels of the pipeline**:
+An optional object of per-stage score floors, each compared **inclusively** (`>=`). Any field you leave unset imposes no floor; omitting `min_scores` entirely (the default) applies no score filtering at all. The four fields operate at **two different levels of the pipeline**, and the level decides what a returned result is guaranteed to satisfy:
 
-| field | level | effect |
-|---|---|---|
-| `semantic` | retrieval | minimum vector similarity, pushed into the SQL — prunes weak vector matches **before** fusion (overrides the global similarity minimum for this request) |
-| `keyword` | retrieval | minimum keyword/full-text (BM25) score, pushed into the SQL — prunes weak keyword matches before fusion |
-| `reranker` | post-query | minimum normalized cross-encoder score, applied to the ranked results |
-| `final` | post-query | minimum final ranking score, applied to the ranked results |
+| field | level | effect | guaranteed by every result? |
+|---|---|---|---|
+| `semantic` | retrieval | minimum vector similarity, pushed into the **semantic arm's** SQL — prunes weak vector matches **before** fusion (overrides the global similarity minimum for this request) | no |
+| `keyword` | retrieval | minimum keyword/full-text (BM25) score, pushed into the **keyword arm's** SQL — prunes weak keyword matches before fusion | no |
+| `reranker` | post-query | minimum normalized cross-encoder score, applied to the ranked results | yes |
+| `final` | post-query | minimum final ranking score, applied to the ranked results | yes |
 
 ```json
 { "query": "...", "min_scores": { "reranker": 0.5 } }
 ```
 
-The retrieval-level floors (`semantic`/`keyword`) change *which candidates are considered*, so they can also change the final ordering; the post-query floors (`reranker`/`final`) only drop already-ranked results. Because freed slots are **not** backfilled, any floor can return fewer results than the budget allows.
+#### Retrieval floors constrain one arm, not the result
 
-**Use floors with care.** The reranker's scores are reliable for *ordering* but not as *absolute* values — a clearly-relevant memory can score `~0.001` on one query and `~1.0` on another, so a fixed cutoff risks silently dropping good results. Calibrate any threshold against the scores you actually observe (recall with no `min_scores` first and inspect the [`scores`](#scores) object).
+Recall runs [four retrieval arms](#results) — semantic, keyword, graph and temporal — and a memory reaches the response if **any** of them surfaced it. `semantic` and `keyword` prune inside the arm they name, so they change *which candidates are considered*, and with them the final ordering. They are **not predicates over each returned result**:
 
-Each threshold is compared against the matching field in the response [`scores`](#scores) object. See the note under [`scores`](#scores) on why the scale is relative, not absolute, before relying on a fixed threshold.
+- a result surfaced only semantically reports `"keyword": null`, whatever `min_scores.keyword` you set;
+- a result surfaced only by keyword reports `"semantic": null`, whatever `min_scores.semantic` you set;
+- a result reached through the graph or temporal arm reports **neither**, and is unaffected by both floors.
+
+Setting `semantic` and `keyword` together therefore does not restrict the response to results that clear both. That is deliberate: an intersection would discard exactly the strong single-arm matches hybrid retrieval exists to find — a paraphrase with no lexical overlap in common with the query, or an exact identifier like `amber-17` that the embedding scores poorly.
+
+#### For abstention, use `reranker` or `final`
+
+The post-query floors are applied to every scored result after fusion and reranking, so a returned result always clears them — and a query where nothing clears them returns no results. That is the floor to reach for when you want recall to abstain on a low-confidence or nonsense query. Note they gate a *combined* signal: `final` blends RRF rank, cross-encoder relevance, recency/temporal and strategy boosts, and `reranker` depends on the cross-encoder's calibration, so neither is a drop-in equivalent of a retrieval-stage cutoff.
+
+Because freed slots are **not** backfilled, any floor can return fewer results than the budget allows.
+
+**Use floors with care.** The reranker's scores are reliable for *ordering* but not as *absolute* values — a clearly-relevant memory can score `~0.001` on one query and `~1.0` on another, so a fixed cutoff risks silently dropping good results. Calibrate any threshold against the scores you actually observe (recall with no `min_scores` first and inspect the [`scores`](#scores) object). See the note under [`scores`](#scores) on why the scale is relative, not absolute, before relying on a fixed threshold.
 
 ---
 
@@ -693,13 +863,17 @@ An object of the per-stage scores for this result. `null` for `source_facts` ent
 - **`semantic`** — the raw vector cosine similarity (`0`–`1`). `null` if this result was not surfaced by semantic search.
 - **`keyword`** — the raw keyword/full-text (BM25) score (`≥ 0`, unbounded). `null` if this result was not surfaced by keyword search.
 
-Each field is also a valid [`min_scores`](#min_scores) floor.
+Each field is also a valid [`min_scores`](#min_scores) floor — but `semantic` and `keyword` gate their own retrieval arm rather than the returned result, so a `null` here is expected even when you set that floor. A non-null value always clears it. See [`min_scores`](#min_scores).
 
 ---
 
 ### source_facts
 
 A dict keyed by fact ID containing full `RecallResult` objects for the source facts that contributed to observation results. Only present when `include.source_facts` is enabled. Facts are deduplicated — if two observations share a source fact, it appears once.
+
+### source_facts_truncated
+
+Whether the token budget cut the `source_facts` map short. When `true`, some IDs in `results[].source_fact_ids` have no entry in `source_facts` because the budget ran out — the references are not dangling. Only present when `include.source_facts` is enabled.
 
 ### chunks
 

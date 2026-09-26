@@ -41,7 +41,12 @@ hindsight memory retain my-bank "Alice works at Google as a software engineer"
 ### Go
 
 ```go
-# Section 'retain-basic' not found in api/retain.go
+client.MemoryAPI.RetainMemories(ctx, "my-bank").
+	RetainRequest(hindsight.RetainRequest{
+		Items: []hindsight.MemoryItem{
+			{Content: hindsight.TextContent("Alice works at Google as a software engineer")},
+		},
+	}).Execute()
 ```
 
 ### Retaining a Conversation
@@ -110,7 +115,29 @@ hindsight memory retain my-bank "$CONVERSATION" \
 ### Go
 
 ```go
-# Section 'retain-conversation' not found in api/retain.go
+// Retain an entire conversation as a single document.
+conversation := "Alice (2024-03-15T09:00:00Z): Hi Bob! Did you end up going to the doctor last week?\n" +
+	"Bob (2024-03-15T09:01:00Z): Yes, finally. Turns out I have a mild peanut allergy.\n" +
+	"Alice (2024-03-15T09:02:00Z): Oh no! Are you okay?\n" +
+	"Bob (2024-03-15T09:03:00Z): Yeah, nothing serious. Just need to carry an antihistamine.\n" +
+	"Alice (2024-03-15T09:04:00Z): Good to know. We'll avoid peanuts at the team lunch."
+
+docID := "chat-2024-03-15-alice-bob"
+context_ := "team chat"
+ts := "2024-03-15T09:04:00Z"
+client.MemoryAPI.RetainMemories(ctx, "my-bank").
+	RetainRequest(hindsight.RetainRequest{
+		Items: []hindsight.MemoryItem{
+			{
+				Content:    hindsight.TextContent(conversation),
+				Context:    *hindsight.NewNullableString(&context_),
+				DocumentId: *hindsight.NewNullableString(&docID),
+				Timestamp: *hindsight.NewNullableTimestamp(&hindsight.Timestamp{
+					String: &ts,
+				}),
+			},
+		},
+	}).Execute()
 ```
 
 When the conversation grows — a new message arrives — just retain again with the full updated content and the same `document_id`. Hindsight will delete the previous version and reprocess from scratch, so memories always reflect the latest state of the conversation.
@@ -171,12 +198,27 @@ hindsight memory retain my-bank "Alice got promoted" \
 ### Go
 
 ```go
-# Section 'retain-with-context' not found in api/retain.go
+ctxLabel := "career update"
+ts2 := "2024-03-15T10:00:00Z"
+client.MemoryAPI.RetainMemories(ctx, "my-bank").
+	RetainRequest(hindsight.RetainRequest{
+		Items: []hindsight.MemoryItem{
+			{
+				Content: hindsight.TextContent("Alice got promoted to senior engineer"),
+				Context: *hindsight.NewNullableString(&ctxLabel),
+				Timestamp: *hindsight.NewNullableTimestamp(&hindsight.Timestamp{
+					String: &ts2,
+				}),
+			},
+		},
+	}).Execute()
 ```
 
 ### metadata
 
 Arbitrary key-value string pairs that provide context about this item. For example: `{"source": "slack", "channel": "engineering", "thread_id": "T123"}`. Metadata is included in the fact extraction prompt, so the LLM can use it as additional context when extracting facts — for instance, knowing the document title or source can improve accuracy. It is also stored on each memory unit and returned with every recalled memory, letting you do client-side filtering or static enrichment without extra lookups — for example, linking a memory back to its source URL, thread ID, or any application-specific identifier.
+
+Values are stored and returned as strings. A key whose value is `null` is dropped rather than stored, so it will not come back on the recalled memory — send an empty string if you need the key to survive.
 
 ### document_id
 
@@ -216,6 +258,16 @@ Append mode requires a `document_id` — without one there is no existing docume
 A list of entities you want to guarantee are recognized, merged with any entities the LLM extracts automatically. Each entry has a `text` field (the entity name) and an optional `type` (e.g., `"PERSON"`, `"ORG"`, `"CONCEPT"` — defaults to `"CONCEPT"` if omitted).
 
 Use this when you know certain entities are important but the LLM might miss them or refer to them inconsistently across different parts of the content. Providing entities explicitly ensures they are always linked in the knowledge graph.
+
+### resolve_entities
+
+By default the names you pass in `entities` are **resolved** against the entities already in the bank: a name close to an existing one may be matched onto it rather than creating its own entity, based on name similarity plus how strongly it co-occurs with the other names in the same item. That is usually what you want — it is how `Dr. Waller` and `Dr Waller` end up as one entity instead of two.
+
+Set `resolve_entities: false` when the names you are passing are authoritative and must be stored exactly as written. An existing entity is then reused only when its name matches case-insensitively, any other name creates a new entity, and your names are never merged with each other (`Alice` and `Alice Smith` stay two entities).
+
+This applies **only to the entities you supply**. Auto-extracted entities are always resolved, because they are the extractor's guess at a name rather than yours — turning resolution off for them would fill the bank with near-duplicate entities.
+
+The same flag exists on [editing a memory](./memories#resolving-entity-names), where it matters most: a correction you type by hand is exactly the case where a similar existing entity should not win.
 
 ### tags and document_tags
 
@@ -351,7 +403,19 @@ hindsight memory retain my-bank "Alice and Bob are friends" \
 ### Go
 
 ```go
-# Section 'retain-batch' not found in api/retain.go
+doc1 := "conversation_001_msg_1"
+doc2 := "conversation_001_msg_2"
+doc3 := "conversation_001_msg_3"
+ctx1 := "career"
+ctx2 := "relationship"
+client.MemoryAPI.RetainMemories(ctx, "my-bank").
+	RetainRequest(hindsight.RetainRequest{
+		Items: []hindsight.MemoryItem{
+			{Content: hindsight.TextContent("Alice works at Google"), Context: *hindsight.NewNullableString(&ctx1), DocumentId: *hindsight.NewNullableString(&doc1)},
+			{Content: hindsight.TextContent("Bob is a data scientist at Meta"), Context: *hindsight.NewNullableString(&ctx1), DocumentId: *hindsight.NewNullableString(&doc2)},
+			{Content: hindsight.TextContent("Alice and Bob are friends"), Context: *hindsight.NewNullableString(&ctx2), DocumentId: *hindsight.NewNullableString(&doc3)},
+		},
+	}).Execute()
 ```
 
 ---
@@ -409,7 +473,19 @@ hindsight memory retain-files my-bank "$SCRIPT_DIR/" --async
 ### Go
 
 ```go
-# Section 'retain-files' not found in api/retain.go
+// Open a file and upload it — Hindsight converts it to text and extracts memories.
+// Supports: PDF, DOCX, PPTX, XLSX, images (OCR), audio (transcription), and text formats.
+f, err := os.Open("../../hindsight-docs/examples/api/sample.pdf")
+if err != nil {
+	log.Fatalf("Failed to open file: %v", err)
+}
+defer f.Close()
+
+fileResp, _, _ := client.FilesAPI.FileRetain(ctx, "my-bank").
+	Files([]*os.File{f}).
+	Request(`{"files_metadata": [{"context": "quarterly report"}]}`).
+	Execute()
+fmt.Println("Operation IDs:", fileResp.GetOperationIds()) // Track processing via the operations endpoint
 ```
 
 The file retain endpoint always returns asynchronously. The response contains `operation_ids` — one per uploaded file — which you can poll via `GET /v1/default/banks/{bank_id}/operations` to track progress.
@@ -467,7 +543,19 @@ hindsight memory retain-files my-bank "$SCRIPT_DIR/" --async
 ### Go
 
 ```go
-# Section 'retain-files' not found in api/retain.go
+// Open a file and upload it — Hindsight converts it to text and extracts memories.
+// Supports: PDF, DOCX, PPTX, XLSX, images (OCR), audio (transcription), and text formats.
+f, err := os.Open("../../hindsight-docs/examples/api/sample.pdf")
+if err != nil {
+	log.Fatalf("Failed to open file: %v", err)
+}
+defer f.Close()
+
+fileResp, _, _ := client.FilesAPI.FileRetain(ctx, "my-bank").
+	Files([]*os.File{f}).
+	Request(`{"files_metadata": [{"context": "quarterly report"}]}`).
+	Execute()
+fmt.Println("Operation IDs:", fileResp.GetOperationIds()) // Track processing via the operations endpoint
 ```
 
 > **ℹ️ File Storage**
@@ -517,7 +605,21 @@ hindsight memory retain my-bank "Meeting notes" --async
 ### Go
 
 ```go
-# Section 'retain-async' not found in api/retain.go
+// Start async ingestion (returns immediately)
+asyncTrue := true
+largeDoc1 := "large-doc-1"
+largeDoc2 := "large-doc-2"
+retainResp, _, _ := client.MemoryAPI.RetainMemories(ctx, "my-bank").
+	RetainRequest(hindsight.RetainRequest{
+		Items: []hindsight.MemoryItem{
+			{Content: hindsight.TextContent("Large batch item 1"), DocumentId: *hindsight.NewNullableString(&largeDoc1)},
+			{Content: hindsight.TextContent("Large batch item 2"), DocumentId: *hindsight.NewNullableString(&largeDoc2)},
+		},
+		Async: &asyncTrue,
+	}).Execute()
+
+// Check if it was processed asynchronously
+fmt.Println("Async:", retainResp.GetAsync())
 ```
 
 When `async: true`, the call returns immediately with an `operation_id`. Processing runs in the background via the worker service. No `usage` metrics are returned for async operations.
