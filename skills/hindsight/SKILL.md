@@ -25,7 +25,7 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 
 - Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
 - Entry-point: `hindsight-local-mcp` (in `Scripts/` del Python gestito da mise — esposto nel PATH via `[env]` di `.mise.toml`)
-- Versione: **0.9.2** (dal 2026-08-29; 0.9.1 dal 2026-08-15); query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
+- Versione verificata sul setup Linux: **0.10.1** (upgrade del 2026-09-26); verificare separatamente le altre macchine; query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
 - LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
 - Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
 - Reranker: **`voyage/rerank-2.5`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
@@ -39,6 +39,11 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 mise run start-hindsight   # lancia in background, log in /tmp/hs.log
 mise run stop-hindsight    # Windows: taskkill | Linux: pkill (branch per-OS in ops/hindsight-stop-services.sh)
 ```
+
+> **Cluster condiviso:** `stop-hindsight` e `hindsight-sentinel.sh` arrestano anche
+> il Postgres embedded tramite `hindsight-stop-services.sh`. Non usarli con LiteLLM
+> attivo sullo stesso cluster, anche se usa un database distinto: fermare prima
+> LiteLLM ed evitare lo shutdown automatico della sentinella mentre è attivo.
 
 Verifica veloce che il server risponda:
 
@@ -114,18 +119,22 @@ Una UI **opzionale**, indipendente dal server MCP, via task mise e **in foregrou
 | **Control Plane** (Web UI ufficiale Hindsight) | 9999  | `mise run control-plane` | `mise run stop-control-plane` | Sfogliare bank/agent, entità e relazioni, storico operations, testare query di recall. Si collega all'API :8888 |
 
 ```bash
-mise run control-plane    # → http://localhost:9999  (bind 127.0.0.1)
+mise run control-plane    # → http://localhost:9999  (bind localhost)
 ```
 
-- **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `127.0.0.1` (no LAN; non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi).
+- **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `localhost` con `HOSTNAME=localhost` e `--hostname localhost` (no LAN; configurazione conservata dal workaround storico dell'origin mismatch). URL consigliato: `http://localhost:9999`. Non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi.
 - Stop affidabile via `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh <porta>` (su Windows usa `Get-NetTCPConnection` perché il netstat MSYS non vede sempre i processi nativi; su Linux usa `lsof`/`fuser`).
 - Per analizzare `hindsight-debug.log` (JSONL) non serve una UI: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
 
-> Dettagli e gotcha d'ambiente (npx MSYS2 rotto, bind `HOSTNAME`): vedi `README.md` §16.
+> Panoramica memoria: vedi `README.md` §9. Dettagli di avvio e bind `HOSTNAME`:
+> task `control-plane` in `mise.toml`.
 
 ### Operazioni di memoria via MCP
 
-Quando il server è up, in una sessione Claude Code questo progetto espone 29 tool MCP con prefisso `hindsight/`. I tre principali sono:
+I tool MCP con prefisso `hindsight/` esposti dal setup locale sono filtrati da
+`HINDSIGHT_API_MCP_ENABLED_TOOLS` in `mise.toml`: il catalogo upstream completo non
+coincide con l'allowlist locale. Verificare i tool effettivamente disponibili nella
+sessione. I tre principali sono:
 
 | Tool                | Quando usarlo                                                                                                                                                                                                  | Esempio di invocazione                                                                                                                          |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -137,11 +146,14 @@ Tool ausiliari più usati:
 
 - `hindsight/list_memories` — elenca tutte le memorie di un bank (debug)
 - `hindsight/get_memory` — recupera una memoria per id
-- `hindsight/get_operation` — verifica stato di un retain async (`accepted` → `completed`)
+- `hindsight/sync_retain` — retain sincrono
+- `hindsight/get_operation` / `list_operations` / `cancel_operation` — stato e gestione delle operazioni async
 - `hindsight/list_documents` / `get_document` — gruppi di memorie (un retain = un document)
-- `hindsight/get_bank` / `update_bank` — gestione bank
-- `hindsight/clear_memories` / `delete_bank` — distruttive, chiedere conferma all'utente prima
-- `hindsight/delete_document`- Cancella un document
+- `hindsight/update_memory` / `invalidate_memory` — corregge/ritira fatti `world` o `experience`; le `observation` sono derivate dalle fonti
+- `hindsight/get_bank` / `list_tags` — ispezione del bank e dei tag
+- `hindsight/delete_document` — cancella un documento e le memorie associate; chiedere conferma all'utente prima
+
+`update_bank`, `clear_memories` e `delete_bank` non sono nell'allowlist locale.
 
 ### Come Hindsight processa un retain
 

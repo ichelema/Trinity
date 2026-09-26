@@ -4,17 +4,17 @@ Sistema che **avvisa quando esce su PyPI una versione di `hindsight-api` o `hind
 
 ## Perché esiste (e in cosa differisce dal check del Control Plane)
 
-Il server Python di Hindsight è installato/aggiornato dal task `install-hindsight` del `.mise.toml`, che fa semplicemente `pip install --upgrade hindsight-api`. **Non c'è nessun pin di versione.**
+Il server Python di Hindsight è installato/aggiornato dal task `install-hindsight` di `mise.toml`, che esegue `python -m pip install --upgrade "hindsight-api-slim[embedded-db]"`. Non installa il meta-pacchetto `hindsight-api` (alias di `[all]`, con dipendenze ML locali non necessarie). **Non c'è nessun pin di versione.**
 
 Per questo il check è diverso dal gemello `check_update_hindsight_control_plane`:
 
 |                       | Control Plane (`cp-check`)            | API (`api-check`)                                       |
 | --------------------- | ------------------------------------- | ------------------------------------------------------- |
-| Baseline (soglia)     | versione **pinnata** nel `.mise.toml` | versione **installata** (letta da `importlib.metadata`) |
+| Baseline (soglia)     | ultima release **vista** in `cp-last-seen.state` | versione **installata** (letta da `importlib.metadata`) |
 | Registry interrogato  | npm                                   | **PyPI**                                                |
 | Pacchetti controllati | 1                                     | **2** (`hindsight-api` + `hindsight-api-slim`)          |
 
-Siccome la baseline è la versione installata, la soglia **si alza da sola** dopo ogni upgrade: non c'è niente da aggiornare a mano in questi script.
+Per l'API la baseline è la versione installata, quindi la soglia **si alza da sola** dopo ogni upgrade. Per il Control Plane non c'è un pin: il task usa npx sempre-latest; `cp-check` inizializza lo stato silenziosamente al primo run e poi lo aggiorna a ogni nuova release, avvisando una sola volta.
 
 ## File in questa cartella
 
@@ -37,7 +37,7 @@ api-check-scheduled.cmd                 ← ponte: env MSYS2 + bash --noprofile 
 api-check-scheduled.sh                  ← cd root, log, gestione alert
         │  mise run api-check
         ▼
-mise run api-check (.mise.toml)         ← dà Ruby + Python giusti + env (TLS proxy)
+mise run api-check (mise.toml)         ← dà Ruby + Python giusti + env (TLS proxy)
         │  ruby api-check.rb
         ▼
 api-check.rb                            ← confronto versioni, exit 0/10
@@ -64,10 +64,10 @@ L'exit code risale: `api-check.rb` esce `10` → `mise` lo propaga → lo `.sh` 
 
 ```bash
 mise run api-check          # c'è una versione nuova da installare? (exit 10 = sì)
-mise run install-hindsight  # aggiorna entrambi i pacchetti (pip install --upgrade)
+mise run install-hindsight  # aggiorna hindsight-api-slim[embedded-db], non il meta-pacchetto
 ```
 
-> Va lanciato via `mise run`: serve l'`[env]` del `.mise.toml` (`SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE`) per superare il MITM TLS del proxy aziendale, e il `_.path` che mette il Python di mise nel PATH (è quello da cui si legge la versione installata).
+> Va lanciato via `mise run`: serve l'`[env]` del `mise.toml` (`SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE`) per superare il MITM TLS del proxy aziendale, e il `_.path` che mette il Python di mise nel PATH (è quello da cui si legge la versione installata).
 
 ## Cosa succede quando esce una versione nuova
 
@@ -96,9 +96,9 @@ La lista è globale (applicata a entrambi i pacchetti). Nello scheduler la impos
 ## Note tecniche / gotcha
 
 - **Baseline = versione installata**: `api-check.rb` interroga il Python di mise via `importlib.metadata` (istantaneo, non avvia il server). È lo stesso Python che `install-hindsight` aggiorna, perché `mise run` lo mette nel PATH.
-- **Pacchetto non installato**: viene riportato con `"not_installed": true` e **non** conta come update (manca una baseline). Utile se in futuro togli `hindsight-api-slim`.
-- **TLS dietro proxy ENINET**: `api-check.rb` usa `Net::HTTP`, che rispetta `SSL_CERT_FILE` (impostato nell'`[env]` del `.mise.toml` a `C:/certs/cacert.pem`). È ciò che fa passare la chiamata a PyPI attraverso il MITM del proxy.
+- **Pacchetto non installato**: viene riportato con `"not_installed": true` e **non** conta come update (manca una baseline). È il caso del meta-pacchetto `hindsight-api` nel setup slim.
+- **TLS dietro proxy ENINET**: `api-check.rb` usa `Net::HTTP`, che rispetta `SSL_CERT_FILE` (impostato nell'`[env]` del `mise.toml` a `C:/certs/cacert.pem`). È ciò che fa passare la chiamata a PyPI attraverso il MITM del proxy.
 - **`mise` non è nel PATH MSYS**: gli script lo invocano col path assoluto `/e/msys64/home/Sphynx/.local/bin/mise.exe`.
-- **Trust di mise**: `api-check-scheduled.sh` esegue `mise trust` prima di ogni `mise run` — idempotente, ri-fida dopo ogni modifica del `.mise.toml`. Non serve fare `mise trust` a mano.
+- **Trust di mise**: `api-check-scheduled.sh` esegue `mise trust` prima di ogni `mise run` — idempotente, ri-fida dopo ogni modifica del `mise.toml`. Non serve fare `mise trust` a mano.
 - **`API_NO_OPEN=1`**: variabile per testare lo `.sh` senza far comparire Notepad.
 - **Verifica nel contesto reale**: dopo aver creato l'evento, premi **▶ (Run)** in System Scheduler e controlla che compaia una riga fresca in `scheduler/check_update_hindsight_api/api-check-scheduled.log`.

@@ -252,12 +252,17 @@ Regole del formato:
 | `file-update` | `cp <file> <file>.bak` → Edit del corpo → aggiorna `metadata.modified` (ISO) → se cambia il senso, aggiorna la riga indice in MEMORY.md |
 | `file-delete` | `cp` in `.bak` → `rm` → rimuovi la riga indice da MEMORY.md |
 | `file-create` | Write con frontmatter conforme (name kebab, description, metadata.type, modified) + riga indice in MEMORY.md. RARO: solo se passa il test policy "serve a OGNI sessione?" |
-| `hs-invalidate` | `curl -X PATCH <API>/banks/<bank>/memories/<id>` con `{"state": "invalidated", "reason": "dream YYYY-MM-DD"}` |
-| `hs-update` | stesso PATCH con `{"text": "<testo corretto>"}` (ritocco puntuale di un singolo fatto) |
+| `hs-invalidate` | Solo fatti `world`/`experience`: `curl -X PATCH <API>/banks/<bank>/memories/<id>` con `{"state": "invalidated", "reason": "dream YYYY-MM-DD"}` |
+| `hs-update` | Solo fatti `world`/`experience`: stesso PATCH con `{"text": "<testo corretto>"}` (ritocco puntuale di un singolo fatto) |
 | `hs-correct-doc` | `curl -X DELETE <API>/banks/<bank>/documents/<id>` → retain REST (riga sotto) del testo corretto |
 | `hs-retain` | `curl -X POST <API>/banks/<bank>/memories` con `{"items": [{"content": "<testo>", "context": "<dominio>", "tags": [...], "document_id": "dream:<YYYY-MM-DD>:<An>"}], "async": false}` — verifica `"success": true` (sync, fino a ~90s); il `document_id` deterministico fa upsert sui retry invece di duplicare. Tag SOLO universali (`claude-code`, `repo:<nome già nel bank>`; mai tag semantici) |
 | `policy-migrate` | prima l'`hs-retain` e verifica che sia riuscito, POI il `file-delete` |
 | `mm-refresh` | script refresh `--all`, una volta sola a fine apply |
+
+Le `observation` sono derivate: **mai PATCH diretto** per correggerle o invalidarle.
+Proporre ed eseguire invece la correzione/invalidation dei fatti sorgente
+`world`/`experience` (o la correzione del documento sorgente), lasciando rigenerare
+le observation tramite consolidamento; aggiornare poi i mental model con `mm-refresh`.
 
 `<API>` = `http://127.0.0.1:8888/v1/default`; header `Content-Type: application/json`;
 nome bank sempre percent-encoded negli URL.

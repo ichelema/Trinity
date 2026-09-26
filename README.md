@@ -708,7 +708,7 @@ connessione).
 | Job | Cartella | Cadenza | Cosa fa |
 |---|---|---|---|
 | `api-check` | `scheduler/check_update_hindsight_api/` | settimanale | Controlla PyPI: nuova versione di `hindsight-api` o `hindsight-api-slim` rispetto a quella installata. Baseline = versione installata (si alza da sola dopo ogni upgrade, niente pin da aggiornare) |
-| `cp-check` | `scheduler/check_update_hindsight_control_plane/` | settimanale | Controlla npm: nuova versione di `@vectorize-io/hindsight-control-plane` rispetto al pin nel `mise.toml`. Baseline = pin (va alzato a mano nel `mise.toml` per aggiornare) |
+| `cp-check` | `scheduler/check_update_hindsight_control_plane/` | settimanale | Controlla npm: nuova versione di `@vectorize-io/hindsight-control-plane` rispetto all'ultima release vista in `cp-last-seen.state`. Primo run: seed silenzioso; poi avviso una sola volta per nuova release e baseline aggiornata automaticamente. Nessun pin: `control-plane` usa npx sempre-latest |
 | `promote-scan` | `scheduler/promote_scan/` | settimanale | Scansiona i bank Hindsight di progetto, triage LLM (gpt-4.1-nano) dei fatti candidati alla promozione sul core. Non promuove nulla: apre un alert se ci sono candidati per `/trinity:promote`. Verdetti cachati in `logs/promote-state.json` |
 | `nb-auth-refresh` | `scheduler/notebooklm/` | ogni 15–20 min | Rinnova i cookie di sessione di `notebooklm-py` (`__Secure-1PSIDTS`) prima che scadano. Dopo 3 fallimenti consecutivi apre un alert con le istruzioni per rigenerare i cookie SID di base |
 | `nb-check` | `scheduler/check_update_notebooklm/` | settimanale | Controlla PyPI: nuova versione di `notebooklm-py` rispetto a quella installata in `E:/AI/tools/notebooklm`. Baseline = versione installata (dal dist-info locale). Nota: la versione corrente viene da GitHub (`main`, exe-free); l'alert si attiverà quando PyPI raggiungerà la stessa versione |
@@ -743,7 +743,7 @@ dagli strumenti exe-free in `E:/AI/tools` e dai cookie del browser dell'utente).
 |---|---|---|
 | `trinity-promote-scan` | dom 09:00 | scan+triage candidati promozione |
 | `trinity-api-check` | dom 09:15 | nuove versioni `hindsight-api`/`-slim` su PyPI |
-| `trinity-cp-check` | dom 09:30 | nuova versione Control Plane su npm vs pin `mise.toml` |
+| `trinity-cp-check` | dom 09:30 | nuova versione Control Plane su npm vs ultima release vista (`cp-last-seen.state`) |
 
 Installazione (unit utente, niente root), verifica e gestione: vedi
 [`scheduler/systemd/README.md`](scheduler/systemd/README.md).
@@ -1001,8 +1001,8 @@ tramite launcher shell che impostano le variabili d'ambiente corrette prima di l
 | `~/.local/bin/litellm-gpt.sh` | launcher Claude Code → GPT/ChatGPT Max (OAuth) |
 | `~/.local/bin/litellm-deepseek.sh` | launcher Claude Code → DeepSeek (dal 2026-06-19) |
 
-Il DB di LiteLLM usa lo stesso Postgres embedded di Hindsight, ma su un database separato
-chiamato `litellm`.
+Nel setup Windows descritto qui il DB di LiteLLM usa lo stesso Postgres embedded di
+Hindsight, ma su un database separato chiamato `litellm`.
 
 #### Il proxy su Linux (dal 2026-08-14)
 
@@ -1044,11 +1044,18 @@ PRISMA_ENGINE="$(ls -1 "$HOME"/.cache/prisma-python/binaries/*/*/node_modules/@p
 [ -n "$PRISMA_ENGINE" ] && export PRISMA_QUERY_ENGINE_BINARY="$PRISMA_ENGINE"
 ```
 
-**Il Postgres è un cluster a parte, non quello di Hindsight.** Su Linux LiteLLM usa un
-cluster utente in `~/.litellm/pgdata` sulla porta **5433**, distinto dal pg0 di Hindsight
-(5432). Non è un servizio: lo avvia `litellm-start-proxy.sh` se non risponde già, con
-`-k /tmp` perché la socket dir di default `/run/postgresql` la crea solo il servizio
-systemd di sistema.
+**Cluster Postgres separato nel setup Linux qui descritto, non una garanzia universale.**
+LiteLLM è configurato con un cluster utente in `~/.litellm/pgdata` sulla porta **5433**,
+distinto dal pg0 di Hindsight (5432). Non è un servizio: lo avvia
+`litellm-start-proxy.sh` se non risponde già, con `-k /tmp` perché la socket dir di
+default `/run/postgresql` la crea solo il servizio systemd di sistema.
+Verificare la configurazione effettiva per macchina: database distinti nello stesso
+cluster non isolano lo shutdown.
+
+> **Cluster condiviso:** `mise run stop-hindsight` e `hindsight-sentinel.sh` chiamano
+> `hindsight-stop-services.sh`, che arresta anche Postgres, non solo Hindsight.
+> Non usarli con LiteLLM attivo sullo stesso cluster; prima fermare LiteLLM ed evitare
+> che la sentinella spenga il cluster alla chiusura dell'ultima sessione Claude.
 
 Con questi tre pezzi a posto l'avvio è un comando solo:
 
