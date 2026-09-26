@@ -47,6 +47,55 @@ PATH = "/v1/responses"
 MESSAGES_PATH = "/v1/messages"
 
 
+def _patch_responses_collector():
+    """Ricostruisce output quando ChatGPT lo invia solo negli eventi SSE."""
+    from litellm.completion_extras.litellm_responses_transformation.handler import (
+        ResponsesToCompletionBridgeHandler,
+    )
+
+    if getattr(ResponsesToCompletionBridgeHandler, "_output_items_patch", False):
+        return
+
+    def valore(evento, chiave):
+        return evento.get(chiave) if isinstance(evento, dict) else getattr(evento, chiave, None)
+
+    def completa(handler, stream, items):
+        completed = getattr(stream, "completed_response", None)
+        response_obj = getattr(completed, "response", None) if completed else None
+        if response_obj is None:
+            raise ValueError("Stream ended without a completed response")
+        response = handler._coerce_response_object(
+            response_obj, getattr(stream, "_hidden_params", None)
+        )
+        if not response.output and items:
+            response.output = items
+        return response
+
+    def collect(handler, stream):
+        items = []
+        for evento in stream:
+            if (
+                valore(evento, "type") == "response.output_item.done"
+                and (item := valore(evento, "item")) is not None
+            ):
+                items.append(item)
+        return completa(handler, stream, items)
+
+    async def collect_async(handler, stream):
+        items = []
+        async for evento in stream:
+            if (
+                valore(evento, "type") == "response.output_item.done"
+                and (item := valore(evento, "item")) is not None
+            ):
+                items.append(item)
+        return completa(handler, stream, items)
+
+    ResponsesToCompletionBridgeHandler._collect_response_from_stream = collect
+    ResponsesToCompletionBridgeHandler._collect_response_from_stream_async = collect_async
+    ResponsesToCompletionBridgeHandler._output_items_patch = True
+
+
 # --------------------------------------------------------------------------- #
 # WebSearch di Claude Code: /v1/messages -> /v1/responses (web_search nativo)
 # --------------------------------------------------------------------------- #
@@ -86,43 +135,63 @@ def _ultimo_testo_utente(messages):
     return None
 
 
-def _estrai_web_search(testo_sse):
-    """Da un flusso SSE /v1/responses estrae (query, citazioni, testo finale).
-
-    ``query`` dall'azione del primo ``web_search_call``; ``citazioni`` dalle
-    annotation ``url_citation`` (deduplicate per URL); ``testo`` accumulando i
-    delta ``output_text.delta``.
-    """
+def _estrai_web_search(corpo):
+    """Da JSON o SSE Responses estrae query, citazioni deduplicate e testo."""
     query = None
     citazioni = []
     visti = set()
-    testo = []
-    for riga in testo_sse.splitlines():
-        if not riga.startswith("data: "):
-            continue
-        dato = riga[6:].strip()
-        if not dato or dato == "[DONE]":
-            continue
-        try:
+    delta = []
+    items = []
+    annotations = []
+    try:
+        finale = json.loads(corpo)
+    except ValueError:
+        finale = None
+        for riga in corpo.splitlines():
+            if not riga.startswith("data:"):
+                continue
+            dato = riga[5:].strip()
+            if not dato or dato == "[DONE]":
+                continue
             ev = json.loads(dato)
-        except ValueError:
-            continue
-        tipo = ev.get("type")
-        if tipo == "response.output_item.done":
-            item = ev.get("item") or {}
-            if item.get("type") == "web_search_call":
-                azione = item.get("action") or {}
-                if query is None:
-                    query = azione.get("query") or (azione.get("queries") or [None])[0]
-        elif tipo == "response.output_text.delta":
-            testo.append(ev.get("delta", ""))
-        elif tipo == "response.output_text.annotation.added":
-            ann = ev.get("annotation") or {}
-            url = ann.get("url")
-            if url and url not in visti:
-                visti.add(url)
-                citazioni.append({"url": url, "title": ann.get("title", "")})
-    return query, citazioni, "".join(testo)
+            tipo = ev.get("type")
+            if ev.get("error") or tipo in ("error", "response.failed", "response.incomplete"):
+                raise ValueError("websearch: errore nella risposta SSE")
+            if tipo == "response.completed":
+                finale = ev.get("response")
+            elif tipo == "response.output_item.done":
+                items.append(ev.get("item") or {})
+            elif tipo == "response.output_text.delta":
+                delta.append(ev.get("delta", ""))
+            elif tipo == "response.output_text.annotation.added":
+                annotations.append(ev.get("annotation") or {})
+    if finale is not None:
+        if (not isinstance(finale, dict) or finale.get("error")
+                or finale.get("status", "completed") != "completed"
+                or not isinstance(finale.get("output", []), list)):
+            raise ValueError("websearch: risposta JSON non valida o non completata")
+        items = finale.get("output") or items
+    testo = []
+    for item in items:
+        if item.get("status") in ("failed", "incomplete"):
+            raise ValueError("websearch: output non completato")
+        if item.get("type") == "web_search_call" and query is None:
+            azione = item.get("action") or {}
+            query = azione.get("query") or (azione.get("queries") or [None])[0]
+        elif item.get("type") == "message":
+            for parte in item.get("content") or []:
+                if parte.get("type") == "output_text":
+                    testo.append(parte.get("text", ""))
+                    annotations.extend(parte.get("annotations") or [])
+    for ann in annotations:
+        url = ann.get("url")
+        if ann.get("type", "url_citation") == "url_citation" and url and url not in visti:
+            visti.add(url)
+            citazioni.append({"url": url, "title": ann.get("title", "")})
+    testo = "".join(testo) or "".join(delta)
+    if not query and not citazioni and not testo:
+        raise ValueError("websearch: risposta vuota o non riconosciuta")
+    return query, citazioni, testo
 
 
 def _costruisci_risposta(model, query, citazioni, testo):
@@ -351,19 +420,23 @@ class _Ponte:
             return await self.app(scope, receive_replay, send)
 
         auth = self._auth_da_scope(scope)
+        if not any(value.strip() for value in auth.values()):
+            return await self.app(scope, receive_replay, send)
         try:
-            sse = await self._esegui_ricerca(modello, query, auth)
-            q, citazioni, testo = _estrai_web_search(sse)
+            corpo_ricerca = await self._esegui_ricerca(modello, query, auth)
+            q, citazioni, testo = _estrai_web_search(corpo_ricerca)
             risposta = _costruisci_risposta(modello, q or query, citazioni, testo)
         except Exception as e:  # noqa: BLE001 - mai rompere /v1/messages
             _log(f"websearch: ricerca fallita ({e}), passo al flusso normale")
             return await self.app(scope, receive_replay, send)
 
-        corpo_out = _sse_antropico(risposta)
+        streaming = dati.get("stream") is True
+        corpo_out = _sse_antropico(risposta) if streaming else json.dumps(risposta).encode("utf-8")
+        content_type = b"text/event-stream" if streaming else b"application/json"
         await send({
             "type": "http.response.start",
             "status": 200,
-            "headers": [(b"content-type", b"text/event-stream"),
+            "headers": [(b"content-type", content_type),
                         (b"content-length", str(len(corpo_out)).encode())],
         })
         await send({"type": "http.response.body", "body": corpo_out, "more_body": False})
@@ -377,15 +450,11 @@ class _Ponte:
         for chiave in (b"authorization", b"x-api-key", b"x-litellm-api-key"):
             if chiave in intestazioni:
                 auth[chiave.decode("latin-1")] = intestazioni[chiave].decode("latin-1")
-        if not auth:
-            master = os.environ.get("LITELLM_MASTER_KEY")
-            if master:
-                auth["Authorization"] = f"Bearer {master}"
         return auth
 
     @staticmethod
     async def _esegui_ricerca(modello, query, auth):
-        """Chiama /v1/responses col tool nativo ``web_search`` e restituisce l'SSE."""
+        """Chiama /v1/responses col tool nativo ``web_search`` e restituisce JSON o SSE."""
         host = os.environ.get("LITELLM_HOST", "127.0.0.1")
         port = os.environ.get("LITELLM_PORT", "4000")
         url = f"http://{host}:{port}/v1/responses"
@@ -512,10 +581,12 @@ class _Ponte:
             return riga
         if tipo == "response.completed" and ev.get("response") is not None:
             finale = ev["response"]
-            if not finale.get("output") and resto["items"]:
+            ricostruito = not finale.get("output") and bool(resto["items"])
+            if ricostruito:
                 finale["output"] = resto["items"]
-                _estrai_immagini(finale, base_url)
                 _log(f"stream: evento finale ricostruito con {len(resto['items'])} item")
+            immagini = _estrai_immagini(finale, base_url)
+            if ricostruito or immagini:
                 return b"data: " + json.dumps(ev).encode("utf-8")
         return riga
 
@@ -553,6 +624,7 @@ def install(app):
     try:
         from fastapi.responses import FileResponse, JSONResponse
 
+        _patch_responses_collector()
         _pulisci_vecchie()
 
         @app.get("/img/{nome}", include_in_schema=False)
