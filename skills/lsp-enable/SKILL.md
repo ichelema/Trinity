@@ -114,20 +114,14 @@ Do NOT claim code works without LSP diagnostics verification.
 
 ## LSP Availability Check
 
-Before LSP operations, verify setup:
-
-```bash
-# Environment variable must be set
-echo $ENABLE_LSP_TOOL  # Should output "1"
-
-# If not set, add to shell profile:
-export ENABLE_LSP_TOOL=1
-```
+The `LSP` tool is active as soon as a code-intelligence plugin for the file's
+language is enabled (see "Server Installation"): no environment variable needed.
 
 **If LSP unavailable:**
 
 1. **Warn user:** "LSP not available. Semantic operations will be less accurate."
-2. **Suggest fix:** "Set `ENABLE_LSP_TOOL=1` in your shell profile"
+2. **Suggest fix:** enable the language's plugin and put its server binary on
+   `PATH`; errors show in `/plugin` → **Errors** (e.g. `Executable not found in $PATH`)
 3. **Fall back:** Use Grep/Read with documented limitation
 4. **Note limitation:** "Used grep fallback - may include false positives"
 
@@ -135,10 +129,12 @@ export ENABLE_LSP_TOOL=1
 
 ## Server Installation
 
-LSP servers are launched by `scripts/bin/run-lsp.sh`, which resolves each server
-binary at runtime by name, in this order: mise shims (`~/.local/share/mise/shims`)
-→ tarball layout (`~/.local/bin/<name>/bin/`) → `PATH`. Install a server into any
-of those and the plugin will find it.
+LSP servers come from the official Claude Code plugins (`pyright-lsp`,
+`typescript-lsp`, `ruby-lsp`, `lua-lsp` from `claude-plugins-official`, enabled in
+`~/.claude/settings.json` → `enabledPlugins`). Each plugin launches its server by
+name from `PATH`: mise shims (`~/.local/share/mise/shims`) are on `PATH`, and
+`lua-language-server` is reached by adding `~/.local/bin/lua-language-server/bin`
+to `PATH`.
 
 Install with mise or the language's own package manager:
 
