@@ -1,6 +1,6 @@
 # Heuristics — Scored Critique Methodology
 
-Any skill can list anti-patterns. A scored critique is a defensible artifact a PM can action. Every finding gets a heuristic, a score (1-5), and an impact estimate. This file is the source of truth for the `/ui-craft:heuristic` command — the rubric, the laws, the output shape.
+Any skill can list anti-patterns. A scored critique is a defensible artifact a PM can action. Every finding gets a heuristic, a score (1-5), and an impact estimate. This file is the source of truth for the `/trinity:ui-craft:heuristic` command — the rubric, the laws, the output shape.
 
 ---
 
@@ -286,7 +286,7 @@ Rank findings in the final output by impact tag, not by heuristic order: `blocks
 
 ## Scoring Output Format
 
-The `/ui-craft:heuristic` command outputs **exactly** this structure. Do not invent new sections. Do not merge tables. Do not drop the ranking at the end.
+The `/trinity:ui-craft:heuristic` command outputs **exactly** this structure. Do not invent new sections. Do not merge tables. Do not drop the ranking at the end.
 
 ```markdown
 ## Heuristic Scorecard
@@ -359,7 +359,7 @@ Failed laws: Fitts, Doherty, Tesler = 3 → penalty `15`.
 
 ### Output
 
-Append this block to the `/ui-craft:heuristic` output, after Top findings:
+Append this block to the `/trinity:ui-craft:heuristic` output, after Top findings:
 
 ```markdown
 ## UsabilityScore

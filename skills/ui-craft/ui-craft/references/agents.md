@@ -6,13 +6,13 @@ Two read-only agents form the ui-craft **parallel verify team**. They complement
 
 ## The agents
 
-### `ui-craft:design-reviewer`
+### `trinity:design-reviewer`
 
 Adversarial design critique. Loads [review.md](review.md), the Anti-Slop and Craft Test sections from [../SKILL.md](../SKILL.md), and [heuristics.md](heuristics.md). Returns a severity-tagged findings table (Critical / Warning / Suggestion with `file:line`). Read-only — no edits, no code changes.
 
 **Triggers on:** "review UI/design quality", "audit a diff or PR for design issues", "adversarial design critique".
 
-### `ui-craft:a11y-auditor`
+### `trinity:a11y-auditor`
 
 Accessibility audit. Loads [accessibility.md](accessibility.md). Covers keyboard navigation, focus-visible, APCA contrast, ARIA roles and labels, touch targets, and reduced-motion. Returns a severity-tagged findings table. Read-only — no edits, no code changes.
 
@@ -43,7 +43,7 @@ Delegate both agents simultaneously on the same diff or file. They run in indepe
 
 **Pattern — parallel design + a11y verify on a PR diff:**
 
-> Delegate `ui-craft:design-reviewer` and `ui-craft:a11y-auditor` together on [target diff or file path]. Run both simultaneously. Each returns an independent severity-tagged findings table.
+> Delegate `trinity:design-reviewer` and `trinity:a11y-auditor` together on [target diff or file path]. Run both simultaneously. Each returns an independent severity-tagged findings table.
 
 The caller (orchestrator or user) receives two reports and decides which findings to act on. This is the recommended final-pass workflow before merging a UI change.
 

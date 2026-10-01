@@ -51,9 +51,9 @@ Evaluate in order: Value → Ease of Use → Delight. Aesthetic feedback that ar
 
 ## How to Use
 
-- **`/ui-craft:critique <file>`** — UX critique, flag issues, no code changes
-- **`/ui-craft:audit <file>`** — Technical audit (a11y, perf, responsive), severity-ranked
-- **`/ui-craft:polish <file>`** — Apply the Polish Pass compound details directly
+- **`/trinity:ui-craft:critique <file>`** — UX critique, flag issues, no code changes
+- **`/trinity:ui-craft:audit <file>`** — Technical audit (a11y, perf, responsive), severity-ranked
+- **`/trinity:ui-craft:polish <file>`** — Apply the Polish Pass compound details directly
 
 ---
 

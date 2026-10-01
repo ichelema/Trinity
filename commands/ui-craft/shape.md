@@ -113,6 +113,6 @@ Print-only is the default when `/shape` is run standalone. Step 6 is the offer; 
 
 - Produce a single Markdown block with all five steps, in order. Step 6 is the optional offer that follows.
 - Do **NOT** write JSX, CSS, or component code in this command.
-- End the output with: _"Ready to build? Review the shape, confirm the open questions, then run `/ui-craft:audit` (or use Build mode) once the code exists."_
+- End the output with: _"Ready to build? Review the shape, confirm the open questions, then run `/trinity:ui-craft:audit` (or use Build mode) once the code exists."_
 
 **Next step:** `/craft` — build the surface you just wireframed (rung 1).

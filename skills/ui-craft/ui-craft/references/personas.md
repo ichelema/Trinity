@@ -190,7 +190,7 @@ Each persona has a checklist. Every un-ticked box is a finding. Rank findings us
 
 ## How to Use
 
-Invoked by `/ui-craft:heuristic <target> --persona=<name>`:
+Invoked by `/trinity:ui-craft:heuristic <target> --persona=<name>`:
 
 | Arg | Persona | Loads |
 |-----|---------|-------|
