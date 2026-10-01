@@ -115,7 +115,7 @@ link_skill mattpocock-skills "$ROOT/vendor/mattpocock-skills"
 
 sect "6. ~/.claude/settings.json"
 # Non piu' generato da Trinity: lo gestisce chezmoi dal repo dotfiles
-# (ichelema/dotfiles, claude-settings/ + run_onchange_after_claude-settings.sh).
+# (ichelema/dotfiles, template dot_claude/settings.json.tmpl).
 echo "  [i  ] settings.json: chezmoi init --apply ichelema (prima volta) / chezmoi update"
 
 sect "7. Git hooks del repo"

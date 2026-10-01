@@ -92,21 +92,21 @@ Su un host Linux appena bootstrappato lo stato e' questo:
 |---|---|---|
 | `hindsight` | registrato dal bootstrap (§2 + rilancio in §4) | niente da fare |
 | `ticktick` | funziona identico (server remoto) | solo `TICKTICK_API_KEY` (§3) |
-| `notebooklm` | non parte, con un warning innocuo: `NOTEBOOKLM_DATA`/`NOTEBOOKLM_LIB` non sono definite | installa notebooklm-py su questo host e definisci le 2 variabili nel repo dotfiles, `claude-settings/linux.json` → `env`, coi path dell'installazione **Linux**, poi `chezmoi apply` (vedi README §10) |
+| `notebooklm` | non parte, con un warning innocuo: `NOTEBOOKLM_DATA`/`NOTEBOOKLM_LIB` non sono definite | installa notebooklm-py su questo host e definisci le 2 variabili nel repo dotfiles, `dot_claude/settings.json.tmpl` → blocco `env` Linux, coi path dell'installazione **Linux**, poi `chezmoi apply` (vedi README §10) |
 | `playwright` | parte ma muore subito: il bootstrap non installa `@playwright/mcp` | `mise -C ~/ai/trinity x -- npm install -g @playwright/mcp` **piu'** un browser: il `--browser chrome` in `.mcp.json` presuppone Google Chrome installato; su un server headless conviene disabilitarlo |
 | `obsidian_semantic_notes_vault` | in errore a ogni sessione: punta a `http://localhost:3002/mcp`, servito dal plugin MCP dentro Obsidian | ha senso solo dove gira Obsidian con quel plugin; su un server disabilitalo |
 | `ui-craft` (dal plugin vendorizzato, non da questo `.mcp.json`) | dichiarato nel `.mcp.json` di `vendor/ui-craft`: `npx -y ui-craft-mcp` | serve un `node`/`npx` raggiungibile nel PATH (quello di mise del bootstrap basta); se non vuoi il server, disabilitalo come gli altri |
 
-Per spegnere i server che non vuoi su questo host usa il layer per-macchina
-(`~/.claude/settings.json`), NON `.mcp.json` (versionato, condiviso tra gli OS):
+Per spegnere i server che non vuoi su questo host aggiungi la chiave nel blocco
+Linux del template `dot_claude/settings.json.tmpl` (repo dotfiles), NON in
+`.mcp.json` (versionato, condiviso tra gli OS):
 
 ```json
 { "disabledMcpjsonServers": ["playwright", "notebooklm", "obsidian_semantic_notes_vault"] }
 ```
 
-Chiavi come questa sopravvivono: il merge di chezmoi (repo dotfiles,
-`run_onchange_after_claude-settings.sh`) preserva le chiavi presenti solo nel
-file locale e sovrascrive soltanto quelle definite in `claude-settings/` (README §10).
+Non scriverla a mano in `~/.claude/settings.json`: il file è posseduto da chezmoi e il
+prossimo `chezmoi apply` la toglierebbe (README §10).
 
 ## 5. Primo avvio del server e import della memoria
 

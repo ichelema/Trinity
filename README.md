@@ -637,14 +637,14 @@ Il plugin non contiene path hardcoded: i valori che cambiano da macchina a macch
 da **variabili d'ambiente** nell'env utente di `~/.claude/settings.json`.
 
 Quel file **non si edita a mano** e **non è più in questo repo**: dal 2026-10-01 lo genera
-chezmoi dal repo dotfiles (`ichelema/dotfiles`) — `claude-settings/shared.json` (preferenze
-portabili) + `claude-settings/windows.json` / `linux.json` (env e path per OS), uniti con un
-merge a tre strati (locale → shared → overlay OS) che preserva le chiavi solo locali e fa
-backup `.bak`. Flusso: modifica nel repo dotfiles → push/pull → `chezmoi apply` (o
-`chezmoi update`) su ogni macchina. `TRINITY_PLUGIN_DIR` sta nell'overlay di ogni OS.
+chezmoi dal repo dotfiles (`ichelema/dotfiles`): un solo template `dot_claude/settings.json.tmpl`,
+con le parti che cambiano per OS (env, path, `statusLine`, `model`) in blocchi
+`{{ if eq .chezmoi.os "windows" }}`. Flusso: modifica il template → push/pull → `chezmoi apply`
+(o `chezmoi update`) su ogni macchina. chezmoi possiede l'intero file: se Claude lo riscrive a
+runtime, `apply` chiede prima di sovrascrivere. `TRINITY_PLUGIN_DIR` sta nel blocco env di ogni OS.
 
-Le variabili qui sotto vanno quindi nell'**overlay dell'OS** del repo dotfiles (es.
-`claude-settings/windows.json`):
+Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
+`dot_claude/settings.json.tmpl` del repo dotfiles:
 
 ```json
 {
@@ -679,7 +679,7 @@ una variabile separata.
 | root del progetto | `${CLAUDE_PROJECT_DIR}` (gli hook la ricevono da Claude Code) — già automatico |
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
-| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nell'overlay OS del repo dotfiles (`claude-settings/<os>.json`) |
+| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
