@@ -555,9 +555,7 @@
           "(?:come\\s+potre[im]|how\\s+(?:could|might)\\s+we).{0,50}(?:chiamar|nominar|design|architettur|name|approach)"
         ],
         "contentPatterns": [
-          "adhd\\s+\"",
-          "--frames\\s+\\d+",
-          "adhd-agent"
+          "adhd\\s+\""
         ],
         "contextPatterns": [
           "modalità adhd",

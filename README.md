@@ -246,7 +246,7 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `book-to-skill` | converte libri/documenti in skill strutturate |
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
-| `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming; variante CLI in §12.3 |
+| `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
 | `skill-creator` | crea, modifica e ottimizza skill: eval del triggering, benchmark degli output con variance analysis, ottimizzazione delle `description` |
 
@@ -264,7 +264,6 @@ collidono con i comandi locali del progetto:
 | `/trinity:hindsight-create-agent` | crea un subagent con memoria Hindsight isolata per namespace tag |
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
 | `/trinity:release` | versiona il plugin (bump, commit, tag) e push dopo conferma |
-| `/trinity:adhd-cli` | lancia la CLI `adhd-agent` (§12.3) con parametri formali (`--frames`, `--ideas`, `--top`, `--json`, …) |
 | `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
 
 ### `/trinity:dream` — audit della memoria
@@ -654,7 +653,6 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
     "NOTEBOOKLM_DATA": "E:/AI/tools/notebooklm-data",
     "NOTEBOOKLM_LIB": "E:/AI/tools/notebooklm",
     "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw",
-    "ADHD_LIB": "E:/AI/tools/adhd",
     "MCP_DEBUGGER_DIR": "E:/AI/tools/mcp-debugger",
     "MCP_NEOVIM_DIR": "E:/AI/tools/mcp-neovim-server"
   }
@@ -662,7 +660,7 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
 ```
 
 `NOTEBOOKLM_*` e `MCP_EXCALIDRAW_DIR` servono ai server MCP `notebooklm` ed
-`excalidraw`, `ADHD_LIB` alla CLI `adhd` (§12.3): puntano tutte a
+`excalidraw`: puntano tutte a
 strumenti esterni installati **fuori dal repo**: definiscile col path locale
 dell'installazione. Su un'altra macchina (o su Linux) i path cambiano — vanno
 messi quelli dell'installazione locale di quegli strumenti (vedi
@@ -683,7 +681,6 @@ una variabile separata.
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
-| CLI adhd (§12.3) | `${ADHD_LIB}` — **da definire per-macchina** (root dell'installazione di `adhd-agent`, non del repo); se manca, `scripts/bin/adhd` esce con errore esplicito |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
 | server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `D:/Sviluppo/Progetti`) |
 
@@ -968,25 +965,6 @@ API esposte: `/api/projects`, `/api/projects/:id/sessions`, `/api/context/:pid/:
 > `node web/node_modules/vite/bin/vite.js build` (dev: senza `build`, con `--root web`). L'anteprima nel
 > pannello usa `.claude/launch.json` (config `dashboard`, Roda su `:9292`).
 
-### 12.3 adhd-agent (CLI di ideazione divergente)
-
-[adhd](https://github.com/UditAkhourii/adhd) esiste in due forme: la **skill** `skills/adhd/`
-(solo Markdown, viaggia col repo, vedi §5) e la **CLI** `adhd-agent`, che esegue lo stesso
-metodo in autonomia via Claude Agent SDK (usa l'autenticazione di `claude` già presente)
-e accetta parametri formali: `--frames`, `--ideas`, `--top`, `--context`, `--json`, ….
-
-**Install exe-free (Windows/Eni):** niente npm — tarball scaricati con curl da
-`registry.npmjs.org` e scompattati a mano in `${ADHD_LIB}/node_modules/`
-(`adhd-agent` 0.1.4 già compilato + `@anthropic-ai/claude-agent-sdk` 0.1.77 +
-`p-limit` + `yocto-queue` + `zod`; l'SDK non ha dipendenze runtime obbligatorie).
-Su Linux, senza vincolo EDR, basta `npm install adhd-agent` in una cartella locale.
-
-**Invocazione:** il wrapper versionato `scripts/bin/adhd` risolve Node a runtime via
-`run-node.sh` (mise → PATH) e legge la root dell'installazione da `${ADHD_LIB}` (§10) —
-zero path hardcoded. Da una sessione: `/trinity:adhd-cli "problema" --frames 3`.
-Ogni run fa più chiamate LLM (minuti e quota reali: per prove usare
-`--frames 1 --ideas 2 --top 1 --model claude-haiku-*`).
-
 ---
 
 ## 13. Modelli alternativi: LiteLLM
@@ -1192,7 +1170,7 @@ Trinity/
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
-├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh) · bin/adhd
+├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh) · bin/
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```

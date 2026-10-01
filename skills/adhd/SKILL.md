@@ -195,24 +195,10 @@ These are how this skill goes wrong. Watch for them.
 About 5 to 10x a single-shot answer. Not for every keystroke. For decision
 points where the cost of the obvious answer is high.
 
-## Companion library and CLI
-
-There is a Node/TS implementation that does the same loop with structured
-JSON parsing, score weighting, and a CLI. Use it when running outside
-Claude Code or in batch.
-
-    npm install -g adhd-agent
-    adhd "your problem here"
-
-> **Local setup (Trinity):** do NOT `npm install` here — the CLI is already
-> installed per-machine (exe-free on Windows) and is invoked via the
-> versioned wrapper `scripts/bin/adhd` (requires the `ADHD_LIB` env var) or
-> the slash command `/trinity:adhd-cli`. Full flags, output structure, and
-> cheap-test recipe: `references/cli-reference.md`.
+## Upstream
 
 Code, paper, evals, and contributing guide at
-https://github.com/UditAkhourii/adhd. The skill above gives you the same
-loop inside Claude with no install required.
+https://github.com/UditAkhourii/adhd.
 
 ## Source spec
 
