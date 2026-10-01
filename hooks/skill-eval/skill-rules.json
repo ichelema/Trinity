@@ -804,6 +804,51 @@
           "skill description"
         ]
       }
+    },
+    "chezmoi": {
+      "description": "Chezmoi dotfile management: templating, cross-platform config, secrets",
+      "priority": 6,
+      "triggers": {
+        "keywords": [
+          "chezmoi",
+          "dotfile",
+          "dotfiles",
+          "chezmoi apply",
+          "chezmoi add",
+          "chezmoi diff",
+          "chezmoi edit"
+        ],
+        "keywordPatterns": [
+          "\\bchezmoi\\b",
+          "\\bdot\\s?files?\\b",
+          "\\bchezmoi\\s+(?:add|apply|diff|edit|init|update|re-add|cd|status|managed|forget)\\b",
+          "\\.chezmoi(?:ignore|root|data|externals?|templates|scripts)\\b"
+        ],
+        "pathPatterns": [
+          "**/.local/share/chezmoi/**",
+          "**/.chezmoi*",
+          "**/.config/chezmoi/**",
+          "**/*.tmpl"
+        ],
+        "intentPatterns": [
+          "(?:gestisci|sincronizza|aggiungi|aggiorna|versiona|configura).*(?:dotfile|chezmoi|configurazion[ei] (?:di|della) shell)",
+          "(?:manage|sync|add|update|track).*(?:dotfiles?|chezmoi)",
+          "(?:template|segret[oi]|secret).*(?:chezmoi|dotfile)"
+        ],
+        "contentPatterns": [
+          "private_dot_",
+          "\\bdot_[a-z]+rc\\b",
+          "run_once_",
+          "run_onchange_",
+          "\\{\\{\\s*\\.chezmoi\\."
+        ],
+        "contextPatterns": [
+          "con chezmoi",
+          "via chezmoi",
+          "nei dotfile",
+          "with chezmoi"
+        ]
+      }
     }
   }
 }
