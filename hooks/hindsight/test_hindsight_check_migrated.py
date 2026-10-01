@@ -159,7 +159,7 @@ class SentinelShutdownTests(unittest.TestCase):
         # NON devono contare: altri binari Anthropic e wrapper 'claude-*'.
         for p in (
             r"C:\Users\x\AppData\Local\AnthropicClaude\app-1.0\resources\chrome-native-host.exe",
-            "/e/msys64/home/Sphynx/.local/bin/claude-headroom.sh",
+            "/e/msys64/home/Sphynx/.local/bin/claude-wrapper.sh",
             "/usr/bin/zsh",
         ):
             self.assertFalse(win.search(p), f"conta un processo che non e' una sessione: {p}")
@@ -182,7 +182,7 @@ class SentinelShutdownTests(unittest.TestCase):
             "regex Linux non conta il lancio per nome (cmdline senza slash)",
         )
         self.assertFalse(
-            lin.search("claude-headroom.sh --loop"),
+            lin.search("claude-wrapper.sh --loop"),
             "regex Linux conta un wrapper claude-*",
         )
 
