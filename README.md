@@ -196,9 +196,24 @@ esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 
 | Modello | File letto dalla root del progetto |
 | --- | --- |
-| `claude-fable-5` | `CLAUDE_FABLE.md` |
-| `claude-opus-5` | `CLAUDE_OPUS.md` |
+| `claude-fable-5-1` | `CLAUDE_FABLE.md` |
+| `claude-opus-5-5` / `opus[1m]` | `CLAUDE_OPUS.md` |
+| `claude-sonnet-5-5` | `CLAUDE_SONNET.md` |
+| `claude-gpt-6-astra-high` (launcher GPT) | `CLAUDE_GPT.md` |
 | `claude-haiku-4-5-20251001` | `CLAUDE_HAIKU.md` |
+
+I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
+`CLAUDE_GPT.md`) seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonnet 5.5
+e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
+`trinity:fast-worker` per il lavoro meccanico, DeepSeek (`claude-deepseek-flash` via LiteLLM)
+come pari per le decisioni ad alto rischio.
+
+**Modelli degli agenti.** `agents/deep-reasoner.md` usa l'alias `model: fable` e
+`agents/fast-worker.md` l'alias `model: sonnet`. In una sessione normale gli alias diventano
+Fable 5.1 e Sonnet 5.5; con i launcher LiteLLM (§ sotto) ogni launcher li rimappa sui propri
+modelli tramite `ANTHROPIC_DEFAULT_FABLE_MODEL` e `ANTHROPIC_DEFAULT_SONNET_MODEL`. Non usare un
+model id completo (es. `claude-fable-5-1`) nel frontmatter: i launcher non lo rimappano e
+LiteLLM non lo conosce.
 
 Il nome è **derivato dall'id** del modello, non confrontato con una lista: per aggiungere un
 modello basta creare il file, senza toccare l'hook.
@@ -259,7 +274,7 @@ usando le daily note Obsidian come fonte di verità (a loro volta verificate
 sullo stato reale: config, file, comandi) e le trascrizioni delle sessioni
 come fonte ausiliaria. Copre TUTTI i progetti: ogni directory
 `~/.claude/projects/*/memory/` e ogni bank Hindsight (via REST, mai tool MCP).
-Gira in modalità multi-agente: subagent Opus 5 per i task, Fable orchestratore
+Gira in modalità multi-agente: subagent Opus (alias `opus`, oggi Opus 5.5) per i task, Fable orchestratore
 e controllore finale.
 
 Uso:
@@ -998,8 +1013,14 @@ tramite launcher shell che impostano le variabili d'ambiente corrette prima di l
 | `~/.litellm/litellm_config.yaml` | modelli, routing, `reasoning_effort` per tier |
 | `~/.litellm/callbacks.py` | hook LiteLLM (pre-call, post-call) |
 | `~/.local/bin/litellm-start-proxy.sh` | avvia il proxy via `litellm-proxy-run.py` |
+| `~/.local/bin/litellm-claude.sh` | launcher Claude Code → modelli Anthropic via Claude Max (OAuth) |
 | `~/.local/bin/litellm-gpt.sh` | launcher Claude Code → GPT/ChatGPT Max (OAuth) |
 | `~/.local/bin/litellm-deepseek.sh` | launcher Claude Code → DeepSeek (dal 2026-06-19) |
+| `~/.local/bin/litellm-kimi.sh` | launcher Claude Code → Kimi |
+
+Gli alias Anthropic in `litellm_config.yaml` puntano agli ultimi modelli: `claude-opus` →
+Opus 5.5, `claude-sonnet` → Sonnet 5.5, `claude-fable` → Fable 5.1, `claude-haiku` → Haiku 4.5;
+`claude-opus-4-6` resta disponibile come voce separata.
 
 Nel setup Windows descritto qui il DB di LiteLLM usa lo stesso Postgres embedded di
 Hindsight, ma su un database separato chiamato `litellm`.
@@ -1161,8 +1182,18 @@ CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1        # attiva il picker /model pe
 **Gestione dell'effort.** Claude Code invia l'effort via `/effort` nel campo
 `request.output_config.effort`, che LiteLLM diretto non mappa automaticamente. Soluzione: un
 alias per tier di reasoning per ciascun provider, ognuno con `reasoning_effort` fisso nel
-`litellm_config.yaml`, e le variabili `ANTHROPIC_DEFAULT_SONNET/OPUS/HAIKU_MODEL` nel launcher
-per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFlag: true`).
+`litellm_config.yaml`, e le variabili `ANTHROPIC_DEFAULT_SONNET/OPUS/HAIKU/FABLE_MODEL` nel
+launcher per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFlag: true`).
+
+`ANTHROPIC_DEFAULT_FABLE_MODEL` decide anche il modello del subagente `deep-reasoner`
+(`model: fable`):
+
+| Launcher | `deep-reasoner` usa |
+|---|---|
+| `litellm-claude.sh` | `claude-fable` (Fable 5.1) |
+| `litellm-gpt.sh` | `claude-gpt-5-6-sol-xhigh` |
+| `litellm-deepseek.sh` | `claude-deepseek-flash` |
+| `litellm-kimi.sh` | `claude-kimi-k3-max` |
 
 DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due modelli distinti —
 `claude-deepseek-v4-pro` (no thinking) e `claude-deepseek-v4-pro-thinking` (thinking abilitato).

@@ -39,7 +39,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 
 - Il command gira in modalità multi-agente: Fable (il modello della sessione)
   fa da ORCHESTRATORE e non delega la supervisione; i task di lavoro vanno a
-  subagent lanciati col tool Agent con `model: "opus"` (Opus 5).
+  subagent lanciati col tool Agent con `model: "opus"` (oggi Opus 5.5).
 - In AUDIT delega a subagent Opus, in parallelo quando indipendenti: lettura
   di daily e trascrizioni, audit file-based per progetto, audit di ciascun
   bank Hindsight, verifiche sul campo. Ogni subagent restituisce dati grezzi
