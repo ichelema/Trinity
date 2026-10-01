@@ -54,7 +54,7 @@ Claude Code dopo ogni modifica al repo.
 
 Con lo stesso meccanismo si caricano anche i **plugin di terze parti vendorizzati** in
 `vendor/` (§8): una junction per ciascuno, così ogni plugin mantiene il proprio namespace
-(`ui-craft:*`, `mattpocock-skills:*`) separato da `trinity:*`.
+(`ui-craft:*`) separato da `trinity:*`.
 
 **Ricreare le junction** (su un nuovo PC o dopo averle rimosse; su Linux sono symlink):
 
@@ -65,9 +65,6 @@ MSYS_NO_PATHCONV=1 cmd /c mklink /J \
 MSYS_NO_PATHCONV=1 cmd /c mklink /J \
   "%USERPROFILE%\.claude\skills\ui-craft" \
   "E:\AI\Claude\Trinity\vendor\ui-craft"
-MSYS_NO_PATHCONV=1 cmd /c mklink /J \
-  "%USERPROFILE%\.claude\skills\mattpocock-skills" \
-  "E:\AI\Claude\Trinity\vendor\mattpocock-skills"
 ```
 
 ---
@@ -381,23 +378,24 @@ Dal 2026-07-31 i plugin Claude Code di **terze parti** non passano più dal mark
 (`enabledPlugins` è vuoto): sono **vendorizzati** dentro il repo in `vendor/<nome>/` e
 caricati con lo stesso meccanismo skills-dir di Trinity (§2), una junction/symlink per
 plugin. Così viaggiano con `git push/pull` e ogni macchina è allineata senza install
-per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`, `mattpocock-skills:*`).
+per-macchina; ogni plugin conserva il proprio namespace (`ui-craft:*`).
 
 | Plugin | Versione | Cosa fa | Upstream |
 |---|---|---|---|
 | `ui-craft` | 1.0.0 | design engineering per agenti: anti-slop UI, spec-driven design (`/sddesign`), agent design-review + a11y, MCP quality gates | [educlopez/ui-craft](https://github.com/educlopez/ui-craft) |
-| `mattpocock-skills` | 1.2.0 | 22 skill di ingegneria curate dal plugin.json upstream (grilling, TDD, code review, domain modelling, spec/ticket flow) | [mattpocock/skills](https://github.com/mattpocock/skills) |
 
 Com'è fatta una cartella `vendor/<nome>/`:
 
 - **copia snella** dell'upstream: solo `skills/`, `commands/`, `agents/`, `hooks/`,
   `.claude-plugin/plugin.json`, `.mcp.json`, `LICENSE` — niente CLI, e2e, asset;
-- **`VENDOR.txt`**: upstream, versione/commit e procedura di aggiornamento. Due metodi:
-  gli upstream **snelli** (`mattpocock-skills`) sono vendorizzati interi
-  via **`git subtree --squash`** e si aggiornano con
-  `git subtree pull --prefix vendor/<nome> <url upstream> main --squash`;
-  `ui-craft` (upstream pesante: CLI Go, e2e — e subtree non sa prendere una
-  sottocartella) resta a **copia manuale** delle sole dir utili.
+- **`VENDOR.txt`**: upstream, versione/commit e procedura di aggiornamento a
+  **copia manuale** delle sole dir utili (l'upstream è pesante: CLI Go, e2e).
+
+Caso a parte: le **skill di Matt Pocock** ([mattpocock/skills](https://github.com/mattpocock/skills),
+MIT, v1.2.3) non sono un plugin separato ma vivono in `skills/mattpocock-skills/<skill>/`
+e si caricano come `trinity:<skill>` (la cartella è dichiarata in `.claude-plugin/plugin.json`,
+campo `skills`). Copia manuale delle sole skill elencate nel `plugin.json` upstream, senza i
+metadati Codex (`agents/openai.yaml`); `README.md` e `LICENSE` upstream restano nella cartella.
 - il server MCP di `ui-craft` (`npx -y ui-craft-mcp`) è dichiarato nel suo `.mcp.json`
   e viene caricato anche via skills-dir;
 > `yt-extract` non è più in questo elenco: dal 2026-07-03 è una **skill** di Trinity
@@ -1058,7 +1056,7 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── vendor/                  plugin terzi vendorizzati: ui-craft · mattpocock-skills (junction/symlink in ~/.claude/skills/, §8)
+├── vendor/                  plugin terzi vendorizzati: ui-craft (junction/symlink in ~/.claude/skills/, §8)
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
