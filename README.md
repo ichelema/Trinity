@@ -56,8 +56,7 @@ Con lo stesso meccanismo si caricano anche i **plugin di terze parti vendorizzat
 `vendor/` (§8): una junction per ciascuno, così ogni plugin mantiene il proprio namespace
 (`ui-craft:*`, `mattpocock-skills:*`) separato da `trinity:*`.
 
-**Ricreare le junction** (su un nuovo PC o dopo averle rimosse; su Linux le crea
-`scripts/setup/bootstrap-linux.sh` come symlink, funzione `link_skill`):
+**Ricreare le junction** (su un nuovo PC o dopo averle rimosse; su Linux sono symlink):
 
 ```bash
 MSYS_NO_PATHCONV=1 cmd /c mklink /J \
@@ -663,8 +662,7 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
 `excalidraw`: puntano tutte a
 strumenti esterni installati **fuori dal repo**: definiscile col path locale
 dell'installazione. Su un'altra macchina (o su Linux) i path cambiano — vanno
-messi quelli dell'installazione locale di quegli strumenti (vedi
-`docs/SETUP-LINUX.md`). Senza queste variabili quei due server non partono (warning
+messi quelli dell'installazione locale di quegli strumenti. Senza queste variabili quei due server non partono (warning
 in avvio, resto invariato); `excalidraw` è comunque `disabled` di default.
 
 Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
@@ -678,7 +676,7 @@ una variabile separata.
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
-| token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
+| token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
@@ -767,114 +765,12 @@ Strumenti di **terze parti** usati accanto a Trinity ma che **non** fanno parte 
 fuori dal repo, si installano per-macchina e — a differenza dei plugin (§8) — non si caricano in
 Claude Code, sono processi/proxy esterni.
 
-### 12.1 Headroom (compressione del contesto via proxy)
-
-[Headroom](https://github.com/chopratejas/headroom) comprime il contesto che arriva all'LLM
-(output di tool, log, file, RAG, cronologia) — stessi risultati, **meno token**. Si usa come
-**proxy locale** davanti all'API Anthropic: zero modifiche al codice.
-
-**Vincolo PC Eni:** l'EDR blocca i `.exe`. Headroom è installato **exe-free** (come `notebooklm-py`
-e `yt-extract`): wheel scompattati a mano, mai `pip install`. Il nodo è che la compressione gira in
-un **core Rust** (`headroom._core`) e su PyPI **non esiste un wheel Windows** → il core è stato
-**compilato in locale** con la toolchain Rust di pacman, senza creare `.exe` nuovi.
-
-| Voce | Valore |
-|---|---|
-| Repo sorgente | `E:/AI/tools/headroom` (v0.27.0) |
-| Pacchetto runtime | `E:/AI/tools/headroom-pkg` (dipendenze + `headroom/` + `_core.pyd`) |
-| Python | mise 3.13.13 |
-| Toolchain build | `mingw-w64-ucrt-x86_64-rust` (`/ucrt64/bin/cargo`, target gnu, linker gcc) |
-| Motore compressione | SmartCrusher (JSON) / CodeCompressor (AST) — algoritmici, locali, lingua-agnostici; **niente** modello ML inglese |
-
-#### Installazione (riepilogo)
-
-Le dipendenze sono scaricate con `pip download` e **scompattate a mano** (mai `pip install`, che
-creerebbe i `.exe` dei `console_scripts`). Set minimale: `fastapi`, `uvicorn`, `httpx`, `tiktoken`,
-`pydantic`, `click`, `rich`, `tree-sitter`. **Esclusi** gli extra ML (`onnxruntime`, `transformers`,
-`torch`, `magika`, `fastembed`) — sono lazy, e il loro modello testo (Kompress/ModernBERT) è tarato
-sull'inglese, inutile per la prosa italiana. Escluso anche `ast_grep_cli` (unico wheel con `.exe`
-interni); la compressione del codice usa `tree-sitter`.
-
-Ricompilare il core Rust `_core.pyd` (serve solo se aggiorni il repo):
-
-```bash
-cd E:/AI/tools/headroom
-export PATH="/ucrt64/bin:$PATH"
-export CARGO_HTTP_CHECK_REVOKE=false   # il proxy MITM Eni rompe il check di revoca di schannel
-cargo build --release -p headroom-py --features extension-module
-cp target/release/_core.dll E:/AI/tools/headroom-pkg/headroom/_core.pyd
-```
-
-Verifica finale: **nessun `.exe`** nel pacchetto — `find E:/AI/tools/headroom-pkg -iname '*.exe'`
-deve essere vuoto.
-
-#### Avvio
-
-Due launcher:
-
-| Launcher | Cosa fa |
-|---|---|
-| `E:/AI/tools/headroom-pkg/headroom.sh` | base: imposta `PYTHONPATH` + `HEADROOM_BINARIES_OFFLINE=1` (blocca il fetch a runtime di `difft.exe`/`scc.exe`) e lancia `python -m headroom.cli`. Per i comandi statistiche/dashboard. |
-| `~/.local/bin/claude-headroom.sh` | integrato: avvia il proxy su `:8787`, punta `ANTHROPIC_BASE_URL` al proxy e lancia `claude`; replica le env dell'alias zsh `claude` (`HOME`/`USERPROFILE`/`CLAUDE_CONFIG_DIR`). Allo stop di Claude ferma il proxy se l'ha avviato lui. |
-
-```bash
-claude-headroom.sh            # avvia proxy + Claude attraverso la compressione
-```
-
-> ⚠️ Distinto dai launcher LiteLLM (§13): `claude-headroom.sh` punta a Headroom (`:8787`),
-> `litellm-*.sh` puntano a LiteLLM (`:4000`). Entrambi impostano `ANTHROPIC_BASE_URL` → non
-> mescolarli nella stessa sessione.
-
-#### Monitoraggio (dashboard web)
-
-Con il proxy attivo:
-
-```bash
-E:/AI/tools/headroom-pkg/headroom.sh dashboard      # apre http://127.0.0.1:8787/dashboard
-```
-
-| Comando / endpoint | Cosa mostra |
-|---|---|
-| `headroom.sh dashboard` | UI web **live**: risparmi in tempo reale |
-| `headroom.sh savings` | riepilogo persistente (ledger `~/.headroom/savings_events.jsonl`) |
-| `headroom.sh perf --hours 24` | analisi dai log: token salvati, cache hit, breakdown dei transform |
-| `curl http://127.0.0.1:8787/stats` | statistiche grezze (anche `/stats-history`, `/health`) |
-| `http://127.0.0.1:8787/dashboard` | nel browser vedo la dashboard |
-
-I **token** risparmiati sono tracciati; il valore in **€** resta `0` perché richiede LiteLLM,
-escluso di proposito.
-
-> **Perché il `SAVED` è spesso ~0%?** Headroom preserva il **prompt caching** di Anthropic e
-> protegge il contesto recente: su una sessione di coding con cache piena comprime poco (la cache
-> fa già il risparmio grosso), mentre rende molto su grossi output di tool / JSON. Per comprimere
-> anche le **letture vecchie**, `claude-headroom.sh` imposta
-> `HEADROOM_STALE_READ_COMPRESS_AFTER_TURNS=2` (letture più vecchie di 2 turni diventano
-> comprimibili; alza il valore per essere più conservativo, `0` disattiva). Trade-off: possibili
-> cache miss sul prefix — tieni d'occhio anche la **latenza** in dashboard.
-
-#### Attribuzione per progetto ("Per-Project Savings")
-
-La dashboard ha una sezione **Per-Project Savings** che separa i risparmi per progetto
-invece di un unico totale. Il proxy riconosce un prefisso `/p/<nome>` nel path del base
-URL (`proxy/project_context.py` → `split_project_path`): il primo segmento dopo `/p/`
-viene url-decodato e sanitizzato (solo caratteri stampabili) come nome progetto.
-
-`claude-headroom.sh` accoda automaticamente `/p/<basename della cartella corrente>` a
-`ANTHROPIC_BASE_URL` (gli spazi sono encodati `%20`). Esempio: lanciato da
-`…/Claude/Trinity` la sessione usa `http://127.0.0.1:8787/p/Trinity` e nella dashboard
-compare la riga **`Trinity`** (verificato live). Il nome segue sempre la cartella: nessun
-override.
-
-> Il base URL viene letto **all'avvio** di `claude`: una sessione già in corso non cambia
-> attribuzione a caldo. Per attivarla apri una **nuova** sessione col launcher dalla cartella
-> del progetto — le sessioni Headroom convivono (multi-sessione).
-
-### 12.2 Context Window Dashboard (analisi dei token del contesto)
+### 12.1 Context Window Dashboard (analisi dei token del contesto)
 
 Web app **locale** che analizza la **context window** di Claude Code: cosa entra in contesto e quanti
 token costa, leggendo i **transcript reali** in `.claude/projects` (nessun dato finto). Una sola vista
 "ciclo di vita" — la composizione pre-prompt più la timeline di ogni interazione — che si aggiorna
-**live** mentre lavori. A differenza di Headroom (proxy che _riduce_ i token), questa solo _analizza_;
+**live** mentre lavori. Non riduce i token, li _analizza_ soltanto;
 gira come processo esterno e non fa parte del plugin.
 
 | Voce | Valore |
@@ -1170,7 +1066,7 @@ Trinity/
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
-├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh) · bin/
+├── scripts/                 script di servizio: bin/
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```

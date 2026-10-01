@@ -46,9 +46,8 @@ HINDSIGHT_API_LLM_MODEL = "gpt-4.1-mini"
 # La chiave viene risolta a runtime dall'env utente (OPENAI_API_KEY), non hardcodata qui.
 # default(''): il fail-fast sulla chiave mancante NON può stare qui. Questo blocco [env]
 # mise lo valuta prima di OGNI comando, quindi senza default il template rompe anche
-# `mise install`, `stop-hindsight`, `db-dump`, `cp-check` — che con OpenAI non c'entrano —
-# e il bootstrap Linux, che gira PRIMA che le chiavi siano impostate (SETUP-LINUX.md §2
-# vs §3). La validazione è in [tasks.start-hindsight], l'unico task che usa davvero il LLM.
+# `mise install`, `stop-hindsight`, `db-dump`, `cp-check` — che con OpenAI non c'entrano.
+# La validazione è in [tasks.start-hindsight], l'unico task che usa davvero il LLM.
 HINDSIGHT_API_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 # Salta la chiamata di verifica LLM al boot (2026-06-12): avvio più rapido per
 # hindsight-ensure-up.sh a inizio sessione, e niente hang se il proxy ENINET fa MITM.
@@ -296,7 +295,7 @@ shell = "bash -c"
 # (default('') sul template) e gli errori di embed finirebbero solo in /tmp/hs.log,
 # mentre il task uscirebbe comunque con 0. VOYAGE_API_KEY resta senza guardia: senza
 # chiave il recall degrada (niente rerank), non muore.
-run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-... (vedi docs/SETUP-LINUX.md sezione 3)}"; : "${GEMINI_API_KEY:?manca la chiave: export GEMINI_API_KEY=... (vedi docs/SETUP-LINUX.md sezione 3)}"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
+run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-...}"; : "${GEMINI_API_KEY:?manca la chiave: export GEMINI_API_KEY=...}"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
 
 [tasks.stop-hindsight]
 description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"

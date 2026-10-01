@@ -21,13 +21,6 @@ hooks/hindsight/benchmark/artifacts/
 *.count
 *.state
 
-# Documentazione locale: appunti di setup e procedure una tantum, non fanno parte
-# del plugin. Le eccezioni sono i documenti che devono viaggiare su altre macchine.
-/docs/*
-!/docs/SETUP-LINUX.md
-!/docs/MIGRAZIONE-EMBEDDING-LINUX.md
-!/docs/PLAN-MENTAL-MODELS-PER-PROJECT.md
-
 .claude/worktrees/
 
 # File locali generati, non da versionare.
