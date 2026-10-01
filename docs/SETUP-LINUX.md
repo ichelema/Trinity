@@ -21,14 +21,14 @@ sudo apt-get install -y ffmpeg                    # opzionale: yt-extract, suoni
 ## 2. Clone e bootstrap
 
 ```bash
-git clone git@github.com:ichelema/Trinity.git ~/ai/trinity
-cd ~/ai/trinity
+git clone git@github.com:ichelema/Trinity.git /Dati/AI/Claude/Trinity
+cd /Dati/AI/Claude/Trinity
 bash scripts/setup/bootstrap-linux.sh
 ```
 
 Il bootstrap e' **idempotente** (rieseguibile). Fa: mise + runtime del repo,
 `hindsight-api` via pip, `mcp-remote` via npm, i symlink skills-dir
-(`~/.claude/skills/trinity -> ~/ai/trinity` **piu' uno per ogni plugin
+(`~/.claude/skills/trinity -> /Dati/AI/Claude/Trinity` **piu' uno per ogni plugin
 vendorizzato** in `vendor/`: `ui-craft`, `mattpocock-skills` — funzione
 `link_skill`, README §8), `core.hooksPath .githooks`, registrazione MCP
 `hindsight` a scope user, `~/backups/hindsight`.
@@ -93,7 +93,7 @@ Su un host Linux appena bootstrappato lo stato e' questo:
 | `hindsight` | registrato dal bootstrap (§2 + rilancio in §4) | niente da fare |
 | `ticktick` | funziona identico (server remoto) | solo `TICKTICK_API_KEY` (§3) |
 | `notebooklm` | non parte, con un warning innocuo: `NOTEBOOKLM_DATA`/`NOTEBOOKLM_LIB` non sono definite | installa notebooklm-py su questo host e definisci le 2 variabili nel repo dotfiles, `dot_claude/settings.json.tmpl` → blocco `env` Linux, coi path dell'installazione **Linux**, poi `chezmoi apply` (vedi README §10) |
-| `playwright` | parte ma muore subito: il bootstrap non installa `@playwright/mcp` | `mise -C ~/ai/trinity x -- npm install -g @playwright/mcp` **piu'** un browser: il `--browser chrome` in `.mcp.json` presuppone Google Chrome installato; su un server headless conviene disabilitarlo |
+| `playwright` | parte ma muore subito: il bootstrap non installa `@playwright/mcp` | `mise -C /Dati/AI/Claude/Trinity x -- npm install -g @playwright/mcp` **piu'** un browser: il `--browser chrome` in `.mcp.json` presuppone Google Chrome installato; su un server headless conviene disabilitarlo |
 | `obsidian_semantic_notes_vault` | in errore a ogni sessione: punta a `http://localhost:3002/mcp`, servito dal plugin MCP dentro Obsidian | ha senso solo dove gira Obsidian con quel plugin; su un server disabilitalo |
 | `ui-craft` (dal plugin vendorizzato, non da questo `.mcp.json`) | dichiarato nel `.mcp.json` di `vendor/ui-craft`: `npx -y ui-craft-mcp` | serve un `node`/`npx` raggiungibile nel PATH (quello di mise del bootstrap basta); se non vuoi il server, disabilitalo come gli altri |
 
@@ -111,7 +111,7 @@ prossimo `chezmoi apply` la toglierebbe (README §10).
 ## 5. Primo avvio del server e import della memoria
 
 ```bash
-mise -C ~/ai/trinity run start-hindsight   # pg0 scarica i binari Postgres Linux
+mise -C /Dati/AI/Claude/Trinity run start-hindsight   # pg0 scarica i binari Postgres Linux
                                            # e crea un cluster NUOVO in ~/.pg0 (ext4)
 curl -fsS -m 3 http://127.0.0.1:8888/ -o /dev/null -w "%{http_code}\n"  # 404 = up
 ```
@@ -125,8 +125,8 @@ printf '%s\n' "$(ls ~/backups/hindsight/hindsight-*.dump | sort | tail -1 | xarg
 # oppure montando la chiavetta NTFS (sola lettura basta):
 #   sudo mount -o ro /dev/sdX1 /mnt/usb && cp /mnt/usb/var/backups/hindsight/* ~/backups/hindsight/
 
-mise -C ~/ai/trinity run db-restore
-mise -C ~/ai/trinity run start-hindsight   # il restore ferma il server MCP
+mise -C /Dati/AI/Claude/Trinity run db-restore
+mise -C /Dati/AI/Claude/Trinity run start-hindsight   # il restore ferma il server MCP
 ```
 
 ## 6. Flusso quotidiano (uso alternato, mai concorrente)
@@ -204,7 +204,7 @@ cookie del browser).
 ## 8. Verifica end-to-end
 
 ```bash
-cd ~/ai/trinity
+cd /Dati/AI/Claude/Trinity
 bash hooks/hindsight/tools/hindsight-check.sh        # diagnostica live (attesi OK; SKIP recall/retain se disabilitati)
 python -m unittest discover -s hooks/hindsight -p 'test_*.py'   # test unit (senza server; python3 se serve)
 python hooks/hindsight/lib/hindsight_config.py --banks   # risoluzione bank (python3 se serve)
