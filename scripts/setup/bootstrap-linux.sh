@@ -113,13 +113,10 @@ link_skill trinity "$ROOT"
 link_skill ui-craft "$ROOT/vendor/ui-craft"
 link_skill mattpocock-skills "$ROOT/vendor/mattpocock-skills"
 
-sect "6. Sync ~/.claude/settings.json (config/claude/ shared + overlay linux)"
-# Merge idempotente: shared + settings.linux.json vincono sulle chiavi che
-# definiscono, le chiavi solo locali restano, backup .bak prima di scrivere.
-# Stesso script del task `mise run sync-settings` usato su Windows.
-"$MISE" -C "$ROOT" x -- python "$ROOT/scripts/setup/sync-claude-settings.py" "$HOME/.claude/settings.json" \
-	|| warn "sync di settings.json fallito"
-echo "  [i  ] OBSIDIAN_VAULT/OBSIDIAN_VAULT_NAME: aggiungile a config/claude/settings.linux.json solo se il vault esiste su questa macchina"
+sect "6. ~/.claude/settings.json"
+# Non piu' generato da Trinity: lo gestisce chezmoi dal repo dotfiles
+# (ichelema/dotfiles, claude-settings/ + run_onchange_after_claude-settings.sh).
+echo "  [i  ] settings.json: chezmoi init --apply ichelema (prima volta) / chezmoi update"
 
 sect "7. Git hooks del repo"
 if [ "$(git -C "$ROOT" config core.hooksPath 2> /dev/null)" = ".githooks" ]; then

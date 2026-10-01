@@ -636,16 +636,15 @@ vivono in `hooks/hindsight/test_*.py` (`python -m unittest`, senza server — IC
 Il plugin non contiene path hardcoded: i valori che cambiano da macchina a macchina vengono 
 da **variabili d'ambiente** nell'env utente di `~/.claude/settings.json`.
 
-Dal 2026-07-31 quel file **non si edita più a mano**: è generato dai file versionati in
-`config/claude/` — `settings.shared.json` (preferenze portabili, uguali ovunque) +
-`settings.windows.json` / `settings.linux.json` (env e path per OS) — con un merge a tre
-strati (locale → shared → overlay OS) che preserva le chiavi solo locali e fa backup `.bak`.
-Flusso: modifica in `config/claude/` → push/pull → **`mise run sync-settings`** su ogni
-macchina (su Linux lo esegue anche `bootstrap-linux.sh`, sezione 6). `TRINITY_PLUGIN_DIR`
-è calcolata dallo script dalla posizione del repo, mai scritta negli overlay.
+Quel file **non si edita a mano** e **non è più in questo repo**: dal 2026-10-01 lo genera
+chezmoi dal repo dotfiles (`ichelema/dotfiles`) — `claude-settings/shared.json` (preferenze
+portabili) + `claude-settings/windows.json` / `linux.json` (env e path per OS), uniti con un
+merge a tre strati (locale → shared → overlay OS) che preserva le chiavi solo locali e fa
+backup `.bak`. Flusso: modifica nel repo dotfiles → push/pull → `chezmoi apply` (o
+`chezmoi update`) su ogni macchina. `TRINITY_PLUGIN_DIR` sta nell'overlay di ogni OS.
 
-Le variabili qui sotto vanno quindi nell'**overlay dell'OS** (es.
-`config/claude/settings.windows.json`):
+Le variabili qui sotto vanno quindi nell'**overlay dell'OS** del repo dotfiles (es.
+`claude-settings/windows.json`):
 
 ```json
 {
@@ -680,7 +679,7 @@ una variabile separata.
 | root del progetto | `${CLAUDE_PROJECT_DIR}` (gli hook la ricevono da Claude Code) — già automatico |
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
-| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **automatica**: la scrive `sync-settings` dalla posizione del repo |
+| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nell'overlay OS del repo dotfiles (`claude-settings/<os>.json`) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`, vedi `docs/SETUP-LINUX.md`) |
 | server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
@@ -1209,8 +1208,6 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── config/
-│   └── claude/              settings.shared.json + overlay per OS → genera ~/.claude/settings.json (mise run sync-settings, §10)
 ├── vendor/                  plugin terzi vendorizzati: ui-craft · mattpocock-skills (junction/symlink in ~/.claude/skills/, §8)
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
 ├── hooks/
@@ -1219,7 +1216,7 @@ Trinity/
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
-├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh, sync-claude-settings.py) · bin/adhd · deploy litellm
+├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh) · bin/adhd · deploy litellm
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```
