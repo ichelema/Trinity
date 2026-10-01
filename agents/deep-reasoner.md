@@ -1,6 +1,7 @@
 ---
 name: deep-reasoner
-description: Analisi ad alto ragionamento: architettura, debug complesso,
+description: >-
+  Analisi ad alto ragionamento: architettura, debug complesso,
   design di algoritmi, decisioni con trade-off. Restituisce una conclusione
   concisa su cui l'orchestratore può agire; implementa solo se il task lo
   chiede esplicitamente.
