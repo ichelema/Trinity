@@ -1005,7 +1005,9 @@ esiste un approccio attivo su questa macchina:
 LiteLLM espone un endpoint OpenAI-compatible a `http://127.0.0.1:4000`. Claude Code ci punta
 tramite launcher shell che impostano le variabili d'ambiente corrette prima di lanciare `claude`.
 
-**File coinvolti** (tutti fuori dal repo Trinity, sulla macchina):
+**File coinvolti** (fuori dal repo Trinity: dal 2026-10-01 li gestisce chezmoi nel repo dotfiles
+`ichelema/dotfiles` — `dot_litellm/` per config e moduli, `dot_local/bin/` per i launcher; si
+modifica il source chezmoi, poi `chezmoi apply`. `master-key.txt` e `logs/` restano solo locali):
 
 | File | Ruolo |
 |---|---|
@@ -1027,8 +1029,10 @@ Hindsight, ma su un database separato chiamato `litellm`.
 #### Il proxy su Linux (dal 2026-08-14)
 
 Stessi file e stessi nomi, ma tre differenze da conoscere prima di mettere mano al
-proxy su una macchina Linux. Vivono tutti **fuori dal repo**, quindi non arrivano col
-`git pull`: vanno rifatti per macchina.
+proxy su una macchina Linux. Config, moduli e launcher Claude arrivano con `chezmoi update`;
+`litellm-proxy-run.py`, `litellm-start-proxy.sh` e `litellm-pg-ensure.py` invece sono
+Windows-specifici e il `.chezmoiignore` dei dotfiles li esclude su Linux: lì restano le
+versioni locali, da rifare per macchina.
 
 **Il launcher Windows non gira su Linux.** `litellm-proxy-run.py` esiste per aggirare un
 problema di console group di Windows: installa un guard sui CTRL_C e patcha
