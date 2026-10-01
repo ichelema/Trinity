@@ -392,14 +392,6 @@ description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla 
 shell = "bash -c"
 run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
 
-# --- Git hooks -------------------------------------------------------------
-# Attiva gli hook versionati in .githooks/ (non tracciati in .git/hooks/).
-# Da rilanciare una volta per ogni clone nuovo del repo.
-[tasks.install-git-hooks]
-description = "Configura git per usare .githooks/ (post-commit/post-merge: ridistribuiscono la callback LiteLLM se scripts/litellm-callbacks.py cambia)."
-shell = "bash -c"
-run = "git config core.hooksPath .githooks && echo 'core.hooksPath = .githooks'"
-
 # --- Release plugin --------------------------------------------------------
 # Parte meccanica della release: bump version + commit + tag LOCALE.
 # NON fa push (lo gestisce /trinity:release con conferma). Uso: mise run release 0.6.12

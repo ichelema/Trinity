@@ -1131,39 +1131,11 @@ correttamente al modello.
 > (es. `claude-gpt-5-5`), non il nome reale (`chatgpt/gpt-5.5`), perché il routing avviene
 > dopo. Il match nella callback copre entrambi i prefissi: `claude-gpt-` e `chatgpt/`.
 
-**Versioning e deploy automatico di `callbacks.py`.** La sorgente è versionata in questo
-repo come `scripts/litellm-callbacks.py`. Il file che LiteLLM carica effettivamente è la
-copia in `~/.litellm/callbacks.py` (o `$LITELLM_CONFIG_DIR/callbacks.py`).
-
-Per non dover copiare manualmente dopo ogni modifica, il repo usa **git hook versionati**
-in `.githooks/`:
-
-| File | Scopo |
-|---|---|
-| `.githooks/post-commit` | si attiva dopo ogni `git commit` |
-| `.githooks/post-merge` | si attiva dopo `git merge` / `git pull` |
-| `.githooks/lib/litellm-deploy-common.sh` | logica condivisa: controlla se `scripts/litellm-callbacks.py` è tra i file cambiati; se sì chiama `scripts/deploy-litellm-callback.sh` |
-| `scripts/deploy-litellm-callback.sh` | copia la sorgente in `$LITELLM_CONFIG_DIR` (default `~/.litellm/`) e avvisa di riavviare il proxy |
-
-Gli hook si attivano **solo se `scripts/litellm-callbacks.py` è tra i file modificati**,
-quindi non c'è overhead su commit normali.
-
-> **Nota path:** gli hook usano il git MSYS2 (`/usr/bin/git`) dove `$HOME` punta a
-> `E:\msys64\home\Sphynx`. Con Git-for-Windows `$HOME` sarebbe `C:\Users\EN27553` e il
-> deploy finirebbe nel posto sbagliato.
-
-Per attivare gli hook nel clone locale (operazione una tantum):
-
-```bash
-git -C "$TRINITY_PLUGIN_DIR" config core.hooksPath .githooks
-```
-
-Verifica che sia già impostato:
-
-```bash
-git -C "$TRINITY_PLUGIN_DIR" config core.hooksPath
-# deve rispondere: .githooks
-```
+**Versioning di `callbacks.py` e del resto di `~/.litellm/`.** Config (`litellm_config.yaml`),
+moduli Python (`callbacks.py`, `responses_bridge.py`) e relativi test non stanno più in questo
+repo: dal 2026-10-01 sono gestiti da chezmoi nel repo dotfiles (`ichelema/dotfiles`,
+`dot_litellm/`). Si modifica il source chezmoi, poi `chezmoi apply` e riavvio del proxy.
+`master-key.txt`, `pgdata/` e `logs/` restano solo locali.
 
 **Variabili d'ambiente comuni nei launcher:**
 
@@ -1216,7 +1188,7 @@ Trinity/
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
-├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh) · bin/adhd · deploy litellm
+├── scripts/                 script di servizio: setup/ (bootstrap-linux.sh) · bin/adhd
 ├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```

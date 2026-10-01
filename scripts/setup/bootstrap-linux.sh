@@ -118,14 +118,7 @@ sect "6. ~/.claude/settings.json"
 # (ichelema/dotfiles, template dot_claude/settings.json.tmpl).
 echo "  [i  ] settings.json: chezmoi init --apply ichelema (prima volta) / chezmoi update"
 
-sect "7. Git hooks del repo"
-if [ "$(git -C "$ROOT" config core.hooksPath 2> /dev/null)" = ".githooks" ]; then
-	ok "core.hooksPath gia' .githooks"
-else
-	git -C "$ROOT" config core.hooksPath .githooks && ok "core.hooksPath impostato"
-fi
-
-sect "8. Server MCP hindsight (scope user)"
+sect "7. Server MCP hindsight (scope user)"
 SHIM="$ROOT/hooks/hindsight/mcp/hindsight-mcp-shim.sh"
 if command -v claude > /dev/null 2>&1; then
 	if claude mcp get hindsight > /dev/null 2>&1; then
@@ -140,10 +133,10 @@ else
 	warn "claude CLI non trovato: la registrazione MCP e' saltata — rilancia questo script (idempotente) dopo aver installato claude"
 fi
 
-sect "9. Directory dei backup DB"
+sect "8. Directory dei backup DB"
 mkdir -p "$HOME/backups/hindsight" && ok "~/backups/hindsight pronta"
 
-sect "10. Language server (LSP) — opzionali, per la navigazione codice"
+sect "9. Language server (LSP) — opzionali, per la navigazione codice"
 # .lsp.json abilita 4 server; run-lsp.sh li risolve via shim mise, ~/.local/bin
 # (tarball) o PATH. Come per i prerequisiti di sistema al passo 1, il bootstrap NON
 # li installa: li rileva e, se mancano, stampa il comando (niente sudo qui dentro).
@@ -171,7 +164,7 @@ else
 	warn "LSP mancanti (opzionali):$MISSING_LSP — installali col package manager della distro (su Arch: extra/*, un solo pacman -S)"
 fi
 
-sect "11. Server MCP opzionali del plugin (playwright, notebooklm, obsidian)"
+sect "10. Server MCP opzionali del plugin (playwright, notebooklm, obsidian)"
 # .mcp.json versionato definisce anche server pensati per il PC Windows. Come per
 # gli LSP al passo 10: si rileva e si segnala, niente install automatico. Dettagli
 # e alternativa disabledMcpjsonServers in docs/SETUP-LINUX.md ("Server MCP del

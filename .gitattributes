@@ -13,9 +13,6 @@
 *.timer   text eol=lf
 *.service text eol=lf
 
-# Gli hook git non hanno estensione ma sono script bash.
-.githooks/**  text eol=lf
-
 # Binari: mai convertire.
 *.png   binary
 *.wav   binary

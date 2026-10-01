@@ -30,7 +30,7 @@ Il bootstrap e' **idempotente** (rieseguibile). Fa: mise + runtime del repo,
 `hindsight-api` via pip, `mcp-remote` via npm, i symlink skills-dir
 (`~/.claude/skills/trinity -> /Dati/AI/Claude/Trinity` **piu' uno per ogni plugin
 vendorizzato** in `vendor/`: `ui-craft`, `mattpocock-skills` — funzione
-`link_skill`, README §8), `core.hooksPath .githooks`, registrazione MCP
+`link_skill`, README §8), registrazione MCP
 `hindsight` a scope user, `~/backups/hindsight`.
 
 ## 3. Chiavi API (mai nel repo)
