@@ -10,7 +10,6 @@ logs/
 *.count
 
 # --- Dati generati e cache ----------------------------------------------------
-data/playwright-mcp/
 hooks/hindsight/data/
 sound/
 

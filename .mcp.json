@@ -24,7 +24,7 @@
         "--browser",
         "${PLAYWRIGHT_MCP_BROWSER:-chrome}",
         "--output-dir",
-        "${TRINITY_PLUGIN_DIR}/data/playwright-mcp"
+        "${TEMP:-/tmp}/playwright-mcp"
       ]
     },
     "notebooklm": {

@@ -8,7 +8,6 @@ hooks/hindsight/data/
 hooks/hindsight/benchmark/bench_results/
 hooks/hindsight/benchmark/bench_results_rerank/
 hooks/hindsight/benchmark/artifacts/
-data/playwright-mcp/
 /scratchpad.md
 
 # Stato locale di Claude Code nel progetto (generato, non si versiona).
