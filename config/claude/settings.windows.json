@@ -1,5 +1,6 @@
 {
   "env": {
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
     "CLAUDE_CODE_GIT_BASH_PATH": "e:\\msys64\\usr\\bin\\bash.exe",
     "MSYSTEM": "UCRT64",
     "CHERE_INVOKING": "1",

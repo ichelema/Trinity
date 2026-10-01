@@ -61,7 +61,16 @@
       "Bash(rm -rf *)",
       "Read(./.env)",
       "Read(./.env.*)",
-      "Read(~/.ssh/**)"
+      "Read(~/.ssh/infomaniak_vps)",
+      "Edit(~/.ssh/infomaniak_vps)",
+      "Read(~/.ssh/id_*)",
+      "Edit(~/.ssh/id_*)",
+      "Read(~/.ssh/*.pem)",
+      "Edit(~/.ssh/*.pem)"
+    ],
+    "ask": [
+      "Read(~/.ssh/**)",
+      "Edit(~/.ssh/**)"
     ],
     "defaultMode": "auto"
   },
@@ -70,7 +79,7 @@
   "disableRemoteControl": true,
   "disableClaudeAiConnectors": true,
   "enableArtifact": false,
-  "model": "haiku",
+  "model": "opus[1m]",
   "enabledPlugins": {},
   "extraKnownMarketplaces": {},
   "outputStyle": "simple",
