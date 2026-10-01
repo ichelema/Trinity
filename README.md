@@ -1007,7 +1007,7 @@ tramite launcher shell che impostano le variabili d'ambiente corrette prima di l
 
 **File coinvolti** (fuori dal repo Trinity: dal 2026-10-01 li gestisce chezmoi nel repo dotfiles
 `ichelema/dotfiles` — `dot_litellm/` per config e moduli, `dot_local/bin/` per i launcher; si
-modifica il source chezmoi, poi `chezmoi apply`. `master-key.txt` e `logs/` restano solo locali):
+modifica il source chezmoi, poi `chezmoi apply`. `master-key.txt` è nel repo cifrata con age, `logs/` resta locale):
 
 | File | Ruolo |
 |---|---|
