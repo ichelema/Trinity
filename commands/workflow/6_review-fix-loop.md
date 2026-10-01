@@ -60,7 +60,25 @@ Per ogni round:
    `/3_create-review-worktree <branch> <issue-id...> deepseek`
    `/3_create-review-worktree <branch> <issue-id...> deep-reasoner`
 2. Lancia `/4_independent-review <issue-id...>` sui due worktree in parallelo
-   (due subagent separati, uno per worktree).
+   (due subagent separati, uno per worktree):
+   - review `deep-reasoner`: tool Agent con `subagent_type: trinity:deep-reasoner`;
+   - review `deepseek`: il tool Agent non può scegliere DeepSeek, quindi lanciala
+     da Bash, nel worktree di review, con una sessione headless sul proxy
+     LiteLLM già avviato:
+     ```bash
+     cd "<review-wt-path>" && \
+     ANTHROPIC_BASE_URL="http://127.0.0.1:4000" \
+     ANTHROPIC_AUTH_TOKEN="$(cat ~/.litellm/master-key.txt)" \
+     GH_CONFIG_DIR="$(cygpath -w ~/.config/gh)" \
+     ~/.local/bin/claude.exe -p --model claude-deepseek-flash "/trinity:workflow:4_independent-review <issue-id...>" \
+       2> >(grep -v '^\[claude-code:unrecognized_model\]' >&2)
+     ```
+     `GH_CONFIG_DIR` serve perché `gh` nella sessione headless trovi il login;
+     il filtro su stderr toglie solo l'avviso innocuo `unrecognized_model`
+     (Claude Code non conosce il nome `claude-deepseek-flash`).
+   Se la sessione gira già su DeepSeek (launcher `litellm-deepseek.sh`), anche
+   `deep-reasoner` diventa DeepSeek: segnalalo, perché le due review non sono
+   più su modelli diversi.
 3. Raccogli i due report.
 4. Rimuovi i due worktree con `/5_remove-worktree`.
 
