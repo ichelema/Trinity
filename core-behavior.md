@@ -77,10 +77,33 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 
 ## Linguaggi e strumenti
 
-- Usa Ruby come default per script.
+- Usa JavaScript (Bun, file `.mjs`) come default per script; vedi "Script e file temporanei".
 - Per script Bash usa sempre shebang `#!/usr/bin/env bash`.
 - Preferisci `curl` a `wget` per richieste HTTP.
-- Per Python, Node e Ruby usa sempre `mise` per installare pacchetti/runtime.
+- Per Python, Node, Bun e Ruby usa sempre `mise` per installare pacchetti/runtime.
+
+## Script e file temporanei
+
+- Per operazioni semplici, pipeline Unix e pochi comandi preferisci Bash/Zsh o
+  `bun -e '...'`, senza creare uno script separato. JSON, HTTP o una
+  trasformazione dati non richiedono da soli un file script: decide la
+  complessità, non il linguaggio o il formato.
+- Crea uno script temporaneo per logica articolata, branching o loop non banali,
+  concorrenza o coordinamento di più subprocess.
+- Quando serve uno script non banale, usa JavaScript (`.mjs`) eseguito con Bun.
+- Non creare uno script Bun quando una pipeline shell è più corta e leggibile.
+- Non usare Bash per logica complessa solo per evitare JavaScript.
+- Il linguaggio degli script interni dell'agente non deve influenzare il
+  linguaggio o il runtime del progetto su cui stai lavorando.
+- Usa esclusivamente una sottocartella temporanea dentro `$HOME/.claude/tmp`.
+- Lo script deve produrre log espliciti e leggibili: avvio, checkpoint delle fasi,
+  risultati rilevanti, errori contestualizzati, esito finale (`PASS`/`FAIL`) ed exit code.
+- Salva stdout e stderr in un log; dopo l'esecuzione leggi il log e rendi visibili
+  nella sessione le informazioni necessarie affinché sia l'utente sia l'agente
+  possano verificare l'esito.
+- Non includere segreti nei log.
+- Non creare file temporanei nella directory del progetto, salvo quando il test lo
+  richiede esplicitamente.
 
 
 ## Output
