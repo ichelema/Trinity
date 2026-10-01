@@ -21,8 +21,9 @@ case "$HOOK_INPUT" in
 *) exit 0 ;;
 esac
 
-# claude-fable-5 -> FABLE, claude-haiku-4-5-20251001 -> HAIKU
-FAMILY="${MODEL#claude-}"
+# claude-fable-5 -> FABLE, claude-haiku-4-5-20251001 -> HAIKU, opus[1m] -> OPUS
+FAMILY="${MODEL%%\[*}"
+FAMILY="${FAMILY#claude-}"
 FAMILY="${FAMILY%%-*}"
 
 # $PWD dell'hook è la root del progetto (verificato: coincide col campo `cwd`
