@@ -236,7 +236,6 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `ruby` | stile funzionale pragmatico per Ruby (Switchyard): pipeline dichiarative di action, contratti `expects`/`promises`, errori come valori con `try!`/`fail_and_return!`, immutabilità selettiva |
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
-| `book-to-skill` | converte libri/documenti in skill strutturate |
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
 | `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
