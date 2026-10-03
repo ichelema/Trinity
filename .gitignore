@@ -27,5 +27,6 @@ hooks/hindsight/benchmark/artifacts/
 /CLAUDE_Fable.md
 /CLAUDE_OPUS.md
 /CLAUDE_GPT.md
+/CLAUDE_SONNET.md
 /commands/workflow/prompt.txt
 /tmp/
