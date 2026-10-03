@@ -770,7 +770,7 @@ gira come processo esterno e non fa parte del plugin.
 | Cartella | `D:/AI/Claude/Dashboard Context Window` |
 | Stack | Ruby + Roda + Puma (backend) · Mithril + Vite (frontend) · mise |
 | Dati | transcript JSONL in `.claude/projects` (`CLAUDE_DIR`, default `E:/msys64/home/Sphynx/.claude`) |
-| Runtime | Ruby 4.0.1 (mise) · Node lts · Mithril 2.3.6 |
+| Runtime | Ruby 4.0.7 (mise) · Node lts · Mithril 2.3.6 |
 | Porte | Puma `:9292` (API + build) · Vite dev `:5173` (proxy `/api` → `:9292`) |
 
 #### Cosa mostra
@@ -793,7 +793,7 @@ mise run setup     # bundle install (gem: roda, puma, rackup, json) + npm --pref
 ```
 
 I task `mise` (in `mise.toml`): `setup` · `dev` · `api` · `web` · `build` · `serve`. Lanciali **dalla
-shell con `mise activate`** (lì `ruby` → 4.0.1, `node` → lts).
+shell con `mise activate`** (lì `ruby` → 4.0.7, `node` → lts).
 
 #### Sviluppo (hot reload)
 

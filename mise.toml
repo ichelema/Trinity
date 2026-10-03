@@ -19,7 +19,7 @@ node = "lts"
 # Ruby per l'hook PostToolUse excalidraw-to-obsidian.rb, i check dello scheduler e i
 # benchmark Ruby (hindsight_bench.rb, hindsight_rerank_bench.rb). Ruby gestito da
 # mise, NON quello MSYS2.
-ruby = "4.0.1"
+ruby = "4.0.7"
 
 [env]
 # Espone gli entry-point script di hindsight-api (hindsight-local-mcp, hindsight-api, ecc.)
