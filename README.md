@@ -237,7 +237,6 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
-| `adhd` | ideazione divergente parallela (tree-of-thought con pruning): brainstorm a più frame cognitivi, scoring e approfondimento dei migliori — via `/adhd` o intent di brainstorming |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
 | `skill-creator` | crea, modifica e ottimizza skill: eval del triggering, benchmark degli output con variance analysis, ottimizzazione delle `description` |
 
@@ -379,18 +378,12 @@ viaggiano con `git push/pull` e ogni macchina è allineata senza install per-mac
 | Upstream | Versione | Dove | Cosa fa |
 |---|---|---|---|
 | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) | 1.2.3 | `skills/mattpocock-skills/<skill>/` → `trinity:<skill>` (es. `trinity:tdd`) | 26 skill di ingegneria (grilling, TDD, code review, domain modelling, spec/ticket flow); 15 hanno `disable-model-invocation: true` e si usano solo come `/trinity:<nome>` |
-| [educlopez/ui-craft](https://github.com/educlopez/ui-craft) (MIT) | 1.0.0 (main, 2026-10-01) | `skills/ui-craft/<skill>/` → `trinity:ui-craft*`; comandi in `commands/ui-craft/` → `/trinity:ui-craft:<cmd>`; agenti `trinity:design-reviewer`, `trinity:a11y-auditor` | design engineering per agenti: anti-slop UI, spec-driven design (`/trinity:ui-craft:sddesign`), review design + a11y |
 
 Regole della copia:
 
 - **copia manuale** dal tarball GitHub di `main`, solo le dir utili (`skills/`, `commands/`,
   `agents/`) più `README.md` e `LICENSE` upstream nella sottocartella; niente CLI, e2e, asset,
-  metadati Codex (`agents/openai.yaml`), né `.mcp.json`;
-- i riferimenti interni al vecchio namespace (`/ui-craft:x`, `ui-craft:design-reviewer`) sono
-  riscritti in `trinity:…`; ripetere la riscrittura a ogni aggiornamento;
-- il server MCP `ui-craft-mcp` (quality gate `score_ui`, `fold_candidates`) **non** è caricato:
-  le skill hanno il fallback "se il server non c'è, dillo e procedi"; `audit` e `critique`
-  usano il MCP `playwright` di Trinity.
+  metadati Codex (`agents/openai.yaml`), né `.mcp.json`.
 
 > `yt-extract` non è più in questo elenco: dal 2026-07-03 è una **skill** di Trinity
 > (`/trinity:yt-extract`, §5); il suo runtime esterno resta in
