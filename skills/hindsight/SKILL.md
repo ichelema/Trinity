@@ -25,7 +25,7 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 
 - Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
 - Entry-point: `hindsight-local-mcp` (in `Scripts/` del Python gestito da mise — esposto nel PATH via `[env]` di `.mise.toml`)
-- Versione verificata sul setup Linux: **0.10.1** (upgrade del 2026-09-26); verificare separatamente le altre macchine; query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
+- Versione verificata sul setup Linux: **0.10.2** (upgrade del 2026-10-04); verificare separatamente le altre macchine; query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
 - LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
 - Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
 - Reranker: **`voyage/rerank-2.5`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
