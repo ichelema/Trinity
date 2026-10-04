@@ -159,7 +159,9 @@ HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES = "it,en"
 # carbonara prende 0.50 contro lo 0.59 di una domanda vera. Soglie tarate su questa
 # scala in hindsight.config.json: recall_min_rerank_score 0.60, recall_min_reranker 0.40.
 HINDSIGHT_API_RERANKER_PROVIDER = "litellm-sdk"
-HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL = "voyage/rerank-2.5"
+# Dal 2026-10-04 rerank-3 (upgrade drop-in di 2.5, annuncio Voyage 2026-09-30): stessi
+# prezzi, score calibrati sulla stessa distribuzione, quindi le soglie sopra restano valide.
+HINDSIGHT_API_RERANKER_LITELLM_SDK_MODEL = "voyage/rerank-3"
 HINDSIGHT_API_RERANKER_LITELLM_SDK_API_KEY = "{{ env.VOYAGE_API_KEY | default(value='') }}"
 # Timeout del rerank sotto il recall_timeout(10s) dell'hook (2026-06-12 su zerank-2,
 # default 60): se il provider remoto si appende, il rerank fallisce in fretta e il
