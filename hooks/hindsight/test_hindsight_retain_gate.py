@@ -2765,6 +2765,13 @@ class WindowContentTests(unittest.TestCase):
                 masked = self.worker.command_outcome(f"run {secret}", "Exit code 1\nboom", True)
                 self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
 
+    def test_secret_filter_is_linear_on_long_alphanumeric_lines(self):
+        # Review ICH-150 #D: una riga senza separatori (dump esadecimale) non
+        # deve far esplodere il backtracking. 30000 ~ tetto dell'output di Bash.
+        started = time.perf_counter()
+        self.worker.command_outcome("xxd -p -c0 blob", "Exit code 1\n" + "a" * 30000 + "\nboom", True)
+        self.assertLess(time.perf_counter() - started, 1.0)
+
     def test_evaluate_retain_passes_the_configured_limit_to_the_gate(self):
         seen = {}
 

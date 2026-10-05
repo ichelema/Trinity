@@ -124,8 +124,10 @@ SECRET_PATTERNS = (
     # NPM_TOKEN:, "api_key": ...; lascia passare KeyError, key=..., --keyword=,
     # TOKENIZERS_PARALLELISM= e i valori corti. Poi chiavi sk-* e corpo base64
     # dei PEM (non solo esadecimale, cosi' gli SHA git restano).
+    # Niente prefisso [A-Za-z0-9_]* davanti: con search() non serve e rende il
+    # pattern quadratico sulle righe alfanumeriche lunghe (dump esadecimali).
     re.compile(
-        r"[A-Za-z0-9_]*(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
+        r"(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
         re.I,
     ),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
