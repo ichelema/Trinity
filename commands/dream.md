@@ -1,6 +1,7 @@
 ---
 description: Audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale
 argument-hint: "[apply]"
+disable-model-invocation: true
 ---
 
 # Dream

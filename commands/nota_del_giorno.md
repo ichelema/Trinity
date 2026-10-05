@@ -1,5 +1,6 @@
 ---
 description: Crea/aggiorna la nota del giorno col lavoro della sessione corrente
+disable-model-invocation: true
 ---
 
 # Nota del giorno

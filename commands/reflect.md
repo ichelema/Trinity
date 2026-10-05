@@ -1,5 +1,6 @@
 ---
 description: Riflessione strategica sulla memoria persistente Hindsight del progetto
+disable-model-invocation: true
 ---
 
 # Reflect

@@ -1,6 +1,7 @@
 ---
 description: Work assigned Linear issues — fetch, mark in-progress, implement, mark done, comment. Routes through the linear skill in this repo.
 argument-hint: [optional — issue ID(s), comma-separated, e.g. `AGI-23` or `AGI-23, AGI-26`. Empty = work all assigned in priority order.]
+disable-model-invocation: true
 ---
 
 # /linear

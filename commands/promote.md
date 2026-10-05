@@ -1,5 +1,6 @@
 ---
 description: Promozione curata dei fatti dai bank di progetto al bank core Hindsight
+disable-model-invocation: true
 ---
 
 # Promote
