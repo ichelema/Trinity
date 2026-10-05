@@ -235,7 +235,6 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `ruby` | stile funzionale pragmatico per Ruby (Switchyard): pipeline dichiarative di action, contratti `expects`/`promises`, errori come valori con `try!`/`fail_and_return!`, immutabilità selettiva |
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
-| `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
 
 ---
@@ -378,10 +377,6 @@ Regole della copia:
 - **copia manuale** dal tarball GitHub di `main`, solo le dir utili (`skills/`, `commands/`,
   `agents/`) più `README.md` e `LICENSE` upstream nella sottocartella; niente CLI, e2e, asset,
   metadati Codex (`agents/openai.yaml`), né `.mcp.json`.
-
-> `yt-extract` non è più in questo elenco: dal 2026-07-03 è una **skill** di Trinity
-> (`/trinity:yt-extract`, §5); il suo runtime esterno resta in
-> `E:/AI/tools/claude-code-youtube-extract` (aggiornamenti: job `yt-check`, §11).
 
 ---
 
@@ -1032,7 +1027,7 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)
+├── skills/                  14 skill attive
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval/          suggerimento skill (skill-eval.pl + skill-rules.json/schema)

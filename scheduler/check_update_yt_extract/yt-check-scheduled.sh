@@ -57,13 +57,13 @@ if [[ "$RC" -eq 10 || "${YT_FORCE_ALERT:-0}" == "1" ]]; then
 		echo
 		echo "Vedi Hindsight (recall 'yt-extract patch exe-free') per il diff completo."
 		echo
-		echo "PASSO 3 (yt-extract e' incorporato in Trinity): risincronizzare la copia:"
-		echo "  SRC=E:/AI/tools/claude-code-youtube-extract; DST=E:/AI/Claude/Trinity"
+		echo "PASSO 3 (yt-extract e' un pacchetto nel bazar): risincronizzare la copia:"
+		echo "  SRC=E:/AI/tools/claude-code-youtube-extract; DST=D:/AI/my-bazar/skills/yt-extract"
 		echo "  cp -r \$SRC/skills/yt-extract/. \$DST/skills/yt-extract/"
 		echo "  cp \$SRC/agents/extract-worker.md \$DST/agents/extract-worker.md"
 		echo "  cp \$SRC/scripts/yt-extract.py    \$DST/scripts/yt-extract.py"
-		echo "  poi in \$DST/skills/yt-extract/SKILL.md ripatchare il namespace"
-		echo "  yt-extract:extract-worker -> trinity:extract-worker, e riavviare Claude Code."
+		echo "  CLAUDE.md va accanto a SKILL.md; il namespace upstream e' gia' giusto."
+		echo "  Poi commit+push del bazar, sync dei progetti e riavvio di Claude Code."
 	} >"$ALERT"
 
 	WIN_ALERT="$(command -v cygpath >/dev/null 2>&1 && cygpath -aw "$ALERT" || printf '%s' "$ALERT")"

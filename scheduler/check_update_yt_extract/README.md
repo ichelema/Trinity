@@ -6,7 +6,7 @@ Sistema che **avvisa quando esce su GitHub una versione del plugin `yt-extract` 
 
 Il plugin `yt-extract` è un clone git di `muckybuzzwoo/claude-code-youtube-extract` installato in `E:/AI/tools/claude-code-youtube-extract`. La versione installata è letta dal `CHANGELOG.md` del clone locale (prima riga `## [X.Y.Z]`).
 
-> **Nota (incorporato in Trinity):** da luglio 2026 yt-extract è **incorporato dentro il plugin Trinity** (skill in `skills/yt-extract/`, subagent in `agents/extract-worker.md`, backend in `scripts/yt-extract.py`, namespace `trinity:`). Il clone qui monitorato resta lo **staging upstream** dove fare `git pull` + patch exe-free; dopo l'update va **risincronizzata** la copia dentro Trinity (vedi passo 3 sotto). Lo scheduler continua a leggere la versione dal `CHANGELOG.md` del clone.
+> **Nota (pacchetto nel bazar):** da ottobre 2026 yt-extract non è più dentro Trinity: vive come pacchetto in `D:/AI/my-bazar/skills/yt-extract/` (skill in `skills/yt-extract/`, subagent in `agents/extract-worker.md`, backend in `scripts/yt-extract.py`, namespace `yt-extract:`). Il clone qui monitorato resta lo **staging upstream** dove fare `git pull` + patch exe-free; dopo l'update va **risincronizzata** la copia nel bazar (vedi passo 3 sotto). Lo scheduler continua a leggere la versione dal `CHANGELOG.md` del clone.
 
 Il clone contiene una **patch locale a `scripts/yt-extract.py`** (funzione `run_ytdlp()`) che lo rende exe-free: invoca `python -m yt_dlp` con `PYTHONPATH=E:/AI/tools/yt-dlp` invece del comando esterno `yt-dlp`. Questa patch va **riapplicata dopo ogni `git pull`**, poiché il pull sovrascrive il codice di terzi.
 
@@ -71,18 +71,19 @@ la funzione deve invocare `python -m yt_dlp` con `PYTHONPATH=E:/AI/tools/yt-dlp`
 
 Vedi Hindsight (`recall "yt-extract patch exe-free"`) per il diff completo della patch.
 
-**Passo 3 — risincronizzare la copia dentro Trinity** (necessario da quando yt-extract è incorporato):
+**Passo 3 — risincronizzare la copia nel bazar**:
 
 ```bash
-SRC="E:/AI/tools/claude-code-youtube-extract"; DST="E:/AI/Claude/Trinity"
+SRC="E:/AI/tools/claude-code-youtube-extract"; DST="D:/AI/my-bazar/skills/yt-extract"
 cp -r "$SRC/skills/yt-extract/." "$DST/skills/yt-extract/"
 cp "$SRC/agents/extract-worker.md" "$DST/agents/extract-worker.md"
 cp "$SRC/scripts/yt-extract.py"    "$DST/scripts/yt-extract.py"
 ```
 
-Poi **ripatchare il namespace** in `$DST/skills/yt-extract/SKILL.md` (il pull riporta il valore
-upstream): `subagent_type: "yt-extract:extract-worker"` → `"trinity:extract-worker"` (2 occorrenze,
-righe ~259 e ~261). Infine **riavviare Claude Code** per ricaricare il plugin.
+Il namespace upstream (`yt-extract:extract-worker`) è già quello giusto: non va ripatchato.
+Nel bazar `CLAUDE.md` sta accanto a `SKILL.md` (upstream è alla root del repo): ricopiarlo lì e
+tenere la riga finale di `SKILL.md` che lo indica "in this skill's folder". Infine commit e push
+del bazar, sync dei progetti che lo usano e **riavvio di Claude Code**.
 
 ## Note tecniche
 
