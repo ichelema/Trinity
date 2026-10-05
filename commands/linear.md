@@ -1,12 +1,25 @@
 ---
-description: Work assigned Linear issues — fetch, mark in-progress, implement, mark done, comment. Routes through the linear skill in this repo.
+description: Work assigned Linear issues that need no change to a git repository — fetch, mark in-progress, do the work, mark done, comment. Code issues go through the workflow commands.
 argument-hint: [optional — issue ID(s), comma-separated, e.g. `AGI-23` or `AGI-23, AGI-26`. Empty = work all assigned in priority order.]
 disable-model-invocation: true
 ---
 
 # /linear
 
-Work Linear issues end-to-end. All Linear operations go through the **`linear` skill** (the sibling `SKILL.md` at the repo root) — never via the deprecated Linear MCP server, which has been removed.
+Work Linear issues end-to-end. All Linear operations go through the **`linear` skill** (`${CLAUDE_PLUGIN_ROOT}/skills/linear/SKILL.md`; the `references/` and `scripts/` paths below are relative to that directory) — never via the deprecated Linear MCP server, which has been removed.
+
+## Scope
+
+Only for issues that need **no change to a git repository**: configuration in
+external tools, research, Linear housekeeping, notes outside repos.
+
+For any issue that changes code or other files in a git repository, don't work
+it here: point the user to the worktree workflow,
+`/trinity:workflow:1_create-worktree <source-branch> <issue-id...> <model>` then
+`/trinity:workflow:2_work-issue <issue-id...> <model>`. There, after In Progress,
+the state is driven by the GitHub → Linear automation (PR opened → In Progress,
+ready → In Review, merged → Done): moving such an issue to Done by hand marks
+unmerged work as finished.
 
 ## Identity
 
@@ -39,7 +52,7 @@ The agent **never** filters with `assignee = "me"` — always resolve to a concr
 
 ## Standard task workflow (per issue)
 
-1. **Fetch.** Read the issue's full detail via `scripts/linear.py query` using the `Get one issue, with relations` snippet from `references/common-queries.md`.
+1. **Fetch.** Read the issue's full detail via `scripts/linear.py query` using the `Get one issue, with relations` snippet from `references/common-queries.md`. If it needs a change to a git repository (see Scope), skip it without touching its state and list it in the final summary with the workflow command to use.
 2. **In Progress.** Move the issue to the team's `In Progress` state via `issueUpdate(id, input: { stateId: ... })`. Resolve the state ID once via the `Get a team's workflow states` query.
 
    **Cascade up to the parent epic.** Right after the child transition, check `parent.state.type`. If it's `triage`, `backlog`, or `unstarted` (i.e. the epic hasn't been started yet), transition the parent to its team's `In Progress` state too. **Idempotent** — skip if the parent is already in any `started` state (another story has already moved it). **One level only** — don't recurse to grandparents. The reverse cascade (epic auto-closes when the last child is `Done`) is handled by Linear itself, so we don't mirror it here.
@@ -54,9 +67,9 @@ The agent **never** filters with `assignee = "me"` — always resolve to a concr
    ```
 
    Skip the `parent:` clause if there's no parent or the parent is already started.
-3. **Implement.** Do the work. If any code change is involved, branch first per the project's CLAUDE.md trunk-based-dev rule. Apply the project's per-task skill triggers (TDD, intent-audit, requirements-analyst, etc.) as relevant.
-4. **Done.** Move the issue to `Done` once the work is complete and tests pass.
-5. **Comment.** Post a short summary comment on the issue — what was done, the commit hash(es), the branch, anything the next reader needs to know. The comment is authored by the bot identity loaded above.
+3. **Do the work.** If it turns out to need a change to a git repository, stop: leave the state as it is, tell the user, and point to the worktree workflow (see Scope).
+4. **Done.** Move the issue to `Done` once the work is complete and verified.
+5. **Comment.** Post a short summary comment on the issue — what was done and anything the next reader needs to know. The comment is authored by the bot identity loaded above.
 
 ## Issue creation conventions
 
