@@ -195,7 +195,8 @@ esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 | `claude-haiku-4-5-20251001` | `CLAUDE_HAIKU.md` |
 
 I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
-`CLAUDE_GPT.md`) seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonnet 5.5
+`CLAUDE_GPT.md`) sono **locali**: esclusi da git (`.gitignore`), esistono solo su questa
+macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonnet 5.5
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
 `trinity:fast-worker` per il lavoro meccanico, DeepSeek (`claude-deepseek-flash` via LiteLLM)
 come pari per le decisioni ad alto rischio.
@@ -206,6 +207,11 @@ Fable 5.1 e Sonnet 5.5; con i launcher LiteLLM (§ sotto) ogni launcher li rimap
 modelli tramite `ANTHROPIC_DEFAULT_FABLE_MODEL` e `ANTHROPIC_DEFAULT_SONNET_MODEL`. Non usare un
 model id completo (es. `claude-fable-5-1`) nel frontmatter: i launcher non lo rimappano e
 LiteLLM non lo conosce.
+
+Eccezione voluta: `agents/reviewer.md` usa `model: claude-gpt-5-6-sol-xhigh`, un alias
+LiteLLM, perché deve restare GPT 5.6 Sol con qualunque launcher. Funziona solo in sessioni
+che passano dal proxy (es. `claude -p --agent trinity:reviewer` con `ANTHROPIC_BASE_URL` sul
+proxy): da una sessione Anthropic diretta fallisce.
 
 Il nome è **derivato dall'id** del modello, non confrontato con una lista: per aggiungere un
 modello basta creare il file, senza toccare l'hook.
@@ -224,17 +230,20 @@ Linux o con modelli senza file è un no-op.
 
 ## 5. Skill incluse
 
-In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
+In `skills/` (9 attive; `obsidian-cli` è disattivata, file `SKILL.md.disabled`), attivate per
+rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |
 |---|---|
 | `hindsight` | memoria persistente (retain/recall/reflect), banchi |
-| `obsidian` / `obsidian-cli` | vault Obsidian: note, Dataview, canvas / operazioni via CLI |
+| `obsidian` | vault Obsidian: note, Dataview, canvas, daily note |
 | `mise` | gestione runtime, env e task |
 | `nushell` | pipeline su dati strutturati |
-| `ruby` | stile funzionale pragmatico per Ruby (Switchyard): pipeline dichiarative di action, contratti `expects`/`promises`, errori come valori con `try!`/`fail_and_return!`, immutabilità selettiva |
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
-| `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
+| `github-pr-release` | release e versionamento: SemVer, CHANGELOG curato, commit atomici, tag e GitHub Release via `gh`; copre anche il rilascio del plugin Trinity |
+| `chezmoi` | gestione dei dotfile con chezmoi (template, script, cifratura, multi-macchina) |
+| `linear` | API GraphQL di Linear tramite la CLI `scripts/linear.py` |
+| `ponytail` | impone la soluzione più semplice che funziona; attiva di default a ogni sessione |
 
 ---
 
@@ -247,10 +256,22 @@ collidono con i comandi locali del progetto:
 |---|---|
 | `/trinity:reflect` | riflessione strategica sulla memoria Hindsight del progetto |
 | `/trinity:promote` | promozione curata dei fatti dai bank di progetto al bank core |
-| `/trinity:hindsight-create-agent` | crea un subagent con memoria Hindsight isolata per namespace tag |
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
-| `/trinity:release` | versiona il plugin (bump, commit, tag) e push dopo conferma |
 | `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
+| `/trinity:linear` | lavora issue Linear che non toccano un repo git (quelle con codice passano dal workflow) |
+| `/trinity:workflow:0_create-issue` … `5_review-fix-loop` | flusso issue → worktree → PR → review → pulizia (vedi sotto) |
+| `/trinity:ponytail:ponytail` (+ `-review`, `-audit`, `-debt`, `-gain`, `-help`) | modalità «la soluzione più semplice che funziona» e i suoi strumenti |
+
+### Workflow issue → PR
+
+| Step | Comando | Cosa fa |
+|---|---|---|
+| 0 | `0_create-issue <descrizione>` | crea la issue Linear |
+| 1 | `1_create-worktree <source-branch> <issue-id...> <model>` | branch `<prefix>/<base-name>` + worktree in `.claude/worktrees/` |
+| 2 | `2_work-issue <issue-id...> <model>` | piano, implementazione, push e PR (senza merge) |
+| 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR |
+| 4 | `4_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
+| 5 | `5_review-fix-loop <issue-id...> <model>` | review DeepSeek + deep-reasoner su worktree detached, fix in loop |
 
 ### `/trinity:dream` — audit della memoria
 
@@ -686,7 +707,7 @@ connessione).
 |---|---|---|---|
 | `api-check` | `scheduler/check_update_hindsight_api/` | settimanale | Controlla PyPI: nuova versione di `hindsight-api` o `hindsight-api-slim` rispetto a quella installata. Baseline = versione installata (si alza da sola dopo ogni upgrade, niente pin da aggiornare) |
 | `cp-check` | `scheduler/check_update_hindsight_control_plane/` | settimanale | Controlla npm: nuova versione di `@vectorize-io/hindsight-control-plane` rispetto all'ultima release vista in `cp-last-seen.state`. Primo run: seed silenzioso; poi avviso una sola volta per nuova release e baseline aggiornata automaticamente. Nessun pin: `control-plane` usa npx sempre-latest |
-| `promote-scan` | `scheduler/promote_scan/` | settimanale | Scansiona i bank Hindsight di progetto, triage LLM (gpt-4.1-nano) dei fatti candidati alla promozione sul core. Non promuove nulla: apre un alert se ci sono candidati per `/trinity:promote`. Verdetti cachati in `logs/promote-state.json` |
+| `promote-scan` | `scheduler/promote_scan/` | settimanale | Scansiona i bank Hindsight di progetto, triage LLM (`promote_model`, oggi gpt-5.6-luna) dei fatti candidati alla promozione sul core. Non promuove nulla: apre un alert se ci sono candidati per `/trinity:promote`. Verdetti cachati in `logs/promote-state.json` |
 | `nb-auth-refresh` | `scheduler/notebooklm/` | ogni 15–20 min | Rinnova i cookie di sessione di `notebooklm-py` (`__Secure-1PSIDTS`) prima che scadano. Dopo 3 fallimenti consecutivi apre un alert con le istruzioni per rigenerare i cookie SID di base |
 | `nb-check` | `scheduler/check_update_notebooklm/` | settimanale | Controlla PyPI: nuova versione di `notebooklm-py` rispetto a quella installata in `E:/AI/tools/notebooklm`. Baseline = versione installata (dal dist-info locale). Nota: la versione corrente viene da GitHub (`main`, exe-free); l'alert si attiverà quando PyPI raggiungerà la stessa versione |
 | `yt-check` | `scheduler/check_update_yt_extract/` | settimanale | Controlla GitHub (`/releases/latest`, fallback `/tags`): nuova versione del plugin `yt-extract` rispetto al clone locale `E:/AI/tools/claude-code-youtube-extract`. Baseline = prima riga `## [X.Y.Z]` del `CHANGELOG.md`. Ricorda: dopo ogni `git pull` va riapplicata la patch `run_ytdlp()` (exe-free) |
@@ -1026,7 +1047,7 @@ Trinity/
 ├── .mcp.json                server MCP (playwright, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── skills/                  14 skill attive
+├── skills/                  9 skill attive
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval/          suggerimento skill (skill-eval.pl + skill-rules.json/schema)
