@@ -1,6 +1,6 @@
 ---
 description: Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
-argument-hint: <issue-id...>
+argument-hint: <issue-id...> <model> [<review-path>]
 disable-model-invocation: true
 ---
 
@@ -8,13 +8,48 @@ Agisci come un Principal Software Engineer incaricato di eseguire una review avv
 
 L'implementazione è stata realizzata da un altro agente. Il tuo obiettivo non è confermare che il lavoro sembri corretto, ma cercare sistematicamente errori, requisiti mancanti, assunzioni non valide, regressioni e casi limite.
 
-## Validazione dell'argomento
+Se giri come subagente o in una sessione headless (`claude -p`), nessuno può
+risponderti: ogni volta che questo command dice di chiedere, chiudi invece il
+report con verdetto `BLOCCATO: INFORMAZIONI INSUFFICIENTI` e spiega cosa manca.
 
-Se `$ARGUMENTS` è vuoto, fermati e mostra:
+## Validazione degli argomenti
 
-`/4_independent-review <issue-id...>`
+Dividi `$ARGUMENTS` in token separati da spazi. Se l'ultimo token è un path
+assoluto (inizia con `/` o `<LETTERA>:`), è `<review-path>`: toglilo dalla
+lista. Dei token restanti:
+
+- l'ultimo è il modello di implementazione;
+- i precedenti sono gli issue ID (almeno uno).
+
+Se restano meno di 2 token, fermati e mostra:
+
+`/3_independent-review <issue-id...> <model> [<review-path>]`
 
 Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
+
+## Localizzazione del codice da recensire
+
+Ricava il worktree di implementazione con la stessa regola di `/2_work-issue`
+(`git worktree list --porcelain`, branch che termina esattamente con
+`/<base-name>`): ne ottieni `<branch>`. Se non esiste, fermati.
+
+La directory da recensire `<rev-path>` è `<review-path>` se è stato passato
+(worktree detached creato da `/5_review-fix-loop`), altrimenti il worktree di
+implementazione. Usa `git -C "<rev-path>"` e path assoluti sotto `<rev-path>`;
+non fare `cd`.
+
+Prima di iniziare verifica di recensire esattamente la PR (`git fetch`
+aggiorna solo i ref remoti ed è l'unica scrittura Git ammessa):
+
+```bash
+git fetch origin
+git -C "<rev-path>" status --short    # deve essere vuoto
+git -C "<rev-path>" rev-parse HEAD    # deve coincidere con:
+git rev-parse "origin/<branch>"
+```
+
+Se lo stato non è pulito o gli SHA differiscono (commit non pushati, push di
+altri), fermati e mostralo: non recensire codice diverso da quello della PR.
 
 ## Vincolo assoluto: modalità read-only
 
@@ -70,7 +105,7 @@ Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di
 gli input che superano un confine di fiducia, gestire gli errori che altrimenti causerebbero la perdita
 di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io abbia specificato espressamente.
 
-Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza strettamente necessaria.
+Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza non strettamente necessaria.
 
 È preferibile eliminare codice piuttosto che aggiungerne
 

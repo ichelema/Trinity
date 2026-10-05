@@ -58,7 +58,7 @@ Costruisci il nome base:
 
 Nel resto del comando questo valore è `<base-name>`.
 
-Costruisci il branch di review:
+Costruisci il branch di implementazione:
 
 `<prefix>/<base-name>`
 
@@ -108,7 +108,7 @@ Risolvi lo SHA aggiornato con:
 
 Verifica che non esista già il branch locale:
 
-`refs/heads/<review-branch>`
+`refs/heads/<branch>`
 
 Verifica inoltre che non esista già un worktree associato allo stesso
 branch.
@@ -128,7 +128,7 @@ Prima della creazione mostra:
 - prefisso selezionato;
 - branch sorgente remoto;
 - SHA sorgente;
-- branch di review;
+- branch di implementazione;
 - percorso assoluto del worktree.
 
 ## Creazione
@@ -144,7 +144,7 @@ Esempio: se la root è `E:/AI/Claude/Trinity` e il prefisso è
 
 Crea il branch e il worktree usando il percorso assoluto Windows:
 
-`git worktree add -b "<review-branch>" "<percorso-assoluto-Windows>" "<SHA>"`
+`git worktree add -b "<branch>" "<percorso-assoluto-Windows>" "<SHA>"`
 
 Non eseguire checkout, reset, stash o modifiche nel working tree originale.
 
@@ -160,7 +160,7 @@ Verifica che il back-pointer inizi con `<LETTERA>:/`; se è in formato POSIX
 **Non toccare il file `.git` dentro il worktree.** `git worktree remove` lo
 valida, e se è in formato Windows la rimozione fallisce ("does not point
 back to '.git/worktrees/<nome>'"). Il formato che git scrive lì non è
-deterministico: lascialo com'è, ci pensa `/5_remove-worktree` prima della
+deterministico: lascialo com'è, ci pensa `/4_remove-worktree` prima della
 rimozione. Non usare mai `git worktree prune` come scorciatoia: su questa
 macchina ha già cancellato worktree e branch estranei.
 
@@ -194,7 +194,7 @@ con i valori effettivi:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Commit                 │ <messaggio-commit>                                      │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch di review       │ <branch>                                                 │
+│ Branch                 │ <branch>                                                 │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Worktree               │ <percorso-assoluto-Windows>                             │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤

@@ -7,7 +7,7 @@ disable-model-invocation: true
 ---
 
 Rimuovi il worktree `$worktree_name` (directory sotto `.claude/worktrees/`, es.
-`improvements+ICH-73-review-GPT` o `ich-73-verifica-fattibilita-5df44e`) e il branch
+`review+ICH-73-fable-deepseek` o `ich-73-verifica-fattibilita-5df44e`) e il branch
 che vi è agganciato, poi fai pulizia. Funziona sia su Windows/MSYS2 sia su Linux:
 i comandi sono Bash puro e portabile; i passi solo-Windows sono marcati.
 
@@ -15,7 +15,7 @@ i comandi sono Bash puro e portabile; i passi solo-Windows sono marcati.
 
 Se `$worktree_name` manca, fermati e mostra:
 
-`/5_remove-worktree <worktree-name>`
+`/4_remove-worktree <worktree-name>`
 
 Accetta anche un path assoluto: in quel caso usalo com'è. Altrimenti il worktree
 è `<repo-root>/.claude/worktrees/$worktree_name`.
@@ -51,6 +51,9 @@ git worktree list --porcelain
 
 Dalla entry del worktree ricava `<wt-path>` (riga `worktree ...`, usalo poi
 ESATTAMENTE così com'è stampato) e `<branch>` (riga `branch refs/heads/...`).
+Se la entry ha `detached` al posto di `branch` (worktree di review di
+`/5_review-fix-loop`), non c'è branch: salta i controlli sul branch e il passo
+3; resta obbligatorio `status --short` vuoto.
 Se non c'è nessuna entry per `$worktree_name` ma la directory esiste, vedi
 "Directory orfana" più sotto.
 
@@ -80,7 +83,7 @@ commit, stato merged/unmerged, presenza del branch remoto.
 
 ### 1. (Windows/MSYS2) ripristina il `gitdir` POSIX nel file `.git` del worktree
 
-I worktree creati con `/1_create-worktree` o `/3_create-review-worktree` (o
+I worktree creati con `/1_create-worktree` o `/5_review-fix-loop` (o
 toccati da SmartGit) hanno
 nel file `<wt-path>/.git` un `gitdir:` in forma Windows (`E:/AI/...`). Il git
 MSYS ci lavora (status, commit), ma `git worktree remove` fa una validazione
@@ -159,7 +162,7 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Worktree             │ <wt-path> — rimosso / directory residua da cancellare    │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch locale        │ <branch> — eliminato (era <sha>) / mantenuto: <motivo>   │
+│ Branch locale        │ <branch> — eliminato (era <sha>) / mantenuto: <motivo> / nessuno (detached) │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Branch remoto        │ già assente / eliminato / mantenuto                      │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤

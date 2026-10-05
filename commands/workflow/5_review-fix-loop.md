@@ -23,7 +23,7 @@ Dividi `$ARGUMENTS` in token separati da spazi:
 
 Se i token sono meno di 2, fermati e mostra:
 
-`/6_review-fix-loop <issue-id...> <model>`
+`/5_review-fix-loop <issue-id...> <model>`
 
 ## Localizzazione del worktree e della PR
 
@@ -56,21 +56,34 @@ la review parte dalla PR, non da un branch orfano.
 
 Per ogni round:
 
-1. Crea due worktree di review isolati, uno per modello:
-   `/3_create-review-worktree <branch> <issue-id...> deepseek`
-   `/3_create-review-worktree <branch> <issue-id...> deep-reasoner`
-2. Lancia `/4_independent-review <issue-id...>` sui due worktree in parallelo
-   (due subagent separati, uno per worktree):
+1. Crea due worktree di review isolati e detached (senza branch: il reviewer
+   non committa), uno per reviewer, con path assoluti in formato Windows
+   (`E:/...`) su Windows/MSYS2:
+   ```bash
+   git fetch origin
+   sha="$(git rev-parse --verify "origin/<branch>^{commit}")"
+   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-deepseek" "$sha"
+   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-deep-reasoner" "$sha"
+   ```
+   Se una delle directory esiste già (round precedente non ripulito), fermati.
+   Non toccare il file `.git` dentro i worktree.
+2. Esegui `/trinity:workflow:3_independent-review` sui due worktree in
+   parallelo, uno per reviewer, con argomenti `<issue-id...> <model> <review-wt-path>`.
+   Il command ha `disable-model-invocation: true`: né tu né un subagente potete
+   invocarlo come slash command, e un `/...` nel prompt di un subagente non
+   viene espanso.
    - review `deep-reasoner`: tool Agent con `subagent_type: trinity:deep-reasoner`;
+     nel prompt digli di leggere
+     `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di
+     seguirlo con quegli argomenti al posto di `$ARGUMENTS`;
    - review `deepseek`: il tool Agent non può scegliere DeepSeek, quindi lanciala
-     da Bash, nel worktree di review, con una sessione headless sul proxy
+     da Bash con una sessione headless sul proxy
      LiteLLM già avviato:
      ```bash
-     cd "<review-wt-path>" && \
      ANTHROPIC_BASE_URL="http://127.0.0.1:4000" \
      ANTHROPIC_AUTH_TOKEN="$(cat ~/.litellm/master-key.txt)" \
      GH_CONFIG_DIR="$(cygpath -w ~/.config/gh)" \
-     ~/.local/bin/claude.exe -p --model claude-deepseek-flash "/trinity:workflow:4_independent-review <issue-id...>" \
+     ~/.local/bin/claude.exe -p --model claude-deepseek-flash "/trinity:workflow:3_independent-review <issue-id...> <model> <review-wt-path>" \
        2> >(grep -v '^\[claude-code:unrecognized_model\]' >&2)
      ```
      `GH_CONFIG_DIR` serve perché `gh` nella sessione headless trovi il login;
@@ -79,8 +92,15 @@ Per ogni round:
    Se la sessione gira già su DeepSeek (launcher `litellm-deepseek.sh`), anche
    `deep-reasoner` diventa DeepSeek: segnalalo, perché le due review non sono
    più su modelli diversi.
+   Se `<model>` coincide con il modello di `deep-reasoner` (`fable` in una
+   sessione normale, vedi `agents/deep-reasoner.md`; con un launcher LiteLLM
+   quello del launcher, vedi la tabella nel README), segnalalo: quella review
+   gira sullo stesso modello che ha scritto il codice ed è meno indipendente.
 3. Raccogli i due report.
-4. Rimuovi i due worktree con `/5_remove-worktree`.
+4. Rimuovi i due worktree leggendo e seguendo
+   `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_remove-worktree.md` (per lo stesso
+   motivo non puoi invocarlo come slash command), con `$worktree_name` =
+   `<review-wt-path>`.
 
 Le review sono read-only: nessun reviewer modifica file.
 

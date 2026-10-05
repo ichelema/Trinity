@@ -107,7 +107,7 @@ obbligo è rumore.
     - [ ] <specific test to write or verify>
 
 Gli acceptance criteria diventano la checklist verificata da `/2_work-issue` e
-la base della review di `/4_independent-review`: una condizione non verificabile
+la base della review di `/3_independent-review`: una condizione non verificabile
 con un sì/no lì a valle non è controllabile da nessuno.
 
 ## Estimate

@@ -26,7 +26,7 @@ Se i token sono meno di 2, fermati e mostra:
 
 ## Localizzazione del worktree
 
-Non ricostruire il prefisso (`bug` / `improvements`) a partire dalla issue: è
+Non ricostruire il prefisso (`bug` / `improvments`) a partire dalla issue: è
 già stato deciso allo step 1 e potrebbe essere stato scelto dall'utente.
 Ricava il worktree dallo stato reale di Git:
 
@@ -39,8 +39,8 @@ Cerca l'entry il cui branch termina esattamente con `/<base-name>`, dove
 `<issue-id>-<model>` (es. `improvments/ICH-72-fable`); più issue → prefisso
 team una sola volta, poi i numeri delle successive, infine il modello
 (es. `ICH-97` + `ICH-98` + `fable` → `improvments/ICH-97-98-fable`).
-Il suffisso esatto è ciò che distingue il worktree di implementazione da
-quello di review, il cui nome contiene `-review-`.
+Il match sul branch esclude da solo i worktree di review di
+`/5_review-fix-loop`: sono detached e non hanno una riga `branch`.
 
 Da quella entry ricava:
 
@@ -59,7 +59,7 @@ lavorare nel repository principale.
 Usa `git -C "<wt-path>"` per ogni comando Git e path assoluti sotto `<wt-path>`
 per ogni lettura o modifica di file. Non fare `cd` nel worktree: su
 Windows la directory diventa poi non cancellabile finché la sessione la tiene
-come cwd (`Device or resource busy` allo step 5).
+come cwd (`Device or resource busy` allo step 4).
 
 Verifica prima di iniziare:
 
@@ -196,7 +196,7 @@ Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di
 gli input che superano un confine di fiducia, gestire gli errori che altrimenti causerebbero la perdita
 di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io abbia specificato espressamente.
 
-Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza strettamente necessaria.
+Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza non strettamente necessaria.
 
  È preferibile eliminare codice piuttosto che aggiungerne.
 
@@ -255,9 +255,9 @@ diventa testo del workspace a tutti gli effetti.
 
 ## Non fare il merge
 
-Fermati qui. Il passo successivo è la review indipendente
-(`/3_create-review-worktree <branch> <issue-id...> <model-reviewer>`), poi il merge
-resta all'utente.
+Fermati qui. Il passo successivo è la review indipendente, in una sessione
+nuova (`/3_independent-review <issue-id...> <model>`), poi il merge resta
+all'utente.
 
 ## Verifica finale
 
@@ -289,7 +289,7 @@ valori effettivi; `<model>` è l'ultimo argomento ricevuto:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Pull Request           │ <url> (magic words: <Fixes/Refs> per ogni issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /3_create-review-worktree <branch> <issue-id...> <model> │
+│ Prossimo passo         │ /3_independent-review <issue-id...> <model>              │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
