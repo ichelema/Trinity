@@ -6,7 +6,7 @@ file flag o persistere qualcosa.
 Le cifre sono le mediane dei benchmark pubblicati (5 task quotidiani: email
 validator, debounce, CSV sum, countdown timer, rate limiter; tre modelli:
 Haiku, Sonnet, Opus). Sono misurate, non calcolate dal repo corrente.
-Source: `benchmarks/` e il README.
+Fonte: `benchmarks/` e README del progetto upstream, https://github.com/DietrichGebert/ponytail.
 
 ## Scoreboard
 
