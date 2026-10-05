@@ -45,11 +45,6 @@
     "UserPromptSubmit": [{
       "hooks": [{
           "type": "command",
-          "command": "perl ${CLAUDE_PLUGIN_ROOT}/hooks/skill-eval/skill-eval.pl",
-          "timeout": 20
-        },
-        {
-          "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
           "timeout": 60
         },
