@@ -293,6 +293,5 @@ valori effettivi; `<model>` è l'ultimo argomento ricevuto:
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
-Adatta la larghezza della colonna Valore al contenuto effettivo. Con più
-issue, le celle «Issue Linear» e «Stato Linear» contengono una riga per ogni
-issue.
+Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine.
+Con più issue, le celle «Issue Linear» e «Stato Linear» diventano una riga della tabella per ogni issue.
