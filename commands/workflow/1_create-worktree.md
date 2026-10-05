@@ -150,24 +150,19 @@ Non eseguire checkout, reset, stash o modifiche nel working tree originale.
 
 ## Compatibilità SmartGit
 
-Dopo la creazione, git MSYS2 scrive un path POSIX (es. `/e/AI/...`) nel
-file `.git` del worktree. SmartGit non riconosce quel formato.
+SmartGit legge solo il back-pointer `<repo-root>/.git/worktrees/<prefix>+<base-name>/gitdir`.
+Avendo passato a `git worktree add` il percorso Windows, quel file è già in
+formato `E:/...`: non serve altro.
 
-Converti il path in formato Windows:
+Verifica che il back-pointer inizi con `<LETTERA>:/`; se è in formato POSIX
+(`/e/...`), fermati e segnalalo.
 
-1. Leggi il file `<worktree-path>/.git`.
-2. Nel valore `gitdir:`, sostituisci il prefisso `/<lettera>/` con
-   `<LETTERA>:/` (es. `/e/` → `E:/`).
-3. Riscrivi il file.
-4. Verifica che `git -C "<worktree-path>" status` funzioni ancora.
-
-> **Nota — rimozione del worktree.** `git worktree remove` valida il
-> file `.git` interno del worktree e lo esige in formato POSIX: con il
-> path convertito in formato Windows la rimozione fallisce. Prima di
-> rimuovere il worktree, ripristina il valore `gitdir:` al formato POSIX
-> (es. `E:/` → `/e/`), poi esegui `git worktree remove`. Non usare mai
-> `git worktree prune` come scorciatoia: su questa macchina ha già
-> cancellato worktree e branch estranei.
+**Non toccare il file `.git` dentro il worktree.** `git worktree remove` lo
+valida, e se è in formato Windows la rimozione fallisce ("does not point
+back to '.git/worktrees/<nome>'"). Il formato che git scrive lì non è
+deterministico: lascialo com'è, ci pensa `/5_remove-worktree` prima della
+rimozione. Non usare mai `git worktree prune` come scorciatoia: su questa
+macchina ha già cancellato worktree e branch estranei.
 
 ## Verifica finale
 
@@ -203,7 +198,7 @@ con i valori effettivi:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Worktree               │ <percorso-assoluto-Windows>                             │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ SmartGit               │ gitdir convertito a formato Windows                     │
+│ SmartGit               │ back-pointer gitdir in formato Windows                  │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Stato                  │ Pulito — nessun file modificato                         │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
