@@ -230,7 +230,6 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 |---|---|
 | `hindsight` | memoria persistente (retain/recall/reflect), banchi |
 | `obsidian` / `obsidian-cli` | vault Obsidian: note, Dataview, canvas / operazioni via CLI |
-| `notebooklm` | NotebookLM via MCP exe-free: notebook, sources, chat, deep research |
 | `mise` | gestione runtime, env e task |
 | `nushell` | pipeline su dati strutturati |
 | `ruby` | stile funzionale pragmatico per Ruby (Switchyard): pipeline dichiarative di action, contratti `expects`/`promises`, errori come valori con `try!`/`fail_and_return!`, immutabilità selettiva |
@@ -291,7 +290,6 @@ progetto (sono file del plugin, non del singolo progetto):
 | Server | Tipo | Cosa fornisce |
 |---|---|---|
 | `playwright` | stdio (node) | automazione browser headless (Playwright) |
-| `notebooklm` | stdio (python, exe-free) | Google NotebookLM: notebook, sources, chat, artifact, deep research |
 | `ticktick` | http (remoto, `mcp.ticktick.com`) | task, liste, abitudini, focus record e countdown di TickTick |
 | `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — attivo, richiede l'app Obsidian in ascolto su :3002 |
@@ -327,9 +325,7 @@ apre il browser — l'agente non può farlo al posto tuo. Fatto una volta, espon
 tool `mcp__linear__*` sul workspace `Ichelema`. L'endpoint corretto è
 `https://mcp.linear.app/mcp` (Streamable HTTP); `/sse` è deprecato.
 
-Il runtime di `notebooklm` è **exe-free** e vive fuori dal repo (modulo in
-`E:/AI/tools/notebooklm`, launcher con `truststore` per il proxy Eni): i file del plugin
-restano il *cervello*, il runtime sta sul sistema (vedi §1). Il solo `excalidraw` è
+Il solo `excalidraw` è
 marcato `disabled: true` nel file. Oltre a questi, Claude Code
 espone i propri MCP **built-in** (es. `claude-in-chrome`), non gestiti da Trinity.
 
@@ -632,8 +628,6 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
   "env": {
     "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
     "OBSIDIAN_VAULT_NAME": "Sinapsi",
-    "NOTEBOOKLM_DATA": "E:/AI/tools/notebooklm-data",
-    "NOTEBOOKLM_LIB": "E:/AI/tools/notebooklm",
     "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw",
     "MCP_DEBUGGER_DIR": "E:/AI/tools/mcp-debugger",
     "MCP_NEOVIM_DIR": "E:/AI/tools/mcp-neovim-server"
@@ -641,11 +635,9 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
 }
 ```
 
-`NOTEBOOKLM_*` e `MCP_EXCALIDRAW_DIR` servono ai server MCP `notebooklm` ed
-`excalidraw`: puntano tutte a
-strumenti esterni installati **fuori dal repo**: definiscile col path locale
-dell'installazione. Su un'altra macchina (o su Linux) i path cambiano — vanno
-messi quelli dell'installazione locale di quegli strumenti. Senza queste variabili quei due server non partono (warning
+`MCP_EXCALIDRAW_DIR` serve al server MCP `excalidraw`: punta a uno
+strumento esterno installato **fuori dal repo**: definiscila col path locale
+dell'installazione. Su un'altra macchina (o su Linux) il path cambia. Senza questa variabile il server non parte (warning
 in avvio, resto invariato); `excalidraw` è comunque `disabled` di default.
 
 Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
@@ -660,7 +652,6 @@ una variabile separata.
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
-| server MCP notebooklm | `${NOTEBOOKLM_DATA}` / `${NOTEBOOKLM_LIB}` — **da definire per-macchina** (path dello strumento esterno, non del repo) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
 | server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `D:/Sviluppo/Progetti`) |
@@ -1038,7 +1029,7 @@ DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due mod
 ```
 Trinity/
 ├── core-behavior.md         comportamento iniettato al SessionStart
-├── .mcp.json                server MCP (playwright, notebooklm, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
+├── .mcp.json                server MCP (playwright, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
 ├── skills/                  14 skill attive (+ excel-data-analyst disabilitata)

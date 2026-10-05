@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lancia il Python DI MISE (risolto a runtime), con PYTHONUTF8=1. Usato dai
 # server MCP in .mcp.json: serve proprio il python di mise — e' li' che sono
-# pip-installati i pacchetti dei server (es. truststore per notebooklm) — non
+# pip-installati i pacchetti dei server — non
 # un python qualsiasi del PATH (il python MSYS ne e' privo).
 set -uo pipefail
 

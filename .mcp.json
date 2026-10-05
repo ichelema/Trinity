@@ -27,17 +27,6 @@
         "${TEMP:-/tmp}/playwright-mcp"
       ]
     },
-    "notebooklm": {
-      "type": "stdio",
-      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-python.sh",
-      "args": [
-        "${NOTEBOOKLM_DATA}/run_notebooklm_mcp.py"
-      ],
-      "env": {
-        "PYTHONPATH": "${NOTEBOOKLM_LIB}",
-        "NOTEBOOKLM_HOME": "${NOTEBOOKLM_DATA}/nbhome"
-      }
-    },
     "debugger": {
       "type": "stdio",
       "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
