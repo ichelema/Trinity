@@ -2737,10 +2737,33 @@ class WindowContentTests(unittest.TestCase):
              "python t.py --keyword=something_long → Exit code 2 | bad option"),
             ("pytest", "Exit code 1\nAssertionError: token: 'abcdefghij' != None",
              "pytest → Exit code 1 | AssertionError: token: 'abcdefghij' != None"),
+            ("pip install x", "Exit code 1\nTOKENIZERS_PARALLELISM=false_value_here",
+             "pip install x → Exit code 1 | TOKENIZERS_PARALLELISM=false_value_here"),
         ]
         for cmd, out, expected in cases:
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.worker.command_outcome(cmd, out, True), "- " + expected)
+
+    def test_secret_filter_catches_lowercase_colon_and_json_formats(self):
+        # Review ICH-150 #C: formati riaperti dal restringimento del filtro.
+        for secret in (
+            "openai_api_key=abcdefghijklmnopqrstu",
+            "db_password=hunter2hunter2",
+            "aws_secret_access_key = wJalrXUtnFEMIK7MDENGbPxRfiCY",
+            "NPM_TOKEN: abcdefghijklmnopqrstuvwx",
+            "MY_SECRET: abcdefghijklmnopqrstuvwx",
+            "STRIPE_SECRET_KEY: rk_live_abcdefghijklmnop",
+            '"api_key": "abcdefghijklmnopqrstu"',
+            '"password": "hunter2hunter2"',
+            "OPENAI_API_KEY=sk-proj-abcdefghijklmnop1234567890",
+            "GITHUB_TOKEN=abcdefghijklmnop12345",
+            "token: abcdefghijklmnopqrstuvwx",
+        ):
+            with self.subTest(secret=secret):
+                outcome = self.worker.command_outcome("deploy", f"Exit code 1\n{secret}", True)
+                self.assertEqual(outcome, "- deploy → Exit code 1")
+                masked = self.worker.command_outcome(f"run {secret}", "Exit code 1\nboom", True)
+                self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
 
     def test_evaluate_retain_passes_the_configured_limit_to_the_gate(self):
         seen = {}

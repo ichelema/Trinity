@@ -118,12 +118,16 @@ SECRET_PATTERNS = (
     ),
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
-    # Solo per gli esiti, stretti per non scartare prove (KeyError, key=...,
-    # SHA git, --keyword=...): variabili d'ambiente in maiuscolo
-    # (OPENAI_API_KEY=, GITHUB_TOKEN=, AWS_SECRET_ACCESS_KEY=), token:/secret:
-    # con un valore lungo, chiavi sk-*, corpo base64 dei PEM (non solo esadecimale).
-    re.compile(r"\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD)\b\s*=\s*['\"]?\S{8,}"),
-    re.compile(r"\b(?:token|secret)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}", re.I),
+    # Solo per gli esiti: un nome che FINISCE in api_key/_key/secret/password/
+    # token (maiuscolo o minuscolo, anche tra virgolette JSON) seguito da : o =
+    # e da un valore di 12+ caratteri. Copre OPENAI_API_KEY=, db_password=,
+    # NPM_TOKEN:, "api_key": ...; lascia passare KeyError, key=..., --keyword=,
+    # TOKENIZERS_PARALLELISM= e i valori corti. Poi chiavi sk-* e corpo base64
+    # dei PEM (non solo esadecimale, cosi' gli SHA git restano).
+    re.compile(
+        r"[A-Za-z0-9_]*(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
+        re.I,
+    ),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
     re.compile(r"^(?=[A-Za-z0-9+/]*[G-Zg-z+/])[A-Za-z0-9+/]{40,}={0,2}$"),
 )
