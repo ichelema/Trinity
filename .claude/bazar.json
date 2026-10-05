@@ -1,0 +1,18 @@
+{
+  "project": "Trinity",
+  "bazar_remote": "https://github.com/ichelema/my-bazar.git",
+  "managed": {
+    "skills": {},
+    "agents": {},
+    "commands": {},
+    "hooks": {},
+    "rules": {},
+    "files": {
+      "CLAUDE_FABLE.md": "CLAUDE_FABLE.md",
+      "CLAUDE_GPT.md": "CLAUDE_GPT.md",
+      "CLAUDE_OPUS.md": "CLAUDE_OPUS.md",
+      "CLAUDE_SONNET.md": "CLAUDE_SONNET.md"
+    },
+    "ignore": {}
+  }
+}

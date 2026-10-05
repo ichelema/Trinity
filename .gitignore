@@ -30,3 +30,5 @@ hooks/hindsight/benchmark/artifacts/
 /CLAUDE_SONNET.md
 /commands/workflow/prompt.txt
 /tmp/
+# bazar managed
+.claude/bazar.state.json
