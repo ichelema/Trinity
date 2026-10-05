@@ -43,8 +43,9 @@ if prompt:match("^[/@$]ponytail") or prompt:match("^[/@$]trinity:ponytail") then
     elseif arg == "full" then mode = "full"
     elseif arg == "off" then mode = "off"
     elseif arg == "" then
-      is_report = true
-      mode = config.read_mode() or config.get_default_mode()
+      -- attiva: solo report; spenta: riattiva col default (anche per i subagent)
+      mode = config.read_mode()
+      if mode then is_report = true else mode = config.get_default_mode() end
     else
       mode = config.get_default_mode()
     end
