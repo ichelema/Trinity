@@ -234,7 +234,6 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `nushell` | pipeline su dati strutturati |
 | `ruby` | stile funzionale pragmatico per Ruby (Switchyard): pipeline dichiarative di action, contratti `expects`/`promises`, errori come valori con `try!`/`fail_and_return!`, immutabilità selettiva |
 | `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
-| `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
 
 ---

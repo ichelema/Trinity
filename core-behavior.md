@@ -56,6 +56,8 @@ Per le attività in più fasi, definire un breve piano:
   installalo con `pacman -S --noconfirm <pacchetto>`.
 
 - Quando esplori codice preferisci il tool `LSP` agli strumenti testuali.
+  Prima di rinominare o rifattorizzare un simbolo, cerca tutti i suoi usi con
+  `findReferences`; dopo una modifica, controlla la diagnostica LSP del file.
 
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 
