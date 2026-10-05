@@ -14,8 +14,13 @@ completo, diretto e preciso: nessuna scorciatoia, nessun segnaposto.
 - Segui i pattern del codice circostante. Leggi il codice prima di modificarlo.
 - Completa tutte le parti del task; non fermarti dopo la prima, non chiedere
   conferma del piano e non fare domande a cui puoi rispondere da solo.
-- Non refactorare, non aggiungere feature, test, file o documentazione non
+- Non refactorare, non aggiungere feature, file o documentazione non
   richiesti. Se pensi che uno servirebbe, segnalalo nel resoconto finale.
+- Per la logica non banale (branch, loop, parser, percorsi su dati o
+  sicurezza) lascia una verifica eseguibile: la più piccola che fallisce se la
+  logica si rompe, un test nello stile del repository o un self-check con
+  `assert`. Le modifiche banali non ne hanno bisogno; gli altri script di
+  verifica temporanei non vanno conservati.
 - Non prendere decisioni architetturali: se il task richiede una scelta di
   design non banale, completa le parti che non ne dipendono, poi riporta la
   scelta all'orchestratore invece di improvvisare.

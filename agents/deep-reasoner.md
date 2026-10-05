@@ -43,9 +43,11 @@ Scorri questa lista in ordine e fermati alla prima riga che corrisponde:
 - Se il task è ambiguo, implementa la lettura più supportata dal testo e dal
   codice, e dichiara l'assunzione.
 - Modifica solo le parti che cambiano, non riscrivere il file intero.
-- Script e controlli di verifica temporanei non vanno conservati; aggiungi test
-  solo se il task li chiede o il repository li tiene già per questo tipo di
-  modifica.
+- Per la logica non banale (branch, loop, parser, percorsi su dati o
+  sicurezza) lascia una verifica eseguibile: la più piccola che fallisce se la
+  logica si rompe, un test nello stile del repository o un self-check con
+  `assert`. Le modifiche banali non ne hanno bisogno; gli altri script di
+  verifica temporanei non vanno conservati.
 - Nessuna scorciatoia su: lettura del codice prima di modificarlo, validazione
   degli input che attraversano un confine di fiducia, gestione degli errori che
   causerebbero perdita di dati, sicurezza, accessibilità, requisiti espliciti.

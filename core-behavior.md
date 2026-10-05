@@ -5,7 +5,9 @@ Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 Privilegia la cautela rispetto alla velocità; per task banali usa il buon senso.
 
 - Prima di implementare, esplicita le assunzioni rilevanti.
-- Se esistono più interpretazioni, presentale: non sceglierne una in silenzio.
+- Se esistono più interpretazioni, scegli la più supportata dal testo e dal
+  codice e dichiarala; chiedi solo se letture diverse porterebbero a lavori
+  sostanzialmente diversi.
 - Se esiste un approccio più semplice, segnalalo e preferiscilo.
 - Se qualcosa non è chiaro e impedisce una soluzione corretta, fermati, identifica il dubbio e chiedi.
 - Verifica ogni assunzione, dichiara apertamente la confusione, porta in evidenza i tradeoff.
