@@ -13,6 +13,11 @@ Un errore TECNICO del gate e' fail-closed lato worker (ICH-73): nessun
 salvataggio, notifica non bloccante una volta per sessione e rollback del
 contatore cosi' la prossima valutazione riprova. L'errore resta visibile in
 GateResult.error e nel debug log.
+Secondo filtro TypeSafe Jev (ICH-163): un "retain" di luna si salva solo se
+Jev conferma con F1 >= retain_jev_threshold (sotto soglia -> skip con reason
+jev_rejected). Jev non viene chiamato su skip/uncertain. Jev irraggiungibile,
+in timeout o senza TYPESAFE_API_KEY e' un errore tecnico come quelli di luna:
+fail-closed, con GateResult.error prefissato "jev:".
 Il gate produce anche il `context` descrittivo del retain; se manca (retain o
 uncertain) il worker mette comunque la POST in pending e Claude propone una
 riga di dominio: al prompt successivo handle_retain_consent risolve il context
@@ -28,6 +33,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 # Doppio percorso: nome top-level quando lib/ e' su sys.path (worker, bench);
@@ -40,6 +46,7 @@ try:
         _consent_decision,
         api_json,
         consume_pending,
+        read_with_deadline,
         save_pending,
     )
     from hindsight_recall_lib import last_assistant_text
@@ -51,6 +58,7 @@ except ImportError:
         _consent_decision,
         api_json,
         consume_pending,
+        read_with_deadline,
         save_pending,
     )
     from .hindsight_recall_lib import last_assistant_text
@@ -144,6 +152,10 @@ class GateResult:
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
     error: str | None = None
+    # Secondo filtro Jev (ICH-163): valorizzati solo se Jev e' stato chiamato.
+    jev_score: float | None = None
+    jev_probs: dict = field(default_factory=dict)
+    jev_latency_ms: float = 0.0
 
 
 DEDUP_QUERY_MAX_CHARS = 1500
@@ -363,12 +375,88 @@ def gate_input(content: str, candidates: list[dict], max_chars: int = 10000) -> 
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Secondo filtro TypeSafe Jev (ICH-163). Domande e nota di stato in inglese
+# (Jev e' calibrato sull'inglese, la finestra puo' restare in italiano), le
+# stesse misurate da benchmark/retain_gate_jev_bench.py, che le importa da qui.
+# Si chiedono tutte e 10 anche se F1 ne usa 5: chiedendone solo 5 le p si
+# spostano fino a 0,04 vicino alla soglia (verifica ICH-163 su 20 finestre).
+# ---------------------------------------------------------------------------
+
+JEV_URL = "https://api.typesafe.ai/v1/systemone"
+JEV_MODEL = "jev-latest"
+
+STATE_NOTE = (
+    "A window of a conversation between a developer and the Claude Code coding "
+    "assistant (may be in Italian). It is being considered for storage in the "
+    "assistant's long-term memory, to be recalled in future sessions."
+)
+
+QUESTIONS = {
+    "core": "Could the information in this window avoid work, mistakes or repeated analysis in a FUTURE session, if stored in long-term memory? Answer yes only for durable, verified knowledge.",
+    "durable_decision": "Does the window state a decision or convention together with its rationale, settled by the end of the window?",
+    "root_cause_or_workaround": "Does the window identify a root cause or a workaround that was confirmed to work?",
+    "environment_constraint": "Does the window reveal a non-obvious constraint or quirk of the user's environment, tools or versions?",
+    "convention_or_preference": "Does the user explicitly state a preference or a rule about how the assistant should work?",
+    "discarded_approach": "Does the window show an approach that was tried and discarded, together with the reason it failed?",
+    "ephemeral": "Is the window only ephemeral material: routine task execution, command output, intermediate attempts or work still in progress, with no lasting lesson?",
+    "repo_recoverable": "Is everything durable in the window easily recoverable by reading the repository, the code or the git history?",
+    "open_question": "Does the window end with an open question to the user, a proposed plan awaiting approval, or work that is not yet concluded?",
+    "unverified": "Is the main claim of the window a hypothesis or a fix that was not confirmed by evidence (test, command result, or the user) within the window?",
+}
+
+JevCall = Callable[[str, float], tuple[dict, float]]
+
+
+def jev_score(p: dict) -> float:
+    """F1: segnale piu' forte fra causa radice, approccio scartato e vincolo
+    d'ambiente, smorzato se effimero e se ricavabile dal repo."""
+    return (
+        max(p["root_cause_or_workaround"], p["discarded_approach"], p["environment_constraint"])
+        * (1 - p["ephemeral"])
+        * (1 - p["repo_recoverable"])
+    )
+
+
+def ask_jev(content: str, timeout: float, keys=tuple(QUESTIONS)) -> tuple[dict, float]:
+    """Una richiesta Jev con le domande `keys` sulla finestra: (probabilita'
+    0..1 per chiave, latenza ms). Chiave assente, risposta incompleta o p fuori
+    range sollevano: il chiamante le tratta come errore tecnico (fail-closed)."""
+    key = os.environ.get("TYPESAFE_API_KEY")
+    if not key:
+        raise RuntimeError("TYPESAFE_API_KEY non impostata")
+    body = {
+        "model": JEV_MODEL,
+        "state": {"about": STATE_NOTE, "window": content},
+        "questions": {k: {"type": "noul", "instructions": QUESTIONS[k]} for k in keys},
+    }
+    request = urllib.request.Request(
+        JEV_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    started = time.perf_counter()
+    deadline = time.monotonic() + timeout
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.loads(read_with_deadline(response, deadline).decode("utf-8", "replace"))
+    answers = data.get("answers") or {}
+    probs = {}
+    for k in keys:
+        p = (answers.get(k) or {}).get("noul")
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p <= 1:
+            raise ValueError(f"risposta Jev non valida per {k}: {p!r}")
+        probs[k] = float(p)
+    return probs, (time.perf_counter() - started) * 1000
+
+
 def evaluate_retain(
     content: str,
     summary: dict,
     bank_urls: list[str],
     cfg: dict,
     api_call: ApiCall = api_json,
+    jev_call: JevCall | None = None,
 ) -> GateResult:
     """Valuta la finestra. Le violazioni STRUTTURALI della risposta (enum fuori
     schema, tipi errati, indici fuori range o ripetuti) e gli errori tecnici
@@ -435,7 +523,7 @@ def evaluate_retain(
         elif action == "skip" and reason == "duplicate":
             # Claim di duplicato senza indici a supporto: l'esito resta skip.
             reason = "no_durable_knowledge"
-        return GateResult(
+        result = GateResult(
             action=action,
             reason=reason,
             preview=preview.strip(),
@@ -453,6 +541,23 @@ def evaluate_retain(
             candidates=candidates,
             error=f"{type(exc).__name__}: {exc}",
         )
+    if result.action != "retain" or not cfg.get("retain_jev_enabled", True):
+        return result
+    # jev_call None -> ask_jev risolto qui, non nel default: i test lo
+    # sostituiscono a livello di modulo senza toccare ogni chiamata.
+    try:
+        probs, jev_ms = (jev_call or ask_jev)(content, float(cfg.get("retain_jev_timeout", 5)))
+        result.jev_probs, result.jev_latency_ms = probs, round(jev_ms, 2)
+        result.jev_score = jev_score(probs)
+    except Exception as exc:
+        # Fail-closed come gli errori di luna (ICH-73); preview, context e
+        # claim di luna restano per il debug.
+        result.action, result.reason = "skip", "gate_error"
+        result.error = f"jev: {type(exc).__name__}: {exc}"
+        return result
+    if result.jev_score < float(cfg.get("retain_jev_threshold", 0.47)):
+        result.action, result.reason = "skip", "jev_rejected"
+    return result
 
 
 # ---------------------------------------------------------------------------

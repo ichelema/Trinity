@@ -530,7 +530,11 @@ della finestra (replay identici fanno upsert) e candidati semantici dai bank di 
 passati al gate. Un errore tecnico del gate (timeout, chiave assente, output fuori schema) è
 **fail-closed** (ICH-73): nessun salvataggio, un `systemMessage` non bloccante una sola volta
 per sessione, e rollback del contatore `stop_count` così la prossima valutazione riprova su una
-finestra che scivola di un solo turno. Con `retain_debug_in_context: true` ogni valutazione
+finestra che scivola di un solo turno. Secondo filtro (ICH-163): un `retain` di luna si salva
+solo se TypeSafe Jev (`jev-latest`, chiave `$TYPESAFE_API_KEY`) conferma con F1 ≥
+`retain_jev_threshold` (default 0,47), altrimenti `skip` con reason `jev_rejected`; Jev non viene
+chiamato su `skip`/`uncertain`, e Jev irraggiungibile, in timeout o senza chiave è fail-closed
+come il gate. Con `retain_debug_in_context: true` ogni valutazione
 produce un blocco "## Hindsight retain debug" visibile in conversazione, speculare a
 `recall_debug_in_context`. Il gate produce anche il **`context` descrittivo** del retain (una
 riga di dominio invece della categoria secca `claude-code/<slug>`): non esiste più
@@ -542,7 +546,8 @@ scarta, `context: <testo>` salva col context indicato. Lo scarto per prompt nuov
 (*"Hindsight: memoria in attesa scartata — …"*); se la POST del sì fallisce (bank giù) il
 pending viene rimesso in attesa e l'avviso invita a rispondere di nuovo sì. Il content della fetta non porta più
 l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
-`retain_gate_model`, `retain_gate_timeout`. Il lato agente (retain MCP proattivo): il formato
+`retain_gate_model`, `retain_gate_timeout`, `retain_jev_enabled`, `retain_jev_threshold`,
+`retain_jev_timeout`. Il lato agente (retain MCP proattivo): il formato
 di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni
 sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain_enabled` è
 `false` (col gate attivo produrrebbero salvataggi doppi).

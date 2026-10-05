@@ -35,7 +35,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from lib import hindsight_config
+from lib import hindsight_config, hindsight_retain_gate
 from lib.hindsight_recall_lib import _VALID_RECALL_TYPES
 from lib.hindsight_retain_gate import (
     DEDUP_CANDIDATE_TYPES,
@@ -46,6 +46,7 @@ from lib.hindsight_retain_gate import (
     GATE_SCHEMA,
     REASONS_BY_ACTION,
     GateResult,
+    ask_jev,
     complete_documents,
     dedup_query,
     evaluate_retain,
@@ -54,6 +55,7 @@ from lib.hindsight_retain_gate import (
     fetch_duplicate_candidates,
     gate_input,
     handle_retain_consent,
+    jev_score,
     retain_consent_context,
     retain_consent_decision,
     retain_context_from_transcript,
@@ -61,6 +63,23 @@ from lib.hindsight_retain_gate import (
 )
 
 HERE = Path(__file__).resolve().parent
+
+# Probabilita' Jev sopra soglia (F1 = 0.9 * 0.9 * 0.9 = 0.729).
+JEV_PASS = {
+    "root_cause_or_workaround": 0.9,
+    "discarded_approach": 0.1,
+    "environment_constraint": 0.1,
+    "ephemeral": 0.1,
+    "repo_recoverable": 0.1,
+}
+
+
+def setUpModule():
+    # Secondo filtro Jev (ICH-163) attivo per default: i test che non parlano
+    # di Jev vedono il retain di luna invariato, senza rete.
+    patch = mock.patch.object(hindsight_retain_gate, "ask_jev", return_value=(JEV_PASS, 1.0))
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
 
 
 def fake_api(response: dict, latency: float = 7.0):
@@ -795,6 +814,131 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(result.reason, "gate_error")
         self.assertIsNotNone(result.error)
 
+    # --- Secondo filtro Jev (ICH-163) ---
+
+    def jev_retain(self, jev_call, **cfg):
+        """evaluate_retain con luna che dice retain e Jev sostituito da jev_call."""
+        return evaluate_retain(
+            "finestra",
+            {"turns": [("user", "domanda"), ("assistant", "risposta finale")]},
+            [],
+            {"retain_gate_model": "m", "retain_gate_timeout": 5, **cfg},
+            fake_api(gate_payload(
+                action="retain",
+                reason="durable_decision",
+                preview="Salvo la decisione X perché Y.",
+                context="ctx",
+                durable_claims=["X perché Y"],
+            )),
+            jev_call,
+        )
+
+    def test_jev_score_formula(self):
+        p = {
+            "root_cause_or_workaround": 0.9,
+            "discarded_approach": 0.1,
+            "environment_constraint": 0.2,
+            "ephemeral": 0.3,
+            "repo_recoverable": 0.2,
+        }
+        self.assertAlmostEqual(jev_score(p), 0.9 * 0.7 * 0.8)  # 0.504
+
+    def test_jev_above_threshold_retains(self):
+        jev = mock.Mock(return_value=(JEV_PASS, 12.345))
+        result = self.jev_retain(jev, retain_jev_timeout=3)
+        jev.assert_called_once_with("finestra", 3.0)
+        self.assertEqual(result.action, "retain")
+        self.assertEqual(result.reason, "durable_decision")
+        self.assertAlmostEqual(result.jev_score, 0.729)
+        self.assertEqual(result.jev_probs, JEV_PASS)
+        self.assertEqual(result.jev_latency_ms, 12.35)
+        self.assertIsNone(result.error)
+
+    def test_jev_below_threshold_rejects_keeping_luna_output(self):
+        p = dict(JEV_PASS, ephemeral=0.3, repo_recoverable=0.2, environment_constraint=0.2)  # F1 0.504
+        result = self.jev_retain(mock.Mock(return_value=(p, 1.0)), retain_jev_threshold=0.5)
+        self.assertEqual(result.action, "retain")
+        result = self.jev_retain(mock.Mock(return_value=(p, 1.0)), retain_jev_threshold=0.51)
+        self.assertEqual((result.action, result.reason), ("skip", "jev_rejected"))
+        self.assertIsNone(result.error)
+        self.assertAlmostEqual(result.jev_score, 0.504)
+        self.assertEqual(result.preview, "Salvo la decisione X perché Y.")
+        self.assertEqual(result.context, "ctx")
+        self.assertEqual(result.durable_claims, ["X perché Y"])
+        self.assertNotIn("jev_rejected", GATE_REASONS)  # non entra nello schema di luna
+
+    def test_jev_errors_fail_closed(self):
+        result = self.jev_retain(mock.Mock(side_effect=TimeoutError("timed out")))
+        self.assertEqual((result.action, result.reason), ("skip", "gate_error"))
+        self.assertEqual(result.error, "jev: TimeoutError: timed out")
+        self.assertEqual(result.preview, "Salvo la decisione X perché Y.")
+        # Chiave mancante: la vera ask_jev solleva prima di qualsiasi rete.
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("TYPESAFE_API_KEY", None)
+            result = self.jev_retain(ask_jev)
+        self.assertEqual((result.action, result.reason), ("skip", "gate_error"))
+        self.assertEqual(result.error, "jev: RuntimeError: TYPESAFE_API_KEY non impostata")
+
+    def test_jev_not_called_on_skip_uncertain_or_disabled(self):
+        summary = {"turns": [("user", "domanda"), ("assistant", "risposta finale")]}
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        jev = mock.Mock(return_value=(JEV_PASS, 1.0))
+        for payload in (
+            gate_payload(),
+            gate_payload(action="uncertain", reason="borderline", preview="forse", context="ctx"),
+        ):
+            result = evaluate_retain("finestra", summary, [], cfg, fake_api(payload), jev)
+            self.assertIsNone(result.jev_score)
+        result = self.jev_retain(jev, retain_jev_enabled=False)
+        self.assertEqual(result.action, "retain")
+        self.assertIsNone(result.jev_score)
+        jev.assert_not_called()
+
+    def test_ask_jev_request_and_response_validation(self):
+        answers = {k: {"noul": 0.5} for k in hindsight_retain_gate.QUESTIONS}
+
+        def call(data):
+            with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}), mock.patch(
+                "lib.hindsight_retain_gate.urllib.request.urlopen",
+                return_value=JevResponse(data),
+            ) as urlopen:
+                return ask_jev("finestra", 5), urlopen
+
+        (probs, _ms), urlopen = call({"answers": answers})
+        self.assertEqual(probs, {k: 0.5 for k in hindsight_retain_gate.QUESTIONS})
+        request = urlopen.call_args[0][0]
+        self.assertEqual(request.full_url, hindsight_retain_gate.JEV_URL)
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(body["model"], "jev-latest")
+        self.assertEqual(body["state"]["window"], "finestra")
+        self.assertEqual(len(body["questions"]), 10)
+        self.assertEqual({q["type"] for q in body["questions"].values()}, {"noul"})
+
+        for bad in (
+            {k: v for k, v in answers.items() if k != "ephemeral"},
+            dict(answers, ephemeral={"noul": 1.5}),
+            dict(answers, ephemeral={"noul": True}),
+        ):
+            with self.assertRaises(ValueError):
+                call({"answers": bad})
+
+
+class JevResponse:
+    """Risposta HTTP minima per read_with_deadline (read a blocchi, poi b"")."""
+
+    def __init__(self, data: dict):
+        self._chunks = [json.dumps(data).encode("utf-8")]
+
+    def read(self, _n=-1):
+        return self._chunks.pop() if self._chunks else b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
 
 class FakeResponse:
     status = 200
@@ -1136,6 +1280,34 @@ class GateConfigTests(unittest.TestCase):
             self.assertEqual(cfg["retain_gate_timeout"], 8)
             self.assertIs(cfg["retain_debug_in_context"], True)
 
+    def test_jev_defaults_and_override_validation(self):
+        defaults = hindsight_config.DEFAULTS
+        self.assertIs(defaults["retain_jev_enabled"], True)
+        self.assertEqual(defaults["retain_jev_threshold"], 0.47)
+        self.assertEqual(defaults["retain_jev_timeout"], 5)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.json")
+            cfg = dict(defaults)
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {"retain_jev_threshold": 1.5, "retain_jev_timeout": 0, "retain_jev_enabled": "si"},
+                    handle,
+                )
+            hindsight_config._merge_json(cfg, path)
+            self.assertEqual(cfg["retain_jev_threshold"], 0.47)
+            self.assertEqual(cfg["retain_jev_timeout"], 5)
+            self.assertIs(cfg["retain_jev_enabled"], True)
+
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {"retain_jev_threshold": 0.6, "retain_jev_timeout": 2.5, "retain_jev_enabled": False},
+                    handle,
+                )
+            hindsight_config._merge_json(cfg, path)
+            self.assertEqual(cfg["retain_jev_threshold"], 0.6)
+            self.assertEqual(cfg["retain_jev_timeout"], 2.5)
+            self.assertIs(cfg["retain_jev_enabled"], False)
+
 
 def load_worker():
     spec = importlib.util.spec_from_file_location(
@@ -1443,6 +1615,43 @@ class WorkerGateTests(unittest.TestCase):
         urlopen.assert_not_called()
         self.assertIsNone(out)
         self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 2)
+
+    def test_jev_rejected_saves_nothing(self):
+        rejected = GateResult(
+            action="skip",
+            reason="jev_rejected",
+            preview="p",
+            jev_score=0.2,
+            jev_probs=dict(JEV_PASS, root_cause_or_workaround=0.25),
+        )
+        rc, out, _gate, urlopen = self.run_main(self.cfg(), rejected)
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        self.assertIsNone(out)
+        rc, out, _gate, urlopen = self.run_main(self.cfg(retain_debug_in_context=True), rejected)
+        urlopen.assert_not_called()
+        self.assertIn("Gate: skip (jev_rejected)", out["systemMessage"])
+        self.assertIn("Jev: score 0.20 (soglia 0.47)", out["systemMessage"])
+        self.assertIn("0.25/0.10/0.10/0.10/0.10", out["systemMessage"])
+
+    def test_jev_error_is_fail_closed_with_single_notice(self):
+        cfg = self.cfg(retain_every_n_turns=3)
+        jev_error = GateResult(
+            action="skip", reason="gate_error", preview="p", error="jev: TimeoutError: x"
+        )
+        for _ in range(2):  # throttling: gate non chiamato
+            self.run_main(cfg, jev_error)
+        rc, out, gate_mock, urlopen = self.run_main(cfg, jev_error)
+        self.assertEqual(rc, 0)
+        self.assertEqual(gate_mock.call_count, 1)
+        urlopen.assert_not_called()
+        self.assertIn("errore tecnico del gate (jev: TimeoutError: x)", out["systemMessage"])
+        entry = self.read_state()["sess-gate-test"]
+        self.assertEqual(entry["stop_count"], 2)  # rollback: la prossima rivaluta
+        rc, out, gate_mock, urlopen = self.run_main(cfg, jev_error)
+        self.assertEqual(gate_mock.call_count, 1)
+        urlopen.assert_not_called()
+        self.assertIsNone(out)  # una sola notifica per sessione
 
     def test_gate_error_debug_still_emits_notice(self):
         rc, out, _gate, urlopen = self.run_main(
