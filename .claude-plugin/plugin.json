@@ -2,7 +2,6 @@
   "name": "trinity",
   "description": "Core dell'agente Trinity: memoria persistente Hindsight (recall/retain/reflect), skill, comandi, hook di notifica e comportamento condiviso tra progetti.",
   "version": "0.12.1",
-  "skills": ["./skills/mattpocock-skills/"],
   "author": {
     "name": "Ichelema"
   }

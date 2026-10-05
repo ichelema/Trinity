@@ -377,7 +377,6 @@ viaggiano con `git push/pull` e ogni macchina è allineata senza install per-mac
 
 | Upstream | Versione | Dove | Cosa fa |
 |---|---|---|---|
-| [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) | 1.2.3 | `skills/mattpocock-skills/<skill>/` → `trinity:<skill>` (es. `trinity:tdd`) | 26 skill di ingegneria (grilling, TDD, code review, domain modelling, spec/ticket flow); 15 hanno `disable-model-invocation: true` e si usano solo come `/trinity:<nome>` |
 
 Regole della copia:
 
