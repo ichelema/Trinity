@@ -198,7 +198,8 @@ I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNE
 `CLAUDE_GPT.md`) sono **locali**: esclusi da git (`.gitignore`), esistono solo su questa
 macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonnet 5.5
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
-`trinity:fast-worker` per il lavoro meccanico, DeepSeek (`claude-deepseek-flash` via LiteLLM)
+`trinity:fast-worker` per il lavoro meccanico (tranne Sonnet, che il lavoro meccanico lo fa da
+sé: `fast-worker` è lo stesso modello), DeepSeek (`claude-deepseek-flash` via LiteLLM)
 come pari per le decisioni ad alto rischio.
 
 **Modelli degli agenti.** `agents/deep-reasoner.md` usa l'alias `model: fable` e
