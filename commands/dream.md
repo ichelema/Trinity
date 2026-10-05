@@ -235,8 +235,12 @@ Regole del formato:
    giro, una sola volta:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-mental-models.sh" refresh --all
+   (cd "${CLAUDE_PLUGIN_ROOT}" && bash hooks/hindsight/ops/hindsight-mental-models.sh refresh --all)
    ```
+
+   I mental model vivono nel bank core: con la cwd sul repo del plugin lo script
+   risolve il core da qualunque progetto lanci apply. La subshell non sposta la
+   cwd della sessione.
 
 5. **Stato**: `last_audit` = il `window_end` letto dall'intestazione del report
    (NON "adesso": la prossima finestra parte da dove finiva quella auditata).

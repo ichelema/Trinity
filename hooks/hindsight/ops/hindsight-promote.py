@@ -6,7 +6,7 @@ Funnel (design multi-bank 2026-06-12): scan -> triage LLM -> review umana
 meccaniche; la review resta al comando Claude (MAI promozione automatica).
 
   --scan              elenca i documenti dei bank progetto non ancora revisionati
-  --triage            scan + classifica ogni candidato con gpt-4.1-nano
+  --triage            scan + classifica ogni candidato con promote_model (config)
                       ("resterebbe utile su un progetto completamente diverso?")
                       e scrive logs/promote-candidates.json
   --move ID --bank B  promuove: retain dell'original_text sul CORE (senza i tag

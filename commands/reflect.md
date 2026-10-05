@@ -45,7 +45,7 @@ tags_match: any
 Se il tool MCP `reflect` non è disponibile, esegui lo script locale:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-reflect.sh" "$ARGUMENTS"
+"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/ops/hindsight-reflect.sh" "<query usata sopra>"
 ```
 
 Usa l’output dello script come contesto per rispondere.

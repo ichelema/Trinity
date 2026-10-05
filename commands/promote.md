@@ -24,7 +24,8 @@ e imposta `PYTHONUTF8=1`; ogni blocco sotto assume `$HS_PY` già risolto così):
    - Se esiste ed è fresco (generato da meno di 7 giorni), usalo direttamente.
    - Altrimenti rigeneralo: `"$HS_PY" .../hindsight-promote.py --triage`
      (richiede il server Hindsight su :8888 e `OPENAI_API_KEY`; usa il triage
-     gpt-4.1-nano con cache dei verdetti, quindi è economico ripeterlo).
+     `promote_model` di `hindsight.config.json`, oggi gpt-5.6-luna, con cache dei
+     verdetti, quindi è economico ripeterlo).
 2. **Review umana**: mostra all'utente una tabella dei candidati con:
    - bank di provenienza e doc_id
    - motivazione del triage (`reason`)

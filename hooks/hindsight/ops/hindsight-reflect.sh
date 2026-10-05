@@ -16,7 +16,7 @@ export HOOKS_DIR QUERY
 import json, os, sys, urllib.request
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "..", "lib"))
-from hindsight_config import load_config
+from hindsight_config import load_config, retain_bank_url
 
 cfg = load_config()
 
@@ -30,7 +30,8 @@ payload = {
 }
 
 req = urllib.request.Request(
-    cfg["api_url"] + "/reflect",
+    # bank del progetto risolto dal cwd (come il tool MCP), non sempre il core
+    retain_bank_url(cfg, os.getcwd()) + "/reflect",
     data=json.dumps(payload).encode("utf-8"),
     headers={"Content-Type": "application/json"},
     method="POST",
