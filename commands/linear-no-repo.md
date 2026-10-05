@@ -4,7 +4,7 @@ argument-hint: [optional — issue ID(s), comma-separated, e.g. `AGI-23` or `AGI
 disable-model-invocation: true
 ---
 
-# /linear
+# /linear-no-repo
 
 Work Linear issues end-to-end. All Linear operations go through the **`linear` skill** (`${CLAUDE_PLUGIN_ROOT}/skills/linear/SKILL.md`; the `references/` and `scripts/` paths below are relative to that directory) — never via the deprecated Linear MCP server, which has been removed.
 
@@ -33,9 +33,9 @@ The agent **never** filters with `assignee = "me"` — always resolve to a concr
 ## Usage
 
 ```
-/linear                        # Work highest-priority assigned issue → lowest
-/linear AGI-23                 # Work the named issue
-/linear AGI-23, AGI-26         # Work the listed issues in order
+/trinity:linear-no-repo                   # Work highest-priority assigned issue → lowest
+/trinity:linear-no-repo AGI-23            # Work the named issue
+/trinity:linear-no-repo AGI-23, AGI-26    # Work the listed issues in order
 ```
 
 ## Execution logic
