@@ -17,6 +17,11 @@ Due fasi:
                    "retain" passano anche da POST /memories/dry-run-extract
                    (estrazione senza persistenza) per ispezione qualitativa.
 
+  --compare-content  (ICH-149) sulle finestre etichettate retain confronta i
+                   fatti di dry-run-extract da finestra grezza e da
+                   durable_claims + preview del gate; scrive
+                   <artifacts>/content_compare.jsonl per il giudizio.
+
 Formato label (una riga JSONL per finestra, allineata per "id"):
   {"id": "...", "expected_action": "retain|skip|uncertain", "reason": "...",
    "durable_claims": ["..."], "duplicate_of": ["mem-..."],
@@ -183,19 +188,94 @@ def read_jsonl(path: Path) -> list[dict]:
     return out
 
 
-def dry_run_extract(api_base: str, bank: str, content: str, timeout: float) -> int:
-    """POST dry-run-extract: numero di fatti candidati (nessuna persistenza)."""
+def dry_run_extract(
+    api_base: str, bank: str, content: str, timeout: float, context: str = ""
+) -> list[str]:
+    """POST dry-run-extract: testi dei fatti candidati (nessuna persistenza).
+    Il body e' un singolo {content, context}, non {items: [...]}."""
     url = f"{api_base}/banks/{bank}/memories/dry-run-extract"
+    body = {"content": content}
+    if context:
+        body["context"] = context
     req = urllib.request.Request(
         url,
-        data=json.dumps({"items": [{"content": content}]}).encode("utf-8"),
+        data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as res:
         data = json.loads(res.read().decode("utf-8", errors="replace"))
-    facts = data.get("facts") or data.get("items") or []
-    return len(facts)
+    return [str(f.get("text") or "") for f in data.get("facts") or []]
+
+
+def claims_content(preview: str, claims: list[str]) -> str:
+    """Variante (b) di ICH-149: preview del gate + durable_claims."""
+    return "\n".join([preview, ""] + [f"- {c}" for c in claims]).strip()
+
+
+def compare_content(args) -> int:
+    """ICH-149: sulle finestre etichettate retain confronta i fatti estratti da
+    (a) la finestra grezza e (b) durable_claims + preview del gate. Stesso bank
+    e stesso context del gate per entrambe: cambia solo il content. Senza
+    claims (b) coincide con (a) e non si ripete l'estrazione. Il giudizio dei
+    fatti (errati/effimeri/persi) si fa sul file prodotto."""
+    cfg = load_config()
+    windows = {w["id"]: w for w in read_jsonl(args.artifacts / WINDOWS_FILE.name)}
+    labels = read_jsonl(args.artifacts / LABELS_FILE.name)
+    todo = [
+        (l, windows[l["id"]])
+        for l in labels
+        if l.get("expected_action") == "retain" and l.get("id") in windows
+    ]
+    if not todo:
+        print(f"[compare] nessuna finestra retain in {args.artifacts}")
+        return 1
+    base = (cfg.get("bank") or {}).get("api_base", "").rstrip("/")
+    bank = args.compare_bank or (cfg.get("bank") or {}).get("core_bank", "")
+    print(f"[compare] {len(todo)} finestre retain, bank {bank}, modello {cfg['retain_gate_model']}")
+
+    def run(pair):
+        label, window = pair
+        row = {"id": window["id"], "gist": label.get("gist", ""), "why": label.get("why", "")}
+        summary = {"turns": [tuple(t) for t in window.get("turns", [])]}
+        gate = evaluate_retain(window["content"], summary, [], cfg)
+        row.update(
+            action=gate.action,
+            preview=gate.preview,
+            context=gate.context,
+            durable_claims=gate.durable_claims,
+            error=gate.error,
+        )
+        try:
+            row["facts_a"] = dry_run_extract(base, bank, window["content"], 180, gate.context)
+            if gate.durable_claims:
+                b = claims_content(gate.preview, gate.durable_claims)
+                row["content_b"] = b
+                row["facts_b"] = dry_run_extract(base, bank, b, 180, gate.context)
+            else:
+                row["content_b"] = None
+                row["facts_b"] = row["facts_a"]
+        except Exception as exc:  # noqa: BLE001 — la riga resta nel file con l'errore
+            row["error"] = row["error"] or f"dry-run: {type(exc).__name__}: {exc}"
+        return row
+
+    rows = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for i, row in enumerate(pool.map(run, todo), 1):
+            rows.append(row)
+            print(f"\r[compare] {i}/{len(todo)}", end="", flush=True)
+    print()
+    out = args.artifacts / "content_compare.jsonl"
+    with out.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    ok = [r for r in rows if not r["error"]]
+    print(f"  errori                 : {len(rows) - len(ok)}")
+    print(f"  claims vuoti           : {sum(1 for r in ok if r['content_b'] is None)}")
+    print(f"  fatti (a) finestra     : {sum(len(r['facts_a']) for r in ok)}")
+    print(f"  fatti (b) claims       : {sum(len(r['facts_b']) for r in ok)}")
+    print(f"[compare] dettaglio per finestra -> {out}")
+    return 0 if len(ok) == len(rows) else 1
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -375,7 +455,7 @@ def evaluate(args) -> int:
         base = (cfg.get("bank") or {}).get("api_base", "").rstrip("/")
         for label, window, result in predicted_retain[: args.dry_run_extract]:
             try:
-                n = dry_run_extract(base, args.bench_bank, window["content"], 60)
+                n = len(dry_run_extract(base, args.bench_bank, window["content"], 60))
                 print(f"  [dry-run] {window['id']}: {n} fatti candidati")
             except Exception as exc:  # noqa: BLE001 — ispezione best-effort
                 print(f"  [dry-run] {window['id']}: errore {type(exc).__name__}: {exc}")
@@ -428,8 +508,13 @@ def main() -> int:
     parser.add_argument("--dedup-bank-url", default="", metavar="URL", help="con --with-dedup, usa questo bank al posto dei bank reali")
     parser.add_argument("--dry-run-extract", type=int, default=0, metavar="N", help="ispeziona N finestre retain via dry-run-extract")
     parser.add_argument("--bench-bank", default="retain-gate-bench")
+    parser.add_argument("--compare-content", action="store_true", help="ICH-149: fatti estratti da finestra grezza vs durable_claims+preview")
+    parser.add_argument("--artifacts", type=Path, default=ARTIFACTS, help="cartella con retain_windows.jsonl e retain_labels.jsonl")
+    parser.add_argument("--compare-bank", default="", help="bank del dry-run (default: core_bank)")
     args = parser.parse_args()
 
+    if args.compare_content:
+        return compare_content(args)
     if args.build_corpus:
         build_corpus(args.sessions_root, args.target, args.every_n, args.overlap)
         return 0
