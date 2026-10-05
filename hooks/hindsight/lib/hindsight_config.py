@@ -162,7 +162,9 @@ DEFAULTS = {
     "retain_every_n_turns": 3,
     "retain_max_files": 15,
     "retain_max_cmds": 10,
-    "retain_text_truncate": 2000,
+    # Budget unico della finestra (ICH-151): il worker la costruisce entro questo
+    # limite tenendo i turni piu' recenti, il gate lo usa come rete di sicurezza.
+    "retain_window_max_chars": 10000,
     # Gate semantico pre-retain (ICH-67): quando retain_enabled e' true valuta
     # OGNI finestra prima della POST. Esiti: retain -> salva silenzioso;
     # skip -> non salva; uncertain -> mette la POST in pending e chiede
@@ -284,7 +286,7 @@ PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank
 
 def _valid_override(key: str, value) -> bool:
     """Valida i valori che il recall converte o usa come timeout/soglia."""
-    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout"}:
+    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout", "retain_window_max_chars"}:
         return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
     if key == "recall_result_filter_threshold":
         return (

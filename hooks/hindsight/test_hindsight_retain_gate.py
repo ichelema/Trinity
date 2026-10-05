@@ -52,6 +52,7 @@ from lib.hindsight_retain_gate import (
     fallback_context,
     fetch_document_facts,
     fetch_duplicate_candidates,
+    gate_input,
     handle_retain_consent,
     retain_consent_context,
     retain_consent_decision,
@@ -1235,7 +1236,7 @@ class WorkerGateTests(unittest.TestCase):
                 "retain_every_n_turns": 1,
                 "retain_overlap_turns": 1,
                 "retain_tool_calls": False,
-                "retain_text_truncate": 2000,
+                "retain_window_max_chars": 10000,
                 "retain_max_files": 15,
                 "retain_max_cmds": 10,
                 "debug_log_enabled": False,
@@ -2486,6 +2487,307 @@ class WorkerGateTests(unittest.TestCase):
         marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
         with open(marker, encoding="utf-8") as handle:
             self.assertIn("non arrivato al server", handle.read())
+
+
+class WindowContentTests(unittest.TestCase):
+    """Esiti dei comandi in cima alla finestra (ICH-150) e budget unico
+    retain_window_max_chars che conserva i turni piu' recenti (ICH-151)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    def setUp(self):
+        patch = mock.patch.dict(
+            self.worker.CFG, {"retain_window_max_chars": 10000, "retain_tool_calls": False}
+        )
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    @staticmethod
+    def bash(tool_id: str, command: str) -> dict:
+        return {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": tool_id, "name": "Bash", "input": {"command": command}}],
+            },
+        }
+
+    @staticmethod
+    def result(tool_id: str, text: str, is_error: bool = False) -> dict:
+        return {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": tool_id, "content": text, "is_error": is_error}],
+            },
+        }
+
+    def chunk(self, entries: list[dict]) -> str:
+        return self.worker.build_content_chunk({}, self.worker.summarize_window(entries, 4))
+
+    def test_successful_command_without_outcome_is_excluded(self):
+        content = self.chunk([
+            user_record("elenca i file del progetto"),
+            self.bash("t1", "git status --short"),
+            self.result("t1", " M README.md"),
+            assistant_record("Un file modificato."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
+    def test_failed_command_reports_exit_and_last_line(self):
+        content = self.chunk([
+            user_record("avvia il server"),
+            self.bash("t1", "mise run start-hindsight"),
+            self.result("t1", "Exit code 1\navvio...\nOSError: porta 8888 occupata", is_error=True),
+            assistant_record("Il server non parte."),
+        ])
+        self.assertTrue(content.startswith("## Command outcomes"))
+        self.assertIn("mise run start-hindsight → Exit code 1 | OSError: porta 8888 occupata", content)
+        self.assertLess(content.index("## Command outcomes"), content.index("## Conversation"))
+
+    def test_rejected_tool_use_is_not_a_failure(self):
+        content = self.chunk([
+            user_record("cancella la cartella"),
+            self.bash("t1", "rm -rf build"),
+            self.result("t1", "The user doesn't want to proceed with this tool use.", is_error=True),
+            assistant_record("Fermo."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
+    def test_test_result_lines_are_included(self):
+        content = self.chunk([
+            user_record("lancia i test"),
+            self.bash("t1", "python test_x.py"),
+            self.result("t1", "....\nRan 4 tests in 0.1s\nOK\n[run] PASS: 4 righe"),
+            assistant_record("Test verdi."),
+        ])
+        self.assertIn("python test_x.py → OK | [run] PASS: 4 righe", content)
+
+    def test_prose_mentioning_fail_is_not_an_outcome(self):
+        content = self.chunk([
+            user_record("cerca nel codice"),
+            self.bash("t1", "grep -rn gate lib/"),
+            self.result("t1", "lib/gate.py: fail-closed validation (any error means skip)\nlib/gate.py: password reset"),
+            assistant_record("Trovato."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
+    def test_long_command_is_shortened_to_leave_room_for_the_outcome(self):
+        content = self.chunk([
+            user_record("lancia i test"),
+            self.bash("t1", "cd /e/AI/Claude/Trinity && " + "x" * 300),
+            self.result("t1", "Exit code 1\nAssertionError: 1 != 0", is_error=True),
+            assistant_record("Rosso."),
+        ])
+        self.assertIn("… → Exit code 1 | AssertionError: 1 != 0", content)
+
+    def test_secret_lines_are_dropped(self):
+        content = self.chunk([
+            user_record("controlla la config"),
+            self.bash("t1", "env | grep KEY"),
+            self.result("t1", "Exit code 1\napi_key=sk-abcdefghijklmnop1234\nnessuna chiave valida", is_error=True),
+            assistant_record("Fatto."),
+        ])
+        self.assertIn("nessuna chiave valida", content)
+        self.assertNotIn("sk-abcdefghijklmnop1234", content)
+
+    def test_outcomes_section_is_capped(self):
+        entries = [user_record("lancia molti test")]
+        for i in range(40):
+            entries += [self.bash(f"t{i}", f"pytest suite_{i}"), self.result(f"t{i}", f"FAILED test_{i} " + "x" * 200)]
+        entries.append(assistant_record("Molti fallimenti."))
+        outcomes = self.worker.summarize_window(entries, 4)["outcomes"]
+        self.assertLessEqual(sum(len(o) + 1 for o in outcomes), self.worker.OUTCOMES_MAX_CHARS)
+        self.assertTrue(all(len(o) <= self.worker.OUTCOME_MAX_CHARS for o in outcomes))
+        self.assertIn("pytest suite_39", outcomes[-1])  # vincono i piu' recenti
+
+    def test_window_within_budget_is_unchanged(self):
+        content = self.chunk([
+            user_record("prima domanda"),
+            assistant_record("prima risposta"),
+            user_record("seconda domanda"),
+            assistant_record("seconda risposta"),
+        ])
+        self.assertEqual(
+            content,
+            "## Conversation (recent turns)\n[user] prima domanda\n\n[assistant] prima risposta\n\n"
+            "[user] seconda domanda\n\n[assistant] seconda risposta",
+        )
+
+    def test_long_turn_is_no_longer_truncated(self):
+        long_answer = "a" * 3000 + " CONCLUSIONE"
+        content = self.chunk([user_record("domanda"), assistant_record(long_answer)])
+        self.assertIn(long_answer, content)
+
+    def test_over_budget_drops_oldest_turns(self):
+        self.worker.CFG["retain_window_max_chars"] = 3000
+        content = self.chunk([
+            user_record("VECCHIA " + "v" * 2500),
+            assistant_record("VECCHIA risposta " + "v" * 2500),
+            user_record("ULTIMA domanda"),
+            assistant_record("ULTIMA risposta " + "u" * 1000),
+        ])
+        self.assertLessEqual(len(content), 3000)
+        self.assertNotIn("VECCHIA", content)
+        self.assertIn("ULTIMA domanda", content)
+        self.assertIn("ULTIMA risposta", content)
+
+    def test_single_huge_turn_keeps_head_and_tail(self):
+        self.worker.CFG["retain_window_max_chars"] = 2000
+        content = self.chunk([
+            user_record("ULTIMA domanda"),
+            assistant_record("INIZIO " + "x" * 9000 + " FINE"),
+        ])
+        self.assertLessEqual(len(content), 2000)
+        self.assertIn("ULTIMA domanda", content)
+        self.assertIn("INIZIO", content)
+        self.assertIn("FINE", content)
+        self.assertIn("[…]", content)
+
+    def test_last_user_survives_many_assistant_messages(self):
+        # Review ICH-151 #1: un turno utente seguito da tanti messaggi assistant,
+        # uno intermedio troppo grande: il prompt utente non deve sparire.
+        self.worker.CFG["retain_window_max_chars"] = 10000
+        content = self.chunk(
+            [user_record("PROMPT_UTENTE_ORIGINALE")]
+            + [assistant_record(f"passo {i} " + "a" * 1500) for i in range(8)]
+            + [assistant_record("INTERMEDIO " + "b" * 6000), assistant_record("CONCLUSIONE finale")]
+        )
+        self.assertLessEqual(len(content), 10000)
+        self.assertIn("PROMPT_UTENTE_ORIGINALE", content)
+        self.assertIn("CONCLUSIONE finale", content)
+
+    def test_budget_is_never_exceeded_and_protected_turns_survive(self):
+        # Review ICH-151 #2: sezioni accessorie piene, limiti piccoli.
+        self.worker.CFG["retain_tool_calls"] = True
+        for limit in (800, 1500, 3000, 10000):
+            for size in (50, 900, 4000, 12000):
+                entries = [user_record("VECCHIO " + "v" * size), assistant_record("vecchia " + "w" * size)]
+                for i in range(12):
+                    entries += [
+                        {"type": "assistant", "message": {"role": "assistant", "content": [
+                            {"type": "tool_use", "id": f"e{i}", "name": "Edit",
+                             "input": {"file_path": f"E:/repo/src/module_{i}/" + "f" * 60 + ".py"}},
+                            {"type": "tool_use", "id": f"t{i}", "name": "Bash",
+                             "input": {"command": f"python -m pytest suite_{i} " + "x" * 100}},
+                        ]}},
+                        self.result(f"t{i}", f"FAILED test_{i} " + "y" * 250),
+                    ]
+                entries += [user_record("ULTIMA_DOMANDA " + "u" * size), assistant_record("ULTIMA_RISPOSTA " + "r" * size)]
+                self.worker.CFG["retain_window_max_chars"] = limit
+                content = self.chunk(entries)
+                with self.subTest(limit=limit, size=size):
+                    self.assertLessEqual(len(content), limit)
+                    self.assertIn("ULTIMA_DOMANDA", content)
+                    self.assertIn("ULTIMA_RISPOSTA", content)
+
+    def test_command_with_secret_is_masked(self):
+        for command in (
+            'curl -H "Authorization: Bearer abcd1234efgh5678" https://x/api',
+            "OPENAI_API_KEY=sk-proj-abcdefghijklmnop1234567890 python run.py",
+        ):
+            with self.subTest(command=command):
+                content = self.chunk([
+                    user_record("prova"),
+                    self.bash("t1", command),
+                    self.result("t1", "Exit code 22\nrichiesta fallita", is_error=True),
+                    assistant_record("Fallito."),
+                ])
+                self.assertIn(self.worker.SECRET_CMD_PLACEHOLDER + " → Exit code 22 | richiesta fallita", content)
+                self.assertNotIn("abcd1234efgh5678", content)
+                self.assertNotIn("sk-proj-", content)
+
+    def test_env_style_secrets_in_output_are_dropped(self):
+        content = self.chunk([
+            user_record("prova"),
+            self.bash("t1", "printenv"),
+            self.result("t1", "Exit code 1\nGITHUB_TOKEN=abcdefghijklmnop12345\n"
+                              "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\nfine", is_error=True),
+            assistant_record("Fatto."),
+        ])
+        self.assertIn("printenv → Exit code 1 | fine", content)
+        self.assertNotIn("abcdefghijklmnop12345", content)
+        self.assertNotIn("MIIEvQIBADAN", content)
+
+    def test_history_stays_contiguous_when_a_turn_does_not_fit(self):
+        # Review ICH-151 #A: niente buchi, i turni piu' vecchi di quello scartato spariscono.
+        content = self.chunk([
+            user_record("A0 " + "a" * 100), assistant_record("A1 " + "a" * 100),
+            user_record("A2 " + "b" * 6000), assistant_record("A3 " + "c" * 6000),
+            user_record("A4 " + "d" * 100), assistant_record("A5 " + "e" * 100),
+        ])
+        self.assertIn("A3 ", content)
+        self.assertIn("A4 ", content)
+        self.assertIn("A5 ", content)
+        for gone in ("A0 ", "A1 ", "A2 "):
+            self.assertNotIn(gone, content)
+
+    def test_secret_filter_keeps_legitimate_evidence(self):
+        # Review ICH-150 #B: errori e SHA non sono segreti.
+        cases = [
+            ("python t.py", "Exit code 1\nTraceback\nKeyError: 'retain_window_max_chars'",
+             "python t.py → Exit code 1 | KeyError: 'retain_window_max_chars'"),
+            ("pytest -k x", "FAILED test_a.py::test_x - key=missing_value_here\n1 failed",
+             "pytest -k x → FAILED test_a.py::test_x - key=missing_value_here | 1 failed"),
+            ("git rev-parse HEAD", "Exit code 1\n95afd7d646e692eb0167ee55220f6fb9455ebc12",
+             "git rev-parse HEAD → Exit code 1 | 95afd7d646e692eb0167ee55220f6fb9455ebc12"),
+            ("python t.py --keyword=something_long", "Exit code 2\nbad option",
+             "python t.py --keyword=something_long → Exit code 2 | bad option"),
+            ("pytest", "Exit code 1\nAssertionError: token: 'abcdefghij' != None",
+             "pytest → Exit code 1 | AssertionError: token: 'abcdefghij' != None"),
+            ("pip install x", "Exit code 1\nTOKENIZERS_PARALLELISM=false_value_here",
+             "pip install x → Exit code 1 | TOKENIZERS_PARALLELISM=false_value_here"),
+        ]
+        for cmd, out, expected in cases:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.worker.command_outcome(cmd, out, True), "- " + expected)
+
+    def test_secret_filter_catches_lowercase_colon_and_json_formats(self):
+        # Review ICH-150 #C: formati riaperti dal restringimento del filtro.
+        for secret in (
+            "openai_api_key=abcdefghijklmnopqrstu",
+            "db_password=hunter2hunter2",
+            "aws_secret_access_key = wJalrXUtnFEMIK7MDENGbPxRfiCY",
+            "NPM_TOKEN: abcdefghijklmnopqrstuvwx",
+            "MY_SECRET: abcdefghijklmnopqrstuvwx",
+            "STRIPE_SECRET_KEY: rk_live_abcdefghijklmnop",
+            '"api_key": "abcdefghijklmnopqrstu"',
+            '"password": "hunter2hunter2"',
+            "OPENAI_API_KEY=sk-proj-abcdefghijklmnop1234567890",
+            "GITHUB_TOKEN=abcdefghijklmnop12345",
+            "token: abcdefghijklmnopqrstuvwx",
+        ):
+            with self.subTest(secret=secret):
+                outcome = self.worker.command_outcome("deploy", f"Exit code 1\n{secret}", True)
+                self.assertEqual(outcome, "- deploy → Exit code 1")
+                masked = self.worker.command_outcome(f"run {secret}", "Exit code 1\nboom", True)
+                self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
+
+    def test_secret_filter_is_linear_on_long_alphanumeric_lines(self):
+        # Review ICH-150 #D: una riga senza separatori (dump esadecimale) non
+        # deve far esplodere il backtracking. 30000 ~ tetto dell'output di Bash.
+        started = time.perf_counter()
+        self.worker.command_outcome("xxd -p -c0 blob", "Exit code 1\n" + "a" * 30000 + "\nboom", True)
+        self.assertLess(time.perf_counter() - started, 1.0)
+
+    def test_evaluate_retain_passes_the_configured_limit_to_the_gate(self):
+        seen = {}
+
+        def capture(model, system, user, schema_name, schema, timeout):
+            seen["user"] = user
+            return gate_payload(action="skip", reason="no_durable_knowledge", preview=""), 1.0
+
+        cfg = {"retain_gate_timeout": 1, "retain_gate_model": "m", "retain_window_max_chars": 50}
+        evaluate_retain("INIZIO " + "x" * 200 + " FINE", {"turns": []}, [], cfg, api_call=capture)
+        self.assertIn("FINE", seen["user"])
+        self.assertNotIn("INIZIO", seen["user"])
+
+    def test_gate_input_keeps_the_end(self):
+        text = gate_input("INIZIO " + "x" * 200 + " FINE", [], max_chars=100)
+        self.assertIn("FINE", text)
+        self.assertNotIn("INIZIO", text)
 
 
 if __name__ == "__main__":
