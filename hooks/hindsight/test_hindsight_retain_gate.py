@@ -2646,6 +2646,83 @@ class WindowContentTests(unittest.TestCase):
         self.assertIn("FINE", content)
         self.assertIn("[…]", content)
 
+    def test_last_user_survives_many_assistant_messages(self):
+        # Review ICH-151 #1: un turno utente seguito da tanti messaggi assistant,
+        # uno intermedio troppo grande: il prompt utente non deve sparire.
+        self.worker.CFG["retain_window_max_chars"] = 10000
+        content = self.chunk(
+            [user_record("PROMPT_UTENTE_ORIGINALE")]
+            + [assistant_record(f"passo {i} " + "a" * 1500) for i in range(8)]
+            + [assistant_record("INTERMEDIO " + "b" * 6000), assistant_record("CONCLUSIONE finale")]
+        )
+        self.assertLessEqual(len(content), 10000)
+        self.assertIn("PROMPT_UTENTE_ORIGINALE", content)
+        self.assertIn("CONCLUSIONE finale", content)
+
+    def test_budget_is_never_exceeded_and_protected_turns_survive(self):
+        # Review ICH-151 #2: sezioni accessorie piene, limiti piccoli.
+        self.worker.CFG["retain_tool_calls"] = True
+        for limit in (800, 1500, 3000, 10000):
+            for size in (50, 900, 4000, 12000):
+                entries = [user_record("VECCHIO " + "v" * size), assistant_record("vecchia " + "w" * size)]
+                for i in range(12):
+                    entries += [
+                        {"type": "assistant", "message": {"role": "assistant", "content": [
+                            {"type": "tool_use", "id": f"e{i}", "name": "Edit",
+                             "input": {"file_path": f"E:/repo/src/module_{i}/" + "f" * 60 + ".py"}},
+                            {"type": "tool_use", "id": f"t{i}", "name": "Bash",
+                             "input": {"command": f"python -m pytest suite_{i} " + "x" * 100}},
+                        ]}},
+                        self.result(f"t{i}", f"FAILED test_{i} " + "y" * 250),
+                    ]
+                entries += [user_record("ULTIMA_DOMANDA " + "u" * size), assistant_record("ULTIMA_RISPOSTA " + "r" * size)]
+                self.worker.CFG["retain_window_max_chars"] = limit
+                content = self.chunk(entries)
+                with self.subTest(limit=limit, size=size):
+                    self.assertLessEqual(len(content), limit)
+                    self.assertIn("ULTIMA_DOMANDA", content)
+                    self.assertIn("ULTIMA_RISPOSTA", content)
+
+    def test_command_with_secret_is_masked(self):
+        for command in (
+            'curl -H "Authorization: Bearer abcd1234efgh5678" https://x/api',
+            "OPENAI_API_KEY=sk-proj-abcdefghijklmnop1234567890 python run.py",
+        ):
+            with self.subTest(command=command):
+                content = self.chunk([
+                    user_record("prova"),
+                    self.bash("t1", command),
+                    self.result("t1", "Exit code 22\nrichiesta fallita", is_error=True),
+                    assistant_record("Fallito."),
+                ])
+                self.assertIn(self.worker.SECRET_CMD_PLACEHOLDER + " → Exit code 22 | richiesta fallita", content)
+                self.assertNotIn("abcd1234efgh5678", content)
+                self.assertNotIn("sk-proj-", content)
+
+    def test_env_style_secrets_in_output_are_dropped(self):
+        content = self.chunk([
+            user_record("prova"),
+            self.bash("t1", "printenv"),
+            self.result("t1", "Exit code 1\nGITHUB_TOKEN=abcdefghijklmnop12345\n"
+                              "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\nfine", is_error=True),
+            assistant_record("Fatto."),
+        ])
+        self.assertIn("printenv → Exit code 1 | fine", content)
+        self.assertNotIn("abcdefghijklmnop12345", content)
+        self.assertNotIn("MIIEvQIBADAN", content)
+
+    def test_evaluate_retain_passes_the_configured_limit_to_the_gate(self):
+        seen = {}
+
+        def capture(model, system, user, schema_name, schema, timeout):
+            seen["user"] = user
+            return gate_payload(action="skip", reason="no_durable_knowledge", preview=""), 1.0
+
+        cfg = {"retain_gate_timeout": 1, "retain_gate_model": "m", "retain_window_max_chars": 50}
+        evaluate_retain("INIZIO " + "x" * 200 + " FINE", {"turns": []}, [], cfg, api_call=capture)
+        self.assertIn("FINE", seen["user"])
+        self.assertNotIn("INIZIO", seen["user"])
+
     def test_gate_input_keeps_the_end(self):
         text = gate_input("INIZIO " + "x" * 200 + " FINE", [], max_chars=100)
         self.assertIn("FINE", text)

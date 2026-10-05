@@ -118,8 +118,14 @@ SECRET_PATTERNS = (
     ),
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
+    # Solo per gli esiti: variabili d'ambiente (OPENAI_API_KEY=, GITHUB_TOKEN=,
+    # AWS_SECRET_ACCESS_KEY=, token: ...), chiavi sk-* e corpo base64 dei PEM.
+    re.compile(r"\w*(?:key|token|secret|passw(?:or)?d)\w*\s*[:=]\s*['\"]?\S{8,}", re.I),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"^[A-Za-z0-9+/=]{40,}$"),
 )
 OMISSION_MARKER = "\n[…]\n"
+SECRET_CMD_PLACEHOLDER = "[comando omesso: contiene un segreto]"
 
 
 def parse_hook() -> dict:
@@ -627,7 +633,9 @@ def head_tail(text: str, max_chars: int) -> str:
     """Inizio + marcatore + fine entro max_chars (40/60: la conclusione sta in fondo)."""
     if len(text) <= max_chars:
         return text
-    budget = max(0, max_chars - len(OMISSION_MARKER))
+    if max_chars <= len(OMISSION_MARKER):
+        return text[len(text) - max_chars:] if max_chars > 0 else ""
+    budget = max_chars - len(OMISSION_MARKER)
     head = budget * 2 // 5
     return text[:head] + OMISSION_MARKER + text[len(text) - (budget - head):]
 
@@ -644,17 +652,18 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     """Esito compatto di un comando Bash, o None se non porta prove: un comando
     fallito (exit code + ultima riga) o le righe di esito dei test. Le righe con
     un segreto vengono scartate prima di tutto."""
-    lines = [
-        ln.strip() for ln in result.splitlines()
-        if ln.strip() and not any(p.search(ln) for p in SECRET_PATTERNS)
-    ]
+    stripped = (ln.strip() for ln in result.splitlines())
+    lines = [ln for ln in stripped if ln and not any(p.search(ln) for p in SECRET_PATTERNS)]
     evidence = [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
     # Un tool_use rifiutato dall'utente ha is_error ma non e' un comando fallito.
     if is_error and lines and not lines[0].startswith("The user doesn't want to proceed"):
         evidence = [lines[0]] + evidence + ([lines[-1]] if len(lines) > 1 else [])
     if not evidence:
         return None
-    if len(cmd) > OUTCOME_CMD_MAX_CHARS:
+    # Il comando finisce in memoria come l'output: stesso filtro.
+    if any(p.search(cmd) for p in SECRET_PATTERNS):
+        cmd = SECRET_CMD_PLACEHOLDER
+    elif len(cmd) > OUTCOME_CMD_MAX_CHARS:
         cmd = cmd[: OUTCOME_CMD_MAX_CHARS - 1] + "…"
     return f"- {cmd} → {' | '.join(dict.fromkeys(evidence))}"[:OUTCOME_MAX_CHARS]
 
@@ -746,12 +755,13 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
     per l'estrattore. Bonus: il content e' stabile per costruzione, quindi il
     document_id derivato dal suo hash resta identico sui replay.
 
-    Budget unico retain_window_max_chars (ICH-151): gli esiti dei comandi
-    (ICH-150) stanno in cima e non vengono mai tagliati; se la conversazione
-    non ci sta si scartano i turni dal piu' vecchio, e l'ultimo messaggio
-    utente e l'ultima risposta restano sempre (al limite in inizio+fine)."""
+    Budget unico retain_window_max_chars (ICH-151), mai superato. In ordine di
+    priorita': l'ultimo messaggio utente e l'ultima risposta (interi, o in
+    inizio+fine), poi le sezioni accessorie (esiti in cima, file/comandi in
+    fondo), poi gli altri turni dal piu' recente (chi non ci sta e' saltato)."""
     if not summary["turns"] and not summary["files_modified"]:
         return None
+    max_chars = int(CFG["retain_window_max_chars"])
     head: list[str] = []
     if summary.get("outcomes"):
         head += ["## Command outcomes"] + summary["outcomes"] + [""]
@@ -761,22 +771,37 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
     if summary["bash_cmds"]:
         tail += ["## Notable commands"] + [f"- {c}" for c in summary["bash_cmds"]] + [""]
     header = "## Conversation (recent turns)"
+    # Ogni turno costa len(line) + 1: il separatore "\n" del join finale.
     lines = [f"[{role}] {text}\n" for role, text in summary["turns"]]
     roles = [role for role, _ in summary["turns"]]
-    protected = {len(roles) - 1 - roles[::-1].index(r) for r in ("user", "assistant") if r in roles}
-    budget = int(CFG["retain_window_max_chars"]) - len("\n".join(head + [header] + tail)) - 2
-    kept: list[str] = []
+    protected = sorted({len(roles) - 1 - roles[::-1].index(r) for r in ("user", "assistant") if r in roles})
+
+    def avail() -> int:
+        return max_chars - len("\n".join(head + [header] + tail))
+
+    # Se i turni protetti non hanno almeno un quarto del limite ciascuno, si
+    # tolgono prima file/comandi e poi gli esiti.
+    need = sum(min(len(lines[j]) + 1, max_chars // 4) for j in protected)
+    if avail() < need:
+        tail = []
+    if avail() < need:
+        head = []
+    budget = max(0, avail())
+    cost = {j: len(lines[j]) + 1 for j in protected}
+    if protected and sum(cost.values()) > budget:
+        # Il piu' corto prende al massimo meta' dello spazio, l'altro il resto.
+        short = min(protected, key=lambda j: cost[j])
+        cost[short] = min(cost[short], budget // len(protected))
+        for j in protected:
+            if j != short:
+                cost[j] = budget - cost[short]
+    kept = {j: head_tail(lines[j], max(0, cost[j] - 1)) for j in protected}
+    budget -= sum(len(line) + 1 for line in kept.values())
     for i in range(len(lines) - 1, -1, -1):
-        line = lines[i]
-        if len(line) + 1 > budget:
-            if i not in protected:
-                break
-            # Lascia spazio all'altro turno protetto non ancora collocato.
-            reserve = sum(min(len(lines[j]) + 1, budget // 4) for j in protected if j < i)
-            line = head_tail(line, max(0, budget - reserve - 1))
-        kept.insert(0, line)
-        budget -= len(line) + 1
-    return "\n".join(head + [header] + kept + tail).strip()
+        if i not in kept and len(lines[i]) + 1 <= budget:
+            kept[i] = lines[i]
+            budget -= len(lines[i]) + 1
+    return "\n".join(head + [header] + [kept[i] for i in sorted(kept)] + tail).strip()
 
 
 def gate_debug_context(gate, bank: str) -> str:
