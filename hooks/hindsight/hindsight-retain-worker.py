@@ -97,6 +97,30 @@ INTERESTING_BASH_PATTERNS = (
     "go ",
 )
 
+# Esiti dei comandi (ICH-150): la prova che il gate cerca quando chiede
+# conoscenza "verificata". Solo comandi falliti e righe di esito dei test.
+OUTCOME_MAX_CHARS = 300
+OUTCOMES_MAX_CHARS = 2000
+OUTCOME_CMD_MAX_CHARS = 80
+# Solo righe che SEMBRANO esiti (PASS/FAIL maiuscoli, "3 passed", "OK" o
+# "FAILED" a inizio riga): la prosa ("fail-closed", "password") resta fuori.
+OUTCOME_TEST_LINE = re.compile(
+    r"\b(?:PASS(?:ED)?|FAIL(?:ED|URE)?)\b|\b\d+\s+(?:passed|failed|errors?)\b|^(?:OK|FAILED)\b"
+)
+# Stessi pattern del benchmark del gate: l'output dei comandi puo' contenere
+# segreti, il dialogo no (filtrarlo e' fuori perimetro).
+SECRET_PATTERNS = (
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    re.compile(r"\bAuthorization\s*:\s*(?:Bearer|Basic)\s+\S+", re.I),
+    re.compile(
+        r"\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|pwd)\s*[:=]\s*['\"]?\S{8,}",
+        re.I,
+    ),
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
+)
+OMISSION_MARKER = "\n[…]\n"
+
 
 def parse_hook() -> dict:
     try:
@@ -599,20 +623,67 @@ def slice_last_turns_by_user_boundary(messages: list[dict], turns: int) -> list[
     return messages[start:] if start != -1 else list(messages)
 
 
+def head_tail(text: str, max_chars: int) -> str:
+    """Inizio + marcatore + fine entro max_chars (40/60: la conclusione sta in fondo)."""
+    if len(text) <= max_chars:
+        return text
+    budget = max(0, max_chars - len(OMISSION_MARKER))
+    head = budget * 2 // 5
+    return text[:head] + OMISSION_MARKER + text[len(text) - (budget - head):]
+
+
+def _tool_result_text(content) -> str:
+    if isinstance(content, list):
+        content = "\n".join(
+            b.get("text") or "" for b in content if isinstance(b, dict) and b.get("type") == "text"
+        )
+    return content if isinstance(content, str) else ""
+
+
+def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
+    """Esito compatto di un comando Bash, o None se non porta prove: un comando
+    fallito (exit code + ultima riga) o le righe di esito dei test. Le righe con
+    un segreto vengono scartate prima di tutto."""
+    lines = [
+        ln.strip() for ln in result.splitlines()
+        if ln.strip() and not any(p.search(ln) for p in SECRET_PATTERNS)
+    ]
+    evidence = [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
+    # Un tool_use rifiutato dall'utente ha is_error ma non e' un comando fallito.
+    if is_error and lines and not lines[0].startswith("The user doesn't want to proceed"):
+        evidence = [lines[0]] + evidence + ([lines[-1]] if len(lines) > 1 else [])
+    if not evidence:
+        return None
+    if len(cmd) > OUTCOME_CMD_MAX_CHARS:
+        cmd = cmd[: OUTCOME_CMD_MAX_CHARS - 1] + "…"
+    return f"- {cmd} → {' | '.join(dict.fromkeys(evidence))}"[:OUTCOME_MAX_CHARS]
+
+
 def summarize_window(entries: list[dict], window_turns: int) -> dict:
     """Riassume l'intera finestra di window_turns turni: raccoglie la sequenza
-    (role, text) della conversazione + file/comandi della finestra."""
+    (role, text) della conversazione + file/comandi della finestra + gli esiti
+    dei comandi Bash (ICH-150, indipendenti da retain_tool_calls)."""
     window = slice_last_turns_by_user_boundary(
         _iter_role_messages(entries), window_turns
     )
     turns: list[tuple[str, str]] = []
     files_modified: list[str] = []
     bash_cmds: list[str] = []
+    pending_cmds: dict[str, str] = {}
+    outcomes: list[str] = []
 
     for m in window:
         role = m["role"]
         content = m["content"]
         if role == "user":
+            if isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "tool_result":
+                        cmd = pending_cmds.pop(b.get("tool_use_id") or "", None)
+                        if cmd:
+                            out = command_outcome(cmd, _tool_result_text(b.get("content")), bool(b.get("is_error")))
+                            if out:
+                                outcomes.append(out)
             txt = _human_user_text(content)
             if txt:
                 turns.append(("user", txt))
@@ -647,14 +718,24 @@ def summarize_window(entries: list[dict], window_turns: int) -> dict:
                             ) and any(p in first for p in INTERESTING_BASH_PATTERNS):
                                 if first not in bash_cmds:
                                     bash_cmds.append(first)
+                if b.get("type") == "tool_use" and b.get("name") == "Bash":
+                    cmd = ((b.get("input") or {}).get("command") or "").strip()
+                    if cmd and b.get("id"):
+                        pending_cmds[b["id"]] = cmd.split("\n", 1)[0][:200]
             if texts:
                 turns.append(("assistant", "\n".join(texts)))
 
-    trunc = CFG["retain_text_truncate"]
+    # Tetto della sezione: gli esiti piu' recenti vincono.
+    kept: list[str] = []
+    for out in reversed(outcomes):
+        if sum(len(o) + 1 for o in kept) + len(out) > OUTCOMES_MAX_CHARS:
+            break
+        kept.insert(0, out)
     return {
-        "turns": [(r, t[:trunc]) for r, t in turns],
+        "turns": turns,
         "files_modified": files_modified[-CFG["retain_max_files"] :],
         "bash_cmds": bash_cmds[-CFG["retain_max_cmds"] :],
+        "outcomes": kept,
     }
 
 
@@ -663,21 +744,39 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
     Niente header Timestamp/CWD/Session (ICH-67): quei valori sono gia' nei
     metadata dell'item e nel campo timestamp — nel content sarebbero solo rumore
     per l'estrattore. Bonus: il content e' stabile per costruzione, quindi il
-    document_id derivato dal suo hash resta identico sui replay."""
+    document_id derivato dal suo hash resta identico sui replay.
+
+    Budget unico retain_window_max_chars (ICH-151): gli esiti dei comandi
+    (ICH-150) stanno in cima e non vengono mai tagliati; se la conversazione
+    non ci sta si scartano i turni dal piu' vecchio, e l'ultimo messaggio
+    utente e l'ultima risposta restano sempre (al limite in inizio+fine)."""
     if not summary["turns"] and not summary["files_modified"]:
         return None
-    parts = ["## Conversation (recent turns)"]
-    for role, text in summary["turns"]:
-        parts += [f"[{role}] {text}", ""]
+    head: list[str] = []
+    if summary.get("outcomes"):
+        head += ["## Command outcomes"] + summary["outcomes"] + [""]
+    tail: list[str] = []
     if summary["files_modified"]:
-        parts += (
-            ["## Files modified"] + [f"- {p}" for p in summary["files_modified"]] + [""]
-        )
+        tail += ["## Files modified"] + [f"- {p}" for p in summary["files_modified"]] + [""]
     if summary["bash_cmds"]:
-        parts += (
-            ["## Notable commands"] + [f"- {c}" for c in summary["bash_cmds"]] + [""]
-        )
-    return "\n".join(parts).strip()
+        tail += ["## Notable commands"] + [f"- {c}" for c in summary["bash_cmds"]] + [""]
+    header = "## Conversation (recent turns)"
+    lines = [f"[{role}] {text}\n" for role, text in summary["turns"]]
+    roles = [role for role, _ in summary["turns"]]
+    protected = {len(roles) - 1 - roles[::-1].index(r) for r in ("user", "assistant") if r in roles}
+    budget = int(CFG["retain_window_max_chars"]) - len("\n".join(head + [header] + tail)) - 2
+    kept: list[str] = []
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i]
+        if len(line) + 1 > budget:
+            if i not in protected:
+                break
+            # Lascia spazio all'altro turno protetto non ancora collocato.
+            reserve = sum(min(len(lines[j]) + 1, budget // 4) for j in protected if j < i)
+            line = head_tail(line, max(0, budget - reserve - 1))
+        kept.insert(0, line)
+        budget -= len(line) + 1
+    return "\n".join(head + [header] + kept + tail).strip()
 
 
 def gate_debug_context(gate, bank: str) -> str:

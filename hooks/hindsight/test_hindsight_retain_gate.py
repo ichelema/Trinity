@@ -52,6 +52,7 @@ from lib.hindsight_retain_gate import (
     fallback_context,
     fetch_document_facts,
     fetch_duplicate_candidates,
+    gate_input,
     handle_retain_consent,
     retain_consent_context,
     retain_consent_decision,
@@ -1235,7 +1236,7 @@ class WorkerGateTests(unittest.TestCase):
                 "retain_every_n_turns": 1,
                 "retain_overlap_turns": 1,
                 "retain_tool_calls": False,
-                "retain_text_truncate": 2000,
+                "retain_window_max_chars": 10000,
                 "retain_max_files": 15,
                 "retain_max_cmds": 10,
                 "debug_log_enabled": False,
@@ -2486,6 +2487,169 @@ class WorkerGateTests(unittest.TestCase):
         marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
         with open(marker, encoding="utf-8") as handle:
             self.assertIn("non arrivato al server", handle.read())
+
+
+class WindowContentTests(unittest.TestCase):
+    """Esiti dei comandi in cima alla finestra (ICH-150) e budget unico
+    retain_window_max_chars che conserva i turni piu' recenti (ICH-151)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    def setUp(self):
+        patch = mock.patch.dict(
+            self.worker.CFG, {"retain_window_max_chars": 10000, "retain_tool_calls": False}
+        )
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    @staticmethod
+    def bash(tool_id: str, command: str) -> dict:
+        return {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": tool_id, "name": "Bash", "input": {"command": command}}],
+            },
+        }
+
+    @staticmethod
+    def result(tool_id: str, text: str, is_error: bool = False) -> dict:
+        return {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": tool_id, "content": text, "is_error": is_error}],
+            },
+        }
+
+    def chunk(self, entries: list[dict]) -> str:
+        return self.worker.build_content_chunk({}, self.worker.summarize_window(entries, 4))
+
+    def test_successful_command_without_outcome_is_excluded(self):
+        content = self.chunk([
+            user_record("elenca i file del progetto"),
+            self.bash("t1", "git status --short"),
+            self.result("t1", " M README.md"),
+            assistant_record("Un file modificato."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
+    def test_failed_command_reports_exit_and_last_line(self):
+        content = self.chunk([
+            user_record("avvia il server"),
+            self.bash("t1", "mise run start-hindsight"),
+            self.result("t1", "Exit code 1\navvio...\nOSError: porta 8888 occupata", is_error=True),
+            assistant_record("Il server non parte."),
+        ])
+        self.assertTrue(content.startswith("## Command outcomes"))
+        self.assertIn("mise run start-hindsight → Exit code 1 | OSError: porta 8888 occupata", content)
+        self.assertLess(content.index("## Command outcomes"), content.index("## Conversation"))
+
+    def test_rejected_tool_use_is_not_a_failure(self):
+        content = self.chunk([
+            user_record("cancella la cartella"),
+            self.bash("t1", "rm -rf build"),
+            self.result("t1", "The user doesn't want to proceed with this tool use.", is_error=True),
+            assistant_record("Fermo."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
+    def test_test_result_lines_are_included(self):
+        content = self.chunk([
+            user_record("lancia i test"),
+            self.bash("t1", "python test_x.py"),
+            self.result("t1", "....\nRan 4 tests in 0.1s\nOK\n[run] PASS: 4 righe"),
+            assistant_record("Test verdi."),
+        ])
+        self.assertIn("python test_x.py → OK | [run] PASS: 4 righe", content)
+
+    def test_prose_mentioning_fail_is_not_an_outcome(self):
+        content = self.chunk([
+            user_record("cerca nel codice"),
+            self.bash("t1", "grep -rn gate lib/"),
+            self.result("t1", "lib/gate.py: fail-closed validation (any error means skip)\nlib/gate.py: password reset"),
+            assistant_record("Trovato."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
+    def test_long_command_is_shortened_to_leave_room_for_the_outcome(self):
+        content = self.chunk([
+            user_record("lancia i test"),
+            self.bash("t1", "cd /e/AI/Claude/Trinity && " + "x" * 300),
+            self.result("t1", "Exit code 1\nAssertionError: 1 != 0", is_error=True),
+            assistant_record("Rosso."),
+        ])
+        self.assertIn("… → Exit code 1 | AssertionError: 1 != 0", content)
+
+    def test_secret_lines_are_dropped(self):
+        content = self.chunk([
+            user_record("controlla la config"),
+            self.bash("t1", "env | grep KEY"),
+            self.result("t1", "Exit code 1\napi_key=sk-abcdefghijklmnop1234\nnessuna chiave valida", is_error=True),
+            assistant_record("Fatto."),
+        ])
+        self.assertIn("nessuna chiave valida", content)
+        self.assertNotIn("sk-abcdefghijklmnop1234", content)
+
+    def test_outcomes_section_is_capped(self):
+        entries = [user_record("lancia molti test")]
+        for i in range(40):
+            entries += [self.bash(f"t{i}", f"pytest suite_{i}"), self.result(f"t{i}", f"FAILED test_{i} " + "x" * 200)]
+        entries.append(assistant_record("Molti fallimenti."))
+        outcomes = self.worker.summarize_window(entries, 4)["outcomes"]
+        self.assertLessEqual(sum(len(o) + 1 for o in outcomes), self.worker.OUTCOMES_MAX_CHARS)
+        self.assertTrue(all(len(o) <= self.worker.OUTCOME_MAX_CHARS for o in outcomes))
+        self.assertIn("pytest suite_39", outcomes[-1])  # vincono i piu' recenti
+
+    def test_window_within_budget_is_unchanged(self):
+        content = self.chunk([
+            user_record("prima domanda"),
+            assistant_record("prima risposta"),
+            user_record("seconda domanda"),
+            assistant_record("seconda risposta"),
+        ])
+        self.assertEqual(
+            content,
+            "## Conversation (recent turns)\n[user] prima domanda\n\n[assistant] prima risposta\n\n"
+            "[user] seconda domanda\n\n[assistant] seconda risposta",
+        )
+
+    def test_long_turn_is_no_longer_truncated(self):
+        long_answer = "a" * 3000 + " CONCLUSIONE"
+        content = self.chunk([user_record("domanda"), assistant_record(long_answer)])
+        self.assertIn(long_answer, content)
+
+    def test_over_budget_drops_oldest_turns(self):
+        self.worker.CFG["retain_window_max_chars"] = 3000
+        content = self.chunk([
+            user_record("VECCHIA " + "v" * 2500),
+            assistant_record("VECCHIA risposta " + "v" * 2500),
+            user_record("ULTIMA domanda"),
+            assistant_record("ULTIMA risposta " + "u" * 1000),
+        ])
+        self.assertLessEqual(len(content), 3000)
+        self.assertNotIn("VECCHIA", content)
+        self.assertIn("ULTIMA domanda", content)
+        self.assertIn("ULTIMA risposta", content)
+
+    def test_single_huge_turn_keeps_head_and_tail(self):
+        self.worker.CFG["retain_window_max_chars"] = 2000
+        content = self.chunk([
+            user_record("ULTIMA domanda"),
+            assistant_record("INIZIO " + "x" * 9000 + " FINE"),
+        ])
+        self.assertLessEqual(len(content), 2000)
+        self.assertIn("ULTIMA domanda", content)
+        self.assertIn("INIZIO", content)
+        self.assertIn("FINE", content)
+        self.assertIn("[…]", content)
+
+    def test_gate_input_keeps_the_end(self):
+        text = gate_input("INIZIO " + "x" * 200 + " FINE", [], max_chars=100)
+        self.assertIn("FINE", text)
+        self.assertNotIn("INIZIO", text)
 
 
 if __name__ == "__main__":
