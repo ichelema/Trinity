@@ -63,11 +63,15 @@ e imposta `PYTHONUTF8=1`; ogni blocco sotto assume `$HS_PY` già risolto così):
      curl -s -m 120 -X POST "$CORE_URL/memories" \
        -H "Content-Type: application/json" \
        -d '{"items":[{"content":"<fatto riscritto>","tags":["claude-code"],
+            "context":"<riga descrittiva del dominio>",
+            "observation_scopes":[["claude-code"]],
             "metadata":{"promoted_from":"<BANK>"},
             "document_id":"promoted:<BANK>:<DOC_ID>#curato"}],"async":false}'
      ```
 
      Verifica `"success": true` nella risposta (sync: può durare fino a ~90s).
+     `context` segue la regola di `core-behavior`: una riga che descrive il
+     dominio, mai una categoria secca né il nome del bank.
      Il `document_id` deterministico fa upsert su retry invece di duplicare;
      il suffisso `#curato` lo distingue dall'id di un eventuale `--move` dello
      stesso documento.
