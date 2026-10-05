@@ -1,17 +1,5 @@
 {
   "mcpServers": {
-    "excalidraw": {
-      "type": "stdio",
-      "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
-      "args": [
-        "${MCP_EXCALIDRAW_DIR}/dist/index.js"
-      ],
-      "env": {
-        "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
-        "ENABLE_CANVAS_SYNC": "true",
-        "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR}/logs/excalidraw.log"
-      }
-    },
     "obsidian_semantic_notes_vault": {
       "type": "http",
       "url": "http://localhost:3002/mcp"

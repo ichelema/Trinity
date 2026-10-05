@@ -86,7 +86,7 @@ Eventi registrati dal plugin:
 |---|---|---|
 | `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model · **cattura il modello** (`capture-model.sh`, §3.1) |
 | `UserPromptSubmit` | — | skill-eval · Hindsight **recall** (che prima consuma il consenso e valuta il retain accodato allo Stop precedente: gate → POST o domanda) · failcheck |
-| `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian |
+| `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian (inattivo finché il server `excalidraw` è disattivato) |
 | `Stop` | — | suono di fine · Hindsight **retain** (solo enqueue: scrive il payload in `hs-retain-queue/` e risponde `{}`; la valutazione è differita al prossimo `UserPromptSubmit`, la coda residua la drena la sentinella — ICH-86) |
 | `MessageDisplay` | — | **riscrittura in italiano semplice** (`gate.sh` → `rewrite.sh`, §3.1) |
 | `Notification` | `permission_prompt` | suono + toast Windows |
@@ -231,7 +231,7 @@ Linux o con modelli senza file è un no-op.
 
 ## 5. Skill incluse
 
-In `skills/` (9 attive; `obsidian-cli` è disattivata, file `SKILL.md.disabled`), attivate per
+In `skills/` (8 attive; `obsidian-cli` ed `excalidraw-skill` sono disattivate, file `SKILL.md.disabled`), attivate per
 rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |
@@ -240,7 +240,7 @@ rilevanza dall'hook skill-eval o a richiesta:
 | `obsidian` | vault Obsidian: note, Dataview, canvas, daily note |
 | `mise` | gestione runtime, env e task |
 | `nushell` | pipeline su dati strutturati |
-| `excalidraw-skill` | creazione/refine di diagrammi su canvas live |
+| `excalidraw-skill` | **disattivata** — diagrammi su canvas live; richiede il server MCP `excalidraw` (§7) |
 | `github-pr-release` | release e versionamento: SemVer, CHANGELOG curato, commit atomici, tag e GitHub Release via `gh`; copre anche il rilascio del plugin Trinity |
 | `chezmoi` | gestione dei dotfile con chezmoi (template, script, cifratura, multi-macchina) |
 | `linear` | API GraphQL di Linear tramite la CLI `scripts/linear.py` |
@@ -311,7 +311,7 @@ progetto (sono file del plugin, non del singolo progetto):
 |---|---|---|
 | `playwright` | stdio (node) | automazione browser headless (Playwright) |
 | `ticktick` | http (remoto, `mcp.ticktick.com`) | task, liste, abitudini, focus record e countdown di TickTick |
-| `excalidraw` | stdio (node) | canvas Excalidraw live — `disabled: true` nel file |
+| `excalidraw` | stdio (node) | canvas Excalidraw live — **disattivato**: entry tolta da `.mcp.json` (sotto come riattivarlo) |
 | `obsidian_semantic_notes_vault` | http (`localhost:3002`) | accesso semantico al vault Obsidian — attivo, richiede l'app Obsidian in ascolto su :3002 |
 | `debugger` | stdio (node, exe-free) | debug **autonomo** di Claude (mcp-debugger): breakpoint, step, variabili su Python/Ruby/JavaScript, 21 tool |
 | `neovim` | stdio (node, exe-free) | pair-debugging sulla sessione **nvim-dap dell'utente** (fork `ichelema/mcp-neovim-server`): 21 tool `dap_*` + 18 `vim_*` |
@@ -345,8 +345,26 @@ apre il browser — l'agente non può farlo al posto tuo. Fatto una volta, espon
 tool `mcp__linear__*` sul workspace `Ichelema`. L'endpoint corretto è
 `https://mcp.linear.app/mcp` (Streamable HTTP); `/sse` è deprecato.
 
-Il solo `excalidraw` è
-marcato `disabled: true` nel file. Oltre a questi, Claude Code
+**`excalidraw` è disattivato**, insieme alla skill `excalidraw-skill`. L'entry non è in
+`.mcp.json` perché lì non esiste un flag `disabled` (Claude Code lo ignora) e i server di
+un plugin non hanno un interruttore globale, solo per progetto da `/mcp`. Per riattivarlo:
+rimetti questa entry in `mcpServers` di `.mcp.json` e rinomina
+`skills/excalidraw-skill/SKILL.md.disabled` in `SKILL.md`.
+
+```json
+"excalidraw": {
+  "type": "stdio",
+  "command": "${TRINITY_PLUGIN_DIR}/scripts/bin/run-node.sh",
+  "args": ["${MCP_EXCALIDRAW_DIR}/dist/index.js"],
+  "env": {
+    "EXPRESS_SERVER_URL": "http://127.0.0.1:3000",
+    "ENABLE_CANVAS_SYNC": "true",
+    "LOG_FILE_PATH": "${TRINITY_PLUGIN_DIR}/logs/excalidraw.log"
+  }
+}
+```
+
+Oltre a questi, Claude Code
 espone i propri MCP **built-in** (es. `claude-in-chrome`), non gestiti da Trinity.
 
 ### I due server di debug (dal 2026-07-28)
@@ -654,7 +672,7 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
 `MCP_EXCALIDRAW_DIR` serve al server MCP `excalidraw`: punta a uno
 strumento esterno installato **fuori dal repo**: definiscila col path locale
 dell'installazione. Su un'altra macchina (o su Linux) il path cambia. Senza questa variabile il server non parte (warning
-in avvio, resto invariato); `excalidraw` è comunque `disabled` di default.
+in avvio, resto invariato); serve solo se riattivi `excalidraw`, disattivato di default.
 
 Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
 valore (es. `"/home/sphynx/Obsidian/Sinapsi"`): `core-behavior.md` resta identico, l'iniezione 
@@ -668,7 +686,7 @@ una variabile separata.
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
-| server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; server `disabled` di default) |
+| server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; serve solo se riattivi il server, disattivato di default) |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
 | server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `D:/Sviluppo/Progetti`) |
 
@@ -1045,10 +1063,10 @@ DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due mod
 ```
 Trinity/
 ├── core-behavior.md         comportamento iniettato al SessionStart
-├── .mcp.json                server MCP (playwright, ticktick; excalidraw/obsidian off — hindsight a scope user, §7)
+├── .mcp.json                server MCP (playwright, ticktick, obsidian; excalidraw disattivato — hindsight a scope user, §7)
 ├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
 ├── commands/                slash command (/trinity:*)
-├── skills/                  9 skill attive
+├── skills/                  8 skill attive
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval/          suggerimento skill (skill-eval.pl + skill-rules.json/schema)
