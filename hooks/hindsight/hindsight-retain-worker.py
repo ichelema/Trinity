@@ -118,11 +118,14 @@ SECRET_PATTERNS = (
     ),
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
-    # Solo per gli esiti: variabili d'ambiente (OPENAI_API_KEY=, GITHUB_TOKEN=,
-    # AWS_SECRET_ACCESS_KEY=, token: ...), chiavi sk-* e corpo base64 dei PEM.
-    re.compile(r"\w*(?:key|token|secret|passw(?:or)?d)\w*\s*[:=]\s*['\"]?\S{8,}", re.I),
+    # Solo per gli esiti, stretti per non scartare prove (KeyError, key=...,
+    # SHA git, --keyword=...): variabili d'ambiente in maiuscolo
+    # (OPENAI_API_KEY=, GITHUB_TOKEN=, AWS_SECRET_ACCESS_KEY=), token:/secret:
+    # con un valore lungo, chiavi sk-*, corpo base64 dei PEM (non solo esadecimale).
+    re.compile(r"\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD)\b\s*=\s*['\"]?\S{8,}"),
+    re.compile(r"\b(?:token|secret)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}", re.I),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
-    re.compile(r"^[A-Za-z0-9+/=]{40,}$"),
+    re.compile(r"^(?=[A-Za-z0-9+/]*[G-Zg-z+/])[A-Za-z0-9+/]{40,}={0,2}$"),
 )
 OMISSION_MARKER = "\n[…]\n"
 SECRET_CMD_PLACEHOLDER = "[comando omesso: contiene un segreto]"
@@ -758,7 +761,7 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
     Budget unico retain_window_max_chars (ICH-151), mai superato. In ordine di
     priorita': l'ultimo messaggio utente e l'ultima risposta (interi, o in
     inizio+fine), poi le sezioni accessorie (esiti in cima, file/comandi in
-    fondo), poi gli altri turni dal piu' recente (chi non ci sta e' saltato)."""
+    fondo), poi gli altri turni dal piu' recente finche' entrano."""
     if not summary["turns"] and not summary["files_modified"]:
         return None
     max_chars = int(CFG["retain_window_max_chars"])
@@ -797,10 +800,14 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
                 cost[j] = budget - cost[short]
     kept = {j: head_tail(lines[j], max(0, cost[j] - 1)) for j in protected}
     budget -= sum(len(line) + 1 for line in kept.values())
+    # Storia contigua: al primo turno che non entra si scartano lui e i piu' vecchi.
     for i in range(len(lines) - 1, -1, -1):
-        if i not in kept and len(lines[i]) + 1 <= budget:
-            kept[i] = lines[i]
-            budget -= len(lines[i]) + 1
+        if i in kept:
+            continue
+        if len(lines[i]) + 1 > budget:
+            break
+        kept[i] = lines[i]
+        budget -= len(lines[i]) + 1
     return "\n".join(head + [header] + [kept[i] for i in sorted(kept)] + tail).strip()
 
 

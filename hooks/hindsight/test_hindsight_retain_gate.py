@@ -2711,6 +2711,37 @@ class WindowContentTests(unittest.TestCase):
         self.assertNotIn("abcdefghijklmnop12345", content)
         self.assertNotIn("MIIEvQIBADAN", content)
 
+    def test_history_stays_contiguous_when_a_turn_does_not_fit(self):
+        # Review ICH-151 #A: niente buchi, i turni piu' vecchi di quello scartato spariscono.
+        content = self.chunk([
+            user_record("A0 " + "a" * 100), assistant_record("A1 " + "a" * 100),
+            user_record("A2 " + "b" * 6000), assistant_record("A3 " + "c" * 6000),
+            user_record("A4 " + "d" * 100), assistant_record("A5 " + "e" * 100),
+        ])
+        self.assertIn("A3 ", content)
+        self.assertIn("A4 ", content)
+        self.assertIn("A5 ", content)
+        for gone in ("A0 ", "A1 ", "A2 "):
+            self.assertNotIn(gone, content)
+
+    def test_secret_filter_keeps_legitimate_evidence(self):
+        # Review ICH-150 #B: errori e SHA non sono segreti.
+        cases = [
+            ("python t.py", "Exit code 1\nTraceback\nKeyError: 'retain_window_max_chars'",
+             "python t.py → Exit code 1 | KeyError: 'retain_window_max_chars'"),
+            ("pytest -k x", "FAILED test_a.py::test_x - key=missing_value_here\n1 failed",
+             "pytest -k x → FAILED test_a.py::test_x - key=missing_value_here | 1 failed"),
+            ("git rev-parse HEAD", "Exit code 1\n95afd7d646e692eb0167ee55220f6fb9455ebc12",
+             "git rev-parse HEAD → Exit code 1 | 95afd7d646e692eb0167ee55220f6fb9455ebc12"),
+            ("python t.py --keyword=something_long", "Exit code 2\nbad option",
+             "python t.py --keyword=something_long → Exit code 2 | bad option"),
+            ("pytest", "Exit code 1\nAssertionError: token: 'abcdefghij' != None",
+             "pytest → Exit code 1 | AssertionError: token: 'abcdefghij' != None"),
+        ]
+        for cmd, out, expected in cases:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.worker.command_outcome(cmd, out, True), "- " + expected)
+
     def test_evaluate_retain_passes_the_configured_limit_to_the_gate(self):
         seen = {}
 
