@@ -76,7 +76,7 @@ esistente.
 
 ## Recupero delle issue
 
-Recupera ogni issue con `scripts/linear.py query`, selezionando il campo `relations`.
+Recupera ogni issue con `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`, selezionando il campo `relations`.
 
 Leggi:
 

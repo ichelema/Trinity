@@ -43,7 +43,7 @@ Determina, a partire dalla descrizione:
 - dipendenze da altre issue (se presenti);
 - eventuale parent issue.
 
-Recupera i valori validi dal workspace via `scripts/linear.py query`, mai a memoria:
+Recupera i valori validi dal workspace via `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`, mai a memoria:
 
 | Campo | Query GraphQL |
 | --- | --- |
@@ -126,7 +126,7 @@ Se la issue dipende da altre issue Linear, usa il campo `blockedBy` di
 (es. `["ICH-42", "ICH-55"]`).
 
 Non inventare identificativi: verifica che le issue referenziate esistano con
-`scripts/linear.py query` (query `issue(id:)` o `issues(filter:)`) prima di
+`${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query` (query `issue(id:)` o `issues(filter:)`) prima di
 aggiungerle come dipendenza. Un ID
 inventato non fallisce in modo rumoroso: crea silenziosamente un collegamento
 sbagliato o nessun collegamento.
@@ -178,12 +178,12 @@ Prima di creare la issue mostra:
 - Description (corpo completo, in inglese)
 
 Chiedi conferma esplicita. Solo dopo la conferma crea la issue con la mutation
-`issueCreate` via `scripts/linear.py mutation` (per aggiornare un'issue
+`issueCreate` via `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py mutation` (per aggiornare un'issue
 esistente usa invece `issueUpdate` con l'`id`).
 
 ## Verifica finale
 
-Rileggi la issue creata con `scripts/linear.py query` (`issue(id:)`) e verifica che i campi salvati
+Rileggi la issue creata con `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query` (`issue(id:)`) e verifica che i campi salvati
 corrispondano a quelli confermati. Un valore rifiutato da Linear non produce
 sempre un errore: può semplicemente restare vuoto.
 

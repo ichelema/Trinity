@@ -69,7 +69,7 @@ Puoi eseguire comandi di ispezione e test solo se non modificano file tracciati 
 
 ## 1. Ricostruisci il contratto delle issue
 
-Leggi ogni issue direttamente da Linear (via `scripts/linear.py query`), se hai accesso in sola lettura, includendo:
+Leggi ogni issue direttamente da Linear (via `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`), se hai accesso in sola lettura, includendo:
 
 - descrizione;
 - acceptance criteria;
