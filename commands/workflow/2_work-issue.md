@@ -22,7 +22,7 @@ Dividi `$ARGUMENTS` in token separati da spazi:
 
 Se i token sono meno di 2, fermati e mostra:
 
-`/2_work-issue <issue-id...> <model>`
+`/trinity:workflow:2_work-issue <issue-id...> <model>`
 
 ## Localizzazione del worktree
 
@@ -49,7 +49,7 @@ Da quella entry ricava:
 
 Se non esiste nessuna entry corrispondente, fermati e mostra:
 
-`/1_create-worktree <source-branch> <issue-id...> <model>`
+`/trinity:workflow:1_create-worktree <source-branch> <issue-id...> <model>`
 
 Non cercare worktree simili, non riutilizzare un worktree di review, non
 lavorare nel repository principale.
@@ -256,7 +256,7 @@ diventa testo del workspace a tutti gli effetti.
 ## Non fare il merge
 
 Fermati qui. Il passo successivo è la review indipendente, in una sessione
-nuova (`/3_independent-review <issue-id...> <model>`), poi il merge resta
+nuova (`/trinity:workflow:3_independent-review <issue-id...> <model>`), poi il merge resta
 all'utente.
 
 ## Verifica finale
@@ -289,7 +289,7 @@ valori effettivi; `<model>` è l'ultimo argomento ricevuto:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Pull Request           │ <url> (magic words: <Fixes/Refs> per ogni issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /3_independent-review <issue-id...> <model>              │
+│ Prossimo passo         │ /trinity:workflow:3_independent-review <issue-id...> <model> │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 

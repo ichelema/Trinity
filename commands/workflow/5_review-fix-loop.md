@@ -23,7 +23,7 @@ Dividi `$ARGUMENTS` in token separati da spazi:
 
 Se i token sono meno di 2, fermati e mostra:
 
-`/5_review-fix-loop <issue-id...> <model>`
+`/trinity:workflow:5_review-fix-loop <issue-id...> <model>`
 
 ## Localizzazione del worktree e della PR
 

@@ -23,7 +23,7 @@ lista. Dei token restanti:
 
 Se restano meno di 2 token, fermati e mostra:
 
-`/3_independent-review <issue-id...> <model> [<review-path>]`
+`/trinity:workflow:3_independent-review <issue-id...> <model> [<review-path>]`
 
 Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 

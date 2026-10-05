@@ -17,7 +17,7 @@ Dividi `$ARGUMENTS` in token separati da spazi:
 
 Se i token sono meno di 3, fermati e mostra:
 
-`/1_create-worktree <source-branch> <issue-id...> <model>`
+`/trinity:workflow:1_create-worktree <source-branch> <issue-id...> <model>`
 
 ## Determinazione del tipo dalle issue
 

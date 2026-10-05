@@ -15,7 +15,7 @@ i comandi sono Bash puro e portabile; i passi solo-Windows sono marcati.
 
 Se `$worktree_name` manca, fermati e mostra:
 
-`/4_remove-worktree <worktree-name>`
+`/trinity:workflow:4_remove-worktree <worktree-name>`
 
 Accetta anche un path assoluto: in quel caso usalo com'è. Altrimenti il worktree
 è `<repo-root>/.claude/worktrees/$worktree_name`.

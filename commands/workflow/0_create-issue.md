@@ -12,7 +12,7 @@ $ARGUMENTS
 
 Se la descrizione è vuota, fermati e mostra:
 
-`/0_create-issue <descrizione del lavoro da fare>`
+`/trinity:workflow:0_create-issue <descrizione del lavoro da fare>`
 
 Non dedurre la issue dal branch corrente, dalla cronologia Git o dal contenuto
 del working tree.
