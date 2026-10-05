@@ -24,7 +24,7 @@ hooks/hindsight/benchmark/artifacts/
 .claude/worktrees/
 
 # File locali generati, non da versionare.
-/CLAUDE_Fable.md
+/CLAUDE_FABLE.md
 /CLAUDE_OPUS.md
 /CLAUDE_GPT.md
 /CLAUDE_SONNET.md
