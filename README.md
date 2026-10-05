@@ -238,7 +238,6 @@ In `skills/` (14), attivate per rilevanza dall'hook skill-eval o a richiesta:
 | `lsp-enable` | navigazione codice via LSP (goToDefinition, references, diagnostica) |
 | `yt-extract` | estrae e analizza video YouTube (transcript, metadata, screenshot, commenti); solo su richiesta esplicita via `/trinity:yt-extract` |
 | `github-pr-release` | workflow Git/GitHub per progetti personali: feature branch, PR con merge commit, changelog curato, release SemVer via `gh` (non per il rilascio del plugin Trinity: quello usa `/trinity:release`) |
-| `skill-creator` | crea, modifica e ottimizza skill: eval del triggering, benchmark degli output con variance analysis, ottimizzazione delle `description` |
 
 ---
 
