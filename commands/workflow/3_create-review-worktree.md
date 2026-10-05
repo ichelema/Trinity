@@ -206,7 +206,7 @@ con i valori effettivi:
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
-Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine. Con più
-issue, la cella «Issue Linear» contiene una riga per ogni issue.
+Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine.
+Con più issue, la cella «Issue Linear» diventa una riga della tabella per ogni issue.
 
 Non iniziare la review e non modificare file nel nuovo worktree.
