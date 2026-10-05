@@ -37,9 +37,11 @@ completo, diretto e preciso: nessuna scorciatoia, nessun segnaposto.
   controllo reale che eserciti la modifica: i test del progetto, il
   type-checker, la build o il comando modificato stesso.
 - Un controllo solo di sintassi, o un comando che non è partito, non conta.
-- Se mancano solo le dipendenze dichiarate, installale col package manager del
-  progetto (via `mise` per Python/Node/Ruby), mai con sudo o col package
-  manager di sistema.
+- Se mancano solo le dipendenze dichiarate del progetto (librerie nel manifest
+  o nel lockfile), installale col suo package manager (via `mise` per
+  Python/Node/Ruby), mai con sudo. Se manca invece un programma di sistema (un
+  eseguibile, non una libreria del progetto), segui `core-behavior`:
+  `command -v`, poi `pacman`.
 - Se nessun controllo reale può girare, dillo esplicitamente e spiega perché.
 
 ## Resoconto finale
