@@ -534,8 +534,7 @@ finestra che scivola di un solo turno. Secondo filtro (ICH-163): un `retain` di 
 solo se TypeSafe Jev (`jev-latest`, chiave `$TYPESAFE_API_KEY`) conferma con F1 ≥
 `retain_jev_threshold` (default 0,47), altrimenti `skip` con reason `jev_rejected`; Jev non viene
 chiamato su `skip`/`uncertain`, e Jev irraggiungibile, in timeout o senza chiave è fail-closed
-come il gate (senza chiave il gate chiude prima di chiamare luna, quindi anche gli `uncertain`
-non vengono più proposti). Con `retain_debug_in_context: true` ogni valutazione
+come il gate. Con `retain_debug_in_context: true` ogni valutazione
 produce un blocco "## Hindsight retain debug" visibile in conversazione, speculare a
 `recall_debug_in_context`. Il gate produce anche il **`context` descrittivo** del retain (una
 riga di dominio invece della categoria secca `claude-code/<slug>`): non esiste più

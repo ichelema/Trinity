@@ -842,7 +842,11 @@ def gate_debug_context(gate, bank: str) -> str:
                 )
             )
             if gate.jev_score is not None
-            else ""
+            else (
+                f"\nJev: nessun punteggio, errore dopo {gate.jev_latency_ms:.1f} ms"
+                if (gate.error or "").startswith("jev:")
+                else ""
+            )
         )
         + (f"\nPreview: {gate.preview}" if gate.preview else "")
         + (f"\nGate error (fail-closed): {gate.error}" if gate.error else "")
