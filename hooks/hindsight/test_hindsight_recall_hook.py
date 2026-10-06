@@ -197,6 +197,10 @@ class HookE2ETests(unittest.TestCase):
             "HS_CFG_RETAIN_ENABLED": "true",
             "HS_CFG_RETAIN_DEBUG_IN_CONTEXT": "false",
             "HS_CFG_RETAIN_GATE_TIMEOUT": "5",
+            # Jev (ICH-163) non ha un mock qui: senza questo il worker vero
+            # chiamerebbe TypeSafe (o fallirebbe chiuso senza chiave). Il
+            # filtro e' coperto da test_hindsight_retain_gate.
+            "HS_CFG_RETAIN_JEV_ENABLED": "false",
             **(extra_env or {}),
         }
         proc = subprocess.run(

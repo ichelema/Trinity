@@ -15,10 +15,10 @@ HERE = Path(__file__).resolve().parent
 BENCH_PATH = HERE / "benchmark" / "hindsight_retain_gate_bench.py"
 
 
-def load_bench():
-    spec = importlib.util.spec_from_file_location("retain_gate_bench_test", BENCH_PATH)
+def load_bench(path: Path = BENCH_PATH, name: str = "retain_gate_bench_test"):
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"impossibile caricare {BENCH_PATH}")
+        raise RuntimeError(f"impossibile caricare {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -324,6 +324,21 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         rc, output = self.run_evaluate(labels, results, with_dedup=False)
         self.assertEqual(rc, 0)
         self.assertIn("falsi duplicati        : 1", output)
+
+
+class JevBenchSplitTests(unittest.TestCase):
+    """Split tune/test per sessione del bench Jev (ICH-163, spec ICH-164)."""
+
+    def test_split_by_session_is_deterministic(self):
+        bench = load_bench(HERE / "benchmark" / "retain_gate_jev_bench.py", "retain_gate_jev_bench_test")
+        transcript = {"source": "transcript", "transcript": "session-a.jsonl", "old_id": "mem-2"}
+        memory = {"source": "hindsight", "transcript": "session-a.jsonl", "old_id": "mem-2"}
+        self.assertEqual(bench.group(transcript), "session-a.jsonl")
+        self.assertEqual(bench.group(memory), "mem-2")
+        # Valori fissati: sha256 del gruppo, primi 8 hex, pari -> tune.
+        self.assertEqual(bench.half(transcript), "test")
+        self.assertEqual(bench.half(memory), "tune")
+        self.assertEqual(bench.half({"source": "hindsight", "old_id": "mem-1"}), "test")
 
 
 if __name__ == "__main__":
