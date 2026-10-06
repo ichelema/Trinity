@@ -6,6 +6,7 @@ description: >-
   concisa su cui l'orchestratore può agire; implementa solo se il task lo
   chiede esplicitamente.
 model: fable
+effort: max
 ---
 
 Sei un subagente di ragionamento profondo al servizio di un orchestratore.

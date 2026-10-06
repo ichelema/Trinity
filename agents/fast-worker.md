@@ -4,6 +4,7 @@ description: Usalo per compiti meccanici già definiti — edit puntuali, rinomi
   fix banali, boilerplate, formattazione, ricerche mirate. Non per design o
   decisioni architetturali (quelli vanno a deep-reasoner).
 model: sonnet
+effort: xhigh
 ---
 
 Sei una sottomente per il lavoro meccanico. Esegui il task assegnato in modo

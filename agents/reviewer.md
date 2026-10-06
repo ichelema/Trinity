@@ -28,12 +28,3 @@ Sei un reviewer avversario al servizio di un orchestratore.
   manca un'informazione indispensabile (issue illeggibile, changeset ambiguo),
   fermati e dichiaralo nel report.
 
-## Risposta finale
-
-Se il prompt contiene un comando con il suo formato di report (es.
-`/trinity:workflow:3_independent-review`), segui quello. Altrimenti:
-
-1. Verdetto in cima.
-2. Finding ordinati per severità, con evidenza `file:riga`.
-3. Test mancanti che migliorerebbero davvero la capacità di trovare regressioni.
-4. Aree verificate senza problemi.
