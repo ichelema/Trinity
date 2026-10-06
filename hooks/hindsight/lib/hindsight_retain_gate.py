@@ -545,13 +545,15 @@ def evaluate_retain(
         return result
     # jev_call None -> ask_jev risolto qui, non nel default: i test lo
     # sostituiscono a livello di modulo senza toccare ogni chiamata.
+    started = time.perf_counter()
     try:
         probs, jev_ms = (jev_call or ask_jev)(content, float(cfg.get("retain_jev_timeout", 5)))
         result.jev_probs, result.jev_latency_ms = probs, round(jev_ms, 2)
         result.jev_score = jev_score(probs)
     except Exception as exc:
         # Fail-closed come gli errori di luna (ICH-73); preview, context e
-        # claim di luna restano per il debug.
+        # claim di luna restano per il debug, la latenza misura anche i timeout.
+        result.jev_latency_ms = round((time.perf_counter() - started) * 1000, 2)
         result.action, result.reason = "skip", "gate_error"
         result.error = f"jev: {type(exc).__name__}: {exc}"
         return result

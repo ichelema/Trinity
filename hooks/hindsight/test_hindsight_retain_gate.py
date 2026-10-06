@@ -872,6 +872,14 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual((result.action, result.reason), ("skip", "gate_error"))
         self.assertEqual(result.error, "jev: TimeoutError: timed out")
         self.assertEqual(result.preview, "Salvo la decisione X perché Y.")
+
+        def slow_timeout(content, timeout):
+            time.sleep(0.05)
+            raise TimeoutError("timed out")
+
+        result = self.jev_retain(slow_timeout)
+        self.assertEqual(result.reason, "gate_error")
+        self.assertGreaterEqual(result.jev_latency_ms, 40)  # il timeout resta misurato
         # Chiave mancante: la vera ask_jev solleva prima di qualsiasi rete.
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TYPESAFE_API_KEY", None)
@@ -918,10 +926,15 @@ class GateModuleTests(unittest.TestCase):
         for bad in (
             {k: v for k, v in answers.items() if k != "ephemeral"},
             dict(answers, ephemeral={"noul": 1.5}),
+            dict(answers, ephemeral={"noul": -0.1}),
+            dict(answers, ephemeral={"noul": float("nan")}),
+            dict(answers, ephemeral={"noul": "0.5"}),
             dict(answers, ephemeral={"noul": True}),
         ):
             with self.assertRaises(ValueError):
                 call({"answers": bad})
+        with self.assertRaises(ValueError):
+            call({})  # nessun campo answers
 
 
 class JevResponse:
