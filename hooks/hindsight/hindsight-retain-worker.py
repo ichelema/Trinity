@@ -828,6 +828,26 @@ def gate_debug_context(gate, bank: str) -> str:
         f"Model: {CFG.get('retain_gate_model')}\n"
         f"Gate latency: {gate.latency_ms:.1f} ms\n"
         f"Bank: {bank}"
+        + (
+            f"\nJev: score {gate.jev_score:.2f} (soglia {CFG.get('retain_jev_threshold')}) — "
+            "p rc/disc/env/eph/repo "
+            + "/".join(
+                f"{gate.jev_probs[k]:.2f}"
+                for k in (
+                    "root_cause_or_workaround",
+                    "discarded_approach",
+                    "environment_constraint",
+                    "ephemeral",
+                    "repo_recoverable",
+                )
+            )
+            if gate.jev_score is not None
+            else (
+                f"\nJev: nessun punteggio, errore dopo {gate.jev_latency_ms:.1f} ms"
+                if (gate.error or "").startswith("jev:")
+                else ""
+            )
+        )
         + (f"\nPreview: {gate.preview}" if gate.preview else "")
         + (f"\nGate error (fail-closed): {gate.error}" if gate.error else "")
         + "\n\nUse as consultative context. Verify mutable facts against the repo."
@@ -931,6 +951,9 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
         reason=gate.reason,
         duplicates=len(gate.duplicate_of),
         latency_ms=gate.latency_ms,
+        jev_score=None if gate.jev_score is None else round(gate.jev_score, 2),
+        jev_latency_ms=gate.jev_latency_ms,
+        jev_probs={k: round(v, 2) for k, v in gate.jev_probs.items()},
         error=gate.error,
         preview=gate.preview[:300],
         mode=mode,

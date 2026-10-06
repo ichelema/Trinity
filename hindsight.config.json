@@ -43,6 +43,9 @@
   "retain_window_max_chars": 10000,
   "retain_gate_model": "gpt-5.6-luna",
   "retain_gate_timeout": 20,
+  "retain_jev_enabled": true,
+  "retain_jev_threshold": 0.47,
+  "retain_jev_timeout": 5,
   "retain_debug_in_context": false,
 
   "promote_model": "gpt-5.6-luna",

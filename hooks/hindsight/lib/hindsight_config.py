@@ -173,6 +173,12 @@ DEFAULTS = {
     # notifica non bloccante, vedi hindsight_retain_gate.py.
     "retain_gate_model": "gpt-5.6-luna",
     "retain_gate_timeout": 15,
+    # Secondo filtro TypeSafe Jev (ICH-163): un retain di luna si salva solo se
+    # Jev conferma con F1 >= soglia. Chiave da env TYPESAFE_API_KEY; Jev giu',
+    # in timeout o senza chiave = fail-closed come il gate.
+    "retain_jev_enabled": True,
+    "retain_jev_threshold": 0.47,
+    "retain_jev_timeout": 5.0,
     # Se attivo, ogni valutazione del gate produce un blocco
     # "## Hindsight retain debug" visibile (systemMessage) e nel contesto,
     # speculare a recall_debug_in_context.
@@ -227,12 +233,23 @@ ENV_OVERRIDES = {
 }
 
 
-def _cast(value: str, sample):
+_INVALID = object()
+
+
+def _cast(value: str, sample, invalid=None):
     """Converte la stringa env al tipo del default. Liste accettano JSON o CSV;
-    dict (es. HS_CFG_BANK) accettano solo JSON."""
+    dict (es. HS_CFG_BANK) accettano solo JSON. Valore non convertibile ->
+    `invalid` se passato, altrimenti il sample stesso."""
+    fallback = sample if invalid is None else invalid
     try:
         if isinstance(sample, bool):
-            return value.lower() in ("1", "true", "yes")
+            # "si"/"off" non riconosciuti non devono diventare False (ICH-163).
+            low = value.strip().lower()
+            if low in ("1", "true", "yes"):
+                return True
+            if low in ("0", "false", "no"):
+                return False
+            return fallback
         if isinstance(sample, int):
             return int(value)
         if isinstance(sample, float):
@@ -246,7 +263,7 @@ def _cast(value: str, sample):
             return json.loads(value)
         return value
     except (ValueError, json.JSONDecodeError):
-        return sample
+        return fallback
 
 
 def _plugin_config_path() -> str:
@@ -286,15 +303,15 @@ PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank
 
 def _valid_override(key: str, value) -> bool:
     """Valida i valori che il recall converte o usa come timeout/soglia."""
-    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout", "retain_window_max_chars"}:
+    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout", "retain_jev_timeout", "retain_window_max_chars"}:
         return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
-    if key == "recall_result_filter_threshold":
+    if key in {"recall_result_filter_threshold", "retain_jev_threshold"}:
         return (
             isinstance(value, (int, float))
             and not isinstance(value, bool)
             and 0 <= value <= 1
         )
-    if key in {"recall_result_filter_enabled", "recall_debug_in_context", "retain_debug_in_context"}:
+    if key in {"recall_result_filter_enabled", "recall_debug_in_context", "retain_debug_in_context", "retain_jev_enabled"}:
         return isinstance(value, bool)
     if key in {"recall_result_filter_model", "retain_gate_model"}:
         return isinstance(value, str) and bool(value.strip())
@@ -557,16 +574,23 @@ def load_config() -> dict:
         if project_cfg:
             applied |= _merge_json(cfg, project_cfg, trusted=False)
 
-    # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>)
+    # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>), validati come
+    # quelli da file: un valore non convertibile o non valido viene ignorato e
+    # resta quello precedente (file o default).
     for env_name, key in ENV_OVERRIDES.items():
         val = os.environ.get(env_name)
         if val:
-            cfg[key] = _cast(val, DEFAULTS[key])
+            new = _cast(val, DEFAULTS[key], _INVALID)
+            if new is _INVALID or not _valid_override(key, new):
+                continue
+            cfg[key] = new
             applied.add(key)
     for key in DEFAULTS:
         val = os.environ.get("HS_CFG_" + key.upper())
         if val:
-            new = _cast(val, DEFAULTS[key])
+            new = _cast(val, DEFAULTS[key], _INVALID)
+            if new is _INVALID or not _valid_override(key, new):
+                continue
             if isinstance(cfg.get(key), dict) and isinstance(new, dict):
                 cfg[key] = {**cfg[key], **new}
             else:

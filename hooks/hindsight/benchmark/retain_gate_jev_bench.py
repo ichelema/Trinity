@@ -5,14 +5,22 @@ Misura solo la domanda "questa finestra contiene conoscenza durevole?": il
 controllo duplicati e' escluso (bank_urls vuoto), cosi' i due sistemi vedono
 lo stesso input. Il rumore che interessa e' "troppe memorie salvate".
 
-  --run      per ogni finestra di artifacts/jev/windows.jsonl chiama il gate
-             di produzione (evaluate_retain) e Jev (una richiesta, piu' noul);
+  --run      per ogni finestra di artifacts/jev/windows.jsonl chiama luna
+             (evaluate_retain con retain_jev_enabled=False: "luna da solo") e
+             Jev (ask_jev del gate, una richiesta con tutte le QUESTIONS);
              scrive artifacts/jev/results.jsonl. Riprende dalle finestre gia'
              fatte.
   --report   confronta i risultati con le label (artifacts/jev/retain_labels.jsonl
              se esiste, altrimenti i draft labels_part*.jsonl) e stampa:
              precisione/copertura di luna, curva a soglie di Jev, chiamate a
-             luna evitate usando Jev come pre-filtro.
+             luna evitate usando Jev come pre-filtro, regola di produzione
+             (luna retain E F1 >= retain_jev_threshold, ICH-163).
+  --split    tune|test: limita il report a una meta' del dataset, divisa per
+             sessione (serve artifacts/<dir>/dataset.jsonl). La soglia si
+             sceglie su tune, test si guarda una volta sola.
+
+Domande, nota di stato, ask_jev e jev_score (F1) vivono nel gate
+(lib/hindsight_retain_gate.py): una sola copia, la stessa della produzione.
 
 Chiavi: OPENAI_API_KEY (luna), TYPESAFE_API_KEY (Jev). Contenuti solo negli
 artefatti locali ignorati da Git; su stdout solo conteggi e metriche.
@@ -22,46 +30,28 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
 import sys
-import time
-import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "lib"))
 
 from hindsight_config import load_config  # pyright: ignore[reportMissingImports]  # noqa: E402
-from hindsight_retain_gate import evaluate_retain  # pyright: ignore[reportMissingImports]  # noqa: E402
+from hindsight_retain_gate import (  # pyright: ignore[reportMissingImports]  # noqa: E402
+    JEV_MODEL,
+    ask_jev,
+    evaluate_retain,
+    jev_score,
+)
 
 ART = HERE / "artifacts" / "jev"
 WINDOWS = ART / "windows.jsonl"
 RESULTS = ART / "results.jsonl"
-JEV_URL = "https://api.typesafe.ai/v1/systemone"
-JEV_MODEL = "jev-latest"
 JEV_TIMEOUT = 30
 
-STATE_NOTE = (
-    "A window of a conversation between a developer and the Claude Code coding "
-    "assistant (may be in Italian). It is being considered for storage in the "
-    "assistant's long-term memory, to be recalled in future sessions."
-)
-
-# Domanda principale: e' la stessa che si pone il gate di produzione.
-QUESTIONS = {
-    "core": "Could the information in this window avoid work, mistakes or repeated analysis in a FUTURE session, if stored in long-term memory? Answer yes only for durable, verified knowledge.",
-    "durable_decision": "Does the window state a decision or convention together with its rationale, settled by the end of the window?",
-    "root_cause_or_workaround": "Does the window identify a root cause or a workaround that was confirmed to work?",
-    "environment_constraint": "Does the window reveal a non-obvious constraint or quirk of the user's environment, tools or versions?",
-    "convention_or_preference": "Does the user explicitly state a preference or a rule about how the assistant should work?",
-    "discarded_approach": "Does the window show an approach that was tried and discarded, together with the reason it failed?",
-    "ephemeral": "Is the window only ephemeral material: routine task execution, command output, intermediate attempts or work still in progress, with no lasting lesson?",
-    "repo_recoverable": "Is everything durable in the window easily recoverable by reading the repository, the code or the git history?",
-    # Aggiunte dopo il dataset v2: le trappole che luna e combo non filtrano.
-    "open_question": "Does the window end with an open question to the user, a proposed plan awaiting approval, or work that is not yet concluded?",
-    "unverified": "Is the main claim of the window a hypothesis or a fix that was not confirmed by evidence (test, command result, or the user) within the window?",
-}
 RETAIN_TYPES = [
     "durable_decision",
     "root_cause_or_workaround",
@@ -71,48 +61,31 @@ RETAIN_TYPES = [
 ]
 
 
-FROZEN_THRESHOLD = 0.57
-
-
-def combo(p: dict) -> float:
-    """Punteggio Jev scelto sul dataset ICH-89: il segnale piu' forte fra causa
-    radice, approccio scartato e vincolo d'ambiente, smorzato se effimero."""
-    return max(p["root_cause_or_workaround"], p["discarded_approach"], p["environment_constraint"]) * (1 - p["ephemeral"])
-
-
 def read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def ask_jev(content: str, key: str) -> dict:
-    body = {
-        "model": JEV_MODEL,
-        "state": {"about": STATE_NOTE, "window": content},
-        "questions": {k: {"type": "noul", "instructions": q} for k, q in QUESTIONS.items()},
-    }
-    req = urllib.request.Request(
-        JEV_URL,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"content-type": "application/json", "authorization": f"Bearer {key}"},
-        method="POST",
-    )
-    t0 = time.perf_counter()
-    with urllib.request.urlopen(req, timeout=JEV_TIMEOUT) as res:
-        data = json.loads(res.read().decode("utf-8"))
-    latency = (time.perf_counter() - t0) * 1000
-    answers = data.get("answers") or {}
-    p = {k: answers.get(k, {}).get("noul") for k in QUESTIONS}
-    if any(v is None for v in p.values()):
-        raise RuntimeError(f"risposta Jev incompleta: {sorted(answers)}")
-    return {"p": p, "latency_ms": round(latency, 1), "model": data.get("model"), "usage": data.get("usage")}
+def jev_row(content: str) -> dict:
+    p, latency = ask_jev(content, JEV_TIMEOUT)
+    return {"p": p, "latency_ms": round(latency, 1)}
+
+
+def group(d: dict) -> str:
+    """Sessione di una riga di dataset.jsonl: le finestre della stessa sessione
+    stanno tutte nella stessa meta'."""
+    return d["transcript"] if d["source"] == "transcript" else d["old_id"]
+
+
+def half(d: dict) -> str:
+    h = int(hashlib.sha256(group(d).encode("utf-8")).hexdigest()[:8], 16)
+    return "tune" if h % 2 == 0 else "test"
 
 
 def refresh_jev(args) -> int:
     """Rifà solo le richieste Jev (dopo aver cambiato QUESTIONS); luna resta."""
-    key = os.environ.get("TYPESAFE_API_KEY")
-    if not key:
+    if not os.environ.get("TYPESAFE_API_KEY"):
         print("[jev-only] FAIL: serve TYPESAFE_API_KEY")
         return 1
     content = {w["id"]: w["content"] for w in read_jsonl(WINDOWS)}
@@ -120,7 +93,7 @@ def refresh_jev(args) -> int:
 
     def one(row: dict) -> dict:
         try:
-            row["jev"] = ask_jev(content[row["id"]], key)
+            row["jev"] = jev_row(content[row["id"]])
         except Exception as exc:  # noqa: BLE001
             row["jev"] = {"error": f"{type(exc).__name__}: {exc}"}
         return row
@@ -134,11 +107,12 @@ def refresh_jev(args) -> int:
 
 
 def run(args) -> int:
-    key = os.environ.get("TYPESAFE_API_KEY")
-    if not key or not os.environ.get("OPENAI_API_KEY"):
+    if not os.environ.get("TYPESAFE_API_KEY") or not os.environ.get("OPENAI_API_KEY"):
         print("[run] FAIL: servono OPENAI_API_KEY e TYPESAFE_API_KEY")
         return 1
-    cfg = load_config()
+    # Colonna "luna da solo": senza questo evaluate_retain applicherebbe gia'
+    # il filtro Jev di produzione.
+    cfg = {**load_config(), "retain_jev_enabled": False}
     windows = read_jsonl(WINDOWS)
     done = {r["id"] for r in read_jsonl(RESULTS) if not r["luna"].get("error") and not r["jev"].get("error")}
     todo = [w for w in windows if w["id"] not in done]
@@ -149,7 +123,7 @@ def run(args) -> int:
         g = evaluate_retain(w["content"], summary, [], cfg)
         luna = {"action": g.action, "reason": g.reason, "latency_ms": round(g.latency_ms, 1), "error": g.error}
         try:
-            jev = ask_jev(w["content"], key)
+            jev = jev_row(w["content"])
         except Exception as exc:  # noqa: BLE001 — la riga resta da rifare
             jev = {"error": f"{type(exc).__name__}: {exc}"}
         return {"id": w["id"], "luna": luna, "jev": jev}
@@ -179,10 +153,17 @@ def quantile(xs: list[float], q: float) -> float:
     return xs[min(len(xs) - 1, int(q * len(xs)))] if xs else 0.0
 
 
-def report(_args) -> int:
+def report(args) -> int:
     final = ART / "retain_labels.jsonl"
     label_files = [final] if final.exists() else sorted(ART.glob("labels_part*.jsonl"))
     labels = {l["id"]: l for f in label_files for l in read_jsonl(f)}
+    if args.split:
+        dataset = ART / "dataset.jsonl"
+        if not dataset.exists():
+            print(f"[report] FAIL: --split richiede {dataset}")
+            return 1
+        keep = {d["id"] for d in read_jsonl(dataset) if half(d) == args.split}
+        labels = {i: l for i, l in labels.items() if i in keep}
     rows = [r for r in read_jsonl(RESULTS) if r["id"] in labels and not r["luna"].get("error") and not r["jev"].get("error")]
     if not rows:
         print("[report] FAIL: nessuna riga con label e senza errori")
@@ -190,14 +171,15 @@ def report(_args) -> int:
     gold = {r["id"]: labels[r["id"]]["expected_action"] == "retain" for r in rows}
     n_pos = sum(gold.values())
     src = "label finali" if final.exists() else "label DRAFT (non ancora revisionate)"
-    print(f"[report] {len(rows)} finestre ({src}): {n_pos} da salvare, {len(rows) - n_pos} da scartare\n")
+    split = f", meta' {args.split}" if args.split else ""
+    print(f"[report] {len(rows)} finestre ({src}{split}): {n_pos} da salvare, {len(rows) - n_pos} da scartare\n")
 
     def line(name: str, pred: dict[str, bool], extra: str = "") -> None:
         tp = sum(1 for i, p in pred.items() if p and gold[i])
         fp = sum(1 for i, p in pred.items() if p and not gold[i])
         print(f"  {name:<28} salva {tp + fp:3d} | giuste {tp:3d} | a torto {fp:3d} | precisione {pct(tp, tp + fp)} | copertura {pct(tp, n_pos)}{extra}")
 
-    print("luna (gate di produzione):")
+    print("luna da solo (senza il filtro Jev):")
     act = {r["id"]: r["luna"]["action"] for r in rows}
     unc = sum(1 for a in act.values() if a == "uncertain")
     line("solo retain", {i: a == "retain" for i, a in act.items()}, f" | uncertain {unc}")
@@ -218,19 +200,20 @@ def report(_args) -> int:
         lost = sum(1 for r in below if gold[r["id"]])
         print(f"  soglia {t:.1f}: chiamate luna evitate {len(below):3d}/{len(rows)} ({pct(len(below), len(rows)).strip()}) | memorie giuste perse {lost}/{n_pos}")
 
-    # Regola fissata PRIMA del dataset v2 (scelta sul dataset ICH-89): luna
-    # retain E combo Jev >= 0.57 salva; luna uncertain resta una domanda.
-    print(f"\nRegola fissata: luna retain E Jev combo >= {FROZEN_THRESHOLD} (uncertain -> domanda {unc}):")
-    frozen = {r["id"]: r["luna"]["action"] == "retain" and combo(r["jev"]["p"]) >= FROZEN_THRESHOLD for r in rows}
-    line("regola fissata", frozen)
-    for t in (0.50, 0.53, 0.55, 0.57, 0.59, 0.61):
-        line(f"luna E combo >= {t:.2f}", {r["id"]: r["luna"]["action"] == "retain" and combo(r["jev"]["p"]) >= t for r in rows})
+    # Regola di produzione (ICH-163): luna retain E Jev F1 >= soglia di config;
+    # luna uncertain resta una domanda all'utente.
+    threshold = float(load_config()["retain_jev_threshold"])
+    print(f"\nRegola di produzione: luna retain E Jev F1 >= {threshold} (uncertain -> domanda {unc}):")
+    frozen = {r["id"]: r["luna"]["action"] == "retain" and jev_score(r["jev"]["p"]) >= threshold for r in rows}
+    line("regola di produzione", frozen)
+    for t in (0.41, 0.44, 0.47, 0.50, 0.53):
+        line(f"luna E F1 >= {t:.2f}", {r["id"]: r["luna"]["action"] == "retain" and jev_score(r["jev"]["p"]) >= t for r in rows})
 
     source = {w["id"]: w.get("source", "transcript") for w in read_jsonl(WINDOWS)}
     for field, values in (("source", sorted(set(source.values()))), ("trap", sorted({l.get("trap", "none") for l in labels.values()}))):
         if len(values) < 2:
             continue
-        print(f"\nPer {field} (salvate a torto / da salvare perse): luna | regola fissata")
+        print(f"\nPer {field} (salvate a torto / da salvare perse): luna | regola di produzione")
         for v in values:
             ids = [r["id"] for r in rows if (source.get(r["id"]) if field == "source" else labels[r["id"]].get("trap", "none")) == v]
             if not ids:
@@ -254,6 +237,7 @@ def main() -> int:
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--jev-only", action="store_true", help="rifà solo Jev sulle righe di results.jsonl")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--split", choices=("tune", "test"), help="solo una meta' del dataset (report)")
     ap.add_argument("--dir", default="jev", help="sottocartella di artifacts/ (jev = ICH-89, jev2 = dataset v2)")
     args = ap.parse_args()
     global ART, WINDOWS, RESULTS
