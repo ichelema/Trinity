@@ -3,6 +3,8 @@ description:
   Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
 argument-hint: <issue-id...> <model> [<review-path>]
 disable-model-invocation: true
+model: fable
+effort: high
 ---
 
 Agisci come un Principal Software Engineer incaricato di eseguire una review avversaria indipendente
