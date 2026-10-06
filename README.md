@@ -209,10 +209,8 @@ modelli tramite `ANTHROPIC_DEFAULT_FABLE_MODEL` e `ANTHROPIC_DEFAULT_SONNET_MODE
 model id completo (es. `claude-fable-5-1`) nel frontmatter: i launcher non lo rimappano e
 LiteLLM non lo conosce.
 
-Eccezione voluta: `agents/reviewer.md` usa `model: claude-gpt-5-6-sol-xhigh`, un alias
-LiteLLM, perché deve restare GPT 5.6 Sol con qualunque launcher. Funziona solo in sessioni
-che passano dal proxy (es. `claude -p --agent trinity:reviewer` con `ANTHROPIC_BASE_URL` sul
-proxy): da una sessione Anthropic diretta fallisce.
+Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.1 in sessione
+diretta, il modello Fable del launcher con LiteLLM (stesso di `deep-reasoner`, tabella sotto).
 
 Il nome è **derivato dall'id** del modello, non confrontato con una lista: per aggiungere un
 modello basta creare il file, senza toccare l'hook.
