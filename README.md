@@ -258,7 +258,7 @@ collidono con i comandi locali del progetto:
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
 | `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
 | `/trinity:linear-no-repo` | lavora issue Linear che non toccano un repo git (quelle con codice passano dal workflow) |
-| `/trinity:workflow:0_create-issue` … `5_review-fix-loop` | flusso issue → worktree → PR → review → pulizia (vedi sotto) |
+| `/trinity:workflow:0_create-issue` … `5_remove-worktree` | flusso issue → worktree → PR → review → pulizia (vedi sotto) |
 | `/trinity:ponytail:ponytail` (+ `-review`, `-audit`, `-debt`, `-gain`, `-help`) | modalità «la soluzione più semplice che funziona» e i suoi strumenti |
 
 ### Workflow issue → PR
@@ -269,8 +269,8 @@ collidono con i comandi locali del progetto:
 | 1 | `1_create-worktree <source-branch> <issue-id...> <model>` | branch `<prefix>/<base-name>` + worktree in `.claude/worktrees/` |
 | 2 | `2_work-issue <issue-id...> <model>` | piano, implementazione, push e PR (senza merge) |
 | 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR |
-| 4 | `4_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
-| 5 | `5_review-fix-loop <issue-id...> <model>` | review DeepSeek + deep-reasoner su worktree detached, fix in loop |
+| 4 | `4_review-fix-loop <issue-id...> <model>` | review DeepSeek + deep-reasoner su worktree detached, fix in loop |
+| 5 | `5_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
 
 ### `/trinity:dream` — audit della memoria
 

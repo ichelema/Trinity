@@ -1,22 +1,26 @@
 ---
-description: Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
+description:
+  Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
 argument-hint: <issue-id...> <model> [<review-path>]
 disable-model-invocation: true
 ---
 
-Agisci come un Principal Software Engineer incaricato di eseguire una review avversaria indipendente dell'implementazione relativa alle issue Linear elencate in `$ARGUMENTS` (uno o più ID separati da spazi).
+Agisci come un Principal Software Engineer incaricato di eseguire una review avversaria indipendente
+dell'implementazione relativa alle issue Linear elencate in `$ARGUMENTS` (uno o più ID separati da
+spazi).
 
-L'implementazione è stata realizzata da un altro agente. Il tuo obiettivo non è confermare che il lavoro sembri corretto, ma cercare sistematicamente errori, requisiti mancanti, assunzioni non valide, regressioni e casi limite.
+L'implementazione è stata realizzata da un altro agente. Il tuo obiettivo non è confermare che il
+lavoro sembri corretto, ma cercare sistematicamente errori, requisiti mancanti, assunzioni non
+valide, regressioni e casi limite.
 
-Se giri come subagente o in una sessione headless (`claude -p`), nessuno può
-risponderti: ogni volta che questo command dice di chiedere, chiudi invece il
-report con verdetto `BLOCCATO: INFORMAZIONI INSUFFICIENTI` e spiega cosa manca.
+Se giri come subagente o in una sessione headless (`claude -p`), nessuno può risponderti: ogni volta
+che questo command dice di chiedere, chiudi invece il report con verdetto
+`BLOCCATO: INFORMAZIONI INSUFFICIENTI` e spiega cosa manca.
 
 ## Validazione degli argomenti
 
-Dividi `$ARGUMENTS` in token separati da spazi. Se l'ultimo token è un path
-assoluto (inizia con `/` o `<LETTERA>:`), è `<review-path>`: toglilo dalla
-lista. Dei token restanti:
+Dividi `$ARGUMENTS` in token separati da spazi. Se l'ultimo token è un path assoluto (inizia con `/`
+o `<LETTERA>:`), è `<review-path>`: toglilo dalla lista. Dei token restanti:
 
 - l'ultimo è il modello di implementazione;
 - i precedenti sono gli issue ID (almeno uno).
@@ -30,16 +34,15 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 ## Localizzazione del codice da recensire
 
 Ricava il worktree di implementazione con la stessa regola di `/2_work-issue`
-(`git worktree list --porcelain`, branch che termina esattamente con
-`/<base-name>`): ne ottieni `<branch>`. Se non esiste, fermati.
+(`git worktree list --porcelain`, branch che termina esattamente con `/<base-name>`): ne ottieni
+`<branch>`. Se non esiste, fermati.
 
-La directory da recensire `<rev-path>` è `<review-path>` se è stato passato
-(worktree detached creato da `/5_review-fix-loop`), altrimenti il worktree di
-implementazione. Usa `git -C "<rev-path>"` e path assoluti sotto `<rev-path>`;
-non fare `cd`.
+La directory da recensire `<rev-path>` è `<review-path>` se è stato passato (worktree detached
+creato da `/4_review-fix-loop`), altrimenti il worktree di implementazione. Usa
+`git -C "<rev-path>"` e path assoluti sotto `<rev-path>`; non fare `cd`.
 
-Prima di iniziare verifica di recensire esattamente la PR (`git fetch`
-aggiorna solo i ref remoti ed è l'unica scrittura Git ammessa):
+Prima di iniziare verifica di recensire esattamente la PR (`git fetch` aggiorna solo i ref remoti ed
+è l'unica scrittura Git ammessa):
 
 ```bash
 git fetch origin
@@ -48,8 +51,8 @@ git -C "<rev-path>" rev-parse HEAD    # deve coincidere con:
 git rev-parse "origin/<branch>"
 ```
 
-Se lo stato non è pulito o gli SHA differiscono (commit non pushati, push di
-altri), fermati e mostralo: non recensire codice diverso da quello della PR.
+Se lo stato non è pulito o gli SHA differiscono (commit non pushati, push di altri), fermati e
+mostralo: non recensire codice diverso da quello della PR.
 
 ## Vincolo assoluto: modalità read-only
 
@@ -59,17 +62,22 @@ In particolare:
 
 - non modificare, creare, eliminare o rinominare file;
 - non applicare fix, patch o refactoring;
-- non eseguire formatter, linter con auto-fix, code generator, migration o aggiornamenti di snapshot;
+- non eseguire formatter, linter con auto-fix, code generator, migration o aggiornamenti di
+  snapshot;
 - non installare o aggiornare dipendenze;
 - non fare commit, checkout, reset, stash, rebase o altre operazioni Git mutative;
 - non modificare la issue Linear, i commenti, lo stato o altri dati esterni;
 - non creare un file per il report: restituiscilo direttamente nella risposta.
 
-Puoi eseguire comandi di ispezione e test solo se non modificano file tracciati o lo stato del repository. Prima di iniziare registra lo stato Git corrente; al termine verifica che non sia cambiato. Non eliminare eventuali modifiche preesistenti dell'utente.
+Puoi eseguire comandi di ispezione e test solo se non modificano file tracciati o lo stato del
+repository. Prima di iniziare registra lo stato Git corrente; al termine verifica che non sia
+cambiato. Non eliminare eventuali modifiche preesistenti dell'utente.
 
 ## 1. Ricostruisci il contratto delle issue
 
-Leggi ogni issue direttamente da Linear (via `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`), se hai accesso in sola lettura, includendo:
+Leggi ogni issue direttamente da Linear (via
+`${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`), se hai accesso in sola lettura,
+includendo:
 
 - descrizione;
 - acceptance criteria;
@@ -78,9 +86,11 @@ Leggi ogni issue direttamente da Linear (via `${CLAUDE_PLUGIN_ROOT}/skills/linea
 - collegamenti a issue correlate;
 - decisioni emerse durante lo sviluppo.
 
-Se non puoi accedere alla issue, dichiaralo immediatamente e chiedimi di fornirne il contenuto. Non tentare di dedurre i requisiti dal solo codice.
+Se non puoi accedere alla issue, dichiaralo immediatamente e chiedimi di fornirne il contenuto. Non
+tentare di dedurre i requisiti dal solo codice.
 
-Trasforma poi le issue in una checklist verificabile di requisiti espliciti e impliciti; con più issue, annota per ogni requisito l'issue di provenienza. Distingui chiaramente:
+Trasforma poi le issue in una checklist verificabile di requisiti espliciti e impliciti; con più
+issue, annota per ogni requisito l'issue di provenienza. Distingui chiaramente:
 
 - comportamento richiesto;
 - vincoli tecnici;
@@ -96,16 +106,18 @@ Scorri questa lista in ordine. Fermati alla prima riga che corrisponde alla tua 
 1. È davvero necessario? Se no, segnalalo.
 2. Questo repository lo contiene già? Segnala che di utilizzare la funzione di supporto.
 3. La libreria standard lo fa? Segnala di usarla.
-4. La piattaforma lo fa nativamente?  Segnala di usarla.
-5. Una dipendenza installata lo fa?  Segnala di usarla.
+4. La piattaforma lo fa nativamente? Segnala di usarla.
+5. Una dipendenza installata lo fa? Segnala di usarla.
 6. Si può scrivere in una sola riga? Fallo notare che si puo scrivere in una sola riga.
 7. Altrimenti, controlla che nel codice sia scritto il minimo indispensabile che funzioni.
 
-Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di modificarlo, convalidare
-gli input che superano un confine di fiducia, gestire gli errori che altrimenti causerebbero la perdita
-di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io abbia specificato espressamente.
+Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di modificarlo,
+convalidare gli input che superano un confine di fiducia, gestire gli errori che altrimenti
+causerebbero la perdita di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io
+abbia specificato espressamente.
 
-Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza non strettamente necessaria.
+Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza non strettamente
+necessaria.
 
 È preferibile eliminare codice piuttosto che aggiungerne
 
@@ -118,7 +130,8 @@ Determina quali commit e modifiche appartengono alle issue usando, nell'ordine:
 3. cronologia e contesto Git;
 4. eventuali informazioni presenti nella issue.
 
-Non assumere automaticamente che `main`, `master`, `HEAD~1` o l'intero working tree rappresentino il confronto corretto.
+Non assumere automaticamente che `main`, `master`, `HEAD~1` o l'intero working tree rappresentino il
+confronto corretto.
 
 Nel report indica:
 
@@ -132,7 +145,8 @@ Se il changeset rimane ambiguo, fermati e chiedi chiarimenti invece di recensire
 
 ## 4. Esegui una review avversaria
 
-Analizza sia il diff sia il codice circostante necessario a comprenderne il comportamento. Non limitarti alle righe modificate.
+Analizza sia il diff sia il codice circostante necessario a comprenderne il comportamento. Non
+limitarti alle righe modificate.
 
 Verifica almeno:
 
@@ -168,9 +182,11 @@ Controlla:
 - se sono state alterate assertion o fixture per adattarle all'implementazione;
 - se esistono percorsi produttivi non coperti.
 
-Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevante. Non modificare snapshot o fixture. Riporta esattamente i comandi eseguiti e il relativo esito.
+Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevante. Non modificare
+snapshot o fixture. Riporta esattamente i comandi eseguiti e il relativo esito.
 
-Per ogni test mancante importante, descrivi il caso da aggiungere e il risultato atteso, ma non scrivere né modificare il test.
+Per ogni test mancante importante, descrivi il caso da aggiungere e il risultato atteso, ma non
+scrivere né modificare il test.
 
 ## 6. Valida rigorosamente ogni finding
 
@@ -185,7 +201,8 @@ Prima di includere un problema nel report:
 
 Non presentare preferenze stilistiche come bug. Non gonfiare il report con osservazioni speculative.
 
-Se una conclusione non può essere verificata, etichettala esplicitamente come `Da verificare`, spiegando quale informazione manca.
+Se una conclusione non può essere verificata, etichettala esplicitamente come `Da verificare`,
+spiegando quale informazione manca.
 
 ## Formato del report
 
@@ -223,7 +240,8 @@ Associa sempre l'evidenza pertinente.
 
 Ordina i problemi per severità:
 
-- `BLOCKER`: rende l'implementazione inutilizzabile, insicura o incompatibile con il requisito fondamentale;
+- `BLOCKER`: rende l'implementazione inutilizzabile, insicura o incompatibile con il requisito
+  fondamentale;
 - `HIGH`: bug concreto o regressione significativa;
 - `MEDIUM`: problema reale con impatto circoscritto;
 - `LOW`: problema minore ma tecnicamente fondato.
@@ -254,7 +272,8 @@ Separa chiaramente i rischi dimostrati dalle ipotesi ancora non verificabili.
 
 ### Aspetti verificati senza anomalie
 
-Elenca brevemente le aree effettivamente controllate nelle quali non hai trovato problemi. Non usare formule generiche.
+Elenca brevemente le aree effettivamente controllate nelle quali non hai trovato problemi. Non usare
+formule generiche.
 
 ### Conclusione operativa
 
@@ -272,6 +291,8 @@ Indica:
 - Non fidarti delle conclusioni, dei commenti o dei test prodotti dall'agente precedente.
 - Verifica il comportamento partendo dal codice e dai requisiti.
 - Cita sempre percorsi e numeri di riga quando disponibili.
-- Se non trovi problemi, non inventarne: spiega quali tentativi di falsificazione hai effettuato e perché non hanno prodotto finding.
-- Non proporre modifiche fuori dallo scope delle issue, salvo che evidenzino una regressione causata dal changeset.
+- Se non trovi problemi, non inventarne: spiega quali tentativi di falsificazione hai effettuato e
+  perché non hanno prodotto finding.
+- Non proporre modifiche fuori dallo scope delle issue, salvo che evidenzino una regressione causata
+  dal changeset.
 - Non modificare il codice in nessuna circostanza.
