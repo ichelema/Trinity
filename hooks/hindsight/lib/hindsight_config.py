@@ -178,7 +178,7 @@ DEFAULTS = {
     # in timeout o senza chiave = fail-closed come il gate.
     "retain_jev_enabled": True,
     "retain_jev_threshold": 0.47,
-    "retain_jev_timeout": 5,
+    "retain_jev_timeout": 5.0,
     # Se attivo, ogni valutazione del gate produce un blocco
     # "## Hindsight retain debug" visibile (systemMessage) e nel contesto,
     # speculare a recall_debug_in_context.
@@ -238,7 +238,14 @@ def _cast(value: str, sample):
     dict (es. HS_CFG_BANK) accettano solo JSON."""
     try:
         if isinstance(sample, bool):
-            return value.lower() in ("1", "true", "yes")
+            # Valore non riconosciuto -> default: "si" non deve spegnere un
+            # interruttore come retain_jev_enabled (ICH-163).
+            low = value.strip().lower()
+            if low in ("1", "true", "yes"):
+                return True
+            if low in ("0", "false", "no"):
+                return False
+            return sample
         if isinstance(sample, int):
             return int(value)
         if isinstance(sample, float):
@@ -563,16 +570,22 @@ def load_config() -> dict:
         if project_cfg:
             applied |= _merge_json(cfg, project_cfg, trusted=False)
 
-    # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>)
+    # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>), validati come
+    # quelli da file: un valore non valido lascia quello precedente.
     for env_name, key in ENV_OVERRIDES.items():
         val = os.environ.get(env_name)
         if val:
-            cfg[key] = _cast(val, DEFAULTS[key])
+            new = _cast(val, DEFAULTS[key])
+            if not _valid_override(key, new):
+                continue
+            cfg[key] = new
             applied.add(key)
     for key in DEFAULTS:
         val = os.environ.get("HS_CFG_" + key.upper())
         if val:
             new = _cast(val, DEFAULTS[key])
+            if not _valid_override(key, new):
+                continue
             if isinstance(cfg.get(key), dict) and isinstance(new, dict):
                 cfg[key] = {**cfg[key], **new}
             else:

@@ -77,9 +77,13 @@ JEV_PASS = {
 def setUpModule():
     # Secondo filtro Jev (ICH-163) attivo per default: i test che non parlano
     # di Jev vedono il retain di luna invariato, senza rete.
-    patch = mock.patch.object(hindsight_retain_gate, "ask_jev", return_value=(JEV_PASS, 1.0))
-    patch.start()
-    unittest.addModuleCleanup(patch.stop)
+    # Chiave fittizia: senza, il gate chiude prima di luna (ICH-163).
+    for patch in (
+        mock.patch.object(hindsight_retain_gate, "ask_jev", return_value=(JEV_PASS, 1.0)),
+        mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}),
+    ):
+        patch.start()
+        unittest.addModuleCleanup(patch.stop)
 
 
 def fake_api(response: dict, latency: float = 7.0):
@@ -881,11 +885,25 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(result.reason, "gate_error")
         self.assertGreaterEqual(result.jev_latency_ms, 40)  # il timeout resta misurato
         # Chiave mancante: la vera ask_jev solleva prima di qualsiasi rete.
-        with mock.patch.dict(os.environ, {}, clear=False):
+        with mock.patch.dict(os.environ):
             os.environ.pop("TYPESAFE_API_KEY", None)
-            result = self.jev_retain(ask_jev)
-        self.assertEqual((result.action, result.reason), ("skip", "gate_error"))
-        self.assertEqual(result.error, "jev: RuntimeError: TYPESAFE_API_KEY non impostata")
+            with self.assertRaisesRegex(RuntimeError, "TYPESAFE_API_KEY non impostata"):
+                ask_jev("finestra", 5)
+
+    def test_missing_jev_key_fails_closed_before_luna(self):
+        summary = {"turns": [("user", "domanda"), ("assistant", "risposta finale")]}
+        api = mock.Mock()
+        with mock.patch.dict(os.environ):
+            os.environ.pop("TYPESAFE_API_KEY", None)
+            result = evaluate_retain("finestra", summary, [], {"retain_gate_model": "m"}, api)
+            api.assert_not_called()  # luna non viene pagata a vuoto
+            self.assertEqual((result.action, result.reason), ("skip", "gate_error"))
+            self.assertEqual(result.error, "jev: RuntimeError: TYPESAFE_API_KEY non impostata")
+            # Con Jev spento la chiave non serve.
+            result = evaluate_retain(
+                "finestra", summary, [], {"retain_jev_enabled": False}, fake_api(gate_payload())
+            )
+            self.assertIsNone(result.error)
 
     def test_jev_not_called_on_skip_uncertain_or_disabled(self):
         summary = {"turns": [("user", "domanda"), ("assistant", "risposta finale")]}
@@ -1320,6 +1338,30 @@ class GateConfigTests(unittest.TestCase):
             self.assertEqual(cfg["retain_jev_threshold"], 0.6)
             self.assertEqual(cfg["retain_jev_timeout"], 2.5)
             self.assertIs(cfg["retain_jev_enabled"], False)
+
+    def test_jev_env_overrides_are_validated(self):
+        # Gli override da env passano dalla stessa validazione dei file: un
+        # valore errato non deve spegnere il filtro ne' renderlo impossibile.
+        bad = {
+            "HS_CFG_RETAIN_JEV_ENABLED": "si",
+            "HS_CFG_RETAIN_JEV_THRESHOLD": "1.5",
+            "HS_CFG_RETAIN_JEV_TIMEOUT": "0",
+        }
+        with mock.patch.dict(os.environ, bad):
+            cfg = hindsight_config.load_config()
+        self.assertIs(cfg["retain_jev_enabled"], True)
+        self.assertEqual(cfg["retain_jev_threshold"], 0.47)
+        self.assertEqual(cfg["retain_jev_timeout"], 5)
+        good = {
+            "HS_CFG_RETAIN_JEV_ENABLED": "false",
+            "HS_CFG_RETAIN_JEV_THRESHOLD": "0.6",
+            "HS_CFG_RETAIN_JEV_TIMEOUT": "2.5",
+        }
+        with mock.patch.dict(os.environ, good):
+            cfg = hindsight_config.load_config()
+        self.assertIs(cfg["retain_jev_enabled"], False)
+        self.assertEqual(cfg["retain_jev_threshold"], 0.6)
+        self.assertEqual(cfg["retain_jev_timeout"], 2.5)
 
 
 def load_worker():

@@ -17,7 +17,8 @@ Secondo filtro TypeSafe Jev (ICH-163): un "retain" di luna si salva solo se
 Jev conferma con F1 >= retain_jev_threshold (sotto soglia -> skip con reason
 jev_rejected). Jev non viene chiamato su skip/uncertain. Jev irraggiungibile,
 in timeout o senza TYPESAFE_API_KEY e' un errore tecnico come quelli di luna:
-fail-closed, con GateResult.error prefissato "jev:".
+fail-closed, con GateResult.error prefissato "jev:". Senza chiave il gate
+chiude subito, prima di chiamare luna.
 Il gate produce anche il `context` descrittivo del retain; se manca (retain o
 uncertain) il worker mette comunque la POST in pending e Claude propone una
 riga di dominio: al prompt successivo handle_retain_consent risolve il context
@@ -465,6 +466,14 @@ def evaluate_retain(
     violazioni SEMANTICHE (action e reason entrambe valide ma male accoppiate)
     vengono invece normalizzate senza errore: la action decisa dal modello non
     cambia mai."""
+    if cfg.get("retain_jev_enabled", True) and not os.environ.get("TYPESAFE_API_KEY"):
+        # Senza chiave ogni retain finirebbe fail-closed su Jev: si chiude
+        # subito, senza pagare luna ne' interrogare i bank a ogni turno.
+        return GateResult(
+            action="skip",
+            reason="gate_error",
+            error="jev: RuntimeError: TYPESAFE_API_KEY non impostata",
+        )
     timeout = float(cfg.get("retain_gate_timeout", 15))
     model = str(cfg.get("retain_gate_model", "gpt-5.6-luna"))
     candidates = fetch_duplicate_candidates(bank_urls, dedup_query(summary), timeout)

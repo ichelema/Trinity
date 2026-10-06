@@ -179,7 +179,7 @@ def report(args) -> int:
         fp = sum(1 for i, p in pred.items() if p and not gold[i])
         print(f"  {name:<28} salva {tp + fp:3d} | giuste {tp:3d} | a torto {fp:3d} | precisione {pct(tp, tp + fp)} | copertura {pct(tp, n_pos)}{extra}")
 
-    print("luna (gate di produzione):")
+    print("luna da solo (senza il filtro Jev):")
     act = {r["id"]: r["luna"]["action"] for r in rows}
     unc = sum(1 for a in act.values() if a == "uncertain")
     line("solo retain", {i: a == "retain" for i, a in act.items()}, f" | uncertain {unc}")
