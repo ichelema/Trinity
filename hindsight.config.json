@@ -8,7 +8,7 @@
   },
 
   "recall_enabled": false,
-  "retain_enabled": false,
+  "retain_enabled": true,
 
   "recall_budget": "mid",
   "recall_max_tokens": 2048,
