@@ -63,6 +63,7 @@ from hindsight_retain_gate import (
     handle_retain_consent,
     save_retain_pending,
 )
+from hindsight_secrets import OUTCOME_SECRET_PATTERNS
 
 CFG = load_config()
 
@@ -107,32 +108,6 @@ OUTCOME_CMD_MAX_CHARS = 80
 # "FAILED" a inizio riga): la prosa ("fail-closed", "password") resta fuori.
 OUTCOME_TEST_LINE = re.compile(
     r"\b(?:PASS(?:ED)?|FAIL(?:ED|URE)?)\b|\b\d+\s+(?:passed|failed|errors?)\b|^(?:OK|FAILED)\b"
-)
-# Stessi pattern del benchmark del gate: l'output dei comandi puo' contenere
-# segreti, il dialogo no (filtrarlo e' fuori perimetro).
-SECRET_PATTERNS = (
-    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
-    re.compile(r"\bAuthorization\s*:\s*(?:Bearer|Basic)\s+\S+", re.I),
-    re.compile(
-        r"\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|pwd)\s*[:=]\s*['\"]?\S{8,}",
-        re.I,
-    ),
-    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
-    # Solo per gli esiti: un nome che FINISCE in api_key/_key/secret/password/
-    # token (maiuscolo o minuscolo, anche tra virgolette JSON) seguito da : o =
-    # e da un valore di 12+ caratteri. Copre OPENAI_API_KEY=, db_password=,
-    # NPM_TOKEN:, "api_key": ...; lascia passare KeyError, key=..., --keyword=,
-    # TOKENIZERS_PARALLELISM= e i valori corti. Poi chiavi sk-* e corpo base64
-    # dei PEM (non solo esadecimale, cosi' gli SHA git restano).
-    # Niente prefisso [A-Za-z0-9_]* davanti: con search() non serve e rende il
-    # pattern quadratico sulle righe alfanumeriche lunghe (dump esadecimali).
-    re.compile(
-        r"(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
-        re.I,
-    ),
-    re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
-    re.compile(r"^(?=[A-Za-z0-9+/]*[G-Zg-z+/])[A-Za-z0-9+/]{40,}={0,2}$"),
 )
 OMISSION_MARKER = "\n[…]\n"
 SECRET_CMD_PLACEHOLDER = "[comando omesso: contiene un segreto]"
@@ -663,7 +638,7 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     fallito (exit code + ultima riga) o le righe di esito dei test. Le righe con
     un segreto vengono scartate prima di tutto."""
     stripped = (ln.strip() for ln in result.splitlines())
-    lines = [ln for ln in stripped if ln and not any(p.search(ln) for p in SECRET_PATTERNS)]
+    lines = [ln for ln in stripped if ln and not any(p.search(ln) for p in OUTCOME_SECRET_PATTERNS)]
     evidence = [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
     # Un tool_use rifiutato dall'utente ha is_error ma non e' un comando fallito.
     if is_error and lines and not lines[0].startswith("The user doesn't want to proceed"):
@@ -671,7 +646,7 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     if not evidence:
         return None
     # Il comando finisce in memoria come l'output: stesso filtro.
-    if any(p.search(cmd) for p in SECRET_PATTERNS):
+    if any(p.search(cmd) for p in OUTCOME_SECRET_PATTERNS):
         cmd = SECRET_CMD_PLACEHOLDER
     elif len(cmd) > OUTCOME_CMD_MAX_CHARS:
         cmd = cmd[: OUTCOME_CMD_MAX_CHARS - 1] + "…"

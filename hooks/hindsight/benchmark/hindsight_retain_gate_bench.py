@@ -60,7 +60,6 @@ import concurrent.futures
 import hashlib
 import importlib.util
 import json
-import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -72,24 +71,13 @@ sys.path.insert(0, str(LIB_DIR))
 
 from hindsight_config import load_config, recall_bank_urls  # pyright: ignore[reportMissingImports]  # noqa: E402
 from hindsight_retain_gate import claims_content, evaluate_retain, guided_content  # pyright: ignore[reportMissingImports]  # noqa: E402
+from hindsight_secrets import SECRET_PATTERNS  # pyright: ignore[reportMissingImports]  # noqa: E402
 
 DEFAULT_SESSIONS_ROOT = Path("E:/msys64/home/Sphynx/.claude/projects")
 ARTIFACTS = HERE / "artifacts"
 WINDOWS_FILE = ARTIFACTS / "retain_windows.jsonl"
 LABELS_FILE = ARTIFACTS / "retain_labels.jsonl"
 RESULTS_FILE = ARTIFACTS / "retain_gate_results.jsonl"
-
-# Stessi filtri del bench recall: mai portare segreti negli artefatti.
-SECRET_PATTERNS = (
-    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
-    re.compile(r"\bAuthorization\s*:\s*(?:Bearer|Basic)\s+\S+", re.I),
-    re.compile(
-        r"\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|pwd)\s*[:=]\s*['\"]?\S{8,}",
-        re.I,
-    ),
-    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
-)
 
 
 def load_worker():
