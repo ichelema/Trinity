@@ -18,6 +18,8 @@ Jev conferma con F1 >= retain_jev_threshold (sotto soglia -> skip con reason
 jev_rejected). Jev non viene chiamato su skip/uncertain. Jev irraggiungibile,
 in timeout o senza TYPESAFE_API_KEY e' un errore tecnico come quelli di luna:
 fail-closed, con GateResult.error prefissato "jev:".
+I durable_claims sono una frase per ogni fatto durevole distinto, fino a 5
+(ICH-162): sono la materia prima del content inviato al bank (ICH-149).
 Il gate produce anche il `context` descrittivo del retain; se manca (retain o
 uncertain) il worker mette comunque la POST in pending e Claude propone una
 riga di dominio: al prompt successivo handle_retain_consent risolve il context
@@ -91,7 +93,9 @@ GATE_SCHEMA = {
     # le chiavi nell'ordine dello schema, quindi scrive il giudizio di
     # copertura PRIMA della action e la condiziona su quello. Non riordinare.
     "properties": {
-        "durable_claims": {"type": "array", "items": {"type": "string"}},
+        # Un claim per fatto durevole distinto, fino a 5 (ICH-162): con "at
+        # most 3" il gate accorpava e perdeva un terzo della conoscenza (ICH-149).
+        "durable_claims": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "covered_by": {"type": "array", "items": {"type": "integer"}},
         "action": {"type": "string", "enum": sorted(GATE_ACTIONS)},
         "reason": {"type": "string", "enum": sorted(GATE_REASONS)},
@@ -119,7 +123,7 @@ Choose action "skip" for: temporary or trivial information, anything easily reco
 Ask yourself: "Could this information avoid work, mistakes or repeated analysis in the future?"
 
 Duplicate check — fill these two fields BEFORE choosing the action:
-- durable_claims: the durable facts this window states, at most 3, one short sentence each, in the same language as the conversation. List them even when you believe memory already contains them — covered_by is where you say so. Ephemeral material — command output, intermediate attempts, anything recoverable from the repository or git history — is not a durable claim; leave the list empty when the window states none.
+- durable_claims: ONE short sentence for EACH distinct durable fact this window states, up to 5, in the same language as the conversation. Never merge two facts into one sentence: split them. List them even when you believe memory already contains them — covered_by is where you say so. Ephemeral material — command output, intermediate attempts, anything recoverable from the repository or git history — is not a durable claim; leave the list empty when the window states none.
 - covered_by: indices of the existing memories that, taken together, already cover EVERY claim you listed. Judge substance, not wording: a memory that is phrased differently, is more general, or is written in another language still covers a claim. Extra ephemeral material in the window never prevents coverage. If you listed no durable claim but the window's content is already reflected by the existing memories, set covered_by to the memories that reflect it. Leave it empty when at least one claim is missing from the existing memories, or when no existing memory was provided.
 
 Rules:
