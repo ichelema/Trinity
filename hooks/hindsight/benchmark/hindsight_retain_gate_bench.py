@@ -17,10 +17,12 @@ Due fasi:
                    "retain" passano anche da POST /memories/dry-run-extract
                    (estrazione senza persistenza) per ispezione qualitativa.
 
-  --compare-content  (ICH-149) sulle finestre etichettate retain confronta i
-                   fatti di dry-run-extract da finestra grezza e da
-                   durable_claims + preview del gate; scrive
-                   <artifacts>/content_compare.jsonl per il giudizio.
+  --compare-content  (ICH-149/162) sulle finestre etichettate retain confronta
+                   i fatti di dry-run-extract da (a) finestra grezza, (b)
+                   durable_claims + preview del gate e (c) finestra con claims
+                   + preview in cima; scrive <artifacts>/content_compare.jsonl
+                   per il giudizio. Legge windows.jsonl se retain_windows.jsonl
+                   manca (dataset v2, artifacts/jev2).
 
 Formato label (una riga JSONL per finestra, allineata per "id"):
   {"id": "...", "expected_action": "retain|skip|uncertain", "reason": "...",
@@ -213,14 +215,25 @@ def claims_content(preview: str, claims: list[str]) -> str:
     return "\n".join([preview, ""] + [f"- {c}" for c in claims]).strip()
 
 
+def guided_content(preview: str, claims: list[str], window: str) -> str:
+    """Variante (c) di ICH-162: claims + preview in cima alla finestra grezza,
+    come guida per l'estrattore senza togliere contesto."""
+    return f"{claims_content(preview, claims)}\n\n{window}"
+
+
 def compare_content(args) -> int:
-    """ICH-149: sulle finestre etichettate retain confronta i fatti estratti da
-    (a) la finestra grezza e (b) durable_claims + preview del gate. Stesso bank
-    e stesso context del gate per entrambe: cambia solo il content. Senza
-    claims (b) coincide con (a) e non si ripete l'estrazione. Il giudizio dei
-    fatti (errati/effimeri/persi) si fa sul file prodotto."""
-    cfg = load_config()
-    windows = {w["id"]: w for w in read_jsonl(args.artifacts / WINDOWS_FILE.name)}
+    """ICH-149/162: sulle finestre etichettate retain confronta i fatti
+    estratti da (a) la finestra grezza, (b) durable_claims + preview del gate e
+    (c) la finestra con claims + preview in cima. Stesso bank e stesso context
+    del gate per tutte: cambia solo il content. Senza claims (b) e (c)
+    coincidono con (a) e non si ripete l'estrazione. Jev e' spento: misura il
+    contenuto, non la decisione, e un suo timeout scarterebbe la finestra. Il
+    giudizio dei fatti (errati/effimeri/persi) si fa sul file prodotto."""
+    cfg = {**load_config(), "retain_jev_enabled": False}
+    windows_file = args.artifacts / WINDOWS_FILE.name
+    if not windows_file.exists():
+        windows_file = args.artifacts / "windows.jsonl"
+    windows = {w["id"]: w for w in read_jsonl(windows_file)}
     labels = read_jsonl(args.artifacts / LABELS_FILE.name)
     todo = [
         (l, windows[l["id"]])
@@ -244,17 +257,22 @@ def compare_content(args) -> int:
             preview=gate.preview,
             context=gate.context,
             durable_claims=gate.durable_claims,
+            n_claims=len(gate.durable_claims),
+            latency_ms=gate.latency_ms,
             error=gate.error,
         )
         try:
             row["facts_a"] = dry_run_extract(base, bank, window["content"], 180, gate.context)
             if gate.durable_claims:
                 b = claims_content(gate.preview, gate.durable_claims)
+                c = guided_content(gate.preview, gate.durable_claims, window["content"])
                 row["content_b"] = b
                 row["facts_b"] = dry_run_extract(base, bank, b, 180, gate.context)
+                row["content_c"] = c
+                row["facts_c"] = dry_run_extract(base, bank, c, 180, gate.context)
             else:
-                row["content_b"] = None
-                row["facts_b"] = row["facts_a"]
+                row["content_b"] = row["content_c"] = None
+                row["facts_b"] = row["facts_c"] = row["facts_a"]
         except Exception as exc:  # noqa: BLE001 — la riga resta nel file con l'errore
             row["error"] = row["error"] or f"dry-run: {type(exc).__name__}: {exc}"
         return row
@@ -274,6 +292,7 @@ def compare_content(args) -> int:
     print(f"  claims vuoti           : {sum(1 for r in ok if r['content_b'] is None)}")
     print(f"  fatti (a) finestra     : {sum(len(r['facts_a']) for r in ok)}")
     print(f"  fatti (b) claims       : {sum(len(r['facts_b']) for r in ok)}")
+    print(f"  fatti (c) finestra+claims: {sum(len(r['facts_c']) for r in ok)}")
     print(f"[compare] dettaglio per finestra -> {out}")
     return 0 if len(ok) == len(rows) else 1
 
@@ -508,8 +527,8 @@ def main() -> int:
     parser.add_argument("--dedup-bank-url", default="", metavar="URL", help="con --with-dedup, usa questo bank al posto dei bank reali")
     parser.add_argument("--dry-run-extract", type=int, default=0, metavar="N", help="ispeziona N finestre retain via dry-run-extract")
     parser.add_argument("--bench-bank", default="retain-gate-bench")
-    parser.add_argument("--compare-content", action="store_true", help="ICH-149: fatti estratti da finestra grezza vs durable_claims+preview")
-    parser.add_argument("--artifacts", type=Path, default=ARTIFACTS, help="cartella con retain_windows.jsonl e retain_labels.jsonl")
+    parser.add_argument("--compare-content", action="store_true", help="ICH-149/162: fatti estratti da (a) finestra grezza, (b) durable_claims+preview, (c) finestra con claims in cima")
+    parser.add_argument("--artifacts", type=Path, default=ARTIFACTS, help="cartella con retain_windows.jsonl (o windows.jsonl, dataset v2) e retain_labels.jsonl")
     parser.add_argument("--compare-bank", default="", help="bank del dry-run (default: core_bank)")
     args = parser.parse_args()
 

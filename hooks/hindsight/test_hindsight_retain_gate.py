@@ -788,6 +788,16 @@ class GateModuleTests(unittest.TestCase):
         self.assertIn("A covered window is a duplicate", GATE_PROMPT)
         self.assertNotIn("duplicate_of", GATE_PROMPT)
 
+    def test_one_claim_per_durable_fact_up_to_five(self):
+        """ICH-162: un claim per fatto durevole distinto, tetto 5 nello schema
+        (maxItems, accettato da OpenAI strict: verificato dal vivo) e nel
+        prompt, con il divieto di accorpare."""
+        self.assertEqual(GATE_SCHEMA["properties"]["durable_claims"]["maxItems"], 5)
+        self.assertIn("EACH distinct durable fact", GATE_PROMPT)
+        self.assertIn("up to 5", GATE_PROMPT)
+        self.assertIn("Never merge two facts", GATE_PROMPT)
+        self.assertNotIn("at most 3", GATE_PROMPT)
+
     def test_check_stub_verdict_covers_schema_required_fields(self):
         """Lo stub e2e di hindsight-check.sh fabbrica la risposta del gate:
         se perde un campo required il gate reale va in gate_error fail-closed
