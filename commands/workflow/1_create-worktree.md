@@ -196,6 +196,8 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 │ SmartGit               │ back-pointer gitdir in formato Windows                  │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Stato                  │ Pulito — nessun file modificato                         │
+├────────────────────────┼──────────────────────────────────────────────────────────┤
+│ Prossimo passo         │ /trinity:workflow:2_work-issue <issue-id...> <model>    │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
