@@ -173,6 +173,31 @@ class GateModuleTests(unittest.TestCase):
         )
         self.assertEqual(result.action, "uncertain")
 
+    def test_durable_claims_are_normalized(self):
+        """ICH-149: claims vuoti scartati, spazi e a capo compattati; con soli
+        claims vuoti la lista e' vuota e il worker invia la finestra grezza."""
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        summary = {"turns": [("user", "domanda"), ("assistant", "risposta finale")]}
+        for claims, expected in (
+            (["", "  fatto  uno ", "riga\nspezzata"], ["fatto uno", "riga spezzata"]),
+            (["", "   "], []),
+        ):
+            result = evaluate_retain(
+                "finestra",
+                summary,
+                [],
+                cfg,
+                fake_api(gate_payload(
+                    action="retain",
+                    reason="durable_decision",
+                    preview="Salvo X.",
+                    context="dominio",
+                    durable_claims=claims,
+                )),
+            )
+            self.assertIsNone(result.error)
+            self.assertEqual(result.durable_claims, expected)
+
     def test_invalid_payloads_fail_closed(self):
         cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
         summary = {"turns": []}

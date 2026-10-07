@@ -534,7 +534,9 @@ def evaluate_retain(
             preview=preview.strip(),
             context=context.strip(),
             duplicate_of=duplicate_of,
-            durable_claims=durable_claims,
+            # Come preview/context: un claim vuoto o spezzato su piu' righe
+            # lascerebbe un bullet orfano nel content inviato al bank (ICH-149).
+            durable_claims=[" ".join(c.split()) for c in durable_claims if c.strip()],
             covered_by=covered_by,
             candidates=candidates,
             latency_ms=round(latency, 2),
