@@ -409,5 +409,47 @@ class JevBenchSplitTests(unittest.TestCase):
         self.assertEqual(bench.half({"source": "hindsight", "old_id": "mem-1"}), "test")
 
 
+class JevBenchClaimsTests(unittest.TestCase):
+    """Jev per claim: claimF, aggregazione e scelta della soglia (ICH-164)."""
+
+    def setUp(self):
+        self.bench = load_bench(HERE / "benchmark" / "retain_gate_jev_bench.py", "retain_gate_jev_bench_claims_test")
+
+    def test_claim_score_is_f1_and_a3_damps_unverified(self):
+        p = {
+            "root_cause_or_workaround": 0.9,
+            "discarded_approach": 0.2,
+            "environment_constraint": 0.1,
+            "ephemeral": 0.5,
+            "repo_recoverable": 0.2,
+            "unverified": 0.5,
+        }
+        self.assertAlmostEqual(self.bench.claim_score(p), 0.9 * 0.5 * 0.8)
+        self.assertAlmostEqual(self.bench.claim_score(p, unverified=True), 0.9 * 0.5 * 0.8 * 0.5)
+
+    def test_aggregate_requires_luna_retain_and_a2_is_a_union(self):
+        agg = self.bench.aggregate
+        self.assertFalse(agg(False, 0.9, 0.9, False, (0.5,)))
+        self.assertTrue(agg(True, 0.0, 0.6, False, (0.5,)))
+        self.assertFalse(agg(True, 0.9, 0.4, False, (0.5,)))
+        self.assertTrue(agg(True, 0.9, 0.0, True, (0.5, 0.5)))
+        self.assertTrue(agg(True, 0.1, 0.6, True, (0.5, 0.5)))
+        self.assertFalse(agg(True, 0.4, 0.4, True, (0.5, 0.5)))
+
+    def test_pick_threshold_weights_wrong_saves_double_and_prefers_higher_on_ties(self):
+        score = {"good": 0.6, "bad": 0.3, "lost": 0.2}
+        gold = {"good": True, "bad": False, "lost": True}
+
+        def rule(i, t):
+            return score[i] >= t
+
+        # 0,2: "bad" a torto (costo 2); 0,3: "bad" a torto e "lost" persa
+        # (costo 3); 0,4..0,6: perde solo "lost" (costo 1) -> a parita' vince
+        # 0,6; 0,7: perde anche "good" (costo 2).
+        self.assertEqual(self.bench.rule_cost({i: rule(i, 0.2) for i in gold}, gold), (2, 1, 0))
+        grid = [(t,) for t in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7)]
+        self.assertEqual(self.bench.pick_threshold(rule, grid, gold), (0.6,))
+
+
 if __name__ == "__main__":
     unittest.main()

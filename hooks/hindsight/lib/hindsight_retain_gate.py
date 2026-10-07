@@ -425,17 +425,26 @@ def jev_score(p: dict) -> float:
     )
 
 
-def ask_jev(content: str, timeout: float, keys=tuple(QUESTIONS)) -> tuple[dict, float]:
-    """Una richiesta Jev con le domande `keys` sulla finestra: (probabilita'
-    0..1 per chiave, latenza ms). Chiave assente, risposta incompleta o p fuori
-    range sollevano: il chiamante le tratta come errore tecnico (fail-closed)."""
+def ask_jev(
+    content: str,
+    timeout: float,
+    keys=None,
+    state: dict | None = None,
+    questions: dict = QUESTIONS,
+) -> tuple[dict, float]:
+    """Una richiesta Jev con le domande `keys` (default: tutte le `questions`)
+    sulla finestra: (probabilita' 0..1 per chiave, latenza ms). `state` e
+    `questions` diversi servono al bench per claim (ICH-164). Chiave assente,
+    risposta incompleta o p fuori range sollevano: il chiamante le tratta come
+    errore tecnico (fail-closed)."""
     key = os.environ.get("TYPESAFE_API_KEY")
     if not key:
         raise RuntimeError("TYPESAFE_API_KEY non impostata")
+    keys = tuple(questions) if keys is None else keys
     body = {
         "model": JEV_MODEL,
-        "state": {"about": STATE_NOTE, "window": content},
-        "questions": {k: {"type": "noul", "instructions": QUESTIONS[k]} for k in keys},
+        "state": state or {"about": STATE_NOTE, "window": content},
+        "questions": {k: {"type": "noul", "instructions": questions[k]} for k in keys},
     }
     request = urllib.request.Request(
         JEV_URL,
