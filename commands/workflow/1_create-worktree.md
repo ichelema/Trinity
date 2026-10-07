@@ -109,7 +109,12 @@ Verifica che non esista già il branch locale:
 
 Verifica inoltre che non esista già un worktree associato allo stesso branch.
 
-Determina la root del repository.
+Determina la root del repository dal worktree principale, non da un altro worktree:
+
+```bash
+repo_root="$(git rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"
+command -v cygpath >/dev/null && repo_root="$(cygpath -m "$repo_root")"   # solo Windows/MSYS2
+```
 
 La directory di destinazione è dentro `.claude/worktrees/`:
 

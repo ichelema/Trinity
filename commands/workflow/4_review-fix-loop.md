@@ -59,9 +59,11 @@ Per ogni round:
    reviewer, con path assoluti in formato Windows (`E:/...`) su Windows/MSYS2:
    ```bash
    git fetch origin
+   repo_root="$(git rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"
+   command -v cygpath >/dev/null && repo_root="$(cygpath -m "$repo_root")"   # solo Windows/MSYS2
    sha="$(git rev-parse --verify "origin/<branch>^{commit}")"
-   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-gpt" "$sha"
-   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-fable" "$sha"
+   git worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>-gpt" "$sha"
+   git worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>-fable" "$sha"
    ```
    Se una delle directory esiste già (round precedente non ripulito), fermati. Non toccare il file
    `.git` dentro i worktree.
@@ -114,6 +116,7 @@ falsi positivi e le preferenze stilistiche, senza riproporli nel round successiv
 
 Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 
+- comandi sempre con `git -C "<wt-path>"`, `mise -C "<wt-path>"` e path assoluti, mai `cd`;
 - la minima modifica che risolve il difetto;
 - nessun refactoring, nessuna riscrittura, nessun cambio di architettura;
 - ogni riga modificata è riconducibile a un finding verificato;

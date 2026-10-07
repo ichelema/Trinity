@@ -51,9 +51,9 @@ git worktree list --porcelain
 
 Dalla entry del worktree ricava `<wt-path>` (riga `worktree ...`, usalo poi ESATTAMENTE così com'è
 stampato) e `<branch>` (riga `branch refs/heads/...`). Se la entry ha `detached` al posto di
-`branch` (worktree di review di `/4_review-fix-loop`), non c'è branch: salta i controlli sul branch
-e il passo 3; resta obbligatorio `status --short` vuoto. Se non c'è nessuna entry per
-`$worktree_name` ma la directory esiste, vedi "Directory orfana" più sotto.
+`branch` (worktree di review di `/3_independent-review` o `/4_review-fix-loop`), non c'è branch:
+salta i controlli sul branch e il passo 3; resta obbligatorio `status --short` vuoto. Se non c'è
+nessuna entry per `$worktree_name` ma la directory esiste, vedi "Directory orfana" più sotto.
 
 Default branch senza `gh` (che nella shell di Claude può non essere loggato):
 
@@ -80,19 +80,21 @@ merged/unmerged, presenza del branch remoto.
 
 ### 1. (Windows/MSYS2) ripristina il `gitdir` POSIX nel file `.git` del worktree
 
-I worktree creati con `/1_create-worktree` o `/4_review-fix-loop` (o toccati da SmartGit) hanno nel
-file `<wt-path>/.git` un `gitdir:` in forma Windows (`E:/AI/...`). Il git MSYS ci lavora (status,
-commit), ma `git worktree remove` fa una validazione testuale e fallisce con
+I worktree creati con `/1_create-worktree`, `/3_independent-review` o `/4_review-fix-loop` (o
+toccati da SmartGit) hanno nel file `<wt-path>/.git` un `gitdir:` in forma Windows (`E:/AI/...`).
+Il git MSYS ci lavora (status, commit), ma `git worktree remove` fa una validazione testuale e
+fallisce con
 `validation failed, cannot remove working tree: '...' does not point back to '.git/worktrees/<nome>'`.
 
-Ripristino in Bash puro (no `sed`: su MSYS la conversione dei path lo rompe; crea prima il `.bak`;
-su Linux il pattern non matcha ed è un no-op):
+Ripristino in Bash puro (no `sed`: su MSYS la conversione dei path lo rompe). Il backup va FUORI
+dal worktree: un `.git.bak` dentro è un file non tracciato e `git worktree remove` lo rifiuta
+("contains modified or untracked files"). Su Linux il pattern non matcha ed è un no-op:
 
 ```bash
-gf="<wt-path>/.git"; cp -p "$gf" "$gf.bak"
-IFS= read -r line < "$gf"; gd="${line#gitdir: }"
+gf="<wt-path>/.git"; IFS= read -r line < "$gf"; gd="${line#gitdir: }"
 case "$gd" in
-  [A-Za-z]:/*) d="${gd%%:*}"; printf 'gitdir: /%s%s\n' "${d,,}" "${gd#?:}" > "$gf" ;;
+  [A-Za-z]:/*) mkdir -p "$HOME/.claude/tmp"; cp -p "$gf" "$HOME/.claude/tmp/<nome>.git.bak"
+               d="${gd%%:*}"; printf 'gitdir: /%s%s\n' "${d,,}" "${gd#?:}" > "$gf" ;;
 esac
 cat "$gf"     # atteso: gitdir: /<lettera>/.../.git/worktrees/<nome>
 ```
@@ -117,7 +119,7 @@ con path `E:/...` nelle entry ha già cancellato worktree e branch estranei (li 
 **Windows: `error: failed to delete '...': Device or resource busy`.** Git ha già deregistrato il
 worktree (verifica: sparisce da `git worktree list`) ma la directory è ancora aperta da un processo
 (sessione Claude Code, terminale, editor). Non ripetere il comando: chiudi chi la tiene e poi
-cancella la sola directory con `rm -rf "<wt-path>"`. Vale anche per un `.git.bak` residuo.
+cancella la sola directory con `rm -rf "<wt-path>"`.
 
 ### 3. Elimina il branch
 
@@ -158,7 +160,7 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Branch remoto        │ già assente / eliminato / mantenuto                      │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ gitdir POSIX         │ ripristinato (.bak creato) / non necessario              │
+│ gitdir POSIX         │ ripristinato (backup in ~/.claude/tmp) / non necessario  │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Default branch       │ <default> = <sha> (allineato a origin: sì/no)            │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤

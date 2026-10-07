@@ -168,8 +168,8 @@ I messaggi di commit vanno scritti in inglese.
 
 Quando l'implementazione è terminata:
 
-1. Esegui i test e i controlli rilevanti (`mise run <task>` se il progetto li definisce), dal
-   worktree.
+1. Esegui i test e i controlli rilevanti sul worktree senza `cd`: `mise -C "<wt-path>" run <task>`
+   se il progetto li definisce, altrimenti il comando di test con path assoluti sotto `<wt-path>`.
 2. Verifica che ogni requisito della checklist sia coperto.
 3. Crea i commit mancanti: `git -C "<wt-path>" add ...` e `git -C "<wt-path>" commit -m "..."`.
 4. Esegui il push: `git -C "<wt-path>" push -u origin "<branch>"`.
@@ -251,8 +251,10 @@ effetti.
 
 ## Non fare il merge
 
-Fermati qui. Il passo successivo è la review indipendente, in una sessione nuova
-(`/trinity:workflow:3_independent-review <issue-id...> <model>`), poi il merge resta all'utente.
+Fermati qui. Il passo successivo è la review, in una sessione nuova, a scelta dell'utente:
+`/trinity:workflow:3_independent-review <issue-id...> <model>` (una review) oppure
+`/trinity:workflow:4_review-fix-loop <issue-id...> <model>` (due review in parallelo e fix in
+loop). Il merge resta all'utente.
 
 ## Verifica finale
 
@@ -284,7 +286,7 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Pull Request           │ <url> (magic words: <Fixes/Refs> per ogni issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /trinity:workflow:3_independent-review <issue-id...> <model> │
+│ Prossimo passo         │ /trinity:workflow:3_independent-review <issue-id...> <model> oppure /trinity:workflow:4_review-fix-loop <issue-id...> <model> │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 

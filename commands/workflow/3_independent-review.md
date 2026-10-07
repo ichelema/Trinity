@@ -200,8 +200,9 @@ Controlla:
 - se sono state alterate assertion o fixture per adattarle all'implementazione;
 - se esistono percorsi produttivi non coperti.
 
-Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevante. Non modificare
-snapshot o fixture. Riporta esattamente i comandi eseguiti e il relativo esito.
+Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevante, sempre senza
+`cd`: `mise -C "<rev-path>" run <task>` o comandi con path assoluti sotto `<rev-path>`. Non
+modificare snapshot o fixture. Riporta esattamente i comandi eseguiti e il relativo esito.
 
 Per ogni test mancante importante, descrivi il caso da aggiungere e il risultato atteso, ma non
 scrivere né modificare il test.
