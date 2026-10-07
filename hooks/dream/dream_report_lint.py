@@ -122,7 +122,7 @@ def lint(text, apply_mode=False):
 
 
 def main(argv):
-    args = [x for x in argv[1:] if not x.startswith("--")]
+    args = [x for x in argv[1:] if x and not x.startswith("--")]
     if len(args) != 1:
         print(__doc__)
         return 2

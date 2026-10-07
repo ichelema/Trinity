@@ -15,7 +15,7 @@ LINT="$HERE/dream_report_lint.py"
 # Python nativo Windows vuole path Windows (come CFG_PY in inject-core-behavior.sh).
 if command -v cygpath >/dev/null 2>&1; then
     LINT="$(cygpath -w "$LINT")"
-    set -- "$(cygpath -w "$1")" "${@:2}"
+    [ $# -gt 0 ] && set -- "$(cygpath -w "$1")" "${@:2}"
 fi
 
 exec "$HS_PY" "$LINT" "$@"
