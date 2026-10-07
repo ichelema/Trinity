@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -55,6 +57,8 @@ class Args:
     dry_run_extract = 0
     bench_bank = "unused"
     dedup_bank_url = ""
+    artifacts = Path(".")
+    compare_bank = ""
 
 
 class RetainGateBenchmarkTests(unittest.TestCase):
@@ -335,6 +339,59 @@ class CompareContentVariantsTests(unittest.TestCase):
         self.assertEqual(b, "Perche' X.\n\n- fatto uno\n- fatto due")
         c = bench.guided_content("Perche' X.", ["fatto uno", "fatto due"], "## finestra grezza")
         self.assertEqual(c, b + "\n\n## finestra grezza")
+
+    def test_compare_content_three_variants_jev_off_and_v2_fallback(self):
+        """ICH-162: Jev spento nel confronto, lettura di windows.jsonl quando
+        retain_windows.jsonl manca, tre estrazioni con claims e una sola senza,
+        campi nuovi della riga."""
+        bench = load_bench()
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        (tmp / "windows.jsonl").write_text(
+            '{"id": "w1", "content": "finestra uno"}\n{"id": "w2", "content": "finestra due"}\n',
+            encoding="utf-8",
+        )
+        (tmp / "retain_labels.jsonl").write_text(
+            '{"id": "w1", "expected_action": "retain"}\n{"id": "w2", "expected_action": "retain"}\n',
+            encoding="utf-8",
+        )
+        seen_cfg = []
+
+        def evaluate_retain(content, summary, bank_urls, cfg):
+            seen_cfg.append(cfg)
+            claims = ["fatto uno", "fatto due"] if content == "finestra uno" else []
+            result = FakeResult("retain", "durable_decision", [], durable_claims=claims)
+            result.preview, result.context, result.latency_ms = "Perche' X.", "dominio", 123.4
+            return result
+
+        extracted = []
+
+        def dry_run_extract(base, bank, content, timeout, context=""):
+            extracted.append(content)
+            return [f"fatto da {content[:12]}"]
+
+        args = Args()
+        args.artifacts, args.compare_bank = tmp, ""
+        with mock.patch.object(
+            bench, "load_config",
+            return_value={"retain_gate_model": "m", "retain_jev_enabled": True, "bank": {}},
+        ), mock.patch.object(bench, "evaluate_retain", side_effect=evaluate_retain), mock.patch.object(
+            bench, "dry_run_extract", side_effect=dry_run_extract
+        ), redirect_stdout(io.StringIO()):
+            rc = bench.compare_content(args)
+        self.assertEqual(rc, 0)
+        self.assertTrue(all(cfg["retain_jev_enabled"] is False for cfg in seen_cfg))
+        # w1 con claims: (a), (b), (c); w2 senza claims: solo (a).
+        self.assertEqual(len(extracted), 4)
+        rows = {r["id"]: r for r in map(json.loads, (tmp / "content_compare.jsonl").read_text(encoding="utf-8").splitlines())}
+        w1, w2 = rows["w1"], rows["w2"]
+        self.assertEqual(w1["n_claims"], 2)
+        self.assertEqual(w1["latency_ms"], 123.4)
+        self.assertEqual(w1["content_c"], bench.guided_content("Perche' X.", ["fatto uno", "fatto due"], "finestra uno"))
+        self.assertEqual(len(w1["facts_c"]), 1)
+        self.assertIsNone(w2["content_c"])
+        self.assertEqual(w2["facts_c"], w2["facts_a"])
+        self.assertEqual(w2["facts_b"], w2["facts_a"])
 
 
 class JevBenchSplitTests(unittest.TestCase):

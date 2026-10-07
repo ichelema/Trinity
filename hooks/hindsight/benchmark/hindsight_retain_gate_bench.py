@@ -528,7 +528,7 @@ def main() -> int:
     parser.add_argument("--dry-run-extract", type=int, default=0, metavar="N", help="ispeziona N finestre retain via dry-run-extract")
     parser.add_argument("--bench-bank", default="retain-gate-bench")
     parser.add_argument("--compare-content", action="store_true", help="ICH-149/162: fatti estratti da (a) finestra grezza, (b) durable_claims+preview, (c) finestra con claims in cima")
-    parser.add_argument("--artifacts", type=Path, default=ARTIFACTS, help="cartella con retain_windows.jsonl e retain_labels.jsonl")
+    parser.add_argument("--artifacts", type=Path, default=ARTIFACTS, help="cartella con retain_windows.jsonl (o windows.jsonl, dataset v2) e retain_labels.jsonl")
     parser.add_argument("--compare-bank", default="", help="bank del dry-run (default: core_bank)")
     args = parser.parse_args()
 
