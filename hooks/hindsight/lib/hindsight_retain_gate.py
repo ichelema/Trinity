@@ -150,9 +150,11 @@ class GateResult:
     # chiede un context all'utente).
     context: str = ""
     duplicate_of: list[int] = field(default_factory=list)
+    # Una frase per fatto durevole (ICH-162): con la preview vanno in cima al
+    # content inviato al bank (guided_content, ICH-149).
+    durable_claims: list[str] = field(default_factory=list)
     # Evidenza di copertura come l'ha dichiarata il modello (ICH-84): su skip
     # alimenta duplicate_of, su retain/uncertain resta solo osservabilita'.
-    durable_claims: list[str] = field(default_factory=list)
     covered_by: list[int] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
