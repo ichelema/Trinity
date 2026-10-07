@@ -121,7 +121,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 8. **Report**: scrivi `logs/dream/report-YYYY-MM-DD.md` nel formato sotto.
    Se esiste già (secondo audit lo stesso giorno), prima copialo in `.bak`.
 8b. **Lint del report** (obbligatorio, prima di toccare lo stato):
-   `PYTHONUTF8=1 python "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream_report_lint.py" "<report>"`.
+   `bash "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream-report-lint.sh" "<report>"`.
    Con `FAIL` correggi il report e rilancia finché stampa `PASS`. Il lint
    controlla ID univoci e sequenziali, contatori dell'intestazione, campi
    obbligatori per tipo (`Cosa fa`, `Fonte`/`Motivo`, `Verifica`, `Proposta`,
@@ -232,7 +232,7 @@ Regole del formato:
 1. Leggi `state.json` → `last_report`. Se stato o report mancano:
    "nessun report: lancia prima `/trinity:dream`" e fermati.
 2. **Lint in modalità apply**:
-   `PYTHONUTF8=1 python "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream_report_lint.py" "<report>" --apply`.
+   `bash "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream-report-lint.sh" "<report>" --apply`.
    Con `FAIL` fermati e mostra gli errori: un'azione flaggata che altera o
    ritira una memoria esistente (`hs-invalidate`, `hs-update`, `hs-correct-doc`,
    `file-update`, `file-delete`) con `Verifica: solo ...` non si esegue; va
