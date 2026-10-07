@@ -121,6 +121,8 @@ Choose action "retain" ONLY if the window contains durable, verified knowledge l
 
 Choose action "skip" for: temporary or trivial information, anything easily recoverable from the repository or git history, ordinary command output, intermediate attempts, work still in progress with no conclusion, or content whose durable part is already covered by the existing memories provided, even when the window wraps it in fresh ephemeral material.
 
+The window may open with a "## Command outcomes" section: Bash commands that failed, with their error, and test result lines. It is evidence, not knowledge. Use it to judge whether a claim made in the conversation is verified: a passing test supports the claim; a failure left unresolved, or one that contradicts the conversation, means the claim is not verified. The section lists only failures and test results, so a command missing from it proves nothing. Never list an outcome line as a durable claim, and never retain a window for its outcomes alone.
+
 Ask yourself: "Could this information avoid work, mistakes or repeated analysis in the future?"
 
 Duplicate check — fill these two fields BEFORE choosing the action:
