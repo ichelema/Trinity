@@ -81,6 +81,7 @@ Per ogni round:
      ANTHROPIC_BASE_URL="http://127.0.0.1:4000" \
      ANTHROPIC_AUTH_TOKEN="$(cat ~/.litellm/master-key.txt)" \
      ANTHROPIC_DEFAULT_FABLE_MODEL="claude-gpt-5-6-sol-xhigh" \
+     ANTHROPIC_DEFAULT_SONNET_MODEL="claude-gpt-5-6-sol-high" \
      GH_CONFIG_DIR="$(cygpath -w ~/.config/gh)" \
      ~/.local/bin/claude.exe -p --agent trinity:reviewer --model claude-gpt-5-6-sol-xhigh \
        "/trinity:workflow:3_independent-review <issue-id...> <model> <review-wt-path>" \
@@ -88,11 +89,14 @@ Per ogni round:
      ```
      `ANTHROPIC_DEFAULT_FABLE_MODEL` serve perché `3_independent-review` ha `model: fable` nel
      frontmatter: senza mappatura la sessione chiede al proxy `claude-fable-5-1` e fallisce con
-     400. `GH_CONFIG_DIR` serve perché `gh` nella sessione headless trovi il login; il filtro su
-     stderr toglie solo l'avviso innocuo `unrecognized_model` (Claude Code non conosce il nome
-     `claude-gpt-5-6-sol-xhigh`). Se `<model>` coincide con uno dei due modelli di review
-     (`fable` o `gpt`), segnalalo: quella review gira sullo stesso modello che ha scritto il
-     codice ed è meno indipendente.
+     400. `ANTHROPIC_DEFAULT_SONNET_MODEL` serve al classificatore della modalità auto: con
+     `--agent` il classificatore chiede `claude-sonnet-5` e poi `claude-opus-5`, che il proxy non
+     ha, e blocca ogni comando Bash; la mappatura gli dà subito un modello GPT che risponde, e la
+     review resta su `claude-gpt-5-6-sol-xhigh`. `GH_CONFIG_DIR` serve perché `gh` nella sessione
+     headless trovi il login; il filtro su stderr toglie solo l'avviso innocuo `unrecognized_model`
+     (Claude Code non conosce il nome `claude-gpt-5-6-sol-xhigh`). Se `<model>` coincide con uno
+     dei due modelli di review (`fable` o `gpt`), segnalalo: quella review gira sullo stesso
+     modello che ha scritto il codice ed è meno indipendente.
 3. Raccogli i due report.
 4. Rimuovi i due worktree leggendo e seguendo
    `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` (per lo stesso motivo non puoi
