@@ -68,6 +68,32 @@ classificato, fermati e mostra:
 
 `/trinity:issue-cycle <review|loop> <source-branch> <issue-id...> [<model>]`
 
+## Registro
+
+Il registro è un file che conserva decisioni, questioni aperte ed esiti anche quando Claude Code
+compatta la conversazione. Crealo subito dopo la validazione degli argomenti:
+
+```bash
+log_dir="$HOME/.claude/tmp/issue-cycle"; mkdir -p "$log_dir"
+log="$log_dir/$(date +%Y%m%d-%H%M)-<issue-id...>.md"   # ID uniti da '-', es. ICH-97-ICH-98
+printf '# issue-cycle %s %s %s\n' "<review|loop>" "<source-branch>" "<model>" > "$log"
+```
+
+Ogni «annota» di questo command significa: aggiungi subito una riga al registro, nel momento in cui
+la decisione o il problema avviene, non alla fine. Una riga per voce, sotto l'intestazione della
+issue corrente:
+
+```
+- [decisione] step <N>: <scelta> — <motivo>
+- [questione] step <N>: <problema> (<file>:<riga> se disponibile)
+- [interruzione] step <N>: <motivo> — riprendi con <comando>
+- [esito] PR <url>, review <round> round, <n> fix, residui <elenco>
+```
+
+Aggiungi sempre in append (`cat >> "$log" <<'EOF' … EOF`), mai riscrivendo il file. Dopo una
+compattazione della conversazione, rileggi il registro per sapere a quale issue e a quale step sei
+arrivato.
+
 ## Controlli iniziali
 
 Esegui questi controlli una volta sola, prima della prima issue.
@@ -77,16 +103,16 @@ Esegui questi controlli una volta sola, prima della prima issue.
 Leggi ogni issue con `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`, in sola lettura.
 Una issue che non richiede modifiche a un repository Git (configurazione di tool esterni, ricerca,
 pulizia di Linear, note fuori dai repo) non entra nel ciclo: toglila dalla lista, non toccare il
-suo stato e mettila nel report con il comando `/trinity:linear-no-repo <issue-id>`. Se non resta
-nessuna issue, fermati.
+suo stato e annotala sotto l'intestazione `## Escluse` con il comando
+`/trinity:linear-no-repo <issue-id>`. Se non resta nessuna issue, fermati.
 
 ### Modello di implementazione
 
 `<model>` non sceglie il modello di esecuzione: come negli step, è l'etichetta del worktree e del
 branch. L'implementazione la fa questa sessione. Se il modello della sessione non corrisponde a
-`<model>`, prosegui e annotalo nel report.
+`<model>`, prosegui e annotalo.
 
-Se la modalità è `review` e `<model>` è `fable`, annota nel report che la review gira sullo stesso
+Se la modalità è `review` e `<model>` è `fable`, annota che la review gira sullo stesso
 modello che ha scritto il codice ed è meno indipendente.
 
 ### Proxy LiteLLM (solo `loop`)
@@ -110,6 +136,9 @@ diverse.
 Ogni issue ha il suo worktree, il suo branch e la sua PR, e parte da `<source-branch>`. Nei passi
 sotto, `<issue-id>` è la issue corrente. Se la issue è bloccata da un'altra issue della lista, il
 suo codice non è nel branch (nessun merge): applica la regola dello step 2 sulle dipendenze.
+
+All'inizio di ogni issue aggiungi al registro l'intestazione `## <issue-id>`. Alla fine del ciclo,
+anche dopo un'interruzione, aggiungi la riga `[esito]`.
 
 ### Step 1 — worktree
 
@@ -164,9 +193,9 @@ rimuovere nulla e annotalo; mai `--force`.
 ### Commento su Linear
 
 A fine ciclo, anche dopo un'interruzione, pubblica sulla issue un commento breve in inglese con
-`linear.py`: link della PR (se esiste), esito della review, decisioni prese in autonomia,
-questioni aperte e, se il ciclo è interrotto, lo step raggiunto e il motivo. Chiudi con
-`Not merged: merge is left to the user.`
+`linear.py`, costruito dalle righe del registro sotto `## <issue-id>`: link della PR (se esiste),
+esito della review, decisioni prese in autonomia, questioni aperte e, se il ciclo è interrotto, lo
+step raggiunto e il motivo. Chiudi con `Not merged: merge is left to the user.`
 
 Regole Linear valide per tutto il ciclo:
 
@@ -176,7 +205,8 @@ Regole Linear valide per tutto il ciclo:
 
 ## Report finale
 
-Stampalo dopo l'ultima issue. Sezioni, in quest'ordine:
+Stampalo dopo l'ultima issue. Costruiscilo rileggendo il registro, non dalla memoria della
+conversazione, e indica in testa il path del registro. Sezioni, in quest'ordine:
 
 1. **Riepilogo**: tabella markdown con una riga per issue e le colonne issue, esito del ciclo
    (completo / interrotto allo step N), branch, PR, review (round, finding fixati), worktree di
