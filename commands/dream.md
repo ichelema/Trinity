@@ -120,6 +120,13 @@ altro valore → spiega l'uso (audit / apply) e fermati.
      valuta sulla sola daily e marcalo come tale nel report
 8. **Report**: scrivi `logs/dream/report-YYYY-MM-DD.md` nel formato sotto.
    Se esiste già (secondo audit lo stesso giorno), prima copialo in `.bak`.
+8b. **Lint del report** (obbligatorio, prima di toccare lo stato):
+   `PYTHONUTF8=1 python "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream_report_lint.py" "<report>"`.
+   Con `FAIL` correggi il report e rilancia finché stampa `PASS`. Il lint
+   controlla ID univoci e sequenziali, contatori dell'intestazione, campi
+   obbligatori per tipo (`Cosa fa`, `Fonte`/`Motivo`, `Verifica`, `Proposta`,
+   bank o path) e che solo `mm-refresh` sia pre-flaggata: è il controllo
+   finale reso eseguibile, non lo sostituisce.
 9. **Stato**: aggiorna SOLO `last_report` in `state.json`. NON toccare
    `last_audit`: avanza solo ad apply completato, così un report mai applicato
    non fa perdere la finestra.
@@ -224,7 +231,13 @@ Regole del formato:
 
 1. Leggi `state.json` → `last_report`. Se stato o report mancano:
    "nessun report: lancia prima `/trinity:dream`" e fermati.
-2. Leggi il report. Azioni eseguibili = righe `- [x] **A<n>**` SENZA marcatore
+2. **Lint in modalità apply**:
+   `PYTHONUTF8=1 python "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream_report_lint.py" "<report>" --apply`.
+   Con `FAIL` fermati e mostra gli errori: un'azione flaggata che altera o
+   ritira una memoria esistente (`hs-invalidate`, `hs-update`, `hs-correct-doc`,
+   `file-update`, `file-delete`) con `Verifica: solo ...` non si esegue; va
+   verificata sul campo e il report corretto, oppure tolta la spunta.
+   Poi leggi il report. Azioni eseguibili = righe `- [x] **A<n>**` SENZA marcatore
    `→ FATTO`. Le `- [ ]` sono respinte e si saltano; le `→ ERRORE` flaggate si
    ritentano.
 3. Esegui le azioni UNA alla volta secondo la tassonomia sotto. Dopo ciascuna,
@@ -252,17 +265,21 @@ Regole del formato:
 
 ## Tassonomia azioni
 
-| Tipo | Esecuzione in apply |
-|---|---|
-| `file-update` | `cp <file> <file>.bak` → Edit del corpo → aggiorna `metadata.modified` (ISO) → se cambia il senso, aggiorna la riga indice in MEMORY.md |
-| `file-delete` | `cp` in `.bak` → `rm` → rimuovi la riga indice da MEMORY.md |
-| `file-create` | Write con frontmatter conforme (name kebab, description, metadata.type, modified) + riga indice in MEMORY.md. RARO: solo se passa il test policy "serve a OGNI sessione?" |
-| `hs-invalidate` | Solo fatti `world`/`experience`: `curl -X PATCH <API>/banks/<bank>/memories/<id>` con `{"state": "invalidated", "reason": "dream YYYY-MM-DD"}` |
-| `hs-update` | Solo fatti `world`/`experience`: stesso PATCH con `{"text": "<testo corretto>"}` (ritocco puntuale di un singolo fatto) |
-| `hs-correct-doc` | `curl -X DELETE <API>/banks/<bank>/documents/<id>` → retain REST (riga sotto) del testo corretto |
-| `hs-retain` | `curl -X POST <API>/banks/<bank>/memories` con `{"items": [{"content": "<testo>", "context": "<dominio>", "tags": [...], "document_id": "dream:<YYYY-MM-DD>:<An>"}], "async": false}` — verifica `"success": true` (sync, fino a ~90s); il `document_id` deterministico fa upsert sui retry invece di duplicare. Tag SOLO universali (`claude-code`, `repo:<nome già nel bank>`; mai tag semantici) |
-| `policy-migrate` | prima l'`hs-retain` e verifica che sia riuscito, POI il `file-delete` |
-| `mm-refresh` | script refresh `--all`, una volta sola a fine apply |
+| Tipo | Esecuzione in apply | Post-condizione (rilettura dopo l'azione) |
+|---|---|---|
+| `file-update` | `cp <file> <file>.bak` → Edit del corpo → aggiorna `metadata.modified` (ISO) → se cambia il senso, aggiorna la riga indice in MEMORY.md | il file contiene il testo proposto, `metadata.modified` è aggiornato, il `.bak` esiste |
+| `file-delete` | `cp` in `.bak` → `rm` → rimuovi la riga indice da MEMORY.md | il file non esiste, il `.bak` esiste, `grep` del nome file in MEMORY.md non trova nulla |
+| `file-create` | Write con frontmatter conforme (name kebab, description, metadata.type, modified) + riga indice in MEMORY.md. RARO: solo se passa il test policy "serve a OGNI sessione?" | il file esiste con `name`, `description`, `metadata.type`; la riga indice esiste |
+| `hs-invalidate` | Solo fatti `world`/`experience`: `curl -X PATCH <API>/banks/<bank>/memories/<id>` con `{"state": "invalidated", "reason": "dream YYYY-MM-DD"}` | `GET <API>/banks/<bank>/memories/<id>` → `"state": "invalidated"` |
+| `hs-update` | Solo fatti `world`/`experience`: stesso PATCH con `{"text": "<testo corretto>"}` (ritocco puntuale di un singolo fatto) | `GET` del fatto → `text` uguale al testo proposto |
+| `hs-correct-doc` | `curl -X DELETE <API>/banks/<bank>/documents/<id>` → retain REST (riga sotto) del testo corretto | `GET` del documento vecchio → 404; `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |
+| `hs-retain` | `curl -X POST <API>/banks/<bank>/memories` con `{"items": [{"content": "<testo>", "context": "<dominio>", "tags": [...], "document_id": "dream:<YYYY-MM-DD>:<An>"}], "async": false}` — verifica `"success": true` (sync, fino a ~90s); il `document_id` deterministico fa upsert sui retry invece di duplicare. Tag SOLO universali (`claude-code`, `repo:<nome già nel bank>`; mai tag semantici) | risposta `"success": true` e `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |
+| `policy-migrate` | prima l'`hs-retain` e verifica che sia riuscito, POI il `file-delete` | post-condizione di `hs-retain`, poi quella di `file-delete` |
+| `mm-refresh` | script refresh `--all`, una volta sola a fine apply | exit 0 dello script, nessuna riga di errore nell'output |
+
+`→ FATTO` solo se la post-condizione è verificata con una rilettura dopo
+l'azione (GET, lettura del file, `grep`). Un comando con exit 0 ma
+post-condizione fallita si marca `→ ERRORE: post-condizione — <cosa manca>`.
 
 Le `observation` sono derivate: **mai PATCH diretto** per correggerle o invalidarle.
 Proporre ed eseguire invece la correzione/invalidation dei fatti sorgente

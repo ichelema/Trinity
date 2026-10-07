@@ -294,6 +294,12 @@ Uso:
    `logs/dream/state.json` (la finestra parte dall'ultimo audit applicato;
    primo giro: ultimi 14 giorni).
 
+Guardrail eseguibili: `hooks/dream/dream_report_lint.py` valida il report a fine
+audit (ID, contatori, campi obbligatori per tipo) e in `apply` rifiuta le azioni
+flaggate che alterano o ritirano una memoria senza verifica sul campo; ogni tipo
+di azione ha una post-condizione riletta dopo l'esecuzione, e `→ FATTO` si
+scrive solo se passa. Test: `python -m unittest discover -s hooks/dream -p 'test_*.py'`.
+
 > **TODO**: creare un job schedulato (§11, System Scheduler su Windows) che
 > lanci l'audit tutte le notti in headless (`claude -p "/trinity:dream"`),
 > così al mattino il report è pronto da rivedere e flaggare.
