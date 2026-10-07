@@ -19,7 +19,8 @@ jev_rejected). Jev non viene chiamato su skip/uncertain. Jev irraggiungibile,
 in timeout o senza TYPESAFE_API_KEY e' un errore tecnico come quelli di luna:
 fail-closed, con GateResult.error prefissato "jev:".
 I durable_claims sono una frase per ogni fatto durevole distinto, fino a 5
-(ICH-162): sono la materia prima del content inviato al bank (ICH-149).
+(ICH-162): con la preview vanno in cima alla finestra nel content inviato al
+bank (guided_content, ICH-149).
 Il gate produce anche il `context` descrittivo del retain; se manca (retain o
 uncertain) il worker mette comunque la POST in pending e Claude propone una
 riga di dominio: al prompt successivo handle_retain_consent risolve il context
@@ -149,9 +150,11 @@ class GateResult:
     # chiede un context all'utente).
     context: str = ""
     duplicate_of: list[int] = field(default_factory=list)
+    # Una frase per fatto durevole (ICH-162): con la preview vanno in cima al
+    # content inviato al bank (guided_content, ICH-149).
+    durable_claims: list[str] = field(default_factory=list)
     # Evidenza di copertura come l'ha dichiarata il modello (ICH-84): su skip
     # alimenta duplicate_of, su retain/uncertain resta solo osservabilita'.
-    durable_claims: list[str] = field(default_factory=list)
     covered_by: list[int] = field(default_factory=list)
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
@@ -533,7 +536,9 @@ def evaluate_retain(
             preview=preview.strip(),
             context=context.strip(),
             duplicate_of=duplicate_of,
-            durable_claims=durable_claims,
+            # Come preview/context: un claim vuoto o spezzato su piu' righe
+            # lascerebbe un bullet orfano nel content inviato al bank (ICH-149).
+            durable_claims=[" ".join(c.split()) for c in durable_claims if c.strip()],
             covered_by=covered_by,
             candidates=candidates,
             latency_ms=round(latency, 2),
@@ -572,6 +577,18 @@ def evaluate_retain(
 # consumo singolo. Qui il payload conservato e' la POST /memories gia' pronta:
 # al "si'" dell'utente la esegue l'hook recall, identica a quella del worker.
 # ---------------------------------------------------------------------------
+
+def claims_content(preview: str, claims: list[str]) -> str:
+    """Variante (b) di ICH-149: preview del gate + durable_claims."""
+    return "\n".join([preview, ""] + [f"- {c}" for c in claims]).strip()
+
+
+def guided_content(preview: str, claims: list[str], window: str) -> str:
+    """Variante (c) di ICH-162, adottata dal worker (ICH-149): claims + preview
+    in cima alla finestra grezza, come guida per l'estrattore senza togliere
+    contesto."""
+    return f"{claims_content(preview, claims)}\n\n{window}"
+
 
 RETAIN_PENDING_TTL = 900.0
 

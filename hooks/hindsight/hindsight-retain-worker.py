@@ -59,6 +59,7 @@ from hindsight_recall_lib import last_assistant_text, strip_memory_block
 from hindsight_retain_gate import (
     evaluate_retain,
     fallback_context,
+    guided_content,
     handle_retain_consent,
     save_retain_pending,
 )
@@ -1067,13 +1068,20 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
     # document_id: ogni fetta e' un documento con id derivato dal CONTENUTO
     # (fette diverse = documenti diversi, niente perdita tra retain; fetta
     # identica ri-presentata = stesso id, il server fa upsert invece di
-    # duplicare — dedup replay esatto, ICH-67). Il content e' stabile per
-    # costruzione: build_content_chunk non contiene piu' righe volatili.
+    # duplicare — dedup replay esatto, ICH-67). L'hash e' sulla finestra grezza,
+    # stabile per costruzione: preview e claims vengono dal LLM del gate e
+    # possono cambiare sullo stesso replay.
     if session_id:
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
         doc_id = f"{session_id}-{digest}"
     else:
         doc_id = None
+
+    # ICH-149, variante (c) misurata in ICH-162: claims + preview del gate in
+    # cima alla finestra guidano l'estrattore senza togliergli contesto. Senza
+    # claims resta la finestra grezza.
+    if gate.durable_claims:
+        content = guided_content(gate.preview, gate.durable_claims, content)
 
     item = {
         "content": content,
