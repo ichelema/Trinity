@@ -126,7 +126,7 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 - Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
   Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
-<!-- RETAIN:manual -->
+<!-- RETAIN:manual --> <!-- Blocco iniettato SOLO con retain_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RETAIN_DROP=1): salva già il gate dell'hook Stop. -->
 ## Retain a fine task
 
 Al termine di un task significativo, valuta se il lavoro ha prodotto conoscenza
