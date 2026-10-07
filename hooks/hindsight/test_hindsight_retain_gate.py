@@ -813,6 +813,13 @@ class GateModuleTests(unittest.TestCase):
         self.assertIn("A covered window is a duplicate", GATE_PROMPT)
         self.assertNotIn("duplicate_of", GATE_PROMPT)
 
+    def test_prompt_treats_command_outcomes_as_evidence(self):
+        """ICH-160: la sezione che build_content_chunk mette in cima alla
+        finestra e' prova di verifica, non un fatto da salvare."""
+        self.assertIn('"## Command outcomes"', GATE_PROMPT)
+        self.assertIn("It is evidence, not knowledge", GATE_PROMPT)
+        self.assertIn("Never list an outcome line as a durable claim", GATE_PROMPT)
+
     def test_one_claim_per_durable_fact_up_to_five(self):
         """ICH-162: un claim per fatto durevole distinto, tetto 5 nello schema
         (maxItems, accettato da OpenAI strict: verificato dal vivo) e nel
