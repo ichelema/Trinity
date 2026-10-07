@@ -71,7 +71,7 @@ LIB_DIR = PLUGIN_ROOT / "hooks" / "hindsight" / "lib"
 sys.path.insert(0, str(LIB_DIR))
 
 from hindsight_config import load_config, recall_bank_urls  # pyright: ignore[reportMissingImports]  # noqa: E402
-from hindsight_retain_gate import evaluate_retain  # pyright: ignore[reportMissingImports]  # noqa: E402
+from hindsight_retain_gate import claims_content, evaluate_retain, guided_content  # pyright: ignore[reportMissingImports]  # noqa: E402
 
 DEFAULT_SESSIONS_ROOT = Path("E:/msys64/home/Sphynx/.claude/projects")
 ARTIFACTS = HERE / "artifacts"
@@ -208,17 +208,6 @@ def dry_run_extract(
     with urllib.request.urlopen(req, timeout=timeout) as res:
         data = json.loads(res.read().decode("utf-8", errors="replace"))
     return [str(f.get("text") or "") for f in data.get("facts") or []]
-
-
-def claims_content(preview: str, claims: list[str]) -> str:
-    """Variante (b) di ICH-149: preview del gate + durable_claims."""
-    return "\n".join([preview, ""] + [f"- {c}" for c in claims]).strip()
-
-
-def guided_content(preview: str, claims: list[str], window: str) -> str:
-    """Variante (c) di ICH-162: claims + preview in cima alla finestra grezza,
-    come guida per l'estrattore senza togliere contesto."""
-    return f"{claims_content(preview, claims)}\n\n{window}"
 
 
 def compare_content(args) -> int:

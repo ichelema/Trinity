@@ -1934,6 +1934,36 @@ class WorkerGateTests(unittest.TestCase):
                 self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
         self.assertNotEqual(payloads[3]["items"][0]["document_id"], first["document_id"])
 
+    def test_durable_claims_lead_the_window_and_keep_doc_id(self):
+        """ICH-149, variante (c): con claims il content e' preview + claims in
+        cima alla finestra; senza claims e' la finestra. Il document_id resta
+        quello della finestra: claims diversi sullo stesso replay non duplicano."""
+        payloads = []
+
+        def capture(req, timeout=10):
+            payloads.append(json.loads(req.data.decode("utf-8")))
+            return FakeResponse()
+
+        gates = [
+            GateResult(action="retain", reason="durable_decision", preview="Perche' X.",
+                       context="dominio", durable_claims=claims)
+            for claims in ([], ["fatto uno", "fatto due"], ["fatto tre"])
+        ]
+        for gate in gates:
+            with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
+                self.worker, "evaluate_retain", return_value=gate
+            ), mock.patch("urllib.request.urlopen", side_effect=capture):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(self.worker.evaluate(self.hook, "deferred"), (0, None))
+
+        raw, two, one = (p["items"][0] for p in payloads)
+        self.assertTrue(raw["content"].startswith("## Conversation (recent turns)"))
+        self.assertEqual(
+            two["content"], "Perche' X.\n\n- fatto uno\n- fatto due\n\n" + raw["content"]
+        )
+        self.assertEqual(one["content"], "Perche' X.\n\n- fatto tre\n\n" + raw["content"])
+        self.assertEqual({p["document_id"] for p in (raw, two, one)}, {raw["document_id"]})
+
     # --- ICH-86: coda, drain, evaluate_queued ------------------------------
 
     def enqueue(self, hook: dict, name: str) -> str:
