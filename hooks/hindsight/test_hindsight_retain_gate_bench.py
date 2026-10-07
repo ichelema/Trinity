@@ -326,6 +326,17 @@ class RetainGateBenchmarkTests(unittest.TestCase):
         self.assertIn("falsi duplicati        : 1", output)
 
 
+class CompareContentVariantsTests(unittest.TestCase):
+    """Content delle varianti (b) e (c) di --compare-content (ICH-149/162)."""
+
+    def test_guided_content_puts_claims_before_the_raw_window(self):
+        bench = load_bench()
+        b = bench.claims_content("Perche' X.", ["fatto uno", "fatto due"])
+        self.assertEqual(b, "Perche' X.\n\n- fatto uno\n- fatto due")
+        c = bench.guided_content("Perche' X.", ["fatto uno", "fatto due"], "## finestra grezza")
+        self.assertEqual(c, b + "\n\n## finestra grezza")
+
+
 class JevBenchSplitTests(unittest.TestCase):
     """Split tune/test per sessione del bench Jev (ICH-163, spec ICH-164)."""
 
