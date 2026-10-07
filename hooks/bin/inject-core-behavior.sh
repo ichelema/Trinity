@@ -26,6 +26,10 @@ CFG_PY="$ROOT/hooks/hindsight/lib/hindsight_config.py"
 command -v cygpath >/dev/null 2>&1 && CFG_PY="$(cygpath -w "$CFG_PY")"
 RETAIN_DROP=0
 [ "$("$HS_PY" "$CFG_PY" --get retain_enabled 2>/dev/null)" = "True" ] && RETAIN_DROP=1
+# Stesso criterio per "Recall a inizio task" (marker RECALL:manual): dove
+# recall_enabled e' true le memorie le inietta gia' l'hook UserPromptSubmit.
+RECALL_DROP=0
+[ "$("$HS_PY" "$CFG_PY" --get recall_enabled 2>/dev/null)" = "True" ] && RECALL_DROP=1
 
 # Il file contiene blocchi per-OS delimitati da <!-- OS:windows --> e
 # <!-- OS:linux -->: tieni solo quelli dell'OS corrente e togli i marker.
@@ -44,6 +48,8 @@ filter_os() {
         *"<!-- OS:"* | *"<!-- /OS:"*) continue ;;
         *"<!-- RETAIN:manual -->"*) [ "$RETAIN_DROP" -eq 1 ] && drop=1; continue ;;
         *"<!-- /RETAIN:manual -->"*) [ "$RETAIN_DROP" -eq 1 ] && drop=0; continue ;;
+        *"<!-- RECALL:manual -->"*) [ "$RECALL_DROP" -eq 1 ] && drop=1; continue ;;
+        *"<!-- /RECALL:manual -->"*) [ "$RECALL_DROP" -eq 1 ] && drop=0; continue ;;
         esac
         [ "$drop" -eq 1 ] && continue
         printf '%s\n' "$line"

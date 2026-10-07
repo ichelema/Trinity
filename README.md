@@ -548,7 +548,9 @@ l'header Timestamp/CWD/Session — quei valori vivono nei metadata. Parametri:
 `retain_jev_timeout`. Il lato agente (retain MCP proattivo): il formato
 di `mcp__hindsight__retain` (content/context/tags) in `core-behavior.md` è iniettato a ogni
 sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain_enabled` è
-`false` (col gate attivo produrrebbero salvataggi doppi).
+`false` (col gate attivo produrrebbero salvataggi doppi). Stesso criterio per il recall: le regole
+"Recall a inizio task" (marker `RECALL:manual`) sono iniettate solo dove `recall_enabled` è `false`,
+perché con l'hook attivo le memorie arrivano già a ogni prompt.
 
 **Retain differito: Stop accoda, UserPromptSubmit valuta, la sentinella drena (ICH-86).**
 L'hook `Stop` (`hindsight-retain.sh`) non valuta più nulla: è puro bash, scrive il payload del

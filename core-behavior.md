@@ -126,6 +126,23 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 - Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
   Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
+<!-- RECALL:manual --> <!-- Blocco iniettato SOLO con recall_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RECALL_DROP=1): le memorie le inietta già l'hook UserPromptSubmit. -->
+## Recall a inizio task
+
+Il recall automatico è disattivato: nessun hook inietta le memorie Hindsight
+nel prompt. Chiama `mcp__hindsight__recall` con una query breve e mirata:
+
+- prima di rispondere a domande sull'utente, sul progetto o su decisioni passate;
+- prima di un'operazione tecnica non banale su questa macchina (download,
+  install, assunzioni su path/env, rete, "prima volta che faccio X qui");
+- ogni volta che sei incerto o stai per assumere qualcosa.
+
+Non chiamarlo per conferme, domande banali o quando il contesto contiene già
+la risposta. Se il recall non risponde, prosegui con gli strumenti locali e
+dillo in una riga.
+
+<!-- /RECALL:manual -->
+
 <!-- RETAIN:manual --> <!-- Blocco iniettato SOLO con retain_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RETAIN_DROP=1): salva già il gate dell'hook Stop. -->
 ## Retain a fine task
 
