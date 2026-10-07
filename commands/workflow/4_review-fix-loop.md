@@ -128,10 +128,13 @@ nel report come criticità e chiedi.
 
 ## Loop
 
-Ripeti round → triage → fix finché un round completo non produce alcun finding da fixare.
+Ripeti round → triage → fix finché un round completo non produce alcun finding da fixare, con un
+massimo di 3 round. Dal secondo round in poi fixa solo `BLOCKER`, `HIGH` e `MEDIUM`: i `LOW` vanno
+nel report come residui, non in un nuovo giro.
 
 Fermati e segnala se:
 
+- hai completato il terzo round e restano finding da fixare: elencali nel report con il motivo;
 - due round consecutivi ripropongono lo stesso finding già scartato come falso positivo (i due
   reviewer non convergono: disaccordo di fondo);
 - un fix ne introduce un altro a valanga (il fix non era minimo).
