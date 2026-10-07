@@ -1,6 +1,6 @@
 ---
 description:
-  Ciclo completo e senza presidio di una o più issue Linear, una dopo l'altra: per ogni issue
+  Ciclo completo e senza presidio di una o più issue Linear, una dopo l'altra; per ogni issue
   worktree, implementazione fino alla PR, review singola o loop di review e fix, pulizia dei
   worktree di review e commento su Linear; alla fine report. Non fa il merge.
 argument-hint: <review|loop> <source-branch> <issue-id...> [<model>]
