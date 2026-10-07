@@ -40,15 +40,28 @@ Ricava il worktree di implementazione con la stessa regola di `/2_work-issue`
 `<branch>`. Se non esiste, fermati.
 
 La directory da recensire `<rev-path>` è `<review-path>` se è stato passato (worktree detached
-creato da `/4_review-fix-loop`), altrimenti il worktree di implementazione. Usa
-`git -C "<rev-path>"` e path assoluti sotto `<rev-path>`; non fare `cd`.
-
-Prima di iniziare verifica di recensire esattamente la PR (`git fetch` aggiorna solo i ref remoti ed
-è l'unica scrittura Git ammessa):
+creato da `/4_review-fix-loop`). Altrimenti creala tu: un worktree detached (senza branch: non
+committi) dal commit della PR, con path assoluto in formato Windows (`E:/...`) su Windows/MSYS2:
 
 ```bash
 git fetch origin
-git -C "<rev-path>" status --short    # deve essere vuoto
+repo_root="$(git rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"
+command -v cygpath >/dev/null && repo_root="$(cygpath -m "$repo_root")"   # solo Windows/MSYS2
+sha="$(git rev-parse --verify "origin/<branch>^{commit}")"
+git worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>" "$sha"
+```
+
+Se la directory esiste già (review precedente non ripulita), fermati. Non toccare il file `.git`
+dentro il worktree. Non recensire mai il worktree di implementazione direttamente.
+
+Usa `git -C "<rev-path>"` e path assoluti sotto `<rev-path>`; non fare `cd`.
+
+Prima di iniziare verifica di recensire esattamente la PR (`git fetch` aggiorna solo i ref remoti;
+insieme alla creazione e rimozione del tuo worktree di review è l'unica scrittura Git ammessa):
+
+```bash
+git fetch origin
+git -C "<rev-path>" status --short -- . ':!.review-tmp'    # deve essere vuoto
 git -C "<rev-path>" rev-parse HEAD    # deve coincidere con:
 git rev-parse "origin/<branch>"
 ```
@@ -62,18 +75,21 @@ Non modificare nulla.
 
 In particolare:
 
-- non modificare, creare, eliminare o rinominare file;
+- non modificare, creare, eliminare o rinominare file fuori da `<rev-path>/.review-tmp/`;
 - non applicare fix, patch o refactoring;
 - non eseguire formatter, linter con auto-fix, code generator, migration o aggiornamenti di
   snapshot;
 - non installare o aggiornare dipendenze;
-- non fare commit, checkout, reset, stash, rebase o altre operazioni Git mutative;
+- non fare commit, checkout, reset, stash, rebase o altre operazioni Git mutative; le sole
+  eccezioni sono `git fetch` e la creazione e rimozione del tuo worktree di review;
 - non modificare la issue Linear, i commenti, lo stato o altri dati esterni;
 - non creare un file per il report: restituiscilo direttamente nella risposta.
 
 Puoi eseguire comandi di ispezione e test solo se non modificano file tracciati o lo stato del
 repository. Prima di iniziare registra lo stato Git corrente; al termine verifica che non sia
-cambiato. Non eliminare eventuali modifiche preesistenti dell'utente.
+cambiato, ignorando la cartella `<rev-path>/.review-tmp/`: è l'unico posto dove puoi creare file
+di appoggio (script, output di test, benchmark). Non eliminare eventuali modifiche preesistenti
+dell'utente.
 
 ## 1. Ricostruisci il contratto delle issue
 
@@ -205,6 +221,17 @@ Non presentare preferenze stilistiche come bug. Non gonfiare il report con osser
 
 Se una conclusione non può essere verificata, etichettala esplicitamente come `Da verificare`,
 spiegando quale informazione manca.
+
+## Pulizia
+
+Come ultima azione prima di restituire il report cancella `<rev-path>/.review-tmp/`, sempre:
+`git worktree remove` rifiuta un worktree con file non tracciati e `--force` è vietato.
+
+Se il worktree di review lo hai creato tu (nessun `<review-path>` passato), rimuovilo prima di
+restituire il report: leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md`
+(ha `disable-model-invocation: true`, non puoi invocarlo come slash command) con
+`$worktree_name` = `review+<base-name>`. Se lo ha creato `/4_review-fix-loop`, lascialo: lo
+rimuove il loop.
 
 ## Formato del report
 

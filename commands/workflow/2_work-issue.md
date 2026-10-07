@@ -156,8 +156,7 @@ Obiettivo: implementare tutte le issue indicate.
 Sei il lead.
 
 Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker (se la
-sessione è già Sonnet, fallo tu: fast-worker è lo stesso modello), i problemi con prospettiva fresca
-a DeepSeek.
+sessione è già Sonnet, fallo tu: fast-worker è lo stesso modello).
 
 Mantieni tutte le modifiche entro lo scope delle issue. Ogni riga modificata deve essere
 riconducibile a un requisito di una delle issue: le deviazioni vanno segnalate all'utente, non

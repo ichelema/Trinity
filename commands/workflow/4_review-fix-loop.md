@@ -1,6 +1,6 @@
 ---
 description:
-  Due review indipendenti in parallelo (deepseek + trinity:deep-reasoner) su worktree isolati, loop
+  Due review indipendenti in parallelo (trinity:reviewer su Fable e su GPT) su worktree isolati, loop
   di fix minimi e report finale
 argument-hint: <issue-id...> <model>
 disable-model-invocation: true
@@ -10,7 +10,8 @@ Esegui due review indipendenti e parallele della PR delle issue indicate su work
 applica i fix che meritano di essere fatti in un loop, finché non emergono più finding. In uscita,
 report sintetico.
 
-Le due review girano su modelli diversi: `deepseek` e `trinity:deep-reasoner`.
+Le due review usano lo stesso agente `trinity:reviewer` su due modelli diversi: Fable (default
+dell'agente) e GPT 5.6 sol xhigh (`claude-gpt-5-6-sol-xhigh` via proxy LiteLLM).
 
 L'ultimo argomento è il modello: identifica il worktree di implementazione creato da
 `/1_create-worktree` (e quindi il branch della PR). Non sceglie il modello di esecuzione.
@@ -59,8 +60,8 @@ Per ogni round:
    ```bash
    git fetch origin
    sha="$(git rev-parse --verify "origin/<branch>^{commit}")"
-   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-deepseek" "$sha"
-   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-deep-reasoner" "$sha"
+   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-gpt" "$sha"
+   git worktree add --detach "<repo-root>/.claude/worktrees/review+<base-name>-fable" "$sha"
    ```
    Se una delle directory esiste già (round precedente non ripulito), fermati. Non toccare il file
    `.git` dentro i worktree.
@@ -68,23 +69,28 @@ Per ogni round:
    con argomenti `<issue-id...> <model> <review-wt-path>`. Il command ha
    `disable-model-invocation: true`: né tu né un subagente potete invocarlo come slash command, e un
    `/...` nel prompt di un subagente non viene espanso.
-   - review `deep-reasoner`: tool Agent con `subagent_type: trinity:deep-reasoner`; nel prompt digli
+   Ogni reviewer scrive i file di appoggio solo in `<review-wt-path>/.review-tmp/`, mai altrove.
+   - review `fable`: tool Agent con `subagent_type: trinity:reviewer`; nel prompt digli
      di leggere `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con
      quegli argomenti al posto di `$ARGUMENTS`;
-   - review `deepseek`: il tool Agent non può scegliere DeepSeek, quindi lanciala da Bash con una
-     sessione headless sul proxy LiteLLM già avviato:
+   - review `gpt`: il tool Agent non può scegliere GPT, quindi lanciala da Bash con una
+     sessione headless sul proxy LiteLLM già avviato, con lo stesso agente:
      ```bash
      ANTHROPIC_BASE_URL="http://127.0.0.1:4000" \
      ANTHROPIC_AUTH_TOKEN="$(cat ~/.litellm/master-key.txt)" \
+     ANTHROPIC_DEFAULT_FABLE_MODEL="claude-gpt-5-6-sol-xhigh" \
      GH_CONFIG_DIR="$(cygpath -w ~/.config/gh)" \
-     ~/.local/bin/claude.exe -p --model claude-deepseek-flash "/trinity:workflow:3_independent-review <issue-id...> <model> <review-wt-path>" \
+     ~/.local/bin/claude.exe -p --agent trinity:reviewer --model claude-gpt-5-6-sol-xhigh \
+       "/trinity:workflow:3_independent-review <issue-id...> <model> <review-wt-path>" \
        2> >(grep -v '^\[claude-code:unrecognized_model\]' >&2)
      ```
-     `GH_CONFIG_DIR` serve perché `gh` nella sessione headless trovi il login; il filtro su stderr
-     toglie solo l'avviso innocuo `unrecognized_model` (Claude Code non conosce il nome
-     `claude-deepseek-flash`). Se `<model>` coincide con il modello di `deep-reasoner` (`fable`,
-     vedi `agents/deep-reasoner.md`), segnalalo: quella review gira sullo stesso modello che ha
-     scritto il codice ed è meno indipendente.
+     `ANTHROPIC_DEFAULT_FABLE_MODEL` serve perché `3_independent-review` ha `model: fable` nel
+     frontmatter: senza mappatura la sessione chiede al proxy `claude-fable-5-1` e fallisce con
+     400. `GH_CONFIG_DIR` serve perché `gh` nella sessione headless trovi il login; il filtro su
+     stderr toglie solo l'avviso innocuo `unrecognized_model` (Claude Code non conosce il nome
+     `claude-gpt-5-6-sol-xhigh`). Se `<model>` coincide con uno dei due modelli di review
+     (`fable` o `gpt`), segnalalo: quella review gira sullo stesso modello che ha scritto il
+     codice ed è meno indipendente.
 3. Raccogli i due report.
 4. Rimuovi i due worktree leggendo e seguendo
    `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` (per lo stesso motivo non puoi

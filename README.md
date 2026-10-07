@@ -269,7 +269,7 @@ collidono con i comandi locali del progetto:
 | 1 | `1_create-worktree <source-branch> <issue-id...> <model>` | branch `<prefix>/<base-name>` + worktree in `.claude/worktrees/` |
 | 2 | `2_work-issue <issue-id...> <model>` | piano, implementazione, push e PR (senza merge) |
 | 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR |
-| 4 | `4_review-fix-loop <issue-id...> <model>` | review DeepSeek + deep-reasoner su worktree detached, fix in loop |
+| 4 | `4_review-fix-loop <issue-id...> <model>` | review reviewer su Fable + GPT su worktree detached, fix in loop |
 | 5 | `5_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
 
 ### `/trinity:dream` — audit della memoria

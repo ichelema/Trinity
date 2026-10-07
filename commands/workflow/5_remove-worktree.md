@@ -9,7 +9,7 @@ disable-model-invocation: true
 ---
 
 Rimuovi il worktree `$worktree_name` (directory sotto `.claude/worktrees/`, es.
-`review+ICH-73-fable-deepseek` o `ich-73-verifica-fattibilita-5df44e`) e il branch che vi è
+`review+ICH-73-fable-gpt` o `ich-73-verifica-fattibilita-5df44e`) e il branch che vi è
 agganciato, poi fai pulizia. Funziona sia su Windows/MSYS2 sia su Linux: i comandi sono Bash puro e
 portabile; i passi solo-Windows sono marcati.
 
