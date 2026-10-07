@@ -342,8 +342,7 @@ class HookE2ETests(unittest.TestCase):
             # deterministico e in-process da test_hindsight_retain_gate.py
             # (gate_output/retain_at_prompt), che gira nello stesso check.
             note = f"output dell'hook: {json.dumps(output, ensure_ascii=False)[:300]}"
-            with open(self.wait_for_outbox(note=note), encoding="utf-8") as handle:
-                late = json.dumps(json.load(handle), ensure_ascii=False)
+            late = json.dumps(self.wait_for_outbox(note=note), ensure_ascii=False)
             self.assertIn(
                 question, late, "il gate non ha prodotto la domanda, ne' in tempo ne' in ritardo"
             )
@@ -771,10 +770,14 @@ class HookE2ETests(unittest.TestCase):
     def outbox_path(self, session_id="e2e-session"):
         return os.path.join(self.queue_dir, session_id + ".out.json")
 
-    def wait_for_outbox(self, timeout_s: float = CHILD_TIMEOUT_S, session_id="e2e-session", note="") -> str:
+    def wait_for_outbox(self, timeout_s: float = CHILD_TIMEOUT_S, session_id="e2e-session", note="") -> dict:
         """Aspetta che il processo detached scriva l'outbox (e quindi sia
-        finito col lavoro): serve al test lento e a non lasciare figli vivi
-        al teardown.
+        finito col lavoro) e ne ritorna il contenuto: serve al test lento e a
+        non lasciare figli vivi al teardown. Il file resta su disco.
+
+        Su Windows l'outbox appena rinominato puo' restare bloccato per un
+        attimo (antivirus: PermissionError all'open): conta come non ancora
+        pronto e si riprova, come un file non ancora comparso (ICH-161).
 
         Il figlio scrive l'outbox SEMPRE (run_queued, anche vuoto), quindi la
         scadenza non e' un figlio lento: lo stato nel messaggio dice quale
@@ -783,16 +786,20 @@ class HookE2ETests(unittest.TestCase):
         eseguito, outbox gia' raccolto dall'hook o mai scritto (ICH-161)."""
         deadline = time.monotonic() + timeout_s
         path = self.outbox_path(session_id)
-        while not os.path.exists(path):
+        while True:
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    return json.load(handle)
+            except (FileNotFoundError, PermissionError):
+                pass
             if time.monotonic() >= deadline:
                 self.fail(
-                    f"outbox {path} mai comparso in {timeout_s:.0f}s; "
+                    f"outbox {path} mai comparso o mai leggibile in {timeout_s:.0f}s; "
                     f"coda={[os.path.basename(q) for q in self.queue_files()]}, "
                     f"gate_calls={MockBackend.gate_calls}, "
                     f"retain_pending={len(self.retain_pending_files())}; {note}"
                 )
             time.sleep(0.1)
-        return path
 
     def test_slow_gate_does_not_stall_prompt_and_is_picked_up_next_prompt(self):
         # WP-E: un gate PIU' LENTO del budget di pickup (RETAIN_PICKUP_BUDGET_S,
