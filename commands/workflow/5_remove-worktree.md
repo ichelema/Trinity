@@ -52,7 +52,7 @@ git worktree list --porcelain
 Dalla entry del worktree ricava `<wt-path>` (riga `worktree ...`, usalo poi ESATTAMENTE così com'è
 stampato) e `<branch>` (riga `branch refs/heads/...`). Se la entry ha `detached` al posto di
 `branch` (worktree di review di `/3_independent-review` o `/4_review-fix-loop`), non c'è branch:
-salta i controlli sul branch e il passo 3; resta obbligatorio `status --short` vuoto. Se non c'è
+salta i controlli sul branch e il passo 4; resta obbligatorio `status --short` vuoto. Se non c'è
 nessuna entry per `$worktree_name` ma la directory esiste, vedi "Directory orfana" più sotto.
 
 Default branch senza `gh` (che nella shell di Claude può non essere loggato):
@@ -121,7 +121,25 @@ worktree (verifica: sparisce da `git worktree list`) ma la directory è ancora a
 (sessione Claude Code, terminale, editor). Non ripetere il comando: chiudi chi la tiene e poi
 cancella la sola directory con `rm -rf "<wt-path>"`.
 
-### 3. Elimina il branch
+### 3. Allinea il default branch locale
+
+Il merge è avvenuto su GitHub, quindi il default branch locale è indietro rispetto a `<default>`,
+appena aggiornato dal `fetch`. Portalo avanti, solo in fast-forward:
+
+```bash
+default="<default>"; branch_name="${default#origin/}"   # origin/master -> master
+if [ "$(git -C "<repo-root>" symbolic-ref -q --short HEAD)" = "$branch_name" ]; then
+  git -C "<repo-root>" merge --ff-only "<default>"
+fi
+```
+
+Fallo prima del passo 4: `git branch -d` accetta il branch solo se è già contenuto in `HEAD` (il
+suo upstream remoto è già stato cancellato da GitHub). Se il worktree principale è su un altro
+branch, non fare checkout: salta il passo e segnalalo nella tabella finale. Se `merge --ff-only`
+fallisce (storia divergente o modifiche locali che verrebbero sovrascritte), non forzare: mostra
+l'errore e prosegui.
+
+### 4. Elimina il branch
 
 ```bash
 git branch -d <branch>
@@ -162,7 +180,7 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ gitdir POSIX         │ ripristinato (backup in ~/.claude/tmp) / non necessario  │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Default branch       │ <default> = <sha> (allineato a origin: sì/no)            │
+│ Default branch       │ <default> = <sha> — fast-forward: eseguito / già allineato / saltato: <motivo> │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Worktree residui     │ <elenco o "nessuno">                                     │
 └──────────────────────┴──────────────────────────────────────────────────────────┘
