@@ -769,7 +769,7 @@ class HookE2ETests(unittest.TestCase):
 
     def test_slow_gate_does_not_stall_prompt_and_is_picked_up_next_prompt(self):
         # WP-E: un gate PIU' LENTO del budget di pickup (RETAIN_PICKUP_BUDGET_S,
-        # 6s da T0) non deve trattenere il prompt: l'hook esce senza la
+        # 3s da T0) non deve trattenere il prompt: l'hook esce senza la
         # domanda, il processo detached (VERO python, lanciato dall'hook)
         # continua e scrive l'outbox; il prompt successivo lo raccoglie e
         # mostra la domanda ORA, saltando il consenso (il prompt normale NON
@@ -779,7 +779,7 @@ class HookE2ETests(unittest.TestCase):
         # lo dimostrano). Gate timeout alzato: 5s farebbe scattare il
         # fail-closed prima del ritardo artificiale.
         GATE_DELAY = 12.0
-        PICKUP_BUDGET = 6.0  # RETAIN_PICKUP_BUDGET_S in hindsight-recall.sh
+        PICKUP_BUDGET = 3.0  # RETAIN_PICKUP_BUDGET_S in hindsight-recall.sh
         slow_env = {"HS_CFG_RETAIN_GATE_TIMEOUT": "25"}
         MockBackend.gate_spec = {
             "action": "uncertain",

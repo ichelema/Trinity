@@ -86,13 +86,13 @@ pending_ttl = float(cfg["recall_pending_ttl"])
 # I suoi log '[retain] ...' vanno su stderr (hs-recall-stderr.log): lo stdout
 # resta il solo JSON di questo hook.
 # Budget di raccolta dell'esito del gate: il gate gira in un processo
-# detached e scrive un outbox; l'hook lo aspetta SOLO fino a T0+6s (gate
-# tipico ~3-5s incluso l'avvio del processo, quindi la domanda di solito
-# esce in QUESTO prompt). Se e' piu' lento l'hook esce comunque e l'esito lo
+# detached e scrive un outbox; l'hook lo aspetta SOLO fino a T0+3s (gate
+# tipico ~3-5s incluso l'avvio del processo: la domanda esce in QUESTO
+# prompt solo se il gate e' veloce). Se e' piu' lento l'hook esce comunque e l'esito lo
 # raccoglie il prompt successivo (retain_deferred carried_over -> picked_up):
 # niente piu' max(gate + POST) sul percorso critico del prompt, nessuna
 # finestra persa.
-RETAIN_PICKUP_BUDGET_S = 6.0
+RETAIN_PICKUP_BUDGET_S = 3.0
 
 
 class _NoRetain:
