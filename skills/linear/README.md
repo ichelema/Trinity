@@ -87,17 +87,6 @@ ln -s "$(pwd)" ~/.claude/skills/linear-api
 
 The skill's `name` and `description` (from `SKILL.md`'s frontmatter) become discoverable via Claude Code's skill list. The agent loads `SKILL.md` only on first use; per-domain reference files only when a task touches that surface. That progressive-discovery pattern is the whole reason this is cheaper in tokens than the Linear MCP.
 
-### 3. As a slash command
-
-The `.claude/commands/linear.md` file in this repo defines a `/linear` slash command for working assigned issues end-to-end (fetch → In Progress → implement → Done → comment).
-
-```bash
-# Symlink globally
-ln -s "$(pwd)/.claude/commands/linear.md" ~/.claude/commands/linear.md
-```
-
-Then `/linear`, `/linear AGI-23`, or `/linear AGI-23, AGI-26` from any Claude Code session.
-
 ## Auth — pick your path
 
 Three options, simplest first. Full walkthrough including OAuth-app setup and gotchas in [`references/auth.md`](references/auth.md).
@@ -226,9 +215,6 @@ linear-api/
 ├── LICENSE                           # MIT
 ├── pyproject.toml                    # httpx, python-dotenv (runtime); pytest, respx (dev)
 ├── .env.example                      # auth template
-├── .claude/
-│   └── commands/
-│       └── linear.md                 # /linear slash command — works assigned issues
 ├── references/
 │   ├── auth.md                       # personal key vs OAuth, scopes, revocation
 │   ├── schema-summary.md             # entity model, identifiers, pagination, soft/hard delete

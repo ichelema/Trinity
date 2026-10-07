@@ -87,7 +87,7 @@ Variables — the only required fields are `teamId` and `title`. The `teamId` be
 
 ### Hierarchy convention — Epic vs Story
 
-For workflows that distinguish epics (top-level containers) from stories (user-story-sized children), this repo's `/trinity:linear-no-repo` command (`commands/linear-no-repo.md`) defines a labels-plus-title-prefix convention:
+For workflows that distinguish epics (top-level containers) from stories (user-story-sized children), use this labels-plus-title-prefix convention:
 
 | | Epic | Story |
 |---|---|---|

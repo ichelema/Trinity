@@ -103,8 +103,8 @@ Esegui questi controlli una volta sola, prima della prima issue.
 Leggi ogni issue con `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py query`, in sola lettura.
 Una issue che non richiede modifiche a un repository Git (configurazione di tool esterni, ricerca,
 pulizia di Linear, note fuori dai repo) non entra nel ciclo: toglila dalla lista, non toccare il
-suo stato e annotala sotto l'intestazione `## Escluse` con il comando
-`/trinity:linear-no-repo <issue-id>`. Se non resta nessuna issue, fermati.
+suo stato e annotala sotto l'intestazione `## Escluse` con il motivo. Se non resta nessuna issue,
+fermati.
 
 ### Modello di implementazione
 
@@ -211,7 +211,7 @@ conversazione, e indica in testa il path del registro. Sezioni, in quest'ordine:
 1. **Riepilogo**: tabella markdown con una riga per issue e le colonne issue, esito del ciclo
    (completo / interrotto allo step N), branch, PR, review (round, finding fixati), worktree di
    review (rimossi / residui), commento Linear (pubblicato / fallito); sotto, le issue escluse
-   dallo scope con il comando `/trinity:linear-no-repo`;
+   dallo scope con il motivo;
 2. **Decisioni prese in autonomia**: raggruppate per issue, con la scelta e il motivo;
 3. **Questioni aperte**: raggruppate per issue, con file e righe quando disponibili;
 4. **Prossimi passi**: per ogni PR, i comandi esatti nell'ordine:
