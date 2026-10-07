@@ -140,6 +140,10 @@ suo codice non è nel branch (nessun merge): applica la regola dello step 2 sull
 All'inizio di ogni issue aggiungi al registro l'intestazione `## <issue-id>`. Alla fine del ciclo,
 anche dopo un'interruzione, aggiungi la riga `[esito]`.
 
+Alla fine del ciclo, anche dopo un'interruzione, controlla con `pwd` che la sessione sia nella root
+del repository; se non lo è, esegui `cd "<repo-root>"` come comando a sé. La issue seguente parte
+dalla root.
+
 ### Step 1 — worktree
 
 Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/1_create-worktree.md` con

@@ -120,7 +120,9 @@ falsi positivi e le preferenze stilistiche, senza riproporli nel round successiv
 
 Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 
-- comandi sempre con `git -C "<wt-path>"`, `mise -C "<wt-path>"` e path assoluti, mai `cd`;
+- prima del primo fix entra con un comando a sé, `cd "<wt-path>"`; dopo il push, o se ti fermi
+  prima, esci con `cd "<repo-root>"`: lo step 5 non può cancellare la cwd della sessione;
+- comandi sempre con `git -C "<wt-path>"`, `mise -C "<wt-path>"` e path assoluti;
 - la minima modifica che risolve il difetto;
 - nessun refactoring, nessuna riscrittura, nessun cambio di architettura;
 - ogni riga modificata è riconducibile a un finding verificato;

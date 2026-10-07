@@ -56,8 +56,22 @@ principale.
 ### Tutti i comandi vanno eseguiti sul worktree
 
 Usa `git -C "<wt-path>"` per ogni comando Git e path assoluti sotto `<wt-path>` per ogni lettura o
-modifica di file. Non fare `cd` nel worktree: su Windows la directory diventa poi non cancellabile
-finché la sessione la tiene come cwd (`Device or resource busy` allo step 4).
+modifica di file.
+
+### Entrata e uscita dal worktree
+
+Dopo le verifiche qui sotto entra nel worktree con un comando a sé: `cd "<wt-path>"`. Così la
+statusline mostra il worktree; i comandi restano comunque con `git -C` e path assoluti.
+
+Ogni volta che restituisci il controllo (fine lavoro, domanda all'utente, errore che ti ferma),
+ferma i processi in background avviati nel worktree, poi esci con un comando a sé:
+
+```bash
+repo_root="$(git -C "<wt-path>" rev-parse --path-format=absolute --git-common-dir)"; cd "${repo_root%/.git}" && pwd
+```
+
+Su Windows git non cancella una directory che fa da cwd alla shell (`Device or resource busy` allo
+step 5).
 
 Verifica prima di iniziare:
 
@@ -168,7 +182,7 @@ I messaggi di commit vanno scritti in inglese.
 
 Quando l'implementazione è terminata:
 
-1. Esegui i test e i controlli rilevanti sul worktree senza `cd`: `mise -C "<wt-path>" run <task>`
+1. Esegui i test e i controlli rilevanti sul worktree: `mise -C "<wt-path>" run <task>`
    se il progetto li definisce, altrimenti il comando di test con path assoluti sotto `<wt-path>`.
 2. Verifica che ogni requisito della checklist sia coperto.
 3. Crea i commit mancanti: `git -C "<wt-path>" add ...` e `git -C "<wt-path>" commit -m "..."`.
@@ -208,7 +222,7 @@ loggato:
 git symbolic-ref -q --short refs/remotes/origin/HEAD || git remote show origin | sed -n 's/.*HEAD branch: /origin\//p'
 ```
 
-Crea una sola PR verso il branch di default, senza `cd` nel worktree:
+Crea una sola PR verso il branch di default:
 
 ```bash
 gh repo view --json nameWithOwner -q .nameWithOwner
@@ -262,6 +276,8 @@ loop). Il merge resta all'utente.
 git -C "<wt-path>" status --short          # deve essere vuoto
 git -C "<wt-path>" log --oneline "<default>".."<branch>"
 ```
+
+Poi esci dal worktree come indicato in «Entrata e uscita dal worktree».
 
 Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i valori effettivi;
 `<model>` è l'ultimo argomento ricevuto:

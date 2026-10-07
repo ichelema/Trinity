@@ -32,10 +32,9 @@ git rev-parse --path-format=absolute --git-common-dir   # <repo-root>/.git
 ```
 
 `<repo-root>` è quel valore senza il suffisso `/.git`. Se la cwd corrente è dentro il worktree da
-rimuovere (`git rev-parse --show-toplevel` = path del worktree), fermati: su Windows la directory
-non è cancellabile finché una shell o la sessione Claude Code la tiene come cwd
-(`Device or resource busy`); su Linux funziona ma è comunque fragile. Chiedi all'utente di
-rilanciare il comando da una sessione aperta nella root del repository.
+rimuovere (`git rev-parse --show-toplevel` = path del worktree, confronta i due path dopo
+`cygpath -m`), esci con un comando a sé, `cd "<repo-root>"`, e verifica con `pwd`: su Windows git
+non cancella una directory che fa da cwd alla shell (`Device or resource busy`, vedi più sotto).
 
 **Windows/MSYS2, drive `subst`.** Se `git worktree list` mostra il worktree con una lettera di drive
 diversa da quella della tua cwd (es. entry `E:/AI/...` ma cwd `/d/AI/...`, con `E:` alias `subst` di
