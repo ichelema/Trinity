@@ -22,6 +22,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -29,14 +30,27 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
-from lib.hindsight_retain_gate import save_retain_pending
-
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
-HOOK = os.path.join(HOOKS_DIR, "hindsight-recall.sh")
-STOP_HOOK = os.path.join(HOOKS_DIR, "hindsight-retain.sh")
+# lib/ importabile anche lanciando la suite dalla root del repo (ICH-161).
+sys.path.insert(0, HOOKS_DIR)
+
+from lib.hindsight_retain_gate import save_retain_pending  # noqa: E402
+
+# Slash anche su Windows: l'hook ricava la sua dir con ${BASH_SOURCE[0]%/*} e
+# con un path tutto a backslash ripiega su "." (la cwd), quindi fuori da
+# hooks/hindsight non trova lib/. Da hooks.json arriva
+# "${CLAUDE_PLUGIN_ROOT}/hooks/...", che lo slash ce l'ha (ICH-161).
+HOOK = os.path.join(HOOKS_DIR, "hindsight-recall.sh").replace(os.sep, "/")
+STOP_HOOK = os.path.join(HOOKS_DIR, "hindsight-retain.sh").replace(os.sep, "/")
 # Path esplicito: su Windows CreateProcess cerca in System32 PRIMA del PATH e
 # "bash" diventerebbe la bash WSL. shutil.which cerca solo nel PATH (MSYS).
 BASH = shutil.which("bash") or "bash"
+# Scadenza delle attese sul figlio detached (outbox, POST del retain). Le
+# attese tornano appena l'evento arriva: una scadenza larga costa tempo solo
+# quando il test fallisce. Sotto carico l'avvio di bash+python del figlio
+# supera da solo i 10s, e una finestra stretta diventava un rosso spurio
+# (ICH-161). Stesso tetto del timeout di un run dell'hook.
+CHILD_TIMEOUT_S = 60.0
 
 
 class MockBackend(BaseHTTPRequestHandler):
@@ -327,7 +341,8 @@ class HookE2ETests(unittest.TestCase):
             # di un processo staccato; la proprieta' e' invece coperta in modo
             # deterministico e in-process da test_hindsight_retain_gate.py
             # (gate_output/retain_at_prompt), che gira nello stesso check.
-            with open(self.wait_for_outbox(20.0), encoding="utf-8") as handle:
+            note = f"output dell'hook: {json.dumps(output, ensure_ascii=False)[:300]}"
+            with open(self.wait_for_outbox(note=note), encoding="utf-8") as handle:
                 late = json.dumps(json.load(handle), ensure_ascii=False)
             self.assertIn(
                 question, late, "il gate non ha prodotto la domanda, ne' in tempo ne' in ritardo"
@@ -335,7 +350,7 @@ class HookE2ETests(unittest.TestCase):
             self.skipTest("figlio detached oltre il budget: la domanda esce al prompt dopo")
         return context
 
-    def wait_for_retain_posts(self, count, timeout_s=25.0):
+    def wait_for_retain_posts(self, count, timeout_s=CHILD_TIMEOUT_S):
         """Il gate differito gira in un processo detached che POSTa *prima* di
         scrivere l'outbox: se l'hook e' uscito prima del suo pickup (macchina
         lenta o carica) la POST arriva dopo il ritorno di run_hook, e senza
@@ -756,14 +771,26 @@ class HookE2ETests(unittest.TestCase):
     def outbox_path(self, session_id="e2e-session"):
         return os.path.join(self.queue_dir, session_id + ".out.json")
 
-    def wait_for_outbox(self, timeout_s: float, session_id="e2e-session") -> str:
+    def wait_for_outbox(self, timeout_s: float = CHILD_TIMEOUT_S, session_id="e2e-session", note="") -> str:
         """Aspetta che il processo detached scriva l'outbox (e quindi sia
         finito col lavoro): serve al test lento e a non lasciare figli vivi
-        al teardown."""
+        al teardown.
+
+        Il figlio scrive l'outbox SEMPRE (run_queued, anche vuoto), quindi la
+        scadenza non e' un figlio lento: lo stato nel messaggio dice quale
+        caso e'. Entry ancora in coda = figlio mai partito; coda vuota e
+        gate_calls=0 = figlio morto prima del gate; gate_calls>=1 = gate
+        eseguito, outbox gia' raccolto dall'hook o mai scritto (ICH-161)."""
         deadline = time.monotonic() + timeout_s
         path = self.outbox_path(session_id)
         while not os.path.exists(path):
-            self.assertLess(time.monotonic(), deadline, f"outbox {path} mai comparso")
+            if time.monotonic() >= deadline:
+                self.fail(
+                    f"outbox {path} mai comparso in {timeout_s:.0f}s; "
+                    f"coda={[os.path.basename(q) for q in self.queue_files()]}, "
+                    f"gate_calls={MockBackend.gate_calls}, "
+                    f"retain_pending={len(self.retain_pending_files())}; {note}"
+                )
             time.sleep(0.1)
         return path
 
@@ -797,23 +824,23 @@ class HookE2ETests(unittest.TestCase):
         t0 = time.monotonic()
         first = self.run_hook(self.PROMPT, extra_env=slow_env)
         elapsed = time.monotonic() - t0
-        # L'hook aspetta l'outbox al massimo fino a T0+budget e poi esce: ben
-        # sotto il ritardo del gate (un hook che aspettasse il gate ci
-        # metterebbe >= GATE_DELAY + avvio del figlio). Doppio limite: relativo
-        # alla baseline (avvio bash+python della macchina, +3s di tolleranza) e
-        # assoluto (sotto GATE_DELAY, che un hook bloccato non puo' battere).
-        self.assertLess(
-            elapsed,
-            baseline + PICKUP_BUDGET + 3.0,
+        # L'hook aspetta l'outbox al massimo fino a T0+budget e poi esce, mentre
+        # il mock tiene ancora aperta la richiesta del gate: gate_spans riceve
+        # lo span solo a gate finito. Un hook che aspettasse il gate tornerebbe
+        # dopo quella fine. Evento al posto del tempo di parete: il vecchio
+        # limite baseline+budget+3s sforava sotto carico, perche' l'avvio di
+        # bash+python varia di secondi fra due run (ICH-161).
+        self.assertEqual(
+            MockBackend.gate_spans,
+            [],
             f"l'hook ha aspettato il gate lento? baseline={baseline:.2f}s primo run={elapsed:.2f}s",
         )
-        self.assertLess(elapsed, GATE_DELAY)
         # ...e senza la domanda: il gate non ha ancora risposto
         self.assertNotIn("Vuoi che salvi", json.dumps(first or {}, ensure_ascii=False))
         self.assertEqual(self.retain_pending_files(), [])  # niente pending, non ancora
         # Il figlio finisce per conto suo: outbox su disco (gate 12s + avvio).
         t1 = time.monotonic()
-        self.wait_for_outbox(GATE_DELAY + 15.0)
+        self.wait_for_outbox()
         waited = time.monotonic() - t1
         # L'entry la consuma il figlio: si verifica dopo l'outbox, o un avvio
         # lento la trova ancora in coda al ritorno dell'hook (ICH-109).
