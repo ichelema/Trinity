@@ -186,7 +186,10 @@ Quando l'implementazione è terminata:
 1. Esegui i test e i controlli rilevanti sul worktree: `mise -C "<wt-path>" run <task>`
    se il progetto li definisce, altrimenti il comando di test con path assoluti sotto `<wt-path>`.
 2. Verifica che ogni requisito della checklist sia coperto.
-3. Crea i commit mancanti: `git -C "<wt-path>" add ...` e `git -C "<wt-path>" commit -m "..."`.
+3. Controlla `git -C "<wt-path>" status --short --untracked-files=all`: se ci sono file non
+   correlati alle issue, fermati e segnalali. Poi crea i commit mancanti aggiungendo i file per
+   nome, mai con `git add -A` o `git add .`: `git -C "<wt-path>" add <file>...` e
+   `git -C "<wt-path>" commit -m "..."`.
 4. Esegui il push: `git -C "<wt-path>" push -u origin "<branch>"`.
 
 Se i test falliscono, mostra l'output completo dell'errore prima di tentare un fix. Non aprire la PR
