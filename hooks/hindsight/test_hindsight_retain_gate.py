@@ -3001,6 +3001,20 @@ class WindowContentTests(unittest.TestCase):
         self.assertTrue(outcome.startswith("- make → Exit code 2 | E zzz"))
         self.assertTrue(outcome.endswith("…"))
 
+    def test_repeated_last_line_stays_last(self):
+        # Review ICH-156 #1: l'ultima riga ripete una riga intermedia.
+        fa, fb, fc = (f"FAILED tests/test_{n}.py::t - AssertionError: " + "x" * 90 for n in "abc")
+        outcome = self.worker.command_outcome("pytest", f"Exit code 1\n{fa}\n{fb}\n{fc}\n{fa}", True)
+        self.assertLessEqual(len(outcome), self.worker.OUTCOME_MAX_CHARS)
+        self.assertTrue(outcome.startswith("- pytest → Exit code 1 | "))
+        self.assertTrue(outcome.endswith(" | " + fa))
+
+    def test_long_first_line_uses_the_whole_budget(self):
+        # Review ICH-156 #2: la prima riga non e' un exit code corto.
+        outcome = self.worker.command_outcome("pytest || true", "FAILED " + "y" * 293 + "\n5 failed, 2 passed in 3.0s", False)
+        self.assertEqual(len(outcome), self.worker.OUTCOME_MAX_CHARS)
+        self.assertTrue(outcome.endswith("… | 5 failed, 2 passed in 3.0s"))
+
     def test_window_within_budget_is_unchanged(self):
         content = self.chunk([
             user_record("prima domanda"),
