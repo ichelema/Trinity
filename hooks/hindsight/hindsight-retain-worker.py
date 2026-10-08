@@ -125,6 +125,8 @@ TEXT_ONLY_CMDS = frozenset({
     "sort", "uniq", "wc", "cut", "git grep", "git diff", "git log", "git show",
     "echo", "gh pr view", "gh issue view",
 })
+# ICH-169: ricerche che escono con 1 quando non trovano nulla.
+SEARCH_CMDS = frozenset({"grep", "egrep", "fgrep", "rg", "git grep"})
 # ICH-169: opzioni di xargs con il valore nel token seguente (`xargs -n 1 cat`).
 XARGS_ARG_OPTS = ("-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s")
 CMD_SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")"})
@@ -677,24 +679,23 @@ def _command_name(seg: list[str]) -> str:
     return name
 
 
-def _reads_text_only(cmd: str) -> bool:
-    """True se ogni comando della riga e' in TEXT_ONLY_CMDS (`cd x && grep -rn PASS .`).
-    Nel dubbio (quote non chiuse, variabili d'ambiente in testa) False: vale il
-    riconoscimento normale."""
+def _command_names(cmd: str) -> list[str]:
+    """Nomi dei comandi della riga (`cd x && grep -rn PASS .` -> cd, grep).
+    Nel dubbio (quote non chiuse) lista vuota; una variabile d'ambiente in testa
+    diventa il nome: vale il riconoscimento normale."""
     lex = shlex.shlex(cmd.replace("\n", ";"), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     try:
         tokens = list(lex)
     except ValueError:
-        return False
+        return []
     segments: list[list[str]] = [[]]
     for tok in tokens:
         if tok in CMD_SEPARATORS:
             segments.append([])
         else:
             segments[-1].append(tok)
-    names = [_command_name(seg) for seg in segments if seg]
-    return bool(names) and all(n in TEXT_ONLY_CMDS for n in names)
+    return [_command_name(seg) for seg in segments if seg]
 
 
 def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
@@ -703,13 +704,15 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     un segreto vengono scartate prima di tutto."""
     stripped = (ln.strip() for ln in result.splitlines())
     lines = [ln for ln in stripped if ln and not any(p.search(ln) for p in OUTCOME_SECRET_PATTERNS)]
-    text_only = _reads_text_only(cmd)
+    names = _command_names(cmd)
+    text_only = bool(names) and all(n in TEXT_ONLY_CMDS for n in names)
     evidence = [] if text_only else [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
     # La scelta sopra guarda il comando intero; in memoria va solo la prima riga.
     cmd = cmd.split("\n", 1)[0][:200]
     # Un tool_use rifiutato o interrotto dall'utente ha is_error ma non e' un comando fallito.
     # ICH-169: neanche una ricerca senza risultati (grep esce con 1 e non stampa nulla).
-    no_match = text_only and lines == ["Exit code 1"]
+    # Conta l'ultimo comando: e' il suo l'exit code della pipe (`ls | grep x`).
+    no_match = bool(names) and names[-1] in SEARCH_CMDS and lines == ["Exit code 1"]
     if is_error and lines and not lines[0].startswith(USER_STOP_PREFIXES) and not no_match:
         evidence = [lines[0]] + evidence + ([lines[-1]] if len(lines) > 1 else [])
     if not evidence:
