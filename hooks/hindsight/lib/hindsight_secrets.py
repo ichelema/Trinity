@@ -31,8 +31,12 @@ OUTCOME_SECRET_PATTERNS = SECRET_PATTERNS + (
     # dei PEM (non solo esadecimale, cosi' gli SHA git restano).
     # Niente prefisso [A-Za-z0-9_]* davanti: con search() non serve e rende il
     # pattern quadratico sulle righe alfanumeriche lunghe (dump esadecimali).
+    # ICH-155: restano le righe d'errore "unexpected token: X", "Error: cache_key=..."
+    # e "duplicate primary_key: ...". Esenti solo in quel contesto: REDIS_CACHE_KEY=
+    # o COSMOS_PRIMARY_KEY= (credenziali reali) restano fuori.
     re.compile(
-        r"(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
+        r"(?:api[_-]?key|(?<!: cache)(?<!duplicate primary)[_-]key|secret|passw(?:or)?d|(?<!unexpected )token)"
+        r"[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
         re.I,
     ),
     # ICH-154: con un prefisso (GITHUB_TOKEN, db_password, MYSECRET) basta un
@@ -47,5 +51,9 @@ OUTCOME_SECRET_PATTERNS = SECRET_PATTERNS + (
     # --password, --db-password, --admin-password <valore>; non --password-stdin.
     re.compile(r"-passw(?:or)?d(?:\s+|=)\S", re.I),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
+    # Falso positivo accettato (ICH-155): scarta anche identificatori lunghi
+    # non esadecimali (CamelCase di 40+ lettere). Distinguerli dal base64 dei
+    # PEM vorrebbe dire far passare segreti base64 senza cifre: si perde una
+    # prova, mai un segreto.
     re.compile(r"^(?=[A-Za-z0-9+/]*[G-Zg-z+/])[A-Za-z0-9+/]{40,}={0,2}$"),
 )

@@ -3127,6 +3127,32 @@ class WindowContentTests(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.worker.command_outcome(cmd, out, True), "- " + expected)
 
+    def test_secret_filter_keeps_error_lines_with_key_or_token_names(self):
+        # ICH-155: righe d'errore che sembravano segreti.
+        for line in (
+            "SyntaxError: unexpected token: SomeVeryLongIdentifierName",
+            "AssertionError: cache_key=users:123:profile != None",
+            "IntegrityError: duplicate primary_key: customer_account_7731",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.worker.command_outcome("pytest", f"Exit code 1\n{line}", True),
+                                 f"- pytest → Exit code 1 | {line}")
+
+    def test_secret_filter_still_drops_primary_and_cache_key_credentials(self):
+        # Review ICH-155 #1: l'esenzione vale solo nel contesto dell'errore.
+        for line in (
+            "COSMOS_PRIMARY_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789==",
+            'primary_key = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789=="',
+            "REDIS_CACHE_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789==",
+            "export CACHE_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789==",
+            "X_FOREIGN_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789==",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.worker.command_outcome("printenv", f"Exit code 1\n{line}", True),
+                                 "- printenv → Exit code 1")
+                masked = self.worker.command_outcome(f"run {line}", "Exit code 1\nboom", True)
+                self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
+
     def test_secret_filter_catches_lowercase_colon_and_json_formats(self):
         # Review ICH-150 #C: formati riaperti dal restringimento del filtro.
         for secret in (
