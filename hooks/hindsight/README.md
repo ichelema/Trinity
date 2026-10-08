@@ -33,6 +33,7 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
 | `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
 | `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank |
+| `hindsight_secrets.py`    | pattern dei segreti condivisi (ICH-159): `SECRET_PATTERNS` per il benchmark del gate, `OUTCOME_SECRET_PATTERNS` per gli esiti dei comandi nel retain worker |
 | `hs-python.sh`            | sourced da ogni hook: risolve in `HS_PY` un interprete Python utilizzabile (indipendente dal PATH di sessione) ed esporta `PYTHONUTF8=1` |
 
 > `hindsight.config.json` (i parametri: api_url, budget, tag, mental model, …) vive nella **root del plugin**, non più in `lib/`. Un progetto può sovrascrivere singole chiavi con un proprio `hindsight.config.json` nella sua root (merge a strati).
