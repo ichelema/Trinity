@@ -60,7 +60,9 @@ from hindsight_retain_gate import (
     evaluate_retain,
     fallback_context,
     guided_content,
+    handle_invalidate_consent,
     handle_retain_consent,
+    save_invalidate_pending,
     save_retain_pending,
 )
 from hindsight_secrets import OUTCOME_SECRET_PATTERNS
@@ -859,6 +861,61 @@ def gate_debug_output(gate, bank: str) -> dict:
     }
 
 
+INVALIDATE_TEXT_MAX_CHARS = 300
+
+
+def ask_invalidation(gate, hook: dict, out: dict | None, mode: str) -> dict | None:
+    """ICH-152: se il gate ha trovato memorie smentite dalla finestra, mette
+    il ritiro in pending e aggiunge a `out` la domanda (testo della memoria e
+    motivo). Solo in deferred: nel drain nessuno puo' rispondere e nessuna
+    memoria si ritira. Il ritiro lo esegue handle_invalidate_consent al "si'"."""
+    if not gate.contradicted:
+        return out
+    session_id = hook.get("session_id") or ""
+    if mode != "deferred":
+        debug_log(CFG, "invalidate_skip", reason=mode, session=session_id[:8])
+        return out
+    memories = [
+        {"id": str(c["id"]), "text": str(c.get("text") or ""), "bank_url": str(c["_bank_url"])}
+        for c in (gate.candidates[i] for i in gate.contradicted)
+        if c.get("id") and c.get("_bank_url")
+    ]
+    if not memories or not save_invalidate_pending(
+        session_id, hook.get("cwd") or "", memories, gate.contradiction_reason
+    ):
+        debug_log(CFG, "invalidate_skip", reason="no_pending", session=session_id[:8])
+        return out
+    head = RETAIN_QUESTION_MARKERS[2] if len(memories) == 1 else RETAIN_QUESTION_MARKERS[3]
+    texts = " · ".join(f"«{_clip(m['text'], INVALIDATE_TEXT_MAX_CHARS)}»" for m in memories)
+    question = f"{head} — {texts} Motivo: {gate.contradiction_reason} (sì/no)"
+    instruction = (
+        "Hindsight retain gate found existing memories contradicted by the previous "
+        "turn. Answer the current prompt normally first. Then, as the very last "
+        f"thing in your reply, ask the user verbatim {question!r} and end the turn. "
+        "Do not invalidate anything yourself; a yes runs the pending invalidation "
+        "at the next prompt."
+    )
+    merged = dict(out or {})
+    merged["systemMessage"] = "\n".join(
+        filter(None, [f"Hindsight: {question}", merged.get("systemMessage")])
+    )
+    hso = dict(merged.get("hookSpecificOutput") or {"hookEventName": "UserPromptSubmit"})
+    hso["additionalContext"] = "\n\n".join(
+        filter(None, [instruction, hso.get("additionalContext")])
+    )
+    merged["hookSpecificOutput"] = hso
+    merged["asks_consent"] = True
+    debug_log(
+        CFG,
+        "invalidate_pending",
+        action="saved",
+        ids=[m["id"] for m in memories],
+        reason=gate.contradiction_reason[:300],
+        session=session_id[:8],
+    )
+    return merged
+
+
 def note_post_failure(msg: str) -> None:
     """Traccia DUREVOLE di una POST non arrivata al server (server giu', rete,
     bank irraggiungibile): non esiste nessuna async operation da interrogare,
@@ -995,12 +1052,12 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
     if gate.action == "skip":
         print(f"[retain] skip: gate ({gate.reason})", file=sys.stderr)
         debug_log(CFG, "retain_skip", reason=f"gate_{gate.reason}", session=session_id[:8])
-        if CFG.get("retain_debug_in_context"):
-            return 0, gate_debug_output(gate, "-")
-        return 0, None
+        debug_out = gate_debug_output(gate, "-") if CFG.get("retain_debug_in_context") else None
+        return 0, ask_invalidation(gate, hook, debug_out, mode)
     if mode == "drain" and gate.action == "uncertain":
         # Nessun utente a cui chiedere e nessun prompt successivo che possa
         # consumare un pending: l'uncertain a fine sessione si lascia cadere.
+        # ask_invalidation non serve: in drain non ritira mai (ICH-152).
         print(f"[retain] skip: gate uncertain in drain ({gate.preview[:120]})", file=sys.stderr)
         debug_log(
             CFG,
@@ -1211,6 +1268,10 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
             context=context,
             preview=gate.preview[:300],
         )
+        if gate.contradicted:
+            # ICH-152: una seconda domanda nello stesso turno renderebbe
+            # ambiguo il "si'": il ritiro cade, la memoria resta.
+            debug_log(CFG, "invalidate_skip", reason="retain_question", session=session_id[:8])
         return 0, out
 
     debug_log(
@@ -1251,9 +1312,10 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
         debug_log(CFG, "retain_error", doc_id=doc_id, error=str(exc)[:200])
         note_post_failure(f"non arrivato al server — {exc}")
         return 1, None
+    debug_out = None
     if CFG.get("retain_debug_in_context"):
-        return 0, gate_debug_output(gate, api_url.rsplit("/", 1)[-1])
-    return 0, None
+        debug_out = gate_debug_output(gate, api_url.rsplit("/", 1)[-1])
+    return 0, ask_invalidation(gate, hook, debug_out, mode)
 
 
 def evaluate_queued(session_id: str, mode: str = "deferred") -> dict | None:
@@ -1364,12 +1426,14 @@ def _spawn_queued(session_id: str, log_path: str):
 
 class PromptRetain:
     """Esito del lato retain di un prompt (retain_at_prompt) per l'hook recall.
-    outcome: esito di handle_retain_consent (None = nessun pending o consenso
-    saltato per un outbox con domanda mai mostrata);
+    outcome: esito di handle_retain_consent, o di handle_invalidate_consent se
+    il prompt non ha risposto a un pending retain (None = nessun pending o
+    consenso saltato per un outbox con domanda mai mostrata);
     consent_output: JSON hook-output del consenso gia' formattato
     (systemMessage / additionalContext), {} se niente;
     notice: "Hindsight: memoria in attesa scartata — …" su prompt nuovo, altrimenti "";
-    saved: True su outcome saved -> il chiamante scarta i medium pending del recall;
+    saved: True su outcome saved o su un "si'" al ritiro -> il chiamante scarta
+    i medium pending del recall;
     stop_here: True su saved/error -> il chiamante emette consent_output ed esce
     senza recall (come sempre);
     launched: True se il processo `--queued` e' stato lanciato per questo prompt.
@@ -1445,6 +1509,9 @@ class PromptRetain:
 RETAIN_QUESTION_MARKERS = (
     "Vuoi che salvi questa memoria?",
     "Salvo questa memoria con context",
+    # Domande di ritiro (ICH-152), usate anche da ask_invalidation.
+    "Ritiro la memoria contraddetta?",
+    "Ritiro le memorie contraddette?",
 )
 
 
@@ -1520,6 +1587,50 @@ def _consent_output(outcome: dict, transcript_path: str = "") -> tuple[dict, str
     return {}, "", False, False
 
 
+def _invalidate_output(outcome: dict, transcript_path: str = "") -> tuple[dict, str, bool, bool]:
+    """Come _consent_output, per l'esito di handle_invalidate_consent (ICH-152).
+    Sul "si'" (ritiro eseguito o fallito) saved=True: lo stesso "si'" non
+    autorizza anche le memorie medium in pending del recall."""
+    action = outcome.get("action")
+    memories = outcome.get("memories") or []
+    if action == "invalidated":
+        lines = [
+            f"Hindsight: memoria ritirata — «{_clip(str(m.get('text') or ''), INVALIDATE_TEXT_MAX_CHARS)}» "
+            f"(id {m.get('id')}). Per ripristinarla: invalidate_memory con restore=true."
+            for m in memories
+        ]
+        output = {
+            "systemMessage": "\n".join(lines),
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "## Hindsight invalidate\n\nLe memorie contraddette sono state "
+                    "ritirate (reversibile). Non serve alcuna azione manuale."
+                ),
+            },
+        }
+        return output, "", True, True
+    if action == "error":
+        done = [str(m.get("id")) for m in outcome.get("invalidated") or []]
+        message = "Hindsight: ritiro della memoria NON riuscito — " + str(outcome.get("error") or "")
+        if done:
+            message += f" Già ritirate: {', '.join(done)}."
+        if outcome.get("restored"):
+            message += " Rispondi «sì» al prossimo prompt per riprovare."
+        return {"systemMessage": message}, "", True, True
+    if outcome.get("reason") == "new_prompt":
+        head = (
+            "Hindsight: ritiro della memoria annullato"
+            if _question_was_asked(transcript_path)
+            else "Hindsight: ritiro della memoria annullato (domanda non posta da Claude)"
+        )
+        texts = " · ".join(
+            f"«{_clip(str(m.get('text') or ''), INVALIDATE_TEXT_MAX_CHARS)}»" for m in memories
+        )
+        return {}, f"{head} — {texts}" if texts else head, False, False
+    return {}, "", False, False
+
+
 def retain_at_prompt(
     prompt: str, session_id: str, cwd: str, transcript_path: str
 ) -> PromptRetain:
@@ -1587,10 +1698,34 @@ def retain_at_prompt(
                 result.saved,
                 result.stop_here,
             ) = _consent_output(outcome, transcript_path)
+        # 2b. Consenso al ritiro (ICH-152). Se il prompt ha gia' risposto a un
+        # pending retain, il pending di ritiro si scarta senza leggere il
+        # prompt: lo stesso "si'" non vale per due domande.
+        if not skip_consent:
+            invalidation = handle_invalidate_consent(
+                prompt if outcome is None else "", session_id, cwd
+            )
+            if invalidation and outcome is None:
+                debug_log(
+                    CFG,
+                    "invalidate_pending",
+                    action=invalidation.get("action"),
+                    reason=invalidation.get("reason"),
+                    error=invalidation.get("error"),
+                    ids=[m.get("id") for m in invalidation.get("memories") or []],
+                )
+                result.outcome = invalidation
+                (
+                    result.consent_output,
+                    result.notice,
+                    result.saved,
+                    result.stop_here,
+                ) = _invalidate_output(invalidation, transcript_path)
         # 3. Entry stantie di qualunque sessione: via, con marker.
         sweep_stale_queue()
         # 4. Lancio del gate differito, solo se c'e' qualcosa da valutare.
-        if (outcome and outcome.get("restored")) or skip_consent:
+        # result.outcome: il retain o, se non ha risposto, il ritiro (ICH-152).
+        if (result.outcome and result.outcome.get("restored")) or skip_consent:
             return result
         if not has_queued(session_id):
             return result
