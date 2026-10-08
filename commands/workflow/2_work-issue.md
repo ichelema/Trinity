@@ -169,7 +169,7 @@ Obiettivo: implementare tutte le issue indicate.
 
 Sei il lead.
 
-Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker (se la
+Delega il ragionamento a trinity:deep-reasoner, l'implementazione già definita a trinity:fast-worker (se la
 sessione è già Sonnet, fallo tu: fast-worker è lo stesso modello).
 Il lavoro ripetitivo in volume con una regola esatta va a trinity:bulk-worker.
 
