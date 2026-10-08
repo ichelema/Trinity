@@ -3204,6 +3204,31 @@ class WindowContentTests(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertIsNotNone(self.worker.command_outcome(cmd, "FAILED test_x - boom\n3 passed", False))
 
+    def test_multiline_command_is_judged_on_every_line(self):
+        # Review ICH-157 #1: la prima riga "cd"/"grep" non nasconde il runner che segue.
+        for cmd, out, expected in (
+            ("cd lib\npytest -q", "3 passed in 0.2s", "- cd lib → 3 passed in 0.2s"),
+            ("grep -rn PASS " + "lib/x.py " * 30 + "&& pytest -q", "1 failed, 2 passed", "1 failed, 2 passed"),
+            ("cd lib\ngrep -rn PASS .", "run.sh:3: echo PASS", None),
+        ):
+            with self.subTest(cmd=cmd[:30]):
+                outcomes = self.worker.summarize_window(
+                    [user_record("test"), self.bash("t1", cmd), self.result("t1", out), assistant_record("ok")], 4
+                )["outcomes"]
+                if expected is None:
+                    self.assertEqual(outcomes, [])
+                else:
+                    self.assertEqual(len(outcomes), 1)
+                    self.assertIn(expected, outcomes[0])
+                    self.assertNotIn("\n", outcomes[0])
+
+    def test_git_global_options_do_not_hide_a_read_only_subcommand(self):
+        # Review ICH-157 #3.
+        for cmd in ('git -C "E:/x" diff master', "git --no-pager log -p -1", "git -c core.pager=cat show HEAD"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.worker.command_outcome(cmd, '+    print("PASS")\n-    # FAIL path', False))
+        self.assertIsNotNone(self.worker.command_outcome("git -C lib commit -m x", "FAILED test_x - boom", False))
+
     def test_failed_search_is_still_a_failure(self):
         outcome = self.worker.command_outcome("grep -rn PASS nodir/", "Exit code 2\ngrep: nodir/: No such file or directory", True)
         self.assertEqual(outcome, "- grep -rn PASS nodir/ → Exit code 2 | grep: nodir/: No such file or directory")
@@ -3211,6 +3236,9 @@ class WindowContentTests(unittest.TestCase):
     def test_tsc_error_summary_alone_is_not_an_outcome(self):
         out = "src/a.ts(3,1): error TS2304: Cannot find name 'x'.\n\nFound 3 errors in 2 files."
         self.assertIsNone(self.worker.command_outcome("npx tsc --noEmit || true", out, False))
+        # Review ICH-157 #2: il riepilogo di pytest con exit code nascosto resta un esito.
+        self.assertEqual(self.worker.command_outcome("pytest -q 2>&1 | tail -20", "=== 2 errors in 0.52s ===", False),
+                         "- pytest -q 2>&1 | tail -20 → === 2 errors in 0.52s ===")
 
     def test_mocha_and_go_outcomes_are_recognized(self):
         cases = {
