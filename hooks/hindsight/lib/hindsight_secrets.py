@@ -31,10 +31,11 @@ OUTCOME_SECRET_PATTERNS = SECRET_PATTERNS + (
     # dei PEM (non solo esadecimale, cosi' gli SHA git restano).
     # Niente prefisso [A-Za-z0-9_]* davanti: con search() non serve e rende il
     # pattern quadratico sulle righe alfanumeriche lunghe (dump esadecimali).
-    # ICH-155: restano prove "unexpected token: X" e le chiavi di cache e DB
-    # (cache_key, primary_key, foreign_key); ogni altro *_key/token resta fuori.
+    # ICH-155: restano le righe d'errore "unexpected token: X", "Error: cache_key=..."
+    # e "duplicate primary_key: ...". Esenti solo in quel contesto: REDIS_CACHE_KEY=
+    # o COSMOS_PRIMARY_KEY= (credenziali reali) restano fuori.
     re.compile(
-        r"(?:api[_-]?key|(?<!cache)(?<!primary)(?<!foreign)[_-]key|secret|passw(?:or)?d|(?<!unexpected )token)"
+        r"(?:api[_-]?key|(?<!: cache)(?<!duplicate primary)[_-]key|secret|passw(?:or)?d|(?<!unexpected )token)"
         r"[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
         re.I,
     ),
