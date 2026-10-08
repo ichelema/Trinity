@@ -3179,6 +3179,8 @@ class WindowContentTests(unittest.TestCase):
         content = "INIZIO " + "x" * (default + 500) + " FINE"
         summary = {"turns": [("user", "domanda"), ("assistant", content)], "files_modified": [], "bash_cmds": []}
         worker = load_worker()
+        with mock.patch.dict(worker.CFG, {"retain_window_max_chars": default, "retain_tool_calls": False}):
+            expected = worker.build_content_chunk({}, summary)
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "config.json")
             for raw in ("0", "-5", "Infinity", "true", "0.5", '"abc"'):
@@ -3198,7 +3200,7 @@ class WindowContentTests(unittest.TestCase):
                 window = gate_input(content, [], value).split("\n")[1]
                 self.assertEqual(len(window), default)
                 with mock.patch.dict(worker.CFG, {"retain_window_max_chars": value, "retain_tool_calls": False}):
-                    self.assertLessEqual(len(worker.build_content_chunk({}, summary)), default)
+                    self.assertEqual(worker.build_content_chunk({}, summary), expected)
 
 
 if __name__ == "__main__":
