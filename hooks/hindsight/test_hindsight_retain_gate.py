@@ -3389,6 +3389,31 @@ class WindowContentTests(unittest.TestCase):
     def test_failed_search_is_still_a_failure(self):
         outcome = self.worker.command_outcome("grep -rn PASS nodir/", "Exit code 2\ngrep: nodir/: No such file or directory", True)
         self.assertEqual(outcome, "- grep -rn PASS nodir/ → Exit code 2 | grep: nodir/: No such file or directory")
+        self.assertEqual(self.worker.command_outcome("grep -rn PASS lib/", "Exit code 2", True),
+                         "- grep -rn PASS lib/ → Exit code 2")
+
+    def test_search_without_matches_is_not_a_failure(self):
+        # ICH-169: grep/rg senza corrispondenze esce con 1 e non stampa nulla.
+        for cmd in ("grep -rn PASS lib/", "rg FAIL", "cd lib && grep -n PASS run.sh | head -5"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.worker.command_outcome(cmd, "Exit code 1", True))
+        # Un runner con exit 1 e nessun output resta un comando fallito.
+        self.assertEqual(self.worker.command_outcome("pytest", "Exit code 1", True), "- pytest → Exit code 1")
+
+    def test_echo_gh_view_and_xargs_read_text_only(self):
+        # ICH-169: echo, corpo di PR/issue e file letti via xargs sono testo, non esiti.
+        for cmd, out in (
+            ('echo "PASS"', "PASS"),
+            ("gh pr view 100", "## Test\n- 3 passing\n- FAIL path covered"),
+            ("gh issue view ICH-157 --comments", "FAILED test_x - boom"),
+            ("grep -rl PASS lib/ | xargs cat", 'echo "[run] PASS: 3 passed"'),
+            ("rg -l FAIL | xargs -n 1 grep -n FAIL", "FAIL: 1 failed"),
+        ):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.worker.command_outcome(cmd, out, False))
+        for cmd in ("gh pr checks 100", "find . -name '*.py' | xargs pytest", "pytest && echo PASS"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNotNone(self.worker.command_outcome(cmd, "FAILED test_x - boom", False))
 
     def test_tsc_error_summary_alone_is_not_an_outcome(self):
         out = "src/a.ts(3,1): error TS2304: Cannot find name 'x'.\n\nFound 3 errors in 2 files."

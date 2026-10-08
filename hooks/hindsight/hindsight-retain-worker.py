@@ -123,7 +123,10 @@ OUTCOME_TEST_LINE = re.compile(
 TEXT_ONLY_CMDS = frozenset({
     "cd", "cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "sed", "awk",
     "sort", "uniq", "wc", "cut", "git grep", "git diff", "git log", "git show",
+    "echo", "gh pr view", "gh issue view",
 })
+# ICH-169: opzioni di xargs con il valore nel token seguente (`xargs -n 1 cat`).
+XARGS_ARG_OPTS = ("-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s")
 CMD_SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")"})
 # tool_result con is_error che non sono comandi falliti: rifiuto e interruzione dell'utente.
 USER_STOP_PREFIXES = ("The user doesn't want to proceed", "[Request interrupted by user")
@@ -651,12 +654,27 @@ def _tool_result_text(content) -> str:
     return content if isinstance(content, str) else ""
 
 
-def _git_subcommand(seg: list[str]) -> str:
-    """Primo argomento dopo le opzioni globali: `git -C path --no-pager diff` -> diff."""
+def _first_operand(seg: list[str], arg_opts: tuple[str, ...]) -> int:
+    """Indice del primo argomento dopo le opzioni: `git -C path --no-pager diff` -> diff."""
     i = 1
     while i < len(seg) and seg[i].startswith("-"):
-        i += 2 if seg[i] in ("-C", "-c") else 1
-    return seg[i] if i < len(seg) else ""
+        i += 2 if seg[i] in arg_opts else 1
+    return i
+
+
+def _command_name(seg: list[str]) -> str:
+    """Nome da confrontare con TEXT_ONLY_CMDS: `git diff`, `gh pr view`, e per
+    xargs il comando che lancia (`xargs -0 grep x` -> grep)."""
+    name = os.path.basename(seg[0])
+    if name == "git":
+        i = _first_operand(seg, ("-C", "-c"))
+        return "git " + (seg[i] if i < len(seg) else "")
+    if name == "gh":
+        return " ".join(["gh"] + seg[1:3])
+    if name == "xargs":
+        i = _first_operand(seg, XARGS_ARG_OPTS)
+        return _command_name(seg[i:]) if i < len(seg) else name
+    return name
 
 
 def _reads_text_only(cmd: str) -> bool:
@@ -675,10 +693,7 @@ def _reads_text_only(cmd: str) -> bool:
             segments.append([])
         else:
             segments[-1].append(tok)
-    names = [
-        "git " + _git_subcommand(seg) if os.path.basename(seg[0]) == "git" else os.path.basename(seg[0])
-        for seg in segments if seg
-    ]
+    names = [_command_name(seg) for seg in segments if seg]
     return bool(names) and all(n in TEXT_ONLY_CMDS for n in names)
 
 
@@ -688,11 +703,14 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     un segreto vengono scartate prima di tutto."""
     stripped = (ln.strip() for ln in result.splitlines())
     lines = [ln for ln in stripped if ln and not any(p.search(ln) for p in OUTCOME_SECRET_PATTERNS)]
-    evidence = [] if _reads_text_only(cmd) else [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
+    text_only = _reads_text_only(cmd)
+    evidence = [] if text_only else [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
     # La scelta sopra guarda il comando intero; in memoria va solo la prima riga.
     cmd = cmd.split("\n", 1)[0][:200]
     # Un tool_use rifiutato o interrotto dall'utente ha is_error ma non e' un comando fallito.
-    if is_error and lines and not lines[0].startswith(USER_STOP_PREFIXES):
+    # ICH-169: neanche una ricerca senza risultati (grep esce con 1 e non stampa nulla).
+    no_match = text_only and lines == ["Exit code 1"]
+    if is_error and lines and not lines[0].startswith(USER_STOP_PREFIXES) and not no_match:
         evidence = [lines[0]] + evidence + ([lines[-1]] if len(lines) > 1 else [])
     if not evidence:
         return None
