@@ -3148,6 +3148,31 @@ class WindowContentTests(unittest.TestCase):
                 masked = self.worker.command_outcome(f"run {secret}", "Exit code 1\nboom", True)
                 self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
 
+    def test_secret_filter_catches_short_prefixed_and_url_secrets(self):
+        # ICH-154: valori corti con prefisso, stringhe di connessione, --password.
+        for secret in (
+            "DB_PASSWORD=Sup3rS3c!",
+            "GITHUB_TOKEN=abcdefghij",
+            "NPM_TOKEN=abcdefghijk",
+            "db_password=hunter22",
+            "MY_SECRET: abcdefgh",
+            "unix_passwd=abcdefgh",
+            "postgres://admin:S3cret@db:5432/app",
+            "mysql --user root --password hunter2 db",
+            "mysql --password=x db",
+        ):
+            with self.subTest(secret=secret):
+                outcome = self.worker.command_outcome("deploy", f"Exit code 1\n{secret}", True)
+                self.assertEqual(outcome, "- deploy → Exit code 1")
+                masked = self.worker.command_outcome(f"run {secret}", "Exit code 1\nboom", True)
+                self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
+
+    def test_secret_filter_keeps_urls_without_credentials(self):
+        for line in ("https://github.com/org/repo", "ssh://git@github.com/org/repo", "http://localhost:8080/x@y"):
+            with self.subTest(line=line):
+                self.assertEqual(self.worker.command_outcome("git push", f"Exit code 1\n{line}", True),
+                                 f"- git push → Exit code 1 | {line}")
+
     def test_secret_filter_is_linear_on_long_alphanumeric_lines(self):
         # Review ICH-150 #D: una riga senza separatori (dump esadecimale) non
         # deve far esplodere il backtracking. 30000 ~ tetto dell'output di Bash.
