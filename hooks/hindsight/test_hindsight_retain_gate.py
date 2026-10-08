@@ -3161,6 +3161,39 @@ class InvalidationTests(unittest.TestCase):
         self.assertEqual(result.outcome["action"], "invalidated")
         self.assertEqual(methods, ["PATCH"])
 
+    def test_finished_gate_without_question_leaves_turn_free(self):
+        """Gate del turno 2 lanciato e finito senza domanda: la domanda di
+        ritiro esce nello stesso output."""
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        _result, out, methods = self.prompt_turn("no", gate_box={})
+        self.assertEqual(methods, [])
+        self.assert_asks_invalidation(out)
+
+    def test_deferrals_from_two_windows_merge(self):
+        """Due rinvii di fila: una sola domanda con entrambe le memorie e i
+        loro motivi; la memoria rinviata due volte si ritira una volta sola."""
+        second = {"id": "mem-2", "text": "Altro fatto.", "_bank_url": CONTRADICTED["_bank_url"]}
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        gate = GateResult(
+            action="uncertain",
+            reason="borderline",
+            preview="Forse Y.",
+            context="dominio",
+            contradicted=[0, 1],
+            contradiction_reason="Secondo motivo.",
+            candidates=[dict(CONTRADICTED), second],
+        )
+        self.run_main(self.cfg(), gate)
+        _result, out, _methods = self.prompt_turn("spiegami il gate")
+        message = out["systemMessage"]
+        self.assertIn("Ritiro le memorie contraddette?", message)
+        self.assertIn(CONTRADICTED["text"], message)
+        self.assertIn(second["text"], message)
+        self.assertIn(f"{CONTRADICTION_REASON} · Secondo motivo.", message)
+        result, _out, methods = self.prompt_turn("sì")
+        self.assertEqual(result.outcome["action"], "invalidated")
+        self.assertEqual(methods, ["PATCH", "PATCH"])
+
     def test_running_gate_delays_invalidation(self):
         """Gate del turno ancora in corso (carried over): potrebbe porre una
         domanda, quindi il turno non e' libero."""
