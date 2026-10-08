@@ -3004,6 +3004,24 @@ class InvalidationTests(unittest.TestCase):
             {"state": "invalidated", "reason": CONTRADICTION_REASON},
         )
 
+    def test_failed_invalidate_is_restored_for_retry(self):
+        """PATCH fallito dopo il "si'": il pending torna in attesa, un secondo
+        "si'" riprova (stessa meccanica del retain)."""
+        self.run_main(self.cfg(), self.contradicting_gate())
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen", side_effect=OSError("down")
+        ):
+            outcome = hindsight_retain_gate.handle_invalidate_consent(
+                "sì", "sess-gate-test", self.tmp.name
+            )
+        self.assertEqual(outcome["action"], "error")
+        self.assertTrue(outcome["restored"])
+        output, _notice, _saved, _stop = self.worker._invalidate_output(outcome)
+        self.assertIn("per riprovare", output["systemMessage"])
+        outcome, urlopen = self.invalidate_consent("sì")
+        self.assertEqual(outcome["action"], "invalidated")
+        self.assertEqual(urlopen.call_count, 1)
+
     def test_retain_post_and_contradiction_question_in_same_turn(self):
         rc, out, _gate, urlopen = self.run_main(
             self.cfg(),

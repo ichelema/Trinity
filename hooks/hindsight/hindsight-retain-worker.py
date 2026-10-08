@@ -1615,6 +1615,8 @@ def _invalidate_output(outcome: dict, transcript_path: str = "") -> tuple[dict, 
         message = "Hindsight: ritiro della memoria NON riuscito — " + str(outcome.get("error") or "")
         if done:
             message += f" Già ritirate: {', '.join(done)}."
+        if outcome.get("restored"):
+            message += " Rispondi «sì» al prossimo prompt per riprovare."
         return {"systemMessage": message}, "", True, True
     if outcome.get("reason") == "new_prompt":
         head = (
@@ -1722,7 +1724,8 @@ def retain_at_prompt(
         # 3. Entry stantie di qualunque sessione: via, con marker.
         sweep_stale_queue()
         # 4. Lancio del gate differito, solo se c'e' qualcosa da valutare.
-        if (outcome and outcome.get("restored")) or skip_consent:
+        # result.outcome: il retain o, se non ha risposto, il ritiro (ICH-152).
+        if (result.outcome and result.outcome.get("restored")) or skip_consent:
             return result
         if not has_queued(session_id):
             return result

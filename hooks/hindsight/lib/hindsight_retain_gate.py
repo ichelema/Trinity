@@ -900,10 +900,16 @@ def handle_invalidate_consent(
             invalidate_memory(str(m["bank_url"]), str(m["id"]), str(m.get("reason") or ""))
             done.append(m)
     except Exception as exc:
+        # Come il retain: le memorie non ancora ritirate tornano in attesa
+        # (TTL ripartito), cosi' un secondo "si'" riprova.
+        restored = save_pending(
+            invalidate_pending_dir(), session_id, cwd, [m for m in memories if m not in done]
+        )
         return {
             "action": "error",
             "error": f"{type(exc).__name__}: {exc}",
             "memories": memories,
             "invalidated": done,
+            "restored": restored,
         }
     return {"action": "invalidated", "memories": done}
