@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -106,11 +107,23 @@ INTERESTING_BASH_PATTERNS = (
 OUTCOME_MAX_CHARS = 300
 OUTCOMES_MAX_CHARS = 2000
 OUTCOME_CMD_MAX_CHARS = 80
-# Solo righe che SEMBRANO esiti (PASS/FAIL maiuscoli, "3 passed", "OK" o
-# "FAILED" a inizio riga): la prosa ("fail-closed", "password") resta fuori.
+# Solo righe che SEMBRANO esiti (PASS/FAIL maiuscoli, "3 passed"/"1 failing",
+# "OK" o "FAILED" a inizio riga, "ok pkg 0.3s" di Go): la prosa ("fail-closed",
+# "password") resta fuori. Niente "Found 3 errors" (ICH-157): e' il riepilogo di
+# tsc, non un esito di test; un tsc fallito entra comunque da exit code e ultima riga.
 OUTCOME_TEST_LINE = re.compile(
-    r"\b(?:PASS(?:ED)?|FAIL(?:ED|URE)?)\b|\b\d+\s+(?:passed|failed|errors?)\b|^(?:OK|FAILED)\b"
+    r"\b(?:PASS(?:ED)?|FAIL(?:ED|URE)?)\b|\b\d+\s+(?:passed|failed|passing|failing)\b"
+    r"|(?<!Found )\b\d+\s+errors?\b|^(?:OK|FAILED)\b|^ok\s+\S+\s+(?:\d+(?:\.\d+)?s|\(cached\))"
 )
+# ICH-157: comandi che stampano testo gia' esistente (codice, log, risultati di
+# ricerca): un PASS/FAIL nel loro output e' testo trovato, non un esito.
+TEXT_ONLY_CMDS = frozenset({
+    "cd", "cat", "head", "tail", "less", "grep", "egrep", "fgrep", "rg", "sed", "awk",
+    "sort", "uniq", "wc", "cut", "git grep", "git diff", "git log", "git show",
+})
+CMD_SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")"})
+# tool_result con is_error che non sono comandi falliti: rifiuto e interruzione dell'utente.
+USER_STOP_PREFIXES = ("The user doesn't want to proceed", "[Request interrupted by user")
 OMISSION_MARKER = "\n[…]\n"
 SECRET_CMD_PLACEHOLDER = "[comando omesso: contiene un segreto]"
 
@@ -635,15 +648,48 @@ def _tool_result_text(content) -> str:
     return content if isinstance(content, str) else ""
 
 
+def _git_subcommand(seg: list[str]) -> str:
+    """Primo argomento dopo le opzioni globali: `git -C path --no-pager diff` -> diff."""
+    i = 1
+    while i < len(seg) and seg[i].startswith("-"):
+        i += 2 if seg[i] in ("-C", "-c") else 1
+    return seg[i] if i < len(seg) else ""
+
+
+def _reads_text_only(cmd: str) -> bool:
+    """True se ogni comando della riga e' in TEXT_ONLY_CMDS (`cd x && grep -rn PASS .`).
+    Nel dubbio (quote non chiuse, variabili d'ambiente in testa) False: vale il
+    riconoscimento normale."""
+    lex = shlex.shlex(cmd.replace("\n", ";"), posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    try:
+        tokens = list(lex)
+    except ValueError:
+        return False
+    segments: list[list[str]] = [[]]
+    for tok in tokens:
+        if tok in CMD_SEPARATORS:
+            segments.append([])
+        else:
+            segments[-1].append(tok)
+    names = [
+        "git " + _git_subcommand(seg) if os.path.basename(seg[0]) == "git" else os.path.basename(seg[0])
+        for seg in segments if seg
+    ]
+    return bool(names) and all(n in TEXT_ONLY_CMDS for n in names)
+
+
 def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     """Esito compatto di un comando Bash, o None se non porta prove: un comando
     fallito (exit code + ultima riga) o le righe di esito dei test. Le righe con
     un segreto vengono scartate prima di tutto."""
     stripped = (ln.strip() for ln in result.splitlines())
     lines = [ln for ln in stripped if ln and not any(p.search(ln) for p in OUTCOME_SECRET_PATTERNS)]
-    evidence = [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
-    # Un tool_use rifiutato dall'utente ha is_error ma non e' un comando fallito.
-    if is_error and lines and not lines[0].startswith("The user doesn't want to proceed"):
+    evidence = [] if _reads_text_only(cmd) else [ln for ln in lines if OUTCOME_TEST_LINE.search(ln)]
+    # La scelta sopra guarda il comando intero; in memoria va solo la prima riga.
+    cmd = cmd.split("\n", 1)[0][:200]
+    # Un tool_use rifiutato o interrotto dall'utente ha is_error ma non e' un comando fallito.
+    if is_error and lines and not lines[0].startswith(USER_STOP_PREFIXES):
         evidence = [lines[0]] + evidence + ([lines[-1]] if len(lines) > 1 else [])
     if not evidence:
         return None
@@ -734,7 +780,7 @@ def summarize_window(entries: list[dict], window_turns: int) -> dict:
                 if b.get("type") == "tool_use" and b.get("name") == "Bash":
                     cmd = ((b.get("input") or {}).get("command") or "").strip()
                     if cmd and b.get("id"):
-                        pending_cmds[b["id"]] = cmd.split("\n", 1)[0][:200]
+                        pending_cmds[b["id"]] = cmd
             if texts:
                 turns.append(("assistant", "\n".join(texts)))
 
