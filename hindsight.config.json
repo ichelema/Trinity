@@ -40,7 +40,6 @@
   "retain_every_n_turns": 3,
   "retain_max_files": 15,
   "retain_max_cmds": 10,
-  "retain_window_max_chars": 10000,
   "retain_gate_model": "gpt-5.6-luna",
   "retain_gate_timeout": 20,
   "retain_jev_enabled": true,
