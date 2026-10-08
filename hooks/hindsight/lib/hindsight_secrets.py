@@ -35,6 +35,17 @@ OUTCOME_SECRET_PATTERNS = SECRET_PATTERNS + (
         r"(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
         re.I,
     ),
+    # ICH-154: con un prefisso (GITHUB_TOKEN, db_password, MYSECRET) basta un
+    # valore di 8+ caratteri; senza prefisso `token: 'abcdefghij'` resta una prova.
+    re.compile(
+        r"[A-Za-z0-9_-](?:secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{8,}",
+        re.I,
+    ),
+    # Credenziali in una stringa di connessione: schema://utente:password@host
+    # (utente anche vuoto: redis://:password@host).
+    re.compile(r"://[^\s/:@]*:[^\s/@]+@"),
+    # --password, --db-password, --admin-password <valore>; non --password-stdin.
+    re.compile(r"-passw(?:or)?d(?:\s+|=)\S", re.I),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
     re.compile(r"^(?=[A-Za-z0-9+/]*[G-Zg-z+/])[A-Za-z0-9+/]{40,}={0,2}$"),
 )
