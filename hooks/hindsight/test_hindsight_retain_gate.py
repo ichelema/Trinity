@@ -3160,6 +3160,8 @@ class WindowContentTests(unittest.TestCase):
             "postgres://admin:S3cret@db:5432/app",
             "mysql --user root --password hunter2 db",
             "mysql --password=x db",
+            "redis://:S3cret99@redis:6379",
+            "az vm create --admin-password S3cret!x",
         ):
             with self.subTest(secret=secret):
                 outcome = self.worker.command_outcome("deploy", f"Exit code 1\n{secret}", True)
@@ -3167,8 +3169,9 @@ class WindowContentTests(unittest.TestCase):
                 masked = self.worker.command_outcome(f"run {secret}", "Exit code 1\nboom", True)
                 self.assertEqual(masked, f"- {self.worker.SECRET_CMD_PLACEHOLDER} → Exit code 1 | boom")
 
-    def test_secret_filter_keeps_urls_without_credentials(self):
-        for line in ("https://github.com/org/repo", "ssh://git@github.com/org/repo", "http://localhost:8080/x@y"):
+    def test_secret_filter_keeps_urls_and_flags_without_credentials(self):
+        for line in ("https://github.com/org/repo", "ssh://git@github.com/org/repo", "http://localhost:8080/x@y",
+                     "docker login --password-stdin registry", "max_tokens=4096000"):
             with self.subTest(line=line):
                 self.assertEqual(self.worker.command_outcome("git push", f"Exit code 1\n{line}", True),
                                  f"- git push → Exit code 1 | {line}")
