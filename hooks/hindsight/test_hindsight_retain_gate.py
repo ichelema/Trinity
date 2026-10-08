@@ -2986,6 +2986,21 @@ class WindowContentTests(unittest.TestCase):
         self.assertTrue(all(len(o) <= self.worker.OUTCOME_MAX_CHARS for o in outcomes))
         self.assertIn("pytest suite_39", outcomes[-1])  # vincono i piu' recenti
 
+    def test_long_failed_outcome_keeps_exit_code_and_last_line(self):
+        # ICH-156: le righe intermedie cadono, prima e ultima restano.
+        failed = "\n".join(f"FAILED tests/test_mod.py::test_case_{i} - AssertionError: " + "x" * 80 for i in range(4))
+        last = "E   RuntimeError: connessione rifiutata"
+        outcome = self.worker.command_outcome("pytest", f"Exit code 1\n{failed}\n{last}", True)
+        self.assertLessEqual(len(outcome), self.worker.OUTCOME_MAX_CHARS)
+        self.assertTrue(outcome.startswith("- pytest → Exit code 1 | "))
+        self.assertTrue(outcome.endswith(" | " + last))
+
+    def test_huge_last_line_is_clipped_but_exit_code_stays(self):
+        outcome = self.worker.command_outcome("make", "Exit code 2\n" + "FAILED " + "y" * 200 + "\nE " + "z" * 500, True)
+        self.assertLessEqual(len(outcome), self.worker.OUTCOME_MAX_CHARS)
+        self.assertTrue(outcome.startswith("- make → Exit code 2 | E zzz"))
+        self.assertTrue(outcome.endswith("…"))
+
     def test_window_within_budget_is_unchanged(self):
         content = self.chunk([
             user_record("prima domanda"),
