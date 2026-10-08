@@ -52,7 +52,7 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
-from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url
+from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url, window_max_chars
 from hindsight_debug import debug_log
 from hindsight_file_lock import file_lock
 from hindsight_recall_lib import last_assistant_text, strip_memory_block
@@ -746,7 +746,7 @@ def build_content_chunk(hook: dict, summary: dict) -> str | None:
     fondo), poi gli altri turni dal piu' recente finche' entrano."""
     if not summary["turns"] and not summary["files_modified"]:
         return None
-    max_chars = int(CFG["retain_window_max_chars"])
+    max_chars = window_max_chars(CFG.get("retain_window_max_chars"))
     head: list[str] = []
     if summary.get("outcomes"):
         head += ["## Command outcomes"] + summary["outcomes"] + [""]

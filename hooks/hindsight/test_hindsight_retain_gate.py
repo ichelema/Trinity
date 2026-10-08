@@ -3172,6 +3172,34 @@ class WindowContentTests(unittest.TestCase):
         self.assertIn("FINE", text)
         self.assertNotIn("INIZIO", text)
 
+    def test_invalid_window_max_chars_falls_back_to_default(self):
+        # ICH-158: 0 dava content[-0:] (finestra senza limite), Infinity
+        # OverflowError nel worker. Da file, da env e da cfg diretto: default.
+        default = hindsight_config.DEFAULTS["retain_window_max_chars"]
+        content = "INIZIO " + "x" * (default + 500) + " FINE"
+        summary = {"turns": [("user", "domanda"), ("assistant", content)], "files_modified": [], "bash_cmds": []}
+        worker = load_worker()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.json")
+            for raw in ("0", "-5", "Infinity", "true", "0.5", '"abc"'):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write('{"retain_window_max_chars": %s}' % raw)
+                with mock.patch.dict(os.environ, {"HS_CONFIG_FILE": path}):
+                    cfg = hindsight_config.load_config()
+                with self.subTest(file=raw):
+                    self.assertEqual(cfg["retain_window_max_chars"], default)
+        for raw in ("0", "-5", "inf", "true", "abc"):
+            with mock.patch.dict(os.environ, {"HS_CFG_RETAIN_WINDOW_MAX_CHARS": raw}):
+                cfg = hindsight_config.load_config()
+            with self.subTest(env=raw):
+                self.assertEqual(cfg["retain_window_max_chars"], default)
+        for value in (0, -5, float("inf"), True, 0.5, "abc", None):
+            with self.subTest(cfg=value):
+                window = gate_input(content, [], value).split("\n")[1]
+                self.assertEqual(len(window), default)
+                with mock.patch.dict(worker.CFG, {"retain_window_max_chars": value, "retain_tool_calls": False}):
+                    self.assertLessEqual(len(worker.build_content_chunk({}, summary)), default)
+
 
 if __name__ == "__main__":
     unittest.main()

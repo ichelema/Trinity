@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 # Doppio percorso: nome top-level quando lib/ e' su sys.path (worker, bench);
 # relativo quando il modulo viene importato come package (test: lib.<modulo>).
 try:
-    from hindsight_config import cache_dir
+    from hindsight_config import cache_dir, window_max_chars
     from hindsight_multibank import fetch_bank_results
     from hindsight_recall_filter import (
         ApiCall,
@@ -54,7 +54,7 @@ try:
     )
     from hindsight_recall_lib import last_assistant_text
 except ImportError:
-    from .hindsight_config import cache_dir
+    from .hindsight_config import cache_dir, window_max_chars
     from .hindsight_multibank import fetch_bank_results
     from .hindsight_recall_filter import (
         ApiCall,
@@ -370,11 +370,11 @@ def fetch_duplicate_candidates(
     return complete_documents(ranked, timeout)
 
 
-def gate_input(content: str, candidates: list[dict], max_chars: int = 10000) -> str:
+def gate_input(content: str, candidates: list[dict], max_chars: int | None = None) -> str:
     # Rete di sicurezza (ICH-151): il worker costruisce gia' la finestra entro
     # retain_window_max_chars; se arriva piu' lunga si conserva la fine, dove
     # stanno i turni recenti e le conclusioni.
-    lines = ["## Session window to evaluate", content[-max_chars:], ""]
+    lines = ["## Session window to evaluate", content[-window_max_chars(max_chars):], ""]
     if candidates:
         lines.append("## Existing memories (duplicate check)")
         for index, r in enumerate(candidates):
@@ -490,7 +490,7 @@ def evaluate_retain(
         data, latency = api_call(
             model,
             GATE_PROMPT,
-            gate_input(content, candidates, int(cfg.get("retain_window_max_chars", 10000))),
+            gate_input(content, candidates, cfg.get("retain_window_max_chars")),
             "retain_gate_decision",
             GATE_SCHEMA,
             timeout,

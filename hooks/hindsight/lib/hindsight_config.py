@@ -303,8 +303,12 @@ PROJECT_BLOCKED_KEYS = {"api_url", "recall_pending_dir", "debug_log_file", "bank
 
 def _valid_override(key: str, value) -> bool:
     """Valida i valori che il recall converte o usa come timeout/soglia."""
-    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout", "retain_jev_timeout", "retain_window_max_chars"}:
+    if key in {"recall_result_filter_timeout", "recall_pending_ttl", "recall_timeout", "recall_rerank_timeout", "retain_gate_timeout", "retain_jev_timeout"}:
         return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    if key == "retain_window_max_chars":
+        # Solo int: Infinity da JSON e' un float (int(inf) -> OverflowError) e
+        # 0.5 diventerebbe int 0, cioe' content[-0:] = finestra senza limite.
+        return isinstance(value, int) and not isinstance(value, bool) and value > 0
     if key in {"recall_result_filter_threshold", "retain_jev_threshold"}:
         return (
             isinstance(value, (int, float))
@@ -316,6 +320,14 @@ def _valid_override(key: str, value) -> bool:
     if key in {"recall_result_filter_model", "retain_gate_model"}:
         return isinstance(value, str) and bool(value.strip())
     return True
+
+
+def window_max_chars(value) -> int:
+    """retain_window_max_chars valido oppure il default (ICH-158): worker e gate
+    lo usano anche quando il cfg non arriva da load_config."""
+    if _valid_override("retain_window_max_chars", value):
+        return value
+    return DEFAULTS["retain_window_max_chars"]
 
 
 def _merge_json(cfg: dict, path: str, trusted: bool = True) -> set[str]:
