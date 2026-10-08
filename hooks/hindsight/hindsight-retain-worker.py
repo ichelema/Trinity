@@ -55,13 +55,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url, window_max_chars
 from hindsight_debug import debug_log
 from hindsight_file_lock import file_lock
+from hindsight_recall_filter import consume_pending
 from hindsight_recall_lib import last_assistant_text, strip_memory_block
 from hindsight_retain_gate import (
+    RETAIN_PENDING_TTL,
     evaluate_retain,
     fallback_context,
     guided_content,
     handle_invalidate_consent,
     handle_retain_consent,
+    invalidate_pending_dir,
     save_invalidate_pending,
     save_retain_pending,
 )
@@ -880,24 +883,42 @@ def ask_invalidation(gate, hook: dict, out: dict | None, mode: str) -> dict | No
     if mode != "deferred":
         debug_log(CFG, "invalidate_skip", reason=mode, session=session_id[:8])
         return out
-    memories = [
-        {"id": str(c["id"]), "text": str(c.get("text") or ""), "bank_url": str(c["_bank_url"])}
-        for c in (gate.candidates[i] for i in gate.contradicted)
-        if c.get("id") and c.get("_bank_url")
-    ]
+    memories = _contradicted_memories(gate)
     if not memories or not save_invalidate_pending(
         session_id, hook.get("cwd") or "", memories, gate.contradiction_reason
     ):
         debug_log(CFG, "invalidate_skip", reason="no_pending", session=session_id[:8])
         return out
+    debug_log(
+        CFG,
+        "invalidate_pending",
+        action="saved",
+        ids=[m["id"] for m in memories],
+        reason=gate.contradiction_reason[:300],
+        session=session_id[:8],
+    )
+    return _with_invalidation_question(out, memories, gate.contradiction_reason)
+
+
+def _contradicted_memories(gate) -> list[dict]:
+    """Memorie smentite dal gate, nel formato del pending di ritiro."""
+    return [
+        {"id": str(c["id"]), "text": str(c.get("text") or ""), "bank_url": str(c["_bank_url"])}
+        for c in (gate.candidates[i] for i in gate.contradicted)
+        if c.get("id") and c.get("_bank_url")
+    ]
+
+
+def _with_invalidation_question(out: dict | None, memories: list[dict], reason: str) -> dict:
+    """Aggiunge a `out` la domanda di ritiro di `memories` (pending gia' salvato)."""
     head = RETAIN_QUESTION_MARKERS[2] if len(memories) == 1 else RETAIN_QUESTION_MARKERS[3]
     texts = " · ".join(
         f"«{_clip(m['text'], INVALIDATE_TEXT_MAX_CHARS)}» (bank {_bank_name(m['bank_url'])})"
         for m in memories
     )
-    question = f"{head} — {texts} Motivo: {gate.contradiction_reason} (sì/no)"
+    question = f"{head} — {texts} Motivo: {reason} (sì/no)"
     instruction = (
-        "Hindsight retain gate found existing memories contradicted by the previous "
+        "Hindsight retain gate found existing memories contradicted by a recent "
         "turn. Answer the current prompt normally first. Then, as the very last "
         f"thing in your reply, ask the user verbatim {question!r} and end the turn. "
         "Do not invalidate anything yourself; a yes runs the pending invalidation "
@@ -913,15 +934,84 @@ def ask_invalidation(gate, hook: dict, out: dict | None, mode: str) -> dict | No
     )
     merged["hookSpecificOutput"] = hso
     merged["asks_consent"] = True
+    return merged
+
+
+# ICH-166: ritiri rinviati perche' il turno ha gia' la domanda del retain.
+# Stessa directory dei pending di ritiro, chiave a parte (cwd + suffisso; il
+# NUL non compare in un path): handle_invalidate_consent non li legge mai come
+# risposta, e la domanda la pone PromptRetain.gate_output al primo turno libero.
+DEFERRED_INVALIDATION_SUFFIX = "\0deferred"
+
+
+def defer_invalidation(gate, hook: dict) -> None:
+    """Rinvia il ritiro delle memorie smentite. Ogni memoria porta l'istante
+    del rinvio (deferred_at, per il TTL) e si somma ai ritiri gia' rinviati
+    della sessione, ognuno col suo motivo."""
+    session_id = hook.get("session_id") or ""
+    key = (hook.get("cwd") or "") + DEFERRED_INVALIDATION_SUFFIX
+    waiting = [
+        m
+        for m in consume_pending(invalidate_pending_dir(), session_id, key, float("inf")) or []
+        if isinstance(m, dict)
+    ]
+    ids = {m.get("id") for m in waiting}
+    now = time.time()
+    memories = waiting + [
+        dict(m, deferred_at=now) for m in _contradicted_memories(gate) if m["id"] not in ids
+    ]
+    if not memories or not save_invalidate_pending(
+        session_id, key, memories, gate.contradiction_reason
+    ):
+        debug_log(CFG, "invalidate_skip", reason="no_pending", session=session_id[:8])
+        return
     debug_log(
         CFG,
         "invalidate_pending",
-        action="saved",
-        ids=[m["id"] for m in memories],
+        action="deferred",
+        ids=[m.get("id") for m in memories],
         reason=gate.contradiction_reason[:300],
         session=session_id[:8],
     )
-    return merged
+
+
+def ask_deferred_invalidation(out: dict, session_id: str, cwd: str) -> dict:
+    """Primo turno libero dopo il rinvio (ICH-166): i ritiri rinviati passano
+    nel pending normale e `out` riceve la domanda. Le memorie rinviate da piu'
+    di RETAIN_PENDING_TTL cadono con un log."""
+    waiting = consume_pending(
+        invalidate_pending_dir(), session_id, cwd + DEFERRED_INVALIDATION_SUFFIX, float("inf")
+    )
+    if not waiting:
+        return out
+    now = time.time()
+    live, expired = [], []
+    for m in waiting:
+        if isinstance(m, dict):
+            fresh = now - float(m.get("deferred_at") or 0) <= RETAIN_PENDING_TTL
+            (live if fresh else expired).append(m)
+    if expired:
+        debug_log(
+            CFG,
+            "invalidate_skip",
+            reason="expired",
+            ids=[m.get("id") for m in expired],
+            session=session_id[:8],
+        )
+    if not live:
+        return out
+    if not save_invalidate_pending(session_id, cwd, live, ""):
+        debug_log(CFG, "invalidate_skip", reason="no_pending", session=session_id[:8])
+        return out
+    debug_log(
+        CFG,
+        "invalidate_pending",
+        action="asked",
+        ids=[m.get("id") for m in live],
+        session=session_id[:8],
+    )
+    reason = " · ".join(dict.fromkeys(str(m["reason"]) for m in live if m.get("reason")))
+    return _with_invalidation_question(out, live, reason)
 
 
 def note_post_failure(msg: str) -> None:
@@ -1277,9 +1367,9 @@ def evaluate(hook: dict, mode: str = "deferred") -> tuple[int, dict | None]:
             preview=gate.preview[:300],
         )
         if gate.contradicted:
-            # ICH-152: una seconda domanda nello stesso turno renderebbe
-            # ambiguo il "si'": il ritiro cade, la memoria resta.
-            debug_log(CFG, "invalidate_skip", reason="retain_question", session=session_id[:8])
+            # Una seconda domanda nello stesso turno renderebbe ambiguo il
+            # "si'" (ICH-152): il ritiro si rinvia al turno dopo (ICH-166).
+            defer_invalidation(gate, hook)
         return 0, out
 
     debug_log(
@@ -1465,6 +1555,11 @@ class PromptRetain:
         self._leftover: dict | None = None
         self._proc = None
         self._gate: dict | None = None
+        # ICH-166: cwd della sessione (None = retain_at_prompt fallito: niente
+        # ritiri rinviati) e turno gia' occupato da un'altra domanda Hindsight.
+        self._cwd: str | None = None
+        self._busy: bool = False
+        self._leftover_asks: bool = False
 
     def gate_output(self, deadline: float) -> dict:
         """Output del gate differito per questo prompt, entro deadline
@@ -1474,40 +1569,60 @@ class PromptRetain:
         NON segna nessun fallimento: il processo continua per conto suo e
         l'esito viene raccolto al prompt successivo (retain_deferred
         carried_over) — nulla si perde, ne' POST ne' domanda. {} anche senza
-        gate. Idempotente: il risultato viene cachato, cosi' una seconda
-        chiamata non ri-aspetta ne' cambia esito."""
+        gate. Se il turno resta libero (nessuna domanda del gate, esito del
+        gate noto, nessun retry in attesa) aggiunge la domanda dei ritiri
+        rinviati (ICH-166). Idempotente: il risultato viene cachato, cosi' una
+        seconda chiamata non ri-aspetta ne' cambia esito."""
         if self._gate is not None:
             return self._gate
         self._gate = {}
+        # free: l'esito del gate di questo turno e' noto e non pone domande.
+        # Con un gate ancora in corso il turno non e' libero: il processo
+        # potrebbe ancora porre una domanda o scrivere i ritiri rinviati.
+        free = not self._busy
         if self._leftover is not None:
             self._gate = _strip_marker(self._leftover)
-            return self._gate
-        if not self.launched:
-            return self._gate
-        try:
-            while True:
-                box = _read_outbox(self._session_id)
-                if box is not None:
-                    self._gate = _strip_marker(box.get("output") or {})
-                    return self._gate
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(OUTBOX_POLL_S)
-            debug_log(
-                CFG,
-                "retain_deferred",
-                action="carried_over",
-                session=self._session_id[:8],
-            )
-        except Exception as exc:
-            debug_log(
-                CFG,
-                "retain_error",
-                where="gate_output",
-                error=f"{type(exc).__name__}: {exc}"[:300],
-                session=self._session_id[:8],
-            )
-            self._gate = {}
+            free = free and not self._leftover_asks and not self.launched
+        elif self.launched:
+            free = False
+            try:
+                while True:
+                    box = _read_outbox(self._session_id)
+                    if box is not None:
+                        self._gate = _strip_marker(box.get("output") or {})
+                        free = not self._busy and not box.get("asks_consent")
+                        break
+                    if time.monotonic() >= deadline:
+                        debug_log(
+                            CFG,
+                            "retain_deferred",
+                            action="carried_over",
+                            session=self._session_id[:8],
+                        )
+                        break
+                    time.sleep(OUTBOX_POLL_S)
+            except Exception as exc:
+                debug_log(
+                    CFG,
+                    "retain_error",
+                    where="gate_output",
+                    error=f"{type(exc).__name__}: {exc}"[:300],
+                    session=self._session_id[:8],
+                )
+                self._gate = {}
+        if free and self._cwd is not None:
+            try:
+                self._gate = _strip_marker(
+                    ask_deferred_invalidation(self._gate, self._session_id, self._cwd)
+                )
+            except Exception as exc:
+                debug_log(
+                    CFG,
+                    "retain_error",
+                    where="ask_deferred_invalidation",
+                    error=f"{type(exc).__name__}: {exc}"[:300],
+                    session=self._session_id[:8],
+                )
         return self._gate
 
 
@@ -1670,9 +1785,11 @@ def retain_at_prompt(
         # non puo' esserne la risposta.
         skip_consent = False
         leftover = _read_outbox(session_id) if session_id else None
+        result._cwd = cwd or ""
         if leftover is not None:
             result._leftover = dict(leftover.get("output") or {})
             skip_consent = bool(leftover.get("asks_consent"))
+            result._leftover_asks = skip_consent
             debug_log(
                 CFG,
                 "retain_deferred",
@@ -1737,7 +1854,10 @@ def retain_at_prompt(
         sweep_stale_queue()
         # 4. Lancio del gate differito, solo se c'e' qualcosa da valutare.
         # result.outcome: il retain o, se non ha risposto, il ritiro (ICH-152).
-        if (result.outcome and result.outcome.get("restored")) or skip_consent:
+        # Un retry in attesa ("rispondi si' per riprovare") occupa il turno:
+        # niente domanda dei ritiri rinviati (ICH-166).
+        result._busy = bool(result.outcome and result.outcome.get("restored"))
+        if result._busy or skip_consent:
             return result
         if not has_queued(session_id):
             return result
