@@ -65,6 +65,10 @@ Per le attività in più fasi, definire un breve piano:
 
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 
+- Se il testo da inserire contiene backslash o sequenze di escape (`\x1b`, `\n`,
+  `\t`, `\033`), usa il tool Edit/Write, mai `sed`/`awk`/`printf`: interpretano
+  gli escape e scrivono byte di controllo.
+
 ## Assistenza proattiva
 
 Sii proattivo, non limitarti a rispondere alle richieste.
