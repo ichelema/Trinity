@@ -186,6 +186,15 @@ Verifica almeno:
 
 Cerca attivamente controesempi che possano falsificare la correttezza dell'implementazione.
 
+### Strategia di lettura
+
+Adatta la profondità di lettura alla dimensione del changeset:
+
+- meno di 20 file: leggi per intero ogni file modificato;
+- da 20 a 100 file: leggi prima il diff, poi leggi per intero i file ad alto rischio (hook, config,
+  script di installazione, helper condivisi, codice che tocca segreti o file dell'utente);
+- oltre 100 file: fermati e chiedi di restringere il perimetro a un modulo o a un'area di rischio.
+
 ## 5. Valuta i test in modo indipendente
 
 Non considerare sufficiente il fatto che i test esistenti passino.
