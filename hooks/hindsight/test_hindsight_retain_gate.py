@@ -3469,6 +3469,17 @@ class WindowContentTests(unittest.TestCase):
         ])
         self.assertNotIn("## Command outcomes", content)
 
+    def test_command_aborted_after_partial_output_is_not_a_failure(self):
+        # Review ICH-168: Claude Code aggiunge questa riga all'output parziale di un Bash interrotto;
+        # dopo possono seguire i suoi avvisi.
+        aborted = "<error>Command was aborted before completion</error>"
+        for out in ("building...\nlinking\n" + aborted, "Command aborted before execution\n" + aborted,
+                    "building...\n" + aborted + "\nNote: a file read earlier has changed"):
+            with self.subTest(out=out):
+                self.assertIsNone(self.worker.command_outcome("make all", out, True))
+        self.assertEqual(self.worker.command_outcome("make all", "Exit code 2\nbuilding...\nmake: *** Error 2", True),
+                         "- make all → Exit code 2 | make: *** Error 2")
+
     def test_long_command_is_shortened_to_leave_room_for_the_outcome(self):
         content = self.chunk([
             user_record("lancia i test"),
