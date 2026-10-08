@@ -2,7 +2,9 @@
   "project": "Trinity",
   "bazar_remote": "https://github.com/ichelema/my-bazar.git",
   "managed": {
-    "skills": {},
+    "skills": {
+      "adhd": "adhd"
+    },
     "agents": {},
     "commands": {},
     "hooks": {},
