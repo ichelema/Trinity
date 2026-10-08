@@ -3065,6 +3065,9 @@ class InvalidationTests(unittest.TestCase):
             self.contradicting_gate(
                 action="retain", reason="durable_decision", preview="X.", context="dominio"
             ),
+            # ICH-166: nemmeno un ritiro rinviato
+            self.uncertain_contradicting(),
+            self.contradicting_gate(action="retain", reason="durable_decision", preview="X."),
         ):
             rc, out, _gate, urlopen = self.run_main(self.cfg(), gate, mode="drain")
             self.assertEqual(rc, 0)
@@ -3074,19 +3077,151 @@ class InvalidationTests(unittest.TestCase):
         outcome, urlopen = self.invalidate_consent("sì")
         self.assertIsNone(outcome)
         urlopen.assert_not_called()
+        _result, out, methods = self.prompt_turn("spiegami il gate")
+        self.assertEqual(out, {})
+        self.assertEqual(methods, [])
 
     def test_retain_question_wins_over_contradiction(self):
-        """Uncertain pone gia' la sua domanda: niente seconda domanda, niente
-        pending di ritiro (un "si'" sarebbe ambiguo)."""
-        _rc, out, _gate, _urlopen = self.run_main(
-            self.cfg(),
-            self.contradicting_gate(
-                action="uncertain", reason="borderline", preview="Forse X.", context="dominio"
-            ),
-        )
+        """Uncertain pone gia' la sua domanda: niente seconda domanda nello
+        stesso turno e nessun ritiro che un "si'" possa eseguire (ICH-166: il
+        ritiro e' solo rinviato)."""
+        _rc, out, _gate, _urlopen = self.run_main(self.cfg(), self.uncertain_contradicting())
         self.assertNotIn("Ritiro", out["systemMessage"])
+        self.assertNotIn("Ritiro", out["hookSpecificOutput"]["additionalContext"])
         outcome, _urlopen = self.invalidate_consent("sì")
         self.assertIsNone(outcome)
+
+    # --- ICH-166: domanda di ritiro rinviata al turno dopo quella del retain ---
+
+    def uncertain_contradicting(self):
+        return self.contradicting_gate(
+            action="uncertain", reason="borderline", preview="Forse X.", context="dominio"
+        )
+
+    def prompt_turn(self, prompt, gate_box=None):
+        """Un UserPromptSubmit: retain_at_prompt + gate_output, POST/PATCH
+        mockati. gate_box: output del gate di questo turno (lanciato e finito,
+        con asks_consent). Ritorna (result, output del gate, metodi HTTP)."""
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen", return_value=FakeResponse()
+        ) as urlopen:
+            result = self.worker.retain_at_prompt(prompt, "sess-gate-test", self.tmp.name, "")
+            if gate_box is not None:
+                box = dict(gate_box)
+                self.worker._write_outbox("sess-gate-test", box, bool(box.pop("asks_consent", False)))
+                result.launched = True
+            out = result.gate_output(time.monotonic() + 1)
+        return result, out, [c[0][0].get_method() for c in urlopen.call_args_list]
+
+    def assert_asks_invalidation(self, out):
+        for text in (out["systemMessage"], out["hookSpecificOutput"]["additionalContext"]):
+            self.assertIn("Ritiro la memoria contraddetta?", text)
+            self.assertIn(CONTRADICTED["text"], text)
+            self.assertIn(CONTRADICTION_REASON, text)
+        self.assertNotIn("asks_consent", out)
+
+    def test_uncertain_contradiction_asks_invalidation_on_next_turn(self):
+        """Turno 1 solo la domanda del retain; turno 2 la domanda di ritiro,
+        qualunque sia la risposta; un "si'" al turno 3 manda un solo PATCH."""
+        for answer in ("no", "context: gate Hindsight nel plugin Trinity", "spiegami il gate"):
+            with self.subTest(answer=answer):
+                _rc, out, _gate, _urlopen = self.run_main(self.cfg(), self.uncertain_contradicting())
+                self.assertIn("Vuoi che salvi questa memoria?", out["systemMessage"])
+                self.assertNotIn("Ritiro", out["systemMessage"])
+                _result, out, methods = self.prompt_turn(answer)
+                self.assertNotIn("PATCH", methods)
+                self.assert_asks_invalidation(out)
+                result, _out, methods = self.prompt_turn("sì")
+                self.assertEqual(result.outcome["action"], "invalidated")
+                self.assertEqual(methods, ["PATCH"])
+
+    def test_yes_to_retain_question_sends_no_patch(self):
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        result, out, methods = self.prompt_turn("sì")
+        self.assertEqual(result.outcome["action"], "saved")
+        self.assertEqual(methods, ["POST"])
+        # il ritiro resta in attesa e la sua domanda esce adesso
+        self.assert_asks_invalidation(out)
+
+    def test_retain_question_on_turn_2_delays_invalidation(self):
+        """Il gate del turno 2 pone una nuova domanda del retain: la domanda
+        di ritiro aspetta il primo turno libero e il suo pending resta."""
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        retain_question = {
+            "systemMessage": "Hindsight: Vuoi che salvi questa memoria? — Forse Y. (sì/no)",
+            "asks_consent": True,
+        }
+        _result, out, _methods = self.prompt_turn("no", gate_box=retain_question)
+        self.assertNotIn("Ritiro", out["systemMessage"])
+        outcome, _urlopen = self.invalidate_consent("sì")
+        self.assertIsNone(outcome)  # nessun ritiro senza la sua domanda
+        _result, out, _methods = self.prompt_turn("spiegami il gate")
+        self.assert_asks_invalidation(out)
+        result, _out, methods = self.prompt_turn("sì")
+        self.assertEqual(result.outcome["action"], "invalidated")
+        self.assertEqual(methods, ["PATCH"])
+
+    def test_finished_gate_without_question_leaves_turn_free(self):
+        """Gate del turno 2 lanciato e finito senza domanda: la domanda di
+        ritiro esce nello stesso output."""
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        _result, out, methods = self.prompt_turn("no", gate_box={})
+        self.assertEqual(methods, [])
+        self.assert_asks_invalidation(out)
+
+    def test_deferrals_from_two_windows_merge(self):
+        """Due rinvii di fila: una sola domanda con entrambe le memorie e i
+        loro motivi; la memoria rinviata due volte si ritira una volta sola."""
+        second = {"id": "mem-2", "text": "Altro fatto.", "_bank_url": CONTRADICTED["_bank_url"]}
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        gate = GateResult(
+            action="uncertain",
+            reason="borderline",
+            preview="Forse Y.",
+            context="dominio",
+            contradicted=[0, 1],
+            contradiction_reason="Secondo motivo.",
+            candidates=[dict(CONTRADICTED), second],
+        )
+        self.run_main(self.cfg(), gate)
+        _result, out, _methods = self.prompt_turn("spiegami il gate")
+        message = out["systemMessage"]
+        self.assertIn("Ritiro le memorie contraddette?", message)
+        self.assertIn(CONTRADICTED["text"], message)
+        self.assertIn(second["text"], message)
+        self.assertIn(f"{CONTRADICTION_REASON} · Secondo motivo.", message)
+        result, _out, methods = self.prompt_turn("sì")
+        self.assertEqual(result.outcome["action"], "invalidated")
+        self.assertEqual(methods, ["PATCH", "PATCH"])
+
+    def test_running_gate_delays_invalidation(self):
+        """Gate del turno ancora in corso (carried over): potrebbe porre una
+        domanda, quindi il turno non e' libero."""
+        self.run_main(self.cfg(), self.uncertain_contradicting())
+        with mock.patch.object(self.worker, "CFG", self.cfg()):
+            result = self.worker.retain_at_prompt("no", "sess-gate-test", self.tmp.name, "")
+            result.launched = True
+            self.assertEqual(result.gate_output(time.monotonic()), {})
+        _result, out, _methods = self.prompt_turn("spiegami il gate")
+        self.assert_asks_invalidation(out)
+
+    def test_deferred_invalidation_expires_after_ttl(self):
+        stale = time.time() - hindsight_retain_gate.RETAIN_PENDING_TTL - 1
+        hindsight_retain_gate.save_invalidate_pending(
+            "sess-gate-test",
+            self.tmp.name + self.worker.DEFERRED_INVALIDATION_SUFFIX,
+            [{"id": "mem-old", "text": "t", "bank_url": "http://127.0.0.1:9/banks/t", "deferred_at": stale}],
+            "motivo",
+        )
+        with mock.patch.object(self.worker, "debug_log") as log:
+            _result, out, _methods = self.prompt_turn("spiegami il gate")
+        self.assertEqual(out, {})
+        log.assert_any_call(
+            mock.ANY, "invalidate_skip", reason="expired", ids=["mem-old"], session="sess-gat"
+        )
+        result, _out, methods = self.prompt_turn("sì")
+        self.assertIsNone(result.outcome)
+        self.assertEqual(methods, [])
 
     def test_retain_at_prompt_routes_yes_to_invalidation(self):
         self.run_main(self.cfg(), self.contradicting_gate())

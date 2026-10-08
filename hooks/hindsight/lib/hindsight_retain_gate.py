@@ -843,12 +843,13 @@ def save_invalidate_pending(
     session_id: str, cwd: str, memories: list[dict], reason: str
 ) -> bool:
     """Mette in attesa il ritiro di `memories` ({id, text, bank_url}). False se
-    non c'e' session_id o lo stato non e' scrivibile: niente domanda."""
+    non c'e' session_id o lo stato non e' scrivibile: niente domanda. Una
+    memoria che ha gia' il suo motivo lo tiene (ritiri rinviati, ICH-166)."""
     return save_pending(
         invalidate_pending_dir(),
         session_id,
         cwd,
-        [dict(m, reason=reason) for m in memories],
+        [{"reason": reason, **m} for m in memories],
     )
 
 

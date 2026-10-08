@@ -32,7 +32,7 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | `hindsight_multibank.py`  | recall multi-bank: fan-out parallelo sui bank + fusione con rerank globale (Voyage) |
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
 | `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
-| `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank; segnala anche i candidati smentiti dalla finestra (ICH-152): il worker chiede «Ritiro la memoria contraddetta?» e solo dopo il «sì» li ritira (PATCH `state=invalidated`, reversibile; pending in `$HS_CACHE_DIR/hs-invalidate-pending/`, mai nel drain) |
+| `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank; segnala anche i candidati smentiti dalla finestra (ICH-152): il worker chiede «Ritiro la memoria contraddetta?» e solo dopo il «sì» li ritira (PATCH `state=invalidated`, reversibile; pending in `$HS_CACHE_DIR/hs-invalidate-pending/`, mai nel drain); se il turno ha già la domanda del retain, la domanda di ritiro slitta al primo turno libero (ICH-166) |
 | `hindsight_secrets.py`    | pattern dei segreti condivisi (ICH-159): `SECRET_PATTERNS` per il benchmark del gate, `OUTCOME_SECRET_PATTERNS` per gli esiti dei comandi nel retain worker |
 | `hs-python.sh`            | sourced da ogni hook: risolve in `HS_PY` un interprete Python utilizzabile (indipendente dal PATH di sessione) ed esporta `PYTHONUTF8=1` |
 
