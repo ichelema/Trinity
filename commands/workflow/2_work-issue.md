@@ -171,6 +171,7 @@ Sei il lead.
 
 Delega il ragionamento a trinity:deep-reasoner, il lavoro ingrato a trinity:fast-worker (se la
 sessione è già Sonnet, fallo tu: fast-worker è lo stesso modello).
+Il lavoro ripetitivo in volume con una regola esatta va a trinity:bulk-worker.
 
 Mantieni tutte le modifiche entro lo scope delle issue. Ogni riga modificata deve essere
 riconducibile a un requisito di una delle issue: le deviazioni vanno segnalate all'utente, non

@@ -192,20 +192,22 @@ esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 | `claude-opus-5-5` / `opus[1m]` | `CLAUDE_OPUS.md` |
 | `claude-sonnet-5-5` | `CLAUDE_SONNET.md` |
 | `claude-gpt-6-astra-high` (launcher GPT) | `CLAUDE_GPT.md` |
-| `claude-haiku-4-5-20251001` | `CLAUDE_HAIKU.md` |
+| `claude-haiku-5-5` | `CLAUDE_HAIKU.md` |
 
 I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
 `CLAUDE_GPT.md`) sono **locali**: esclusi da git (`.gitignore`), esistono solo su questa
 macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonnet 5.5
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
 `trinity:fast-worker` per il lavoro meccanico (tranne Sonnet, che il lavoro meccanico lo fa da
-sé: `fast-worker` è lo stesso modello), DeepSeek (`claude-deepseek-flash` via LiteLLM)
+sé: `fast-worker` è lo stesso modello), `trinity:bulk-worker` per il lavoro ripetitivo in
+volume con una regola esatta, DeepSeek (`claude-deepseek-flash` via LiteLLM)
 come pari per le decisioni ad alto rischio.
 
 **Modelli degli agenti.** `agents/deep-reasoner.md` usa l'alias `model: fable` e
-`agents/fast-worker.md` l'alias `model: sonnet`. In una sessione normale gli alias diventano
-Fable 5.1 e Sonnet 5.5; con i launcher LiteLLM (§ sotto) ogni launcher li rimappa sui propri
-modelli tramite `ANTHROPIC_DEFAULT_FABLE_MODEL` e `ANTHROPIC_DEFAULT_SONNET_MODEL`. Non usare un
+`agents/fast-worker.md` l'alias `model: sonnet`, `agents/bulk-worker.md` l'alias `model: haiku`.
+In una sessione normale gli alias diventano Fable 5.1, Sonnet 5.5 e Haiku 5.5; con i launcher
+LiteLLM (§ sotto) ogni launcher li rimappa sui propri modelli tramite
+`ANTHROPIC_DEFAULT_FABLE_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` e `ANTHROPIC_DEFAULT_HAIKU_MODEL`. Non usare un
 model id completo (es. `claude-fable-5-1`) nel frontmatter: i launcher non lo rimappano e
 LiteLLM non lo conosce.
 
@@ -914,7 +916,7 @@ modifica il source chezmoi, poi `chezmoi apply`. `master-key.txt` è nel repo ci
 | `~/.local/bin/litellm-kimi.sh` | launcher Claude Code → Kimi |
 
 Gli alias Anthropic in `litellm_config.yaml` puntano agli ultimi modelli: `claude-opus` →
-Opus 5.5, `claude-sonnet` → Sonnet 5.5, `claude-fable` → Fable 5.1, `claude-haiku` → Haiku 4.5;
+Opus 5.5, `claude-sonnet` → Sonnet 5.5, `claude-fable` → Fable 5.1, `claude-haiku` → Haiku 5.5;
 `claude-opus-4-6` resta disponibile come voce separata.
 
 Nel setup Windows descritto qui il DB di LiteLLM usa lo stesso Postgres embedded di
