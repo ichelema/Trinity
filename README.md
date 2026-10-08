@@ -200,11 +200,13 @@ macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonn
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
 `trinity:fast-worker` per l'implementazione già definita (tranne Sonnet, che quel lavoro lo fa da
 sé: `fast-worker` è lo stesso modello), `trinity:bulk-worker` per il lavoro ripetitivo in
-volume con una regola esatta, DeepSeek (`claude-deepseek-flash` via LiteLLM)
+volume con una regola esatta, `trinity:scoper` per l'esplorazione iniziale di codice non
+familiare, DeepSeek (`claude-deepseek-flash` via LiteLLM)
 come pari per le decisioni ad alto rischio.
 
 **Modelli degli agenti.** `agents/deep-reasoner.md` usa l'alias `model: fable` e
-`agents/fast-worker.md` l'alias `model: sonnet`, `agents/bulk-worker.md` l'alias `model: haiku`.
+`agents/fast-worker.md` l'alias `model: sonnet`, `agents/bulk-worker.md` e `agents/scoper.md`
+l'alias `model: haiku`.
 In una sessione normale gli alias diventano Fable 5.1, Sonnet 5.5 e Haiku 5.5; con i launcher
 LiteLLM (§ sotto) ogni launcher li rimappa sui propri modelli tramite
 `ANTHROPIC_DEFAULT_FABLE_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` e `ANTHROPIC_DEFAULT_HAIKU_MODEL`. Non usare un

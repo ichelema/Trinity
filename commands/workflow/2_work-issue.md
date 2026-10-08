@@ -141,6 +141,12 @@ migliore dei casi ridondante, nel peggiore sovrascrive una transizione appena av
 
 ## Piano prima dell'implementazione
 
+Se il codice coinvolto non ti è familiare e prevedi di leggere più di 3 file che non hai già letto,
+delega l'esplorazione a `trinity:scoper`. Nel prompt passagli titolo, descrizione, criteri di
+accettazione e commenti rilevanti delle issue, e il percorso del worktree. Il suo report è un input,
+non una decisione: verifica a campione i file che indica. Se il report segnala il task come
+complesso, leggi tu i file chiave prima di scrivere il piano.
+
 Prima di modificare qualsiasi file mostra:
 
 - le issue: ID e titolo, una per riga;
