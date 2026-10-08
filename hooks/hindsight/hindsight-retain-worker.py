@@ -864,6 +864,11 @@ def gate_debug_output(gate, bank: str) -> dict:
 INVALIDATE_TEXT_MAX_CHARS = 300
 
 
+def _bank_name(bank_url) -> str:
+    """Nome del bank: ultimo segmento dell'URL, come nel debug log (ICH-167)."""
+    return str(bank_url or "").rsplit("/", 1)[-1]
+
+
 def ask_invalidation(gate, hook: dict, out: dict | None, mode: str) -> dict | None:
     """ICH-152: se il gate ha trovato memorie smentite dalla finestra, mette
     il ritiro in pending e aggiunge a `out` la domanda (testo della memoria e
@@ -886,7 +891,10 @@ def ask_invalidation(gate, hook: dict, out: dict | None, mode: str) -> dict | No
         debug_log(CFG, "invalidate_skip", reason="no_pending", session=session_id[:8])
         return out
     head = RETAIN_QUESTION_MARKERS[2] if len(memories) == 1 else RETAIN_QUESTION_MARKERS[3]
-    texts = " · ".join(f"«{_clip(m['text'], INVALIDATE_TEXT_MAX_CHARS)}»" for m in memories)
+    texts = " · ".join(
+        f"«{_clip(m['text'], INVALIDATE_TEXT_MAX_CHARS)}» (bank {_bank_name(m['bank_url'])})"
+        for m in memories
+    )
     question = f"{head} — {texts} Motivo: {gate.contradiction_reason} (sì/no)"
     instruction = (
         "Hindsight retain gate found existing memories contradicted by the previous "
@@ -1596,7 +1604,8 @@ def _invalidate_output(outcome: dict, transcript_path: str = "") -> tuple[dict, 
     if action == "invalidated":
         lines = [
             f"Hindsight: memoria ritirata — «{_clip(str(m.get('text') or ''), INVALIDATE_TEXT_MAX_CHARS)}» "
-            f"(id {m.get('id')}). Per ripristinarla: invalidate_memory con restore=true."
+            f"(bank {_bank_name(m.get('bank_url'))}, id {m.get('id')}). "
+            "Per ripristinarla: invalidate_memory con restore=true."
             for m in memories
         ]
         output = {
@@ -1611,7 +1620,10 @@ def _invalidate_output(outcome: dict, transcript_path: str = "") -> tuple[dict, 
         }
         return output, "", True, True
     if action == "error":
-        done = [str(m.get("id")) for m in outcome.get("invalidated") or []]
+        done = [
+            f"{m.get('id')} (bank {_bank_name(m.get('bank_url'))})"
+            for m in outcome.get("invalidated") or []
+        ]
         message = "Hindsight: ritiro della memoria NON riuscito — " + str(outcome.get("error") or "")
         if done:
             message += f" Già ritirate: {', '.join(done)}."

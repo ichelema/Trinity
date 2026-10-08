@@ -2990,6 +2990,28 @@ class InvalidationTests(unittest.TestCase):
         self.assertIsNone(outcome)
         urlopen.assert_not_called()
 
+    def test_question_and_error_name_the_bank_of_each_memory(self):
+        """ICH-167: memorie di due bank -> la domanda nomina entrambi i bank,
+        l'errore dopo un PATCH fallito nomina il bank delle gia' ritirate."""
+        core = {"id": "mem-core", "text": "Fatto del core.", "_bank_url": "http://127.0.0.1:9/banks/core"}
+        gate = GateResult(
+            action="skip",
+            reason="trivial_or_ephemeral",
+            contradicted=[0, 1],
+            contradiction_reason=CONTRADICTION_REASON,
+            candidates=[dict(CONTRADICTED), core],
+        )
+        _rc, out, _gate, _urlopen = self.run_main(self.cfg(), gate)
+        self.assertIn(f"«{CONTRADICTED['text']}» (bank t)", out["systemMessage"])
+        self.assertIn(f"«{core['text']}» (bank core)", out["systemMessage"])
+
+        output, _notice, _saved, _stop = self.worker._invalidate_output({
+            "action": "error",
+            "error": "OSError: down",
+            "invalidated": [{"id": "mem-core", "bank_url": core["_bank_url"]}],
+        })
+        self.assertIn("mem-core (bank core)", output["systemMessage"])
+
     def test_yes_sends_one_invalidate_with_reason(self):
         self.run_main(self.cfg(), self.contradicting_gate())
         outcome, urlopen = self.invalidate_consent("sì")
@@ -3076,7 +3098,7 @@ class InvalidationTests(unittest.TestCase):
         self.assertEqual(result.outcome["action"], "invalidated")
         message = result.consent_output["systemMessage"]
         self.assertIn("memoria ritirata", message)
-        self.assertIn("mem-old", message)
+        self.assertIn("(bank t, id mem-old)", message)  # ICH-167
         self.assertIn("restore=true", message)
         self.assertTrue(result.saved)
         self.assertTrue(result.stop_here)
