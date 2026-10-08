@@ -3189,6 +3189,49 @@ class WindowContentTests(unittest.TestCase):
         ])
         self.assertNotIn("## Command outcomes", content)
 
+    def test_searched_pass_fail_text_is_not_an_outcome(self):
+        # ICH-157: PASS/FAIL trovati da grep o letti da cat sono testo, non esiti.
+        found = 'lib/run.sh:12: echo "[run] PASS: $n righe"\nlib/run.sh:14: echo "FAIL: 3 passed"'
+        for cmd in ("grep -rn PASS lib/", "cat lib/run.sh", "cd lib && grep -n 'FAIL|PASS' run.sh | head -5",
+                    "git grep -n FAIL", "rg PASS\nsed -n 1,20p lib/run.sh"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.worker.command_outcome(cmd, found, False))
+
+    def test_test_runner_piped_into_a_filter_keeps_its_outcome(self):
+        # ICH-157: basta un comando che non e' di sola lettura per contare l'esito.
+        for cmd in ("pytest -q | tail -3", "cd lib && python test_x.py 2>&1 | grep -E 'passed|FAIL'",
+                    "FOO=1 grep -rn PASS lib/", "grep \"unclosed"):
+            with self.subTest(cmd=cmd):
+                self.assertIsNotNone(self.worker.command_outcome(cmd, "FAILED test_x - boom\n3 passed", False))
+
+    def test_failed_search_is_still_a_failure(self):
+        outcome = self.worker.command_outcome("grep -rn PASS nodir/", "Exit code 2\ngrep: nodir/: No such file or directory", True)
+        self.assertEqual(outcome, "- grep -rn PASS nodir/ → Exit code 2 | grep: nodir/: No such file or directory")
+
+    def test_tsc_error_summary_alone_is_not_an_outcome(self):
+        out = "src/a.ts(3,1): error TS2304: Cannot find name 'x'.\n\nFound 3 errors in 2 files."
+        self.assertIsNone(self.worker.command_outcome("npx tsc --noEmit || true", out, False))
+
+    def test_mocha_and_go_outcomes_are_recognized(self):
+        cases = {
+            "npx mocha": ("  3 passing (20ms)\n  1 failing\n\n  1) suite boom:\n     Error: x", "3 passing (20ms) | 1 failing"),
+            "go test ./...": ("ok  \tgithub.com/x/pkg\t0.312s\nok  \tgithub.com/x/other\t(cached)",
+                              "ok  \tgithub.com/x/pkg\t0.312s | ok  \tgithub.com/x/other\t(cached)"),
+            "go test ./pkg": ("--- FAIL: TestX (0.00s)\nFAIL\tgithub.com/x/pkg\t0.3s", "--- FAIL: TestX (0.00s) | FAIL\tgithub.com/x/pkg\t0.3s"),
+        }
+        for cmd, (out, expected) in cases.items():
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.worker.command_outcome(cmd, out, False), f"- {cmd} → {expected}")
+
+    def test_interrupted_tool_use_is_not_a_failure(self):
+        content = self.chunk([
+            user_record("lancia la build"),
+            self.bash("t1", "make all"),
+            self.result("t1", "[Request interrupted by user for tool use]", is_error=True),
+            assistant_record("Interrotto."),
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
     def test_long_command_is_shortened_to_leave_room_for_the_outcome(self):
         content = self.chunk([
             user_record("lancia i test"),
