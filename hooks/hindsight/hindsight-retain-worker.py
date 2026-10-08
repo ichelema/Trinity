@@ -132,6 +132,9 @@ XARGS_ARG_OPTS = ("-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s")
 CMD_SEPARATORS = frozenset({"|", "||", "&&", ";", "&", "(", ")"})
 # tool_result con is_error che non sono comandi falliti: rifiuto e interruzione dell'utente.
 USER_STOP_PREFIXES = ("The user doesn't want to proceed", "[Request interrupted by user")
+# ICH-168: riga che Claude Code aggiunge all'output parziale di un Bash interrotto
+# (dopo possono seguire solo i suoi avvisi).
+USER_ABORT_LINE = "<error>Command was aborted before completion</error>"
 OMISSION_MARKER = "\n[…]\n"
 SECRET_CMD_PLACEHOLDER = "[comando omesso: contiene un segreto]"
 
@@ -713,7 +716,8 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     # ICH-169: neanche una ricerca senza risultati (grep esce con 1 e non stampa nulla).
     # Conta l'ultimo comando: e' il suo l'exit code della pipe (`ls | grep x`).
     no_match = bool(names) and names[-1] in SEARCH_CMDS and lines == ["Exit code 1"]
-    if is_error and lines and not lines[0].startswith(USER_STOP_PREFIXES) and not no_match:
+    stopped = bool(lines) and (lines[0].startswith(USER_STOP_PREFIXES) or USER_ABORT_LINE in lines)
+    if is_error and lines and not stopped and not no_match:
         evidence = [lines[0]] + evidence + ([lines[-1]] if len(lines) > 1 else [])
     if not evidence:
         return None
