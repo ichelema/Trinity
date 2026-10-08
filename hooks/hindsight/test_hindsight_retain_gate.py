@@ -95,6 +95,8 @@ def gate_payload(**overrides) -> dict:
     payload = {
         "durable_claims": [],
         "covered_by": [],
+        "contradicted": [],
+        "contradiction_reason": "",
         "action": "skip",
         "reason": "trivial_or_ephemeral",
         "preview": "",
@@ -803,8 +805,17 @@ class GateModuleTests(unittest.TestCase):
         self.assertEqual(result.durable_claims, claims)
 
     def test_schema_field_order_puts_coverage_before_action(self):
+        # ICH-152: la contraddizione si valuta nello stesso passaggio della
+        # copertura, sempre prima della action.
         self.assertEqual(
-            list(GATE_SCHEMA["properties"])[:3], ["durable_claims", "covered_by", "action"]
+            list(GATE_SCHEMA["properties"])[:5],
+            [
+                "durable_claims",
+                "covered_by",
+                "contradicted",
+                "contradiction_reason",
+                "action",
+            ],
         )
 
     def test_prompt_states_coverage_precedence(self):
@@ -1497,6 +1508,7 @@ class WorkerGateTests(unittest.TestCase):
         env = {
             "HS_RETAIN_STATE_DIR": self.tmp.name,
             "HS_RETAIN_PENDING_DIR": os.path.join(self.tmp.name, "pending"),
+            "HS_INVALIDATE_PENDING_DIR": os.path.join(self.tmp.name, "invalidate"),
             "HS_RETAIN_QUEUE_DIR": os.path.join(self.tmp.name, "queue"),
             "HOOK_INPUT": self.hook_input,
         }
@@ -2870,6 +2882,208 @@ class WorkerGateTests(unittest.TestCase):
         marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
         with open(marker, encoding="utf-8") as handle:
             self.assertIn("non arrivato al server", handle.read())
+
+
+CONTRADICTED = {
+    "id": "mem-old",
+    "text": "Il bank di default e' core.",
+    "_bank_url": "http://127.0.0.1:9/banks/t",
+}
+CONTRADICTION_REASON = "La finestra mostra che il bank di default ora e' auto."
+
+
+class InvalidationTests(unittest.TestCase):
+    """ICH-152: memorie smentite dalla finestra -> domanda -> ritiro solo dopo
+    il "si'". Riusa setup e helper di WorkerGateTests senza rieseguirne i test."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = load_worker()
+
+    setUp = WorkerGateTests.setUp
+    cfg = WorkerGateTests.cfg
+    run_main = WorkerGateTests.run_main
+
+    def contradicting_gate(self, action="skip", reason="trivial_or_ephemeral", **kw):
+        return GateResult(
+            action=action,
+            reason=reason,
+            contradicted=[0],
+            contradiction_reason=CONTRADICTION_REASON,
+            candidates=[dict(CONTRADICTED)],
+            **kw,
+        )
+
+    def invalidate_consent(self, prompt):
+        """handle_invalidate_consent con il PATCH mockato: (esito, urlopen)."""
+        with mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen",
+            return_value=FakeResponse(),
+        ) as urlopen:
+            outcome = hindsight_retain_gate.handle_invalidate_consent(
+                prompt, "sess-gate-test", self.tmp.name
+            )
+        return outcome, urlopen
+
+    def test_gate_validates_and_normalizes_contradictions(self):
+        cfg = {"retain_gate_model": "m", "retain_gate_timeout": 5}
+        candidates = [{"text": "uno"}, {"text": "due"}]
+        cases = (
+            # (risposta, contradicted atteso, motivo atteso)
+            (dict(contradicted=[1], contradiction_reason="  smentita  ora "), [1], "smentita ora"),
+            # una memoria che copre la finestra non e' smentita
+            (dict(covered_by=[1], contradicted=[1], contradiction_reason="x"), [], ""),
+            # senza motivo la domanda non si puo' porre
+            (dict(contradicted=[0], contradiction_reason="  "), [], ""),
+            # campi assenti: nessuna contraddizione, nessun errore
+            ({}, [], ""),
+        )
+        with mock.patch(
+            "lib.hindsight_retain_gate.fetch_duplicate_candidates", return_value=candidates
+        ):
+            for overrides, expected, reason in cases:
+                payload = gate_payload(**overrides)
+                if not overrides:
+                    payload.pop("contradicted", None)
+                    payload.pop("contradiction_reason", None)
+                result = evaluate_retain("finestra", {"turns": []}, [], cfg, fake_api(payload))
+                self.assertIsNone(result.error, overrides)
+                self.assertEqual(result.action, "skip", overrides)
+                self.assertEqual(result.contradicted, expected, overrides)
+                self.assertEqual(result.contradiction_reason, reason, overrides)
+            for bad in ([2], [0, 0], [True], "0"):
+                result = evaluate_retain(
+                    "finestra", {"turns": []}, [], cfg,
+                    fake_api(gate_payload(contradicted=bad, contradiction_reason="x")),
+                )
+                self.assertEqual(result.reason, "gate_error", bad)
+
+    def test_candidates_carry_their_bank(self):
+        A1 = {"id": "A1", "text": "fatto a1", "document_id": "doc-a"}
+        A2 = {"id": "A2", "text": "fatto a2", "document_id": "doc-a"}
+        N0 = {"id": "N0", "text": "senza documento"}
+        out = complete_documents(
+            [("http://b1", A1), ("http://b2", N0)], timeout=4, fetch=lambda u, d, t: [A1, A2]
+        )
+        self.assertEqual(
+            [(r["id"], r["_bank_url"]) for r in out],
+            [("A1", "http://b1"), ("A2", "http://b1"), ("N0", "http://b2")],
+        )
+
+    def test_contradiction_asks_and_no_makes_no_call(self):
+        rc, out, _gate, urlopen = self.run_main(self.cfg(), self.contradicting_gate())
+        self.assertEqual(rc, 0)
+        urlopen.assert_not_called()
+        self.assertTrue(out.pop("asks_consent"))
+        for text in (out["systemMessage"], out["hookSpecificOutput"]["additionalContext"]):
+            self.assertIn("Ritiro la memoria contraddetta?", text)
+            self.assertIn(CONTRADICTED["text"], text)
+            self.assertIn(CONTRADICTION_REASON, text)
+        self.assertIn(ASK_LAST, out["hookSpecificOutput"]["additionalContext"])
+
+        outcome, urlopen = self.invalidate_consent("no")
+        self.assertEqual(outcome["action"], "discarded")
+        self.assertEqual(outcome["reason"], "negative")
+        urlopen.assert_not_called()
+        # consumo singolo: un "si'" dopo il "no" non ritira nulla
+        outcome, urlopen = self.invalidate_consent("sì")
+        self.assertIsNone(outcome)
+        urlopen.assert_not_called()
+
+    def test_yes_sends_one_invalidate_with_reason(self):
+        self.run_main(self.cfg(), self.contradicting_gate())
+        outcome, urlopen = self.invalidate_consent("sì")
+        self.assertEqual(outcome["action"], "invalidated")
+        self.assertEqual(urlopen.call_count, 1)
+        request = urlopen.call_args[0][0]
+        self.assertEqual(request.get_method(), "PATCH")
+        self.assertEqual(request.full_url, "http://127.0.0.1:9/banks/t/memories/mem-old")
+        # state=invalidated e' reversibile con state=valid (restore)
+        self.assertEqual(
+            json.loads(request.data.decode("utf-8")),
+            {"state": "invalidated", "reason": CONTRADICTION_REASON},
+        )
+
+    def test_retain_post_and_contradiction_question_in_same_turn(self):
+        rc, out, _gate, urlopen = self.run_main(
+            self.cfg(),
+            self.contradicting_gate(
+                action="retain",
+                reason="durable_decision",
+                preview="Il bank di default ora e' auto.",
+                context="configurazione dei bank Hindsight nel plugin Trinity",
+            ),
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(urlopen.call_count, 1)  # solo la POST del retain
+        self.assertTrue(urlopen.call_args[0][0].full_url.endswith("/banks/t/memories"))
+        self.assertIn("Ritiro la memoria contraddetta?", out["systemMessage"])
+
+    def test_drain_never_invalidates(self):
+        for gate in (
+            self.contradicting_gate(),
+            self.contradicting_gate(
+                action="retain", reason="durable_decision", preview="X.", context="dominio"
+            ),
+        ):
+            rc, out, _gate, urlopen = self.run_main(self.cfg(), gate, mode="drain")
+            self.assertEqual(rc, 0)
+            self.assertIsNone(out)
+            for call in urlopen.call_args_list:
+                self.assertEqual(call[0][0].get_method(), "POST")
+        outcome, urlopen = self.invalidate_consent("sì")
+        self.assertIsNone(outcome)
+        urlopen.assert_not_called()
+
+    def test_retain_question_wins_over_contradiction(self):
+        """Uncertain pone gia' la sua domanda: niente seconda domanda, niente
+        pending di ritiro (un "si'" sarebbe ambiguo)."""
+        _rc, out, _gate, _urlopen = self.run_main(
+            self.cfg(),
+            self.contradicting_gate(
+                action="uncertain", reason="borderline", preview="Forse X.", context="dominio"
+            ),
+        )
+        self.assertNotIn("Ritiro", out["systemMessage"])
+        outcome, _urlopen = self.invalidate_consent("sì")
+        self.assertIsNone(outcome)
+
+    def test_retain_at_prompt_routes_yes_to_invalidation(self):
+        self.run_main(self.cfg(), self.contradicting_gate())
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen", return_value=FakeResponse()
+        ) as urlopen:
+            result = self.worker.retain_at_prompt("sì", "sess-gate-test", self.tmp.name, "")
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertEqual(result.outcome["action"], "invalidated")
+        message = result.consent_output["systemMessage"]
+        self.assertIn("memoria ritirata", message)
+        self.assertIn("mem-old", message)
+        self.assertIn("restore=true", message)
+        self.assertTrue(result.saved)
+        self.assertTrue(result.stop_here)
+
+    def test_retain_consent_answer_discards_invalidation_pending(self):
+        """Lo stesso "si'" non vale per due domande: se risponde a un pending
+        retain, il pending di ritiro si scarta senza PATCH."""
+        hindsight_retain_gate.save_invalidate_pending(
+            "sess-gate-test", self.tmp.name, [
+                {"id": "mem-old", "text": "t", "bank_url": "http://127.0.0.1:9/banks/t"}
+            ], "motivo",
+        )
+        save_retain_pending(
+            "sess-gate-test", self.tmp.name, "http://127.0.0.1:9/banks/t",
+            {"items": [{"content": "finestra", "context": "dominio"}], "async": True},
+            "Salvo X.",
+        )
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch(
+            "lib.hindsight_retain_gate.urllib.request.urlopen", return_value=FakeResponse()
+        ) as urlopen:
+            result = self.worker.retain_at_prompt("sì", "sess-gate-test", self.tmp.name, "")
+        self.assertEqual(result.outcome["action"], "saved")
+        self.assertEqual([c[0][0].get_method() for c in urlopen.call_args_list], ["POST"])
+        outcome, _urlopen = self.invalidate_consent("sì")
+        self.assertIsNone(outcome)
 
 
 class WindowContentTests(unittest.TestCase):

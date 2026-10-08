@@ -26,6 +26,10 @@ uncertain) il worker mette comunque la POST in pending e Claude propone una
 riga di dominio: al prompt successivo handle_retain_consent risolve il context
 nell'ordine esplicito (`context: …`) -> gate -> proposta nel transcript ->
 riga repo/branch (fallback_context, zero rete).
+Nello stesso passaggio della copertura il gate indica le memorie candidate
+smentite dalla finestra (contradicted + contradiction_reason, ICH-152): il
+worker chiede all'utente e solo dopo il "si'" handle_invalidate_consent le
+ritira (state=invalidated, reversibile). Nel drain nessun ritiro.
 """
 
 from __future__ import annotations
@@ -98,6 +102,10 @@ GATE_SCHEMA = {
         # most 3" il gate accorpava e perdeva un terzo della conoscenza (ICH-149).
         "durable_claims": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "covered_by": {"type": "array", "items": {"type": "integer"}},
+        # Memorie smentite dalla finestra (ICH-152): stesso passaggio della
+        # copertura, prima della action. Il ritiro parte solo dopo un "si'".
+        "contradicted": {"type": "array", "items": {"type": "integer"}},
+        "contradiction_reason": {"type": "string"},
         "action": {"type": "string", "enum": sorted(GATE_ACTIONS)},
         "reason": {"type": "string", "enum": sorted(GATE_REASONS)},
         "preview": {"type": "string"},
@@ -106,6 +114,8 @@ GATE_SCHEMA = {
     "required": [
         "durable_claims",
         "covered_by",
+        "contradicted",
+        "contradiction_reason",
         "action",
         "reason",
         "preview",
@@ -125,9 +135,11 @@ The window may open with a "## Command outcomes" section: Bash commands that fai
 
 Ask yourself: "Could this information avoid work, mistakes or repeated analysis in the future?"
 
-Duplicate check — fill these two fields BEFORE choosing the action:
+Duplicate and contradiction check — fill these fields BEFORE choosing the action:
 - durable_claims: ONE short sentence for EACH distinct durable fact this window states, up to 5, in the same language as the conversation. Never merge two facts into one sentence: split them. List them even when you believe memory already contains them — covered_by is where you say so. Ephemeral material — command output, intermediate attempts, anything recoverable from the repository or git history — is not a durable claim; leave the list empty when the window states none.
 - covered_by: indices of the existing memories that, taken together, already cover EVERY claim you listed. Judge substance, not wording: a memory that is phrased differently, is more general, or is written in another language still covers a claim. Extra ephemeral material in the window never prevents coverage. If you listed no durable claim but the window's content is already reflected by the existing memories, set covered_by to the memories that reflect it. Leave it empty when at least one claim is missing from the existing memories, or when no existing memory was provided.
+- contradicted: indices of the existing memories that this window proves wrong or outdated: the window states the opposite, a newer value that replaces it, or shows the memory's claim failing. A memory that is only different, narrower, broader or about another subject is NOT contradicted, and a memory listed in covered_by is never contradicted. Leave it empty when in doubt or when no existing memory was provided. Contradicted memories never change the action.
+- contradiction_reason: when contradicted is not empty, ONE short sentence, in the same language as the conversation, stating what the window shows instead; otherwise "".
 
 Rules:
 1. action "retain": set preview to ONE short self-contained sentence, in the same language as the conversation, stating WHAT gets stored and WHY it matters (favour the why over the what).
@@ -158,6 +170,10 @@ class GateResult:
     # Evidenza di copertura come l'ha dichiarata il modello (ICH-84): su skip
     # alimenta duplicate_of, su retain/uncertain resta solo osservabilita'.
     covered_by: list[int] = field(default_factory=list)
+    # Indici dei candidati smentiti dalla finestra e motivo (ICH-152): il
+    # worker li propone per il ritiro, mai in automatico.
+    contradicted: list[int] = field(default_factory=list)
+    contradiction_reason: str = ""
     candidates: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
     error: str | None = None
@@ -283,6 +299,8 @@ def complete_documents(
     origin: dict[str, str] = {}
     order: list[str] = []
     for i, (url, r) in enumerate(ranked):
+        # Bank di provenienza: serve al ritiro di una memoria smentita (ICH-152).
+        r.setdefault("_bank_url", url)
         doc_id = r.get("document_id")
         is_doc = isinstance(doc_id, str) and bool(doc_id)
         key = doc_id if is_doc else f"\x00{i}"
@@ -313,6 +331,7 @@ def complete_documents(
                         continue
                     if rid is not None and (rid in seen_ids or rid in extra_ids):
                         continue
+                    r.setdefault("_bank_url", origin[key])
                     extra.append(r)
                     extra_text.add(text_key)
                     if rid is not None:
@@ -526,6 +545,30 @@ def evaluate_retain(
                 f"indici copertura fuori range o duplicati: {covered_by!r} "
                 f"su {len(candidates)} candidati"
             )
+        # Campi assenti = nessuna contraddizione: il ritiro e' accessorio e non
+        # deve mandare la finestra in fail-closed.
+        contradicted = data.get("contradicted", [])
+        contradiction_reason = data.get("contradiction_reason", "")
+        if not isinstance(contradicted, list) or any(
+            isinstance(i, bool) or not isinstance(i, int) for i in contradicted
+        ):
+            raise ValueError(f"contradicted non valido: {contradicted!r}")
+        if len(set(contradicted)) != len(contradicted) or any(
+            not 0 <= i < len(candidates) for i in contradicted
+        ):
+            raise ValueError(
+                f"indici contraddizione fuori range o duplicati: {contradicted!r} "
+                f"su {len(candidates)} candidati"
+            )
+        if not isinstance(contradiction_reason, str):
+            raise ValueError(f"contradiction_reason non valida: {contradiction_reason!r}")
+        # ICH-152: una memoria che copre la finestra non puo' esserne smentita,
+        # e senza motivo la domanda di ritiro non e' mostrabile. Nei due casi
+        # il ritiro cade in silenzio: la action resta intatta.
+        contradiction_reason = " ".join(contradiction_reason.split())
+        contradicted = [i for i in contradicted if i not in covered_by]
+        if not contradiction_reason:
+            contradicted = []
         # ICH-84: la copertura e' un giudizio a se' (covered_by), emesso dal
         # modello PRIMA della action; la action resta comunque intoccabile
         # (ICH-82) — degradare a gate_error produrrebbe il fail-closed del
@@ -551,6 +594,8 @@ def evaluate_retain(
             # lascerebbe un bullet orfano nel content inviato al bank (ICH-149).
             durable_claims=[" ".join(c.split()) for c in durable_claims if c.strip()],
             covered_by=covered_by,
+            contradicted=contradicted,
+            contradiction_reason=contradiction_reason if contradicted else "",
             candidates=candidates,
             latency_ms=round(latency, 2),
         )
@@ -779,3 +824,86 @@ def handle_retain_consent(
         "reason": "negative" if decision == "negative" else "new_prompt",
         "preview": str(entry.get("preview") or ""),
     }
+
+
+# ---------------------------------------------------------------------------
+# Ritiro delle memorie smentite (ICH-152). Stessa meccanica del pending retain
+# (file per session_id+cwd, TTL, consumo singolo) in una directory separata.
+# Il ritiro e' un PATCH state=invalidated: reversibile con state=valid, cioe'
+# il restore di invalidate_memory. Nessun ritiro senza un "si'" esplicito.
+# ---------------------------------------------------------------------------
+
+
+def invalidate_pending_dir() -> str:
+    """HS_INVALIDATE_PENDING_DIR consente l'override nei test."""
+    return os.environ.get("HS_INVALIDATE_PENDING_DIR") or cache_dir() + "/hs-invalidate-pending"
+
+
+def save_invalidate_pending(
+    session_id: str, cwd: str, memories: list[dict], reason: str
+) -> bool:
+    """Mette in attesa il ritiro di `memories` ({id, text, bank_url}). False se
+    non c'e' session_id o lo stato non e' scrivibile: niente domanda."""
+    return save_pending(
+        invalidate_pending_dir(),
+        session_id,
+        cwd,
+        [dict(m, reason=reason) for m in memories],
+    )
+
+
+def invalidate_consent_decision(prompt: str) -> str | None:
+    """Si'/no standalone o verbi espliciti del ritiro."""
+    return _consent_decision(
+        prompt,
+        explicit_positive=r"\b(?:ritirala|ritirale|ritira\s+pure)\b",
+        explicit_negative=(
+            r"\bnon\s+ritirar(?:la|le|e)\b",
+            r"\b(?:tienila|tienile|lasciala|lasciale)\b",
+        ),
+    )
+
+
+def invalidate_memory(bank_url: str, memory_id: str, reason: str, timeout: float = 10) -> int:
+    """PATCH /memories/<id> con state=invalidated e il motivo. Ritorna lo status."""
+    request = urllib.request.Request(
+        f"{bank_url}/memories/{urllib.parse.quote(memory_id, safe='')}",
+        data=json.dumps({"state": "invalidated", "reason": reason}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="PATCH",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.status
+
+
+def handle_invalidate_consent(
+    prompt: str, session_id: str, cwd: str, ttl: float = RETAIN_PENDING_TTL
+) -> dict | None:
+    """Da chiamare al prompt successivo alla domanda di ritiro. Si' -> consuma
+    il pending e ritira ogni memoria con il suo motivo; no o prompt nuovo ->
+    scarta. Ritorna l'esito (memories, ed error se un PATCH fallisce), None
+    se non c'era un pending valido."""
+    decision = invalidate_consent_decision(prompt)
+    consumed = consume_pending(invalidate_pending_dir(), session_id, cwd, ttl)
+    if not consumed:
+        return None
+    memories = [m for m in consumed if isinstance(m, dict)]
+    if decision != "positive":
+        return {
+            "action": "discarded",
+            "reason": "negative" if decision == "negative" else "new_prompt",
+            "memories": memories,
+        }
+    done: list[dict] = []
+    try:
+        for m in memories:
+            invalidate_memory(str(m["bank_url"]), str(m["id"]), str(m.get("reason") or ""))
+            done.append(m)
+    except Exception as exc:
+        return {
+            "action": "error",
+            "error": f"{type(exc).__name__}: {exc}",
+            "memories": memories,
+            "invalidated": done,
+        }
+    return {"action": "invalidated", "memories": done}
