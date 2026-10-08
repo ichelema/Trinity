@@ -648,9 +648,26 @@ def command_outcome(cmd: str, result: str, is_error: bool) -> str | None:
     # Il comando finisce in memoria come l'output: stesso filtro.
     if any(p.search(cmd) for p in OUTCOME_SECRET_PATTERNS):
         cmd = SECRET_CMD_PLACEHOLDER
-    elif len(cmd) > OUTCOME_CMD_MAX_CHARS:
-        cmd = cmd[: OUTCOME_CMD_MAX_CHARS - 1] + "…"
-    return f"- {cmd} → {' | '.join(dict.fromkeys(evidence))}"[:OUTCOME_MAX_CHARS]
+    else:
+        cmd = _clip(cmd, OUTCOME_CMD_MAX_CHARS)
+    head = f"- {cmd} → "
+    parts = list(dict.fromkeys(evidence))
+    # ICH-156: prima riga (exit code) e ultima restano; le intermedie cadono per prime.
+    # L'ultima resta in coda anche se ripete una riga precedente.
+    parts.remove(evidence[-1])
+    parts.append(evidence[-1])
+    while len(parts) > 2 and len(head) + len(" | ".join(parts)) > OUTCOME_MAX_CHARS:
+        del parts[1]
+    room = OUTCOME_MAX_CHARS - len(head)
+    if len(parts) == 2 and len(parts[0]) + 3 + len(parts[1]) > room:
+        # All'ultima almeno un terzo dello spazio; la prima prende il resto.
+        parts[1] = _clip(parts[1], max(room // 3, room - len(parts[0]) - 3))
+        parts[0] = _clip(parts[0], room - len(parts[1]) - 3)
+    return (head + " | ".join(parts))[:OUTCOME_MAX_CHARS]
+
+
+def _clip(text: str, max_chars: int) -> str:
+    return text if len(text) <= max_chars else text[: max_chars - 1] + "…"
 
 
 def summarize_window(entries: list[dict], window_turns: int) -> dict:
