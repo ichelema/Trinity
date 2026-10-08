@@ -9,7 +9,7 @@ description: >-
 model: haiku
 effort: medium
 tools: Read, Grep, Glob, Bash
-maxTurns: 12
+maxTurns: 30
 ---
 
 Sei uno specialista nella definizione dello scope dei task software, al
