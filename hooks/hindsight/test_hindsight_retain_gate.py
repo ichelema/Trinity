@@ -3127,6 +3127,17 @@ class WindowContentTests(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.worker.command_outcome(cmd, out, True), "- " + expected)
 
+    def test_secret_filter_keeps_error_lines_with_key_or_token_names(self):
+        # ICH-155: righe d'errore che sembravano segreti.
+        for line in (
+            "SyntaxError: unexpected token: SomeVeryLongIdentifierName",
+            "AssertionError: cache_key=users:123:profile != None",
+            "IntegrityError: duplicate primary_key: customer_account_7731",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.worker.command_outcome("pytest", f"Exit code 1\n{line}", True),
+                                 f"- pytest → Exit code 1 | {line}")
+
     def test_secret_filter_catches_lowercase_colon_and_json_formats(self):
         # Review ICH-150 #C: formati riaperti dal restringimento del filtro.
         for secret in (

@@ -31,10 +31,17 @@ OUTCOME_SECRET_PATTERNS = SECRET_PATTERNS + (
     # dei PEM (non solo esadecimale, cosi' gli SHA git restano).
     # Niente prefisso [A-Za-z0-9_]* davanti: con search() non serve e rende il
     # pattern quadratico sulle righe alfanumeriche lunghe (dump esadecimali).
+    # ICH-155: restano prove "unexpected token: X" e le chiavi di cache e DB
+    # (cache_key, primary_key, foreign_key); ogni altro *_key/token resta fuori.
     re.compile(
-        r"(?:api[_-]?key|[_-]key|secret|passw(?:or)?d|token)[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
+        r"(?:api[_-]?key|(?<!cache)(?<!primary)(?<!foreign)[_-]key|secret|passw(?:or)?d|(?<!unexpected )token)"
+        r"[\"']?\s*[:=]\s*[\"']?[^\s\"']{12,}",
         re.I,
     ),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
+    # Falso positivo accettato (ICH-155): scarta anche identificatori lunghi
+    # non esadecimali (CamelCase di 40+ lettere). Distinguerli dal base64 dei
+    # PEM vorrebbe dire far passare segreti base64 senza cifre: si perde una
+    # prova, mai un segreto.
     re.compile(r"^(?=[A-Za-z0-9+/]*[G-Zg-z+/])[A-Za-z0-9+/]{40,}={0,2}$"),
 )
