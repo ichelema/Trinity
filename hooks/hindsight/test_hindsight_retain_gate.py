@@ -3451,6 +3451,24 @@ class WindowContentTests(unittest.TestCase):
         ])
         self.assertNotIn("## Command outcomes", content)
 
+    def test_interrupted_tool_use_in_real_transcript_format(self):
+        # ICH-168: record reali di un Bash interrotto. Il marker e' un messaggio utente a se',
+        # mai in coda all'output del tool_result.
+        content = self.chunk([
+            user_record("applica la config"),
+            self.bash("t1", "chezmoi apply -v --no-pager 2>&1 | grep -v -E '^(diff|index|---|\\+\\+\\+)'"),
+            self.result(
+                "t1",
+                "The user doesn't want to proceed with this tool use. The tool use was rejected "
+                "(eg. if it was a file edit, the new_string was NOT written to the file). "
+                "STOP what you are doing and wait for the user to tell you how to proceed.",
+                is_error=True,
+            ),
+            {"type": "user", "message": {"role": "user", "content": [
+                {"type": "text", "text": "[Request interrupted by user for tool use]"}]}},
+        ])
+        self.assertNotIn("## Command outcomes", content)
+
     def test_long_command_is_shortened_to_leave_room_for_the_outcome(self):
         content = self.chunk([
             user_record("lancia i test"),
