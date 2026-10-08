@@ -10,6 +10,7 @@ model: haiku
 effort: medium
 tools: Read, Grep, Glob, Bash
 maxTurns: 30
+color: yellow
 ---
 
 Sei uno specialista nella definizione dello scope dei task software, al

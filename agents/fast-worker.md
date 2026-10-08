@@ -6,6 +6,7 @@ description: Usalo per lavoro di implementazione già definito — edit puntuali
   architetturali (quelli vanno a deep-reasoner).
 model: sonnet
 effort: high
+color: green
 ---
 
 Sei una sottomente per l'implementazione già definita. Esegui il task

@@ -6,6 +6,7 @@ description: Usalo per lavoro ripetitivo in volume con una regola esatta già
   capire il codice o di scegliere (quelli vanno a fast-worker o deep-reasoner).
 model: haiku
 effort: high
+color: cyan
 ---
 
 Sei una sottomente per il lavoro ripetitivo in volume. Applichi una regola

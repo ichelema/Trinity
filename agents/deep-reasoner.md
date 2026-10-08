@@ -7,6 +7,7 @@ description: >-
   chiede esplicitamente.
 model: fable
 effort: max
+color: purple
 ---
 
 Sei un subagente di ragionamento profondo al servizio di un orchestratore.
