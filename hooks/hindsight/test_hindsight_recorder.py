@@ -189,7 +189,10 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual((proc.returncode, rec["exit_code"], rec["stdout"]), (0, 0, ""))
 
     def test_no_secret_reaches_disk(self):
-        hook_input = json.dumps({"session_id": "s1", "prompt": "password=hunter2hunter2"})
+        # La chiave anche come NOME di un campo; una variabile d'ambiente qualunque come canary.
+        hook_input = json.dumps(
+            {"session_id": "s1", "prompt": "password=hunter2hunter2", KEY: "chiave come nome di campo"}
+        )
         proc, [rec] = self.run_script(f"""
             import json, urllib.request
             req = urllib.request.Request(
@@ -198,14 +201,15 @@ class RecorderTests(unittest.TestCase):
                 headers={{"Authorization": "Bearer {KEY}"}})
             urllib.request.urlopen(req, timeout=5).read()
             urllib.request.urlopen({self.url!r} + "/key", timeout=5).read()
-        """, env={"OPENAI_API_KEY": KEY, "HOOK_INPUT": hook_input})
+        """, env={"OPENAI_API_KEY": KEY, "HOOK_INPUT": hook_input, "TRINITY_ENV_CANARY": "env-canary-9f3b"})
         self.assertEqual(proc.returncode, 0, proc.stderr)
         with open(self.golden_files("hindsight-recall")[0], encoding="utf-8") as handle:
             raw = handle.read()
-        for secret in (KEY, "hunter2hunter2", "zzz-not-a-real-key", "Bearer"):
+        for secret in (KEY, "hunter2hunter2", "zzz-not-a-real-key", "Bearer", "env-canary-9f3b"):
             self.assertNotIn(secret, raw)
         self.assertTrue(rec["redacted"])
         self.assertEqual(rec["stdin"]["prompt"], "[REDACTED]")
+        self.assertEqual(rec["stdin"]["[REDACTED]"], "chiave come nome di campo")
         self.assertEqual(rec["http"][0]["request_body"]["text"], "testo innocuo")
         self.assertEqual(
             rec["keys_present"],
@@ -218,6 +222,12 @@ class RecorderTests(unittest.TestCase):
         proc, records = self.run_script("print('out')\n")
         self.assertEqual((proc.returncode, proc.stdout, records), (0, "out\n", []))
         self.assertIn("[hs-record]", proc.stderr)
+        # Chiave troppo corta per un redact sicuro: nessun record (fail-closed).
+        os.remove(os.path.join(self.cache, "hs-golden"))
+        proc, records = self.run_script("print('out')\n", env={"VOYAGE_API_KEY": "abc1234"})
+        self.assertEqual((proc.returncode, proc.stdout, records), (0, "out\n", []))
+        self.assertIn("[hs-record] ValueError", proc.stderr)
+        self.assertNotIn("abc1234", proc.stderr)
 
     def test_start_failure_keeps_stdout_and_exit_code(self):
         # Errore nell'installazione dei wrapper (qui atexit.register): start non

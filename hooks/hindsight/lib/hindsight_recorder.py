@@ -396,9 +396,15 @@ def _finish() -> None:
             state_after=_snapshot(_state_paths(_rec["config"])),
             transcripts=transcripts,
         )
-        literals = [v for v in (os.environ.get(k) for k in KEY_ENV) if v and len(v) >= 8]
+        literals = [v for v in (os.environ.get(k) for k in KEY_ENV) if v]
+        if any(len(v) < 8 for v in literals):
+            # Una chiave cosi' corta sta anche dentro numeri e sintassi JSON:
+            # nessun replace la toglie da tutto il file, meglio nessun record.
+            raise ValueError("chiave API sotto gli 8 caratteri: record non scritto")
         hits: list = []
-        record = _scrub(_rec, literals, hits)
+        # Round trip JSON prima dello scrub: lo scrub vede esattamente quello
+        # che finisce su disco (tuple, chiavi non stringa, oggetti resi con str).
+        record = _scrub(json.loads(json.dumps(_rec, default=str)), literals, hits)
         record["redacted"] = bool(hits)
         _write(record)
     except BaseException as exc:
@@ -410,8 +416,9 @@ def _scrub(value: Any, literals: list, hits: list) -> Any:
     hindsight_secrets trova un segreto diventa REDACTED per intero: i pattern
     nascono per search(), e sostituire solo il match lascerebbe pezzi di chiave
     (il corpo di un PEM). I valori letterali delle chiavi API spariscono
-    ovunque; i campi con nome segreto perdono il valore. hits dice se e'
-    successo: il record non e' piu' fedele all'esecuzione."""
+    ovunque, nomi dei campi compresi; i campi con nome segreto perdono il
+    valore. hits dice se e' successo: il record non e' piu' fedele
+    all'esecuzione."""
     if isinstance(value, str):
         out = value
         for literal in literals:
@@ -424,11 +431,12 @@ def _scrub(value: Any, literals: list, hits: list) -> Any:
     if isinstance(value, dict):
         clean = {}
         for key, item in value.items():
-            if isinstance(key, str) and key.lower() in SECRET_KEYS and isinstance(item, str) and item:
-                clean[key] = REDACTED
+            name = _scrub(key, literals, hits)
+            if key.lower() in SECRET_KEYS and isinstance(item, str) and item:
+                clean[name] = REDACTED
                 hits.append(True)
             else:
-                clean[key] = _scrub(item, literals, hits)
+                clean[name] = _scrub(item, literals, hits)
         return clean
     if isinstance(value, list):
         return [_scrub(item, literals, hits) for item in value]
@@ -442,7 +450,7 @@ def _write(record: dict) -> None:
     tmp = path + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(record, f, ensure_ascii=False, indent=1, default=str)
+        json.dump(record, f, ensure_ascii=False, indent=1)
     os.replace(tmp, path)
 
 
