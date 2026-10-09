@@ -1,6 +1,6 @@
 ---
 description:
-  Due review indipendenti in parallelo (trinity:reviewer su Fable e su GPT) su worktree isolati, loop
+  Due review indipendenti in parallelo (trinity:reviewer su Fable, gpt-bridge:reviewer su GPT) su worktree isolati, loop
   di fix minimi e report finale
 argument-hint: <issue-id...> <model>
 disable-model-invocation: true
@@ -10,8 +10,10 @@ Esegui due review indipendenti e parallele della PR delle issue indicate su work
 applica i fix che meritano di essere fatti in un loop, finché non emergono più finding. In uscita,
 report sintetico.
 
-Le due review usano lo stesso agente `trinity:reviewer` su due modelli diversi: Fable (default
-dell'agente) e GPT 5.6 sol xhigh (`claude-gpt-5-6-sol-xhigh` via proxy LiteLLM).
+Le due review usano lo stesso prompt del reviewer su due modelli diversi: `trinity:reviewer` su Fable
+e `gpt-bridge:reviewer` su GPT 5.6 sol xhigh (via proxy LiteLLM, servito dalla mod gpt-bridge).
+Se `gpt-bridge:reviewer` non compare tra i subagent_type disponibili, la mod non è caricata: fermati
+e dillo all'utente prima di creare i worktree.
 
 L'ultimo argomento è il modello: identifica il worktree di implementazione creato da
 `/1_create-worktree` (e quindi il branch della PR). Non sceglie il modello di esecuzione.
@@ -75,28 +77,12 @@ Per ogni round:
    - review `fable`: tool Agent con `subagent_type: trinity:reviewer`; nel prompt digli
      di leggere `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con
      quegli argomenti al posto di `$ARGUMENTS`;
-   - review `gpt`: il tool Agent non può scegliere GPT, quindi lanciala da Bash con una
-     sessione headless sul proxy LiteLLM già avviato, con lo stesso agente:
-     ```bash
-     ANTHROPIC_BASE_URL="http://127.0.0.1:4000" \
-     ANTHROPIC_AUTH_TOKEN="$(cat ~/.litellm/master-key.txt)" \
-     ANTHROPIC_DEFAULT_FABLE_MODEL="claude-gpt-5-6-sol-xhigh" \
-     ANTHROPIC_DEFAULT_SONNET_MODEL="claude-gpt-5-6-sol-high" \
-     GH_CONFIG_DIR="$(cygpath -w ~/.config/gh)" \
-     ~/.local/bin/claude.exe -p --agent trinity:reviewer --model claude-gpt-5-6-sol-xhigh \
-       "/trinity:workflow:3_independent-review <issue-id...> <model> <review-wt-path>" \
-       2> >(grep -v '^\[claude-code:unrecognized_model\]' >&2)
-     ```
-     `ANTHROPIC_DEFAULT_FABLE_MODEL` serve perché `3_independent-review` ha `model: fable` nel
-     frontmatter: senza mappatura la sessione chiede al proxy `claude-fable-5-1` e fallisce con
-     400. `ANTHROPIC_DEFAULT_SONNET_MODEL` serve al classificatore della modalità auto: con
-     `--agent` il classificatore chiede `claude-sonnet-5` e poi `claude-opus-5`, che il proxy non
-     ha, e blocca ogni comando Bash; la mappatura gli dà subito un modello GPT che risponde, e la
-     review resta su `claude-gpt-5-6-sol-xhigh`. `GH_CONFIG_DIR` serve perché `gh` nella sessione
-     headless trovi il login; il filtro su stderr toglie solo l'avviso innocuo `unrecognized_model`
-     (Claude Code non conosce il nome `claude-gpt-5-6-sol-xhigh`). Se `<model>` coincide con uno
-     dei due modelli di review (`fable` o `gpt`), segnalalo: quella review gira sullo stesso
-     modello che ha scritto il codice ed è meno indipendente.
+   - review `gpt`: tool Agent con `subagent_type: gpt-bridge:reviewer`, stesso prompt della review
+     `fable`. Il subagente gira su GPT via proxy LiteLLM con tool e permessi nativi, e compare nel
+     pannello degli agenti come l'altro.
+   Lancia le due Agent nello stesso messaggio, così girano in parallelo. Se `<model>` coincide con
+   uno dei due modelli di review (`fable` o `gpt`), segnalalo: quella review gira sullo stesso
+   modello che ha scritto il codice ed è meno indipendente.
 3. Raccogli i due report.
 4. Rimuovi i due worktree leggendo e seguendo
    `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` (per lo stesso motivo non puoi

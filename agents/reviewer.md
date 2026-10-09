@@ -5,6 +5,7 @@ description: >-
   delle issue: cerca bug, requisiti mancanti, regressioni e casi limite e
   restituisce un report con finding verificati. Non modifica file.
 model: fable
+gpt-model: claude-gpt-5-6-sol-xhigh
 effort: high
 tools: Read, Grep, Glob, Bash
 color: red

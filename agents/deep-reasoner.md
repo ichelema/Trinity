@@ -6,6 +6,7 @@ description: >-
   concisa su cui l'orchestratore può agire; implementa solo se il task lo
   chiede esplicitamente.
 model: fable
+gpt-model: claude-gpt-5-6-sol-xhigh
 effort: max
 color: purple
 ---

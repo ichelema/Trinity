@@ -178,6 +178,8 @@ Sei il lead.
 Delega il ragionamento a trinity:deep-reasoner, l'implementazione già definita a trinity:fast-worker (se la
 sessione è già Sonnet, fallo tu: fast-worker è lo stesso modello).
 Il lavoro ripetitivo in volume con una regola esatta va a trinity:bulk-worker.
+Per una decisione di design con trade-off reali, chiedi lo stesso quesito anche a gpt-bridge:deep-reasoner
+(GPT via LiteLLM, se disponibile) e confronta le due conclusioni prima di scegliere.
 
 Mantieni tutte le modifiche entro lo scope delle issue. Ogni riga modificata deve essere
 riconducibile a un requisito di una delle issue: le deviazioni vanno segnalate all'utente, non
