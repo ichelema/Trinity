@@ -42,13 +42,35 @@ sit at that prompt rather than finish.
 
 `hermes plugins enable` is *not* what activates a memory provider — Hermes treats providers as
 `kind: exclusive` and its plugin-enable gate deliberately skips them. A provider is activated by
-`memory.provider: <name>` in `config.yaml`, which `hermes memory setup` writes. Setup also installs
-the mode-dependent extras (`local_embedded` needs `hindsight-all`, not just the client), so
-`plugins install` on its own leaves the provider reporting "not available" in embedded mode.
+`memory.provider: <name>` in `config.yaml`, which `hermes memory setup` writes.
 
-`local_embedded` mode needs `hindsight-all`, which `pyproject.toml` deliberately does not declare
-(it would push the local-ML stack onto cloud-mode users). The setup wizard installs it, and
-`embedded.py::_ensure_local_runtime` self-installs it on the availability check as a backstop.
+### How `local_embedded` runs
+
+The Hindsight server is **not** a dependency of Hermes' venv. `local_embedded` starts it as a
+separate process — an installed `hindsight-api` binary, else a `uvx hindsight-api` fallback that
+gets its own environment — and talks HTTP to it. This venv keeps only `hindsight-client` and
+`hindsight-embed`, both declared in `pyproject.toml`, so every mode installs with the plugin and
+nothing has to be fetched at runtime.
+
+That is not a size optimisation, it is the only shape that installs. `hindsight-all` pulls the whole
+`hindsight-api-slim` tree, which cannot resolve against Hermes' pinned extras: api-slim needs
+`protobuf>=7.35.1` while `mem0ai==2.0.10` and `modal==1.5.5` cap it below 7.0, and
+`opentelemetry-semantic-conventions>=0.65b0` while `mistralai==2.4.8` caps it below 0.61. Relaxing
+one pin only uncovers the next. It is also 482 MB on macOS arm64 and 3.2 GB on Linux x86_64 (the
+CUDA wheels torch pulls there) that cloud-mode users would pay for nothing.
+
+`_new_embedded_client` therefore composes what the old `hindsight.HindsightEmbedded` wrapper composed
+internally — `hindsight_embed.get_embed_manager()` plus `hindsight_client.Hindsight` — instead of
+importing it. **Existing embedded users keep everything**: the profile decides the daemon, so the
+database (`~/.pg0/instances/hindsight-embed-<profile>/`) and the profile env
+(`~/.hindsight/profiles/<profile>.env`) are the same files, read the same way. No migration step, no
+re-setup.
+
+The plugin no longer calls `tools.lazy_deps.install_specs` from anywhere. On package-manager Hermes
+that is a retired shim which handed the process to the updater and exited instead of installing, so
+every `hermes` invocation became a ~40s "update" that drained `hermes-gateway` and still left the
+import missing (NousResearch/hermes-agent#126494, fixed upstream in af26acab73 to raise
+`ImportError`). There is nothing left for it to install.
 
 ## Coming from the built-in provider
 
@@ -151,7 +173,7 @@ which is what records the current pin.
 hermes memory setup    # select "hindsight"
 ```
 
-The setup wizard installs dependencies automatically via `uv`, walks you through configuration, and offers to seed the bank with a **starter memory template** (a curated set of dispositions/instructions for common agent roles) — you can skip it, and it warns before overwriting an already-configured bank.
+The setup wizard installs nothing (dependencies come with the plugin), walks you through configuration, and offers to seed the bank with a **starter memory template** (a curated set of dispositions/instructions for common agent roles) — you can skip it, and it warns before overwriting an already-configured bank.
 
 Or manually (cloud mode with defaults):
 ```bash
@@ -197,9 +219,29 @@ Config file: `~/.hermes/hindsight/config.json`
 | Key | Default | Description |
 |-----|---------|-------------|
 | `bank_id` | `hermes` | Memory bank name (static fallback used when `bank_id_template` is unset or resolves empty) |
-| `bank_id_template` | — | Optional template to derive the bank name dynamically. Placeholders: `{profile}`, `{workspace}`, `{platform}`, `{user}`, `{session}`. Example: `hermes-{profile}` isolates memory per active Hermes profile. Empty placeholders collapse cleanly (e.g. `hermes-{user}` with no user becomes `hermes`). |
+| `bank_id_template` | — | Optional template to derive the bank name dynamically. Placeholders: `{profile}`, `{workspace}`, `{project}`, `{platform}`, `{user}`, `{session}`. `{project}` is the name of the git repository Hermes runs in; every worktree of a repository resolves to the same name, and it is empty outside a repository or for one rooted at your home directory. Example: `hermes-{profile}` isolates memory per active Hermes profile, `{project}` gives each repository its own bank. Empty placeholders collapse cleanly (e.g. `hermes-{user}` with no user becomes `hermes`). |
+| `mirror_to_own_bank` | `false` | Also write to `bank_id` when the template resolves to a different bank, so a profile keeps its own memory while working in project banks. |
+| `additional_banks` | — | Extra banks to write to and recall from, in priority order. |
+| `recall_additional_banks` | — | Extra banks to recall from but never write to, searched after the write banks. Alias `recallAdditionalBanks`, the name the Claude Code integration uses. A bank also listed in `additional_banks` stays writable. |
+| `trusted_project_dirs` | — | Absolute folders whose git repositories may choose their own bank with a `.hindsight/config.toml`. Empty by default, so a cloned repository cannot redirect your memory. |
 | `bank_mission` | — | Reflect mission (identity/framing for reflect reasoning). Applied via Banks API. |
 | `bank_retain_mission` | — | Retain mission (steers what gets extracted). Applied via Banks API. |
+
+#### Multiple banks
+
+The primary bank is chosen in this order: a `.hindsight/config.toml` in a trusted repository, then `bank_id_template`, then `bank_id`. Writes go to the primary, then `bank_id` when `mirror_to_own_bank` is on, then each `additional_banks` entry. Recall searches the same banks and then each `recall_additional_banks` entry, all at once, each with the configured budget and `recall_max_tokens`; results are merged in that order and deduplicated by text. Reflect uses the primary bank only.
+
+The three list settings take a JSON list or comma-separated text; use the JSON form for a value that contains a comma.
+
+A failing extra bank is skipped for five minutes, with one warning when it goes down and one info line when it answers again; recall and writes cool down separately, and a bank misses the writes made while its writes are cooling down. An extra bank that has not answered after 80% of `timeout` counts as failing, so it never costs the primary its results. A failing primary bank fails the call exactly as it does with a single bank, and a write stops there, before any extra bank is touched.
+
+A repository that is itself inside one of the `trusted_project_dirs` (a linked worktree is judged by where the worktree is) can name its bank in `.hindsight/config.toml` at its root or in any folder below it:
+
+```toml
+bank_id = "acme-billing"
+```
+
+The lookup stops at the repository root. Only `bank_id` is read.
 
 ### Recall
 
@@ -213,6 +255,7 @@ Config file: `~/.hermes/hindsight/config.json`
 | `recall_tags` | — | Tags to filter when searching memories |
 | `recall_tags_match` | `any` | Tag matching mode: `any` / `all` / `any_strict` / `all_strict` |
 | `recall_types` | `observation` | Fact types surfaced by recall (both auto-recall and the `hindsight_recall` tool). Comma-separated string or JSON list. **Default narrowed to `observation` only** (see "Behavior change" below). Set to `observation,world,experience` to also include raw facts. |
+| `recall_min_scores` | — | Minimum relevance per score field, as a JSON object (e.g. `{"reranker": 0.25}` or `{"semantic": 0.5}`). Applies to both auto-recall and the `hindsight_recall` tool. See the tip below. |
 | `auto_recall` | `true` | Automatically recall memories before each turn |
 | `recall_sync` | `false` | Recall synchronously against the *current* message each turn (higher relevance, adds recall latency). Default off: recall runs in the background and is injected on the next turn. |
 | `recall_indicator` | `true` | Show a `👁️ Hindsight — recalled N memories` status line when auto-recall injects memory. Turn off for customer-facing agents. |
@@ -225,6 +268,17 @@ Config file: `~/.hermes/hindsight/config.json`
 >
 > Restore the broad recall with `"recall_types": "observation,world,experience"` (string or JSON list) in `~/.hermes/hindsight/config.json`. This applies to **both** auto-recall and the `hindsight_recall` tool — both read the same `recall_types` setting (the tool schema has no per-call `types` argument), so narrowing the default narrows both paths.
 
+> **Tip — `recall_min_scores` against off-topic recall.** Recall ranks, it does not judge relevance: a question
+> unrelated to anything stored still comes back with up to `recall_max_tokens` of the least-bad memories. The
+> `reranker` score separates the two cleanly — on a small bank relevant hits scored 0.7-0.97 and unrelated ones
+> 0.0-0.1 — so `"recall_min_scores": {"reranker": 0.25}` in `~/.hermes/hindsight/config.json` turns that noise
+> into an empty recall. The server only guarantees `reranker` and `final` floors; a `semantic` or `keyword` floor
+> prunes just its own retrieval arm there, and a result found by another arm still comes back with a `null` score
+> for that stage. The plugin therefore also checks every floor against the scores each result reports, and rejects
+> a result that does not report the floored stage. Check the scores on your own bank before tuning a floor: with a
+> multilingual embedding model, `{"semantic": 0.5}` separated relevant from unrelated queries better than the
+> reranker did. Unset by default, so nothing changes unless you opt in.
+
 ### Retain
 
 | Key | Default | Description |
@@ -235,6 +289,7 @@ Config file: `~/.hermes/hindsight/config.json`
 | `retain_context` | `conversation between Hermes Agent and the User` | Context label for retained memories |
 | `retain_tags` | — | Default tags applied to retained memories; merged with per-call tool tags |
 | `retain_source` | — | Opt-in `metadata.source` attached to retained memories (identifies the storing client, e.g. `hermes`). Empty by default — no attribution tag ships unless you set it. |
+| `retain_strategy` | — | Named retain strategy sent with every stored item (`HINDSIGHT_RETAIN_STRATEGY`). The bank must define it under `retain_strategies`; an unknown name is ignored by the server. Empty lets the bank decide. |
 | `retain_indicator` | `true` | Show a `👁️ Hindsight — saving to memory…` status line when a turn is saved. Turn off for customer-facing agents. |
 | `retain_user_prefix` | `User` | Label used before user turns in auto-retained transcripts |
 | `retain_assistant_prefix` | `Assistant` | Label used before assistant turns in auto-retained transcripts |
@@ -267,6 +322,11 @@ order is explicit config → secret scope → the on-disk profile env, and the
 rewrite path is fail-closed: a build with no key never clobbers a profile
 file that already holds one.
 
+The plugin owns only the LLM, log-level and idle-timeout keys in that file. Anything else in it
+(the port hindsight-embed records, a tenant extension and its `HINDSIGHT_API_TENANT_API_KEY`) is
+left alone and never counts as a config change, and the plugin's client sends that tenant key to
+the daemon.
+
 ## Tools
 
 Available in `hybrid` and `tools` memory modes:
@@ -288,11 +348,15 @@ Available in `hybrid` and `tools` memory modes:
 | `HINDSIGHT_BANK_ID` | Override bank name |
 | `HINDSIGHT_BUDGET` | Override recall budget |
 | `HINDSIGHT_MODE` | Override mode (`cloud`, `local_embedded`, `local_external`) |
+| `HINDSIGHT_RETAIN_CONTEXT` | Label stored with each retained conversation (`retain_context`) |
+| `HINDSIGHT_RETAIN_INDICATOR` | `false` hides the "saving to memory" status line (`retain_indicator`) |
+| `HINDSIGHT_RECALL_INDICATOR` | `false` hides the "recalled N memories" status line (`recall_indicator`) |
+| `HINDSIGHT_RECALL_SYNC` | `true` recalls against the current message before answering (`recall_sync`) |
 
 ## Client Version
 
-Requires `hindsight-client >= 0.10.1` and, for `local_embedded`, `hindsight-embed >= 0.10.1`. The plugin
-auto-upgrades the client on session start if an older version is detected.
+Requires `hindsight-client >= 0.10.1` and, for `local_embedded`, `hindsight-embed >= 0.10.1`. A version below
+the floor only logs a warning; `hermes plugins update hindsight` moves the environment.
 
 The floor is 0.10.1 rather than the 0.6.1 this plugin needs at the API level because
 `hindsight-embed` 0.10.0 breaks `local_embedded` outright: its daemon probe cleared the calling
@@ -321,17 +385,20 @@ hermes config set memory.user_profile_enabled false   # optional: the USER.md pr
 Setting both to `false` removes the built-in `memory` tool from the agent entirely. Re-enable later
 by setting the same flags back to `true`.
 
+If you keep the built-in stores on, every entry the agent adds or replaces in them is also saved to
+every bank Hindsight writes to, tagged `builtin-memory`, `builtin-target:<memory|user>` and `builtin-action:<add|replace>`,
+so a fact pruned from the size-capped file is not lost. Removals are not mirrored.
+
 ## Troubleshooting
 
 **Tools don't appear in `/tools`** — the provider skips tool registration when it isn't configured.
 Check `hermes memory status` reports `hindsight` as the active provider and `Status: available`. In
 `memory_mode: context` the tools are hidden on purpose.
 
-**`Status: not available` in `local_embedded`** — the embedded runtime (`hindsight-all`) isn't
-installed. The plugin self-installs it on the availability check; if that is blocked
-(`security.allow_lazy_installs: false`, or a sealed venv) install it yourself:
-`uv pip install --python "$(hermes doctor --python-path)" hindsight-all`, or re-run
-`hermes memory setup`.
+**`Status: not available` in `local_embedded`** — this plugin's own packages
+(`hindsight-client`, `hindsight-embed`) are missing from the environment, which happens when a venv
+rebuild dropped the plugin member. Run `hermes pm repair` and restart Hermes to rebuild them. The Hindsight server is *not* needed in that venv — it runs as a separate
+process, and first use downloads it if no `hindsight-api` binary is present yet.
 
 **`Timeout context manager should be used inside a task`** — `hindsight-embed` 0.10.0. Run
 `hermes plugins update hindsight` to move to the 0.10.1 floor.
