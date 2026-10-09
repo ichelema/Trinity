@@ -39,14 +39,24 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 ## Esecuzione multi-agente
 
 - Il command gira in modalità multi-agente: Fable (il modello della sessione)
-  fa da ORCHESTRATORE e non delega la supervisione; i task di lavoro vanno a
-  subagent lanciati col tool Agent con `model: "opus"` (oggi Opus 5.5).
-- In AUDIT delega a subagent Opus, in parallelo quando indipendenti: lettura
-  di daily e trascrizioni, audit file-based per progetto, audit di ciascun
-  bank Hindsight, verifiche sul campo. Ogni subagent restituisce dati grezzi
-  (fatti, discrepanze, proposte), non il report.
-- In APPLY puoi delegare a subagent Opus gruppi omogenei di azioni; la
-  marcatura degli esiti nel report e l'aggiornamento dello stato restano
+  fa da ORCHESTRATORE e non delega la supervisione; i task di lavoro vanno
+  agli agenti Trinity (`subagent_type`), senza override di `model`:
+  - `trinity:bulk-worker` (Haiku) per il lavoro meccanico con regola esatta:
+    paginazione e dump dei bank Hindsight via REST, inventario della memoria
+    file-based (frontmatter, indice, file orfani), verifiche sul campo con
+    comando già indicato, ricerche Grep mirate nelle trascrizioni.
+  - `trinity:deep-reasoner` (Fable) per il lavoro di giudizio: estrazione
+    dei fatti dalle daily con le priorità del passo 6, confronto semantico
+    tra daily e memorie, proposte di azione con Fonte e Verifica.
+- In AUDIT lancia gli agenti in parallelo quando indipendenti: un bulk-worker
+  per bank Hindsight e uno per la memoria file-based, un deep-reasoner per
+  blocco di daily (massimo 7 daily per agente), poi un deep-reasoner per bank
+  che riceve i fatti delle daily e il dump del bank e restituisce le
+  discrepanze. Ogni agente restituisce dati grezzi (fatti, discrepanze,
+  proposte), non il report.
+- In APPLY puoi delegare a `trinity:bulk-worker` gruppi omogenei di azioni
+  (stesso tipo, stessa procedura della tassonomia, post-condizione inclusa);
+  la marcatura degli esiti nel report e l'aggiornamento dello stato restano
   all'orchestratore.
 - CONTROLLO FINALE (Fable, mai delegato): prima di scrivere il report o il
   riepilogo di apply, verifica il lavoro dei subagent — campiona le azioni
