@@ -257,6 +257,10 @@ class RecorderTests(unittest.TestCase):
         state = os.path.join(self.cache, "hs-retain-state.json")
         with open(state, "w", encoding="utf-8") as handle:
             json.dump({"a": 1}, handle)
+        # ~300 KiB: il failcheck lo legge tutto, il record deve averlo tutto.
+        degraded = "2026-10-09T10:00:00Z\tfallback RRF\n" * 9000
+        with open(os.path.join(self.cache, "hs-reranker-degraded.log"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(degraded)
         open(os.path.join(self.cache, "hs-python-real.path"), "w").close()
         proc, [rec] = self.run_script(
             f"""
@@ -279,6 +283,7 @@ class RecorderTests(unittest.TestCase):
         self.assertNotIn(key, after)
         self.assertEqual(before["hs-retain-state.json"]["content"], {"a": 1})
         self.assertEqual(after["hs-retain-state.json"]["content"], {"a": 2})
+        self.assertEqual(before["hs-reranker-degraded.log"]["content"], degraded)
         self.assertFalse(any("hs-python" in name for name in before))
         tail = rec["transcripts"][transcript]
         self.assertEqual(len(tail["tail"]), 200)

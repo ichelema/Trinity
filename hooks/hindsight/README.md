@@ -68,7 +68,7 @@ Il record (`version: 1`) contiene: argv, pid/ppid, cwd, piattaforma, orari, `ses
 `state_before`), config effettiva, presenza delle chiavi API (mai i valori), ogni `urlopen`
 (metodo, URL, timeout, body inviato, status, body **letto dal chiamante**, errori), ogni
 `subprocess.check_output` (git), stdout, `exit_code`, traceback, file di stato prima e dopo
-(`state_before`/`state_after`; oltre 256 KiB solo `omitted`), coda del transcript (200 righe, con
+(`state_before`/`state_after`, contenuto intero), coda del transcript (200 righe, con
 `changed` se il file cresce durante l'esecuzione) e `redacted`.
 
 - **Privacy:** contiene testo delle conversazioni; resta nella cache per-utente (file 0600). Mai

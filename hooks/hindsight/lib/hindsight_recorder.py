@@ -47,9 +47,6 @@ SECRET_KEYS = {
     "authorization", "api_key", "apikey", "x-api-key", "token", "access_token",
     "auth_token", "password", "passwd", "secret", "client_secret",
 }
-# ponytail: file di stato oltre questa soglia solo size e mtime (omitted: non
-# rigiocabili); oggi la supera solo hs-reranker-degraded.log, che ruota a 5 MB.
-MAX_INLINE = 256 * 1024
 # Coda del transcript: le stesse righe di load_transcript del worker (il recall
 # ne legge 80 con last_assistant_text). Solo per gli script che lo leggono.
 TRANSCRIPT_LINES = 200
@@ -146,17 +143,14 @@ def _snapshot(paths: dict) -> dict:
 
 
 def _read_state(out: dict, key: str, path: str) -> None:
+    """Sempre il contenuto intero: gli hook leggono questi file per intero
+    (hs-reranker-degraded.log arriva a 5 MB e decide l'avviso del failcheck)."""
     try:
         st = os.stat(path)
         if not stat.S_ISREG(st.st_mode):
             return
-        item: dict = {"size": st.st_size, "mtime": st.st_mtime}
-        if st.st_size > MAX_INLINE:
-            item["omitted"] = True
-        else:
-            with open(path, "rb") as f:
-                item["content"] = _decode(f.read())
-        out[key] = item
+        with open(path, "rb") as f:
+            out[key] = {"size": st.st_size, "mtime": st.st_mtime, "content": _decode(f.read())}
     except OSError:
         pass  # sparito tra listdir e open: per lo snapshot non c'era
 
