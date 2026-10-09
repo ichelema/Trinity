@@ -53,6 +53,11 @@ from datetime import datetime, timezone
 # Config centralizzata (vedi hindsight.config.json). sys.path insert necessario
 # sia quando il worker gira come script sia quando viene importato dai test.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+# Recorder dei golden (ICH-173): solo da processo a se' (--queued, --drain,
+# modalita' script), mai quando recall o test importano il modulo.
+if __name__ == "__main__" and os.environ.get("HINDSIGHT_RECORD") == "1":
+    import hindsight_recorder
+    hindsight_recorder.start("hindsight-retain-worker")
 from hindsight_config import cache_dir, load_config, recall_bank_urls, resolve_bank, retain_bank_url, window_max_chars
 from hindsight_debug import debug_log
 from hindsight_file_lock import file_lock

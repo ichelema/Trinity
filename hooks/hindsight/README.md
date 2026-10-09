@@ -32,6 +32,7 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | `hindsight_multibank.py`  | recall multi-bank: fan-out parallelo sui bank + fusione con rerank globale (Voyage) |
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
 | `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
+| `hindsight_recorder.py`   | recorder dei golden per il porting (ICH-173): con `HINDSIGHT_RECORD=1` ogni hook Python e il worker scrivono un record JSON in `$HS_CACHE_DIR/hs-golden/` (vedi «Recorder dei golden») |
 | `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank; segnala anche i candidati smentiti dalla finestra (ICH-152): il worker chiede «Ritiro la memoria contraddetta?» e solo dopo il «sì» li ritira (PATCH `state=invalidated`, reversibile; pending in `$HS_CACHE_DIR/hs-invalidate-pending/`, mai nel drain); se il turno ha già la domanda del retain, la domanda di ritiro slitta al primo turno libero (ICH-166) |
 | `hindsight_secrets.py`    | pattern dei segreti condivisi (ICH-159): `SECRET_PATTERNS` per il benchmark del gate, `OUTCOME_SECRET_PATTERNS` per gli esiti dei comandi nel retain worker |
 | `hs-python.sh`            | sourced da ogni hook: risolve in `HS_PY` un interprete Python utilizzabile (indipendente dal PATH di sessione) ed esporta `PYTHONUTF8=1` |
@@ -53,6 +54,32 @@ classificati in una sola chiamata a `gpt-5.6-luna`:
 Il classificatore è fail-open: chiave mancante, timeout o output invalido iniettano i risultati
 originali. `recall_debug_in_context: true` sostituisce il blocco normale con una diagnostica che
 mostra route, conteggi e testo completo delle sole memorie effettivamente iniettate.
+
+## Recorder dei golden (`HINDSIGHT_RECORD`)
+
+Per il porting nella mod `trinity-memory` (ICH-173): con `HINDSIGHT_RECORD=1` nell'ambiente di
+Claude Code ogni esecuzione di `hindsight-recall.sh`, `hindsight-failcheck.sh`,
+`hindsight-mm-inject.sh` e del worker (`--queued`, `--drain`, modalità script) scrive un record
+JSON in `$HS_CACHE_DIR/hs-golden/<script>/<UTC>-<pid>.json` (`lib/hindsight_recorder.py`). Con un
+valore diverso da `1`, o senza la variabile, il modulo non viene nemmeno importato.
+
+Il record (`version: 1`) contiene: argv, pid/ppid, cwd, piattaforma, orari, `session_id`, `stdin`
+(`HOOK_INPUT`; `null` nel worker `--queued`/`--drain`, il cui input è l'entry di coda in
+`state_before`), config effettiva, presenza delle chiavi API (mai i valori), ogni `urlopen`
+(metodo, URL, timeout, body inviato, status, body **letto dal chiamante**, errori), ogni
+`subprocess.check_output` (git), stdout, `exit_code`, traceback, file di stato prima e dopo
+(`state_before`/`state_after`; oltre 256 KiB solo `omitted`), coda del transcript (200 righe, con
+`changed` se il file cresce durante l'esecuzione) e `redacted`.
+
+- **Privacy:** contiene testo delle conversazioni; resta nella cache per-utente (file 0600). Mai
+  header HTTP né variabili d'ambiente. Una stringa in cui un pattern di `hindsight_secrets.py`
+  trova un segreto diventa `[REDACTED]` per intero, e i valori di `OPENAI_API_KEY`,
+  `TYPESAFE_API_KEY`, `VOYAGE_API_KEY` spariscono ovunque: `redacted: true` dice che il record non
+  è più fedele all'esecuzione.
+- **Limiti:** lo stato "dopo" del recall può dipendere dal worker staccato ancora in corso; se
+  Claude Code chiude l'hook per timeout il record manca; su Windows la lettura dello stato può
+  intralciare per un attimo il rename dell'outbox del worker. I record pesano (coda del
+  transcript): il recorder va acceso solo per le sessioni di raccolta.
 
 ## 📁 `ops/` — script operativi e utility
 

@@ -43,6 +43,9 @@ except Exception:
     pass
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
+if os.environ.get("HINDSIGHT_RECORD") == "1":  # recorder dei golden (ICH-173)
+    import hindsight_recorder
+    hindsight_recorder.start("hindsight-failcheck")
 from hindsight_config import cache_dir, load_config, retain_bank_url, recall_bank_urls
 from hindsight_debug import debug_log
 
