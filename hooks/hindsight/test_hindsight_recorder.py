@@ -336,7 +336,8 @@ class RecorderTests(unittest.TestCase):
 
     def test_entry_points_record_only_with_record_1(self):
         # Guardia nei punti d'ingresso: un record per failcheck, mm-inject e
-        # worker --drain con HINDSIGHT_RECORD=1, nessuno con un altro valore.
+        # worker (--drain e modalita' script) con HINDSIGHT_RECORD=1, nessuno
+        # con un altro valore.
         queue = os.path.join(self.tmp.name, "queue")
         os.makedirs(queue)
         env = {
@@ -345,23 +346,26 @@ class RecorderTests(unittest.TestCase):
             "HS_RETAIN_QUEUE_DIR": queue,
             "HS_RETAIN_STATE_DIR": self.tmp.name,
         }
-        runs = {
-            "hindsight-failcheck": [BASH, os.path.join(HERE, "hindsight-failcheck.sh").replace(os.sep, "/")],
-            "hindsight-mm-inject": [BASH, os.path.join(HERE, "hindsight-mm-inject.sh").replace(os.sep, "/")],
-            "hindsight-retain-worker": [sys.executable, os.path.join(HERE, "hindsight-retain-worker.py"), "--drain"],
-        }
+        worker = os.path.join(HERE, "hindsight-retain-worker.py")
+        runs = [
+            ("hindsight-failcheck", [BASH, os.path.join(HERE, "hindsight-failcheck.sh").replace(os.sep, "/")]),
+            ("hindsight-mm-inject", [BASH, os.path.join(HERE, "hindsight-mm-inject.sh").replace(os.sep, "/")]),
+            ("hindsight-retain-worker", [sys.executable, worker, "--drain"]),
+            ("hindsight-retain-worker", [sys.executable, worker]),
+        ]
         for value, expected in (("0", 0), ("1", 1)):
-            for script, cmd in runs.items():
-                with self.subTest(script=script, record=value):
+            for script, cmd in runs:
+                with self.subTest(cmd=cmd[1:], record=value):
+                    before = len(self.records(script))
                     proc = subprocess.run(
                         cmd, input="{}", env={**self.env, **env, "HINDSIGHT_RECORD": value},
                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
                     )
                     self.assertEqual(proc.returncode, 0, proc.stderr)
                     records = self.records(script)
-                    self.assertEqual(len(records), expected)
-                    if records:
-                        self.assertEqual(records[0]["exit_code"], 0)
+                    self.assertEqual(len(records) - before, expected)
+                    if expected:
+                        self.assertEqual(records[-1]["exit_code"], 0)
 
 
 if __name__ == "__main__":
