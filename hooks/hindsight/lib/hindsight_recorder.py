@@ -149,10 +149,34 @@ def _read_state(out: dict, key: str, path: str) -> None:
         st = os.stat(path)
         if not stat.S_ISREG(st.st_mode):
             return
-        with open(path, "rb") as f:
+        with _open_shared(path) as f:
             out[key] = {"size": st.st_size, "mtime": st.st_mtime, "content": _decode(f.read())}
     except OSError:
         pass  # sparito tra listdir e open: per lo snapshot non c'era
+
+
+def _open_shared(path: str):
+    """Apre in lettura binaria. Su Windows con FILE_SHARE_DELETE, che open()
+    non concede: lo snapshot non blocca il remove o il rename di entry e
+    outbox fatto da un altro hook in quell'istante. Resta bloccato solo un
+    os.replace SOPRA il file letto: Windows lo nega a qualunque lettore."""
+    if sys.platform != "win32":
+        return open(path, "rb")
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = (
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+        wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+    )
+    # GENERIC_READ; share READ|WRITE|DELETE; OPEN_EXISTING; FILE_ATTRIBUTE_NORMAL
+    handle = k32.CreateFileW(path, 0x80000000, 0x7, None, 3, 0x80, None)
+    if handle in (None, ctypes.c_void_p(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb")
 
 
 def _transcripts(stdin, state: dict) -> dict:

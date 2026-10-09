@@ -290,6 +290,21 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(tail["tail"][-1], '{"n": 249}')
         self.assertFalse(tail["changed"])
 
+    @unittest.skipUnless(sys.platform == "win32", "FILE_SHARE_DELETE esiste solo su Windows")
+    def test_state_read_does_not_block_remove(self):
+        # Con open() os.remove fallirebbe (WinError 32) mentre il recorder legge
+        # un outbox: il recall lo lascerebbe li' e rifarebbe la domanda.
+        path = os.path.join(self.cache, "x.out.json")
+        with open(path, "w") as handle:
+            handle.write("{}")
+        proc, _ = self.run_script(f"""
+            import os
+            with hindsight_recorder._open_shared({path!r}) as f:
+                os.remove({path!r})
+                print(f.read().decode())
+        """)
+        self.assertEqual((proc.returncode, proc.stdout), (0, "{}\n"), proc.stderr)
+
     def test_entry_points_record_only_with_record_1(self):
         # Guardia nei punti d'ingresso: un record per failcheck, mm-inject e
         # worker --drain con HINDSIGHT_RECORD=1, nessuno con un altro valore.

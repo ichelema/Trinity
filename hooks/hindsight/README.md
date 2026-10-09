@@ -77,8 +77,10 @@ Il record (`version: 1`) contiene: argv, pid/ppid, cwd, piattaforma, orari, `ses
   `TYPESAFE_API_KEY`, `VOYAGE_API_KEY` spariscono ovunque: `redacted: true` dice che il record non
   è più fedele all'esecuzione.
 - **Limiti:** lo stato "dopo" del recall può dipendere dal worker staccato ancora in corso; se
-  Claude Code chiude l'hook per timeout il record manca; su Windows la lettura dello stato può
-  intralciare per un attimo il rename dell'outbox del worker. I record pesano (coda del
+  Claude Code chiude l'hook per timeout il record manca; su Windows la lettura dello stato non
+  blocca cancellazioni e rename degli altri hook (`FILE_SHARE_DELETE`), ma un `os.replace` sopra un
+  file nell'istante in cui il recorder lo legge fallisce comunque (Windows lo nega a ogni lettore,
+  anche al codice degli hook). I record pesano (coda del
   transcript): il recorder va acceso solo per le sessioni di raccolta.
 
 ## 📁 `ops/` — script operativi e utility
