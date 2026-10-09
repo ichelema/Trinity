@@ -99,7 +99,12 @@ altro valore → spiega l'uso (audit / apply) e fermati.
    parziale solo file-based e marca il degrado nell'intestazione del report
    ("Server Hindsight: NON RAGGIUNGIBILE — audit parziale").
 6. **Confronto semantico** (le daily vincono sempre sulle memorie):
-   - memoria contraddetta dai fatti delle daily → **Obsolete** o **Da aggiornare**
+   - memoria contraddetta dai fatti delle daily → **Obsolete** o **Da aggiornare**.
+     Per ogni fatto da ritirare controlla il documento sorgente
+     (`GET /banks/<bank>/memories/list?document_id=<id>&state=valid`): se
+     TUTTI i suoi fatti world/experience sono superati proponi `hs-delete-doc`
+     (cancella il documento: niente residui), altrimenti `hs-invalidate` del
+     singolo fatto (gli altri fatti del documento restano validi).
    - fatto importante nelle daily assente dalla memoria → **Nuove da salvare**;
      prima di proporlo verifica con un recall mirato via REST
      (`POST /banks/<bank>/memories/recall`) che non esista già (evita falsi
@@ -159,7 +164,9 @@ Flagga `[x]` le azioni che approvi, poi lancia `/trinity:dream apply`.
 Le azioni non flaggate saranno considerate respinte.
 
 Legenda tipi: hs-invalidate = il fatto resta archiviato ma non verrà più
-richiamato · hs-update = corregge il testo di un fatto · hs-correct-doc =
+richiamato (per documenti con altri fatti ancora validi) · hs-delete-doc =
+cancella un documento e tutti i suoi fatti (quando sono tutti superati) ·
+hs-update = corregge il testo di un fatto · hs-correct-doc =
 riscrive un documento errato · hs-retain = salva un fatto nuovo ·
 file-update/-delete/-create = modifica/cancella/crea un file memoria (sempre
 con backup .bak) · policy-migrate = sposta un file memoria in Hindsight ·
@@ -244,7 +251,7 @@ Regole del formato:
 2. **Lint in modalità apply**:
    `bash "${CLAUDE_PLUGIN_ROOT}/hooks/dream/dream-report-lint.sh" "<report>" --apply`.
    Con `FAIL` fermati e mostra gli errori: un'azione flaggata che altera o
-   ritira una memoria esistente (`hs-invalidate`, `hs-update`, `hs-correct-doc`,
+   ritira una memoria esistente (`hs-invalidate`, `hs-delete-doc`, `hs-update`, `hs-correct-doc`,
    `file-update`, `file-delete`) con `Verifica: solo ...` non si esegue; va
    verificata sul campo e il report corretto, oppure tolta la spunta.
    Poi leggi il report. Azioni eseguibili = righe `- [x] **A<n>**` SENZA marcatore
@@ -281,6 +288,7 @@ Regole del formato:
 | `file-delete` | `cp` in `.bak` → `rm` → rimuovi la riga indice da MEMORY.md | il file non esiste, il `.bak` esiste, `grep` del nome file in MEMORY.md non trova nulla |
 | `file-create` | Write con frontmatter conforme (name kebab, description, metadata.type, modified) + riga indice in MEMORY.md. RARO: solo se passa il test policy "serve a OGNI sessione?" | il file esiste con `name`, `description`, `metadata.type`; la riga indice esiste |
 | `hs-invalidate` | Solo fatti `world`/`experience`: `curl -X PATCH <API>/banks/<bank>/memories/<id>` con `{"state": "invalidated", "reason": "dream YYYY-MM-DD"}` | `GET <API>/banks/<bank>/memories/<id>` → `"state": "invalidated"` |
+| `hs-delete-doc` | Solo se nessun fatto world/experience del documento resta valido: `curl -X DELETE <API>/banks/<bank>/documents/<id>` (cancella anche observation e fatti derivati; irreversibile, serve un nuovo retain per ripristinare) | `GET <API>/banks/<bank>/documents/<id>` → 404 |
 | `hs-update` | Solo fatti `world`/`experience`: stesso PATCH con `{"text": "<testo corretto>"}` (ritocco puntuale di un singolo fatto) | `GET` del fatto → `text` uguale al testo proposto |
 | `hs-correct-doc` | `curl -X DELETE <API>/banks/<bank>/documents/<id>` → retain REST (riga sotto) del testo corretto | `GET` del documento vecchio → 404; `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |
 | `hs-retain` | `curl -X POST <API>/banks/<bank>/memories` con `{"items": [{"content": "<testo>", "context": "<dominio>", "tags": [...], "document_id": "dream:<YYYY-MM-DD>:<An>"}], "async": false}` — verifica `"success": true` (sync, fino a ~90s); il `document_id` deterministico fa upsert sui retry invece di duplicare. Tag SOLO universali (`claude-code`, `repo:<nome già nel bank>`; mai tag semantici) | risposta `"success": true` e `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |

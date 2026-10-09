@@ -27,13 +27,13 @@ SECTIONS = {
     "## Mental model": "mental model",
 }
 TYPES = {
-    "hs-invalidate", "hs-update", "hs-correct-doc", "hs-retain",
+    "hs-invalidate", "hs-delete-doc", "hs-update", "hs-correct-doc", "hs-retain",
     "file-update", "file-delete", "file-create", "policy-migrate", "mm-refresh",
 }
 NEEDS_VERIFICA = TYPES - {"policy-migrate", "mm-refresh"}
 NEEDS_PROPOSTA = {"hs-update", "hs-correct-doc", "hs-retain",
                   "file-update", "file-create", "policy-migrate"}
-ALTERS_EXISTING = {"hs-invalidate", "hs-update", "hs-correct-doc",
+ALTERS_EXISTING = {"hs-invalidate", "hs-delete-doc", "hs-update", "hs-correct-doc",
                    "file-update", "file-delete"}
 NOT_FIELD_VERIFIED = re.compile(r"^\s*solo\b", re.IGNORECASE)
 FIELD_RE = re.compile(r"^\s+- ([A-Za-z ]+?)(?: \([^)]*\))?:\s*(.*)$")
