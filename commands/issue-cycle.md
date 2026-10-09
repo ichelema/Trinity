@@ -196,10 +196,12 @@ rimuovere nulla e annotalo; mai `--force`.
 
 ### Commento su Linear
 
-A fine ciclo, anche dopo un'interruzione, pubblica sulla issue un commento breve in inglese con
+A fine ciclo, anche dopo un'interruzione, pubblica sulla issue un commento breve, nella lingua del
+progetto Linear, con
 `linear.py`, costruito dalle righe del registro sotto `## <issue-id>`: link della PR (se esiste),
 esito della review, decisioni prese in autonomia, questioni aperte e, se il ciclo è interrotto, lo
-step raggiunto e il motivo. Chiudi con `Not merged: merge is left to the user.`
+step raggiunto e il motivo. Chiudi con `Non mergiato: il merge resta all'utente.` oppure
+`Not merged: merge is left to the user.`
 
 Regole Linear valide per tutto il ciclo:
 

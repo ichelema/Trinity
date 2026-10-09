@@ -40,8 +40,8 @@ Vale per ogni lavoro su issue Linear, indipendentemente dal backend.
     la magic word sbagliata chiude lavoro ancora aperto.
 - La PR contiene: riepilogo conciso, dettagli implementativi, test eseguiti,
   riferimenti alle issue Linear.
-- Titolo e descrizione della PR in inglese (il titolo finisce come attachment
-  della issue).
+- Titolo e descrizione della PR nella lingua del progetto Linear (il titolo
+  finisce come attachment della issue; vedi "Lingua" in `SKILL.md`).
 - **Non fare il merge**: fermati e attendi l'approvazione esplicita dell'utente.
 
 ## Merge (solo su richiesta esplicita)

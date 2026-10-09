@@ -147,11 +147,12 @@ delle query.
 
 ## Lingua
 
-Titolo, descrizione ed eventuali commenti della issue vanno **sempre scritti in inglese**, anche
-quando la descrizione dell'utente è in italiano: la issue resta nel tempo e la leggono altri.
+Titolo, descrizione ed eventuali commenti seguono la **lingua del progetto Linear** scelto:
+italiano per default, inglese se il progetto ha la label di progetto `lang:en` (vedi la sezione
+"Lingua" della skill `linear`). Seleziona `labels { nodes { name } }` nella query `projects`.
 
 Domande, riepiloghi e output a schermo restano **in italiano**. Fa eccezione la descrizione mostrata
-in conferma, che va esibita nella sua forma inglese definitiva.
+in conferma, che va esibita nella sua forma definitiva nella lingua del progetto.
 
 ## Conferma
 
@@ -166,7 +167,8 @@ Prima di creare la issue mostra:
 - Labels
 - Parent
 - Blocked by
-- Description (corpo completo, in inglese)
+- Lingua (italiano / inglese, dal progetto)
+- Description (corpo completo, nella lingua del progetto)
 
 Chiedi conferma esplicita. Solo dopo la conferma crea la issue con la mutation `issueCreate` via
 `${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py mutation` (per aggiornare un'issue esistente

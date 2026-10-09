@@ -118,16 +118,22 @@ That's the pattern: introspect or query for an id you don't have, run the mutati
 
 ## Lingua
 
-Il contenuto che finisce **dentro** Linear va sempre scritto in inglese, anche
-quando l'utente scrive in italiano: le issue sono lette da altri e restano nel
-tempo, quindi la lingua del workspace prevale su quella della conversazione.
+La lingua la decide il **progetto Linear**, non la conversazione:
 
-Ci finiscono i campi `description`, i commenti e anche **titolo e descrizione
-delle Pull Request**: Linear aggancia la PR alla issue come attachment e ne usa
-il titolo, che diventa così testo del workspace a tutti gli effetti.
+- default **italiano**;
+- **inglese** se il progetto ha la label di progetto `lang:en`
+  (librerie pubbliche, progetti da rilasciare).
 
-Vale lo stesso per i **messaggi di commit**: la history la leggono `git blame`,
-le release notes e chi arriva dopo, e sopravvive alla sessione che l'ha prodotta.
+Leggi le label con la stessa query che usi per risolvere l'id
+(`projects { nodes { id name labels { nodes { name } } } }`); per una issue
+esistente usa `issue(id: $id) { project { labels { nodes { name } } } }`.
+Issue senza progetto: italiano.
+
+La lingua del progetto vale per tutto ciò che resta nel tempo: titolo,
+`description` e commenti delle issue, **messaggi di commit**, **titolo e
+descrizione della PR** (Linear usa il titolo della PR come attachment della
+issue). Termini tecnici, nomi di file e stringhe di codice restano nella forma
+originale.
 
 La conversazione con l'utente resta in italiano: riepiloghi, domande e output a
 schermo non seguono questa regola.

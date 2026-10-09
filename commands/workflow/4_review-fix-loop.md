@@ -112,7 +112,7 @@ Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 - la minima modifica che risolve il difetto;
 - nessun refactoring, nessuna riscrittura, nessun cambio di architettura;
 - ogni riga modificata è riconducibile a un finding verificato;
-- commit in inglese, uno per fix logico;
+- commit nella lingua del progetto Linear, uno per fix logico;
 - push per aggiornare la PR.
 
 Se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia: segnalalo
