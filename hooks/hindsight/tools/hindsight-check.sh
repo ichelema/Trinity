@@ -287,7 +287,10 @@ PY
 		# al python del PATH se il resolver non e' disponibile.
 		HS_PY_E2E=$( (. "$HOOKS_DIR/lib/hs-python.sh" >/dev/null 2>&1 && printf '%s' "$HS_PY") 2>/dev/null)
 		[ -n "$HS_PY_E2E" ] || HS_PY_E2E=python
+		# Jev spento solo qui (ICH-163): lo stub OpenAI approva una memoria finta che il
+		# Jev reale scarterebbe (jev_rejected); il check verifica la pipeline, non Jev.
 		HOOK_INPUT="$RETAIN_PAYLOAD" HS_RETAIN_FORCE=1 OPENAI_API_KEY=check-stub \
+			HS_CFG_RETAIN_JEV_ENABLED=false \
 			HS_OPENAI_URL="http://127.0.0.1:$STUB_PORT/v1/chat/completions" PYTHONUTF8=1 \
 			"$HS_PY_E2E" "$WORKER_WIN_E2E" >"$RETAIN_LOG" 2>&1
 		if grep -q "\[retain\] OK 200" "$RETAIN_LOG" 2>/dev/null; then
