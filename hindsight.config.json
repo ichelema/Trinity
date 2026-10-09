@@ -7,7 +7,7 @@
     "promote_exclude_banks": ["obsidian"]
   },
 
-  "recall_enabled": false,
+  "recall_enabled": true,
   "retain_enabled": true,
 
   "recall_budget": "mid",
