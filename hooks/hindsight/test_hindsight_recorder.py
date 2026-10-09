@@ -104,11 +104,13 @@ class RecorderTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_script(self, body, script="hindsight-recall", args=(), env=None):
-        """body in un python a se', con il recorder avviato come negli hook."""
+    def run_script(self, body, script="hindsight-recall", args=(), env=None, pre=""):
+        """body in un python a se', con il recorder avviato come negli hook;
+        pre gira prima di start (fault injection)."""
         code = (
             f"import sys; sys.path.insert(0, {LIB!r})\n"
-            f"import hindsight_recorder; hindsight_recorder.start({script!r})\n"
+            + pre
+            + f"import hindsight_recorder; hindsight_recorder.start({script!r})\n"
             + textwrap.dedent(body)
         )
         proc = subprocess.run(
@@ -216,6 +218,15 @@ class RecorderTests(unittest.TestCase):
         proc, records = self.run_script("print('out')\n")
         self.assertEqual((proc.returncode, proc.stdout, records), (0, "out\n", []))
         self.assertIn("[hs-record]", proc.stderr)
+
+    def test_start_failure_keeps_stdout_and_exit_code(self):
+        # Errore nell'installazione dei wrapper (qui atexit.register): start non
+        # solleva, l'hook prosegue e l'errore resta su stderr.
+        proc, records = self.run_script(
+            "print('out')\n", pre="import hindsight_recorder; hindsight_recorder.atexit = None\n"
+        )
+        self.assertEqual((proc.returncode, proc.stdout, records), (0, "out\n", []))
+        self.assertIn("[hs-record] AttributeError", proc.stderr)
 
     def test_read_with_deadline_still_enforced(self):
         proc, [rec] = self.run_script(f"""

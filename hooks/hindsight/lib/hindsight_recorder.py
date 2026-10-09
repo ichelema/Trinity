@@ -64,8 +64,10 @@ _name = ""
 
 
 def start(script: str) -> None:
-    """Avvia la registrazione di questo processo. Raccoglie prima tutto e solo
-    alla fine installa i wrapper: un errore a meta' lascia l'hook com'era."""
+    """Avvia la registrazione di questo processo. Non solleva mai: un errore
+    finisce su stderr e l'hook prosegue. Raccoglie prima tutto e solo alla fine
+    installa i wrapper, tutti pass-through: anche un'installazione a meta'
+    lascia l'hook com'era (senza atexit, solo nessun record)."""
     global _t0, _name
     try:
         _t0 = time.monotonic()
@@ -97,14 +99,13 @@ def start(script: str) -> None:
             state_before=state,
             transcripts=_transcripts(stdin, state) if script in TRANSCRIPT_SCRIPTS else {},
         )
+        urllib.request.urlopen = _recording_urlopen(urllib.request.urlopen)
+        subprocess.check_output = _recording_check_output(subprocess.check_output)
+        sys.stdout = _Tee(sys.stdout)
+        sys.exit = _recording_exit(sys.exit)
+        atexit.register(_finish)
     except Exception as exc:
         _warn(exc)
-        return
-    urllib.request.urlopen = _recording_urlopen(urllib.request.urlopen)
-    subprocess.check_output = _recording_check_output(subprocess.check_output)
-    sys.stdout = _Tee(sys.stdout)
-    sys.exit = _recording_exit(sys.exit)
-    atexit.register(_finish)
 
 
 def _state_paths(cfg: dict) -> dict:
