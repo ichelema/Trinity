@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Test del recorder dei golden (ICH-173, lib/hindsight_recorder.py).
 
-Ogni caso gira in un processo Python a se': il recorder sostituisce urlopen,
-subprocess.check_output, sys.stdout e sys.exit e registra un atexit, cose da
+Ogni caso gira in un processo Python a se': il recorder sostituisce open,
+urlopen, subprocess.check_output, sys.stdout e sys.exit e registra un atexit, cose da
 non fare nel processo dei test. XDG_CACHE_HOME punta a una dir temporanea,
 quindi record e stato non toccano la cache reale. L'e2e del recall con il
 worker --queued sta in test_hindsight_recall_hook.py.
@@ -246,14 +246,17 @@ class RecorderTests(unittest.TestCase):
         self.assertIn("read_error", rec["http"][0])
 
     def test_state_and_transcript_are_snapshotted(self):
-        transcript = os.path.join(self.tmp.name, "t.jsonl")
-        with open(transcript, "w", encoding="utf-8") as handle:
-            handle.writelines(f'{{"n": {i}}}\n' for i in range(250))
+        # Due sessioni in coda: il worker --queued s1 apre solo il transcript di s1.
         queue = os.path.join(self.cache, "hs-retain-queue")
         os.makedirs(queue)
+        transcripts = {}
+        for n, sid in enumerate(("s1", "s2")):
+            transcripts[sid] = os.path.join(self.tmp.name, f"{sid}.jsonl")
+            with open(transcripts[sid], "w", encoding="utf-8") as handle:
+                handle.writelines(f'{{"n": {i}, "canary": "{sid}-only"}}\n' for i in range(250))
+            with open(os.path.join(queue, f"170000000000000{n}-1.json"), "w", encoding="utf-8") as handle:
+                json.dump({"session_id": sid, "transcript_path": transcripts[sid]}, handle)
         entry = os.path.join(queue, "1700000000000000-1.json")
-        with open(entry, "w", encoding="utf-8") as handle:
-            json.dump({"session_id": "s1", "transcript_path": transcript}, handle)
         state = os.path.join(self.cache, "hs-retain-state.json")
         with open(state, "w", encoding="utf-8") as handle:
             json.dump({"a": 1}, handle)
@@ -265,6 +268,17 @@ class RecorderTests(unittest.TestCase):
         proc, [rec] = self.run_script(
             f"""
             import json, os
+            path = {transcripts["s1"]!r}
+            def read():  # come load_transcript
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    return f.readlines()[-200:]
+            def append(line):  # come Claude Code mentre l'hook gira
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(line + "\\n")
+            append('{{"n": 250}}')
+            print(read()[-1].strip())
+            append('{{"n": 251}}')
+            read()
             os.remove({entry!r})
             with open({state!r}, "w") as f:
                 json.dump({{"a": 2}}, f)
@@ -285,10 +299,15 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(after["hs-retain-state.json"]["content"], {"a": 2})
         self.assertEqual(before["hs-reranker-degraded.log"]["content"], degraded)
         self.assertFalse(any("hs-python" in name for name in before))
-        tail = rec["transcripts"][transcript]
+        self.assertEqual(list(rec["transcripts"]), [transcripts["s1"]])
+        # La coda e' quella della prima lettura, riga arrivata dopo lo start compresa.
+        tail = rec["transcripts"][transcripts["s1"]]
         self.assertEqual(len(tail["tail"]), 200)
-        self.assertEqual(tail["tail"][-1], '{"n": 249}')
-        self.assertFalse(tail["changed"])
+        self.assertEqual(tail["tail"][-1], proc.stdout.strip())
+        self.assertEqual(tail["tail"][-1], '{"n": 250}')
+        self.assertTrue(tail["changed"])  # la seconda lettura l'ha trovato cresciuto
+        with open(self.golden_files("hindsight-retain-worker")[0], encoding="utf-8") as handle:
+            self.assertNotIn("s2-only", handle.read())
 
     @unittest.skipUnless(sys.platform == "win32", "FILE_SHARE_DELETE esiste solo su Windows")
     def test_state_read_does_not_block_remove(self):

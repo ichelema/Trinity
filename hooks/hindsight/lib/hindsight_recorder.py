@@ -16,6 +16,8 @@ HTTP ne' variabili d'ambiente nel record (solo la presenza delle chiavi API).
 from __future__ import annotations
 
 import atexit
+import builtins
+import io
 import json
 import os
 import stat
@@ -48,14 +50,14 @@ SECRET_KEYS = {
     "auth_token", "password", "passwd", "secret", "client_secret",
 }
 # Coda del transcript: le stesse righe di load_transcript del worker (il recall
-# ne legge 80 con last_assistant_text). Solo per gli script che lo leggono.
+# ne legge 80 con last_assistant_text).
 TRANSCRIPT_LINES = 200
-TRANSCRIPT_SCRIPTS = ("hindsight-recall", "hindsight-retain-worker")
 
 _lock = threading.Lock()
 _rec: dict = {}
 _http: list = []
 _calls: list = []
+_reads: dict = {}  # transcript -> dimensione a ogni open in lettura del codice
 _t0 = 0.0
 _name = ""
 
@@ -94,8 +96,8 @@ def start(script: str) -> None:
             config=cfg,
             keys_present={k: bool(os.environ.get(k)) for k in KEY_ENV},
             state_before=state,
-            transcripts=_transcripts(stdin, state) if script in TRANSCRIPT_SCRIPTS else {},
         )
+        builtins.open = _recording_open(builtins.open, _transcript_paths(stdin, state))
         urllib.request.urlopen = _recording_urlopen(urllib.request.urlopen)
         subprocess.check_output = _recording_check_output(subprocess.check_output)
         sys.stdout = _Tee(sys.stdout)
@@ -159,9 +161,10 @@ def _open_shared(path: str):
     """Apre in lettura binaria. Su Windows con FILE_SHARE_DELETE, che open()
     non concede: lo snapshot non blocca il remove o il rename di entry e
     outbox fatto da un altro hook in quell'istante. Resta bloccato solo un
-    os.replace SOPRA il file letto: Windows lo nega a qualunque lettore."""
+    os.replace SOPRA il file letto: Windows lo nega a qualunque lettore.
+    io.open e non open: builtins.open e' intercettato (_recording_open)."""
     if sys.platform != "win32":
-        return open(path, "rb")
+        return io.open(path, "rb")
     import ctypes
     import msvcrt
     from ctypes import wintypes
@@ -179,27 +182,46 @@ def _open_shared(path: str):
     return os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb")
 
 
-def _transcripts(stdin, state: dict) -> dict:
-    """Coda dei transcript che lo script leggera': quello del prompt (recall) e
-    quelli delle entry di coda (worker). size e mtime servono a dire in
-    _finish se il file e' cresciuto durante l'esecuzione."""
-    paths = [stdin.get("transcript_path")] if isinstance(stdin, dict) else []
+def _transcript_paths(stdin, state: dict) -> set:
+    """Transcript che lo script puo' leggere: quello del prompt (recall) e
+    quelli delle entry di coda (worker). Nel record finiscono solo quelli che
+    il codice apre davvero (un --queued non apre quelli delle altre sessioni)."""
+    paths = {stdin.get("transcript_path")} if isinstance(stdin, dict) else set()
     for key, item in state.items():
         content = item.get("content")
         if key.startswith("hs-retain-queue/") and isinstance(content, dict):
-            paths.append(content.get("transcript_path"))
-    out: dict = {}
-    for path in paths:
-        if not isinstance(path, str) or not path or path in out:
-            continue
+            paths.add(content.get("transcript_path"))
+    return {p for p in paths if isinstance(p, str) and p}
+
+
+def _recording_open(real, paths: set):
+    """open() che annota la dimensione di un transcript quando il codice lo apre
+    in lettura: load_transcript e last_assistant_text leggono fino a EOF subito
+    dopo e il file cresce solo in coda, quindi i primi size byte sono quello che
+    il codice ha letto, anche se Claude Code ci appende dopo lo start."""
+
+    def open_(file, *args, **kwargs):
+        f = real(file, *args, **kwargs)
         try:
-            st = os.stat(path)
-            with open(path, encoding="utf-8", errors="replace") as f:
-                tail = [line.rstrip("\n") for line in f.readlines()[-TRANSCRIPT_LINES:]]
-            out[path] = {"size": st.st_size, "mtime": st.st_mtime, "tail": tail}
-        except OSError:
-            out[path] = {"missing": True}
-    return out
+            mode = args[0] if args else kwargs.get("mode", "r")
+            if file in paths and not set(mode) & set("wax+"):
+                size = os.fstat(f.fileno()).st_size
+                with _lock:
+                    _reads.setdefault(file, []).append(size)
+        except Exception:
+            pass  # file non hashable o mode strano: non e' un transcript
+        return f
+
+    return open_
+
+
+def _tail(path: str, size: int) -> list:
+    """Ultime TRANSCRIPT_LINES righe dei primi size byte, decodificate come fa
+    load_transcript (utf-8 con replace, newline universali)."""
+    with _open_shared(path) as f:
+        data = f.read(size)
+    text = io.TextIOWrapper(io.BytesIO(data), encoding="utf-8", errors="replace")
+    return [line.rstrip("\n") for line in text.readlines()[-TRANSCRIPT_LINES:]]
 
 
 def _decode(data):
@@ -339,9 +361,20 @@ def _finish() -> None:
         with _lock:
             http = [dict(ex) for ex in _http]
             calls = [dict(c) for c in _calls]
+            reads = {path: list(sizes) for path, sizes in _reads.items()}
         for ex in http:
             chunks = ex.pop("_chunks", None)
             ex["response_body"] = _decode(b"".join(chunks)) if chunks else None
+        # La coda della prima lettura; changed se una lettura successiva ha
+        # trovato il file cresciuto (un fixture statico non le rappresenta tutte).
+        transcripts: dict = {}
+        for path, sizes in reads.items():
+            try:
+                transcripts[path] = {
+                    "size": sizes[0], "tail": _tail(path, sizes[0]), "changed": len(set(sizes)) > 1,
+                }
+            except OSError:
+                transcripts[path] = {"missing": True}
         # Eccezione non gestita: l'interprete la lascia in sys.last_value prima
         # di atexit (exit 1); sys.exit non la imposta.
         err = getattr(sys, "last_value", None)
@@ -361,14 +394,8 @@ def _finish() -> None:
                 else None
             ),
             state_after=_snapshot(_state_paths(_rec["config"])),
+            transcripts=transcripts,
         )
-        for path, item in _rec["transcripts"].items():
-            if "size" in item:
-                try:
-                    st = os.stat(path)
-                    item["changed"] = (st.st_size, st.st_mtime) != (item["size"], item["mtime"])
-                except OSError:
-                    item["changed"] = True
         literals = [v for v in (os.environ.get(k) for k in KEY_ENV) if v and len(v) >= 8]
         hits: list = []
         record = _scrub(_rec, literals, hits)
