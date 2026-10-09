@@ -432,6 +432,9 @@ def _scrub(value: Any, literals: list, hits: list) -> Any:
         clean = {}
         for key, item in value.items():
             name = _scrub(key, literals, hits)
+            if name in clean:
+                # Due nomi resi uguali dalla redazione: uno sparirebbe in silenzio.
+                raise ValueError("due campi uguali dopo la redazione: record non scritto")
             if SECRET_NAME.search(key) and item and not isinstance(item, bool):
                 clean[name] = REDACTED
                 hits.append(True)

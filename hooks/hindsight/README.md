@@ -80,6 +80,7 @@ lettura successiva lo trova cresciuto) e `redacted`.
   oggetto o lista (restano i booleani). `redacted: true` dice che il record non è più fedele
   all'esecuzione. Con una di queste chiavi sotto gli 8 caratteri il record non viene scritto
   (avviso su stderr): un valore così corto non si toglie in modo sicuro.
+  Lo stesso se la redazione rende uguali due nomi di campo.
 - **Limiti:** lo stato "dopo" del recall può dipendere dal worker staccato ancora in corso; se
   Claude Code chiude l'hook per timeout il record manca; su Windows la lettura dello stato non
   blocca cancellazioni e rename degli altri hook (`FILE_SHARE_DELETE`), ma un `os.replace` sopra un

@@ -235,6 +235,13 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual((proc.returncode, proc.stdout, records), (0, "out\n", []))
         self.assertIn("[hs-record] ValueError", proc.stderr)
         self.assertNotIn("abc1234", proc.stderr)
+        # Due nomi di campo resi uguali dalla redazione: uno sparirebbe in silenzio.
+        proc, records = self.run_script(
+            "print('out')\n",
+            env={"OPENAI_API_KEY": KEY, "HOOK_INPUT": json.dumps({KEY: "a", "[REDACTED]": "b"})},
+        )
+        self.assertEqual((proc.returncode, proc.stdout, records), (0, "out\n", []))
+        self.assertIn("[hs-record] ValueError", proc.stderr)
 
     def test_start_failure_keeps_stdout_and_exit_code(self):
         # Errore nell'installazione dei wrapper (qui atexit.register): start non
