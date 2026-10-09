@@ -216,6 +216,17 @@ LiteLLM non lo conosce.
 Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.1 in sessione
 diretta, il modello Fable del launcher con LiteLLM (stesso di `deep-reasoner`, tabella sotto).
 
+**Gemelli GPT (`gpt-model`).** `agents/reviewer.md` e `agents/deep-reasoner.md` hanno una seconda
+chiave, `gpt-model: claude-gpt-5-6-sol-xhigh`, che Claude Code ignora. La legge la mod
+`gpt-bridge` (`~/.claude/mods/gpt-bridge`, fuori da questo repo, distribuita via chezmoi): a inizio
+sessione registra `gpt-bridge:<nome>` con lo stesso prompt, descrizione e tool dell'agente, ma con
+quel modello via proxy LiteLLM. Il subagente compare nel pannello agenti ed esegue tool e permessi
+nativi; la sessione principale resta in OAuth Anthropic, senza launcher. Il valore è un alias
+LiteLLM qualsiasi (`claude-gpt-5-6-sol-high`, `-xhigh`, `-max`…): l'effort viene dal suffisso.
+Il parametro `model` del tool Agent accetta solo gli alias Claude, quindi il modello GPT si
+dichiara nel file, non nella chiamata. Se la mod non è caricata, i gemelli non esistono e i
+command che li usano si fermano.
+
 Il nome è **derivato dall'id** del modello, non confrontato con una lista: per aggiungere un
 modello basta creare il file, senza toccare l'hook.
 
@@ -273,7 +284,7 @@ collidono con i comandi locali del progetto:
 | 1 | `1_create-worktree <source-branch> <issue-id...> <model>` | branch `<prefix>/<base-name>` + worktree in `.claude/worktrees/` |
 | 2 | `2_work-issue <issue-id...> <model>` | piano, implementazione, push e PR (senza merge) |
 | 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR |
-| 4 | `4_review-fix-loop <issue-id...> <model>` | review reviewer su Fable + GPT su worktree detached, fix in loop |
+| 4 | `4_review-fix-loop <issue-id...> <model>` | due review in parallelo su worktree detached (`trinity:reviewer` su Fable, `gpt-bridge:reviewer` su GPT), fix in loop |
 | 5 | `5_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
 
 ### `/trinity:dream` — audit della memoria
@@ -1067,6 +1078,11 @@ launcher per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFla
 | `litellm-gpt.sh` | `claude-gpt-5-6-sol-xhigh` |
 | `litellm-deepseek.sh` | `claude-deepseek-flash` |
 | `litellm-kimi.sh` | `claude-kimi-k3-max` |
+
+I launcher rimappano l'intera sessione. Per un solo subagente su GPT dentro una sessione
+Anthropic nativa c'è la mod `gpt-bridge` (chiave `gpt-model` nel frontmatter degli agenti, § 4):
+manda al proxy `litellm_session_id` per l'affinità di cache del backend ChatGPT, lo stesso
+meccanismo che il proxy applica da solo alle sessioni dei launcher leggendo `metadata.user_id`.
 
 DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due modelli distinti —
 `claude-deepseek-v4-pro` (no thinking) e `claude-deepseek-v4-pro-thinking` (thinking abilitato).
