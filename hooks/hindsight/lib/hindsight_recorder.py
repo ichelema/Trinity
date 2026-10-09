@@ -20,6 +20,7 @@ import builtins
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -43,12 +44,11 @@ except ImportError:
 VERSION = 1
 REDACTED = "[REDACTED]"
 KEY_ENV = ("OPENAI_API_KEY", "TYPESAFE_API_KEY", "VOYAGE_API_KEY")
-# Campi il cui valore e' sempre un segreto. Match esatto sul nome: "token" per
-# sottostringa redigerebbe max_tokens in ogni payload.
-SECRET_KEYS = {
-    "authorization", "api_key", "apikey", "x-api-key", "token", "access_token",
-    "auth_token", "password", "passwd", "secret", "client_secret",
-}
+# Campi il cui valore e' sempre un segreto: il nome finisce come quelli di
+# OUTCOME_SECRET_PATTERNS (aws_secret_access_key, github_token, db_password,
+# x-api-key). Nei JSON parsati nome e valore sono separati e i pattern da soli
+# non li vedono. Restano max_tokens, keyword e i booleani di keys_present.
+SECRET_NAME = re.compile(r"(?:secret|passw(?:or)?d|token|[_-]key|apikey|authorization)$", re.I)
 # Coda del transcript: le stesse righe di load_transcript del worker (il recall
 # ne legge 80 con last_assistant_text).
 TRANSCRIPT_LINES = 200
@@ -417,8 +417,8 @@ def _scrub(value: Any, literals: list, hits: list) -> Any:
     nascono per search(), e sostituire solo il match lascerebbe pezzi di chiave
     (il corpo di un PEM). I valori letterali delle chiavi API spariscono
     ovunque, nomi dei campi compresi; i campi con nome segreto perdono il
-    valore. hits dice se e' successo: il record non e' piu' fedele
-    all'esecuzione."""
+    valore, anche oggetto o lista. hits dice se e' successo: il record non
+    e' piu' fedele all'esecuzione."""
     if isinstance(value, str):
         out = value
         for literal in literals:
@@ -432,7 +432,7 @@ def _scrub(value: Any, literals: list, hits: list) -> Any:
         clean = {}
         for key, item in value.items():
             name = _scrub(key, literals, hits)
-            if key.lower() in SECRET_KEYS and isinstance(item, str) and item:
+            if SECRET_NAME.search(key) and item and not isinstance(item, bool):
                 clean[name] = REDACTED
                 hits.append(True)
             else:
