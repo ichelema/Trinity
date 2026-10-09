@@ -57,7 +57,7 @@ _lock = threading.Lock()
 _rec: dict = {}
 _http: list = []
 _calls: list = []
-_reads: dict = {}  # transcript -> dimensione a ogni open in lettura del codice
+_reads: dict = {}  # transcript -> size, tail e changed della prima lettura del codice
 _t0 = 0.0
 _name = ""
 
@@ -195,10 +195,12 @@ def _transcript_paths(stdin, state: dict) -> set:
 
 
 def _recording_open(real, paths: set):
-    """open() che annota la dimensione di un transcript quando il codice lo apre
-    in lettura: load_transcript e last_assistant_text leggono fino a EOF subito
-    dopo e il file cresce solo in coda, quindi i primi size byte sono quello che
-    il codice ha letto, anche se Claude Code ci appende dopo lo start."""
+    """open() che fotografa la coda di un transcript la prima volta che il codice
+    lo apre in lettura: load_transcript e last_assistant_text leggono fino a EOF
+    subito dopo, quindi i primi size byte sono quello che il codice legge,
+    qualunque cosa succeda poi al file. Le aperture successive segnano solo
+    changed se la dimensione e' cambiata: un fixture statico non le rappresenta
+    tutte."""
 
     def open_(file, *args, **kwargs):
         f = real(file, *args, **kwargs)
@@ -206,8 +208,11 @@ def _recording_open(real, paths: set):
             mode = args[0] if args else kwargs.get("mode", "r")
             if file in paths and not set(mode) & set("wax+"):
                 size = os.fstat(f.fileno()).st_size
-                with _lock:
-                    _reads.setdefault(file, []).append(size)
+                first = _reads.get(file)
+                if first is None:
+                    _reads.setdefault(file, {"size": size, "tail": _tail(file, size), "changed": False})
+                elif first["size"] != size:
+                    first["changed"] = True
         except Exception:
             pass  # file non hashable o mode strano: non e' un transcript
         return f
@@ -361,20 +366,9 @@ def _finish() -> None:
         with _lock:
             http = [dict(ex) for ex in _http]
             calls = [dict(c) for c in _calls]
-            reads = {path: list(sizes) for path, sizes in _reads.items()}
         for ex in http:
             chunks = ex.pop("_chunks", None)
             ex["response_body"] = _decode(b"".join(chunks)) if chunks else None
-        # La coda della prima lettura; changed se una lettura successiva ha
-        # trovato il file cresciuto (un fixture statico non le rappresenta tutte).
-        transcripts: dict = {}
-        for path, sizes in reads.items():
-            try:
-                transcripts[path] = {
-                    "size": sizes[0], "tail": _tail(path, sizes[0]), "changed": len(set(sizes)) > 1,
-                }
-            except OSError:
-                transcripts[path] = {"missing": True}
         # Eccezione non gestita: l'interprete la lascia in sys.last_value prima
         # di atexit (exit 1); sys.exit non la imposta.
         err = getattr(sys, "last_value", None)
@@ -394,7 +388,7 @@ def _finish() -> None:
                 else None
             ),
             state_after=_snapshot(_state_paths(_rec["config"])),
-            transcripts=transcripts,
+            transcripts=_reads,
         )
         literals = [v for v in (os.environ.get(k) for k in KEY_ENV) if v]
         if any(len(v) < 8 for v in literals):

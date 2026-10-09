@@ -69,8 +69,8 @@ Il record (`version: 1`) contiene: argv, pid/ppid, cwd, piattaforma, orari, `ses
 (metodo, URL, timeout, body inviato, status, body **letto dal chiamante**, errori), ogni
 `subprocess.check_output` (git), stdout, `exit_code`, traceback, file di stato prima e dopo
 (`state_before`/`state_after`, contenuto intero), coda dei transcript che il codice apre (le
-ultime 200 righe come le ha lette, anche se Claude Code ci appende dopo l'avvio; `changed` se una
-lettura successiva lo trova cresciuto) e `redacted`.
+ultime 200 righe come le ha lette, fotografate alla prima apertura: append o riscritture successive
+non le cambiano; `changed` se una lettura successiva trova un'altra dimensione) e `redacted`.
 
 - **Privacy:** contiene testo delle conversazioni; resta nella cache per-utente (file 0600). Mai
   header HTTP né variabili d'ambiente. Una stringa in cui un pattern di `hindsight_secrets.py`

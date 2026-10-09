@@ -303,6 +303,10 @@ class RecorderTests(unittest.TestCase):
             print(read()[-1].strip())
             append('{{"n": 251}}')
             read()
+            with open(path, "r+b") as f:  # riscritto sul posto, stessa dimensione
+                data = f.read()
+                f.seek(0)
+                f.write(data.replace(b'"n"', b'"m"'))
             os.remove({entry!r})
             with open({state!r}, "w") as f:
                 json.dump({{"a": 2}}, f)
@@ -324,7 +328,8 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(before["hs-reranker-degraded.log"]["content"], degraded)
         self.assertFalse(any("hs-python" in name for name in before))
         self.assertEqual(list(rec["transcripts"]), [transcripts["s1"]])
-        # La coda e' quella della prima lettura, riga arrivata dopo lo start compresa.
+        # La coda e' quella della prima lettura: riga arrivata dopo lo start
+        # compresa, riscrittura successiva esclusa.
         tail = rec["transcripts"][transcripts["s1"]]
         self.assertEqual(len(tail["tail"]), 200)
         self.assertEqual(tail["tail"][-1], proc.stdout.strip())
