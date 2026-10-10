@@ -76,8 +76,8 @@ non le cambiano; `changed` se una lettura successiva trova un'altra dimensione) 
   header HTTP né variabili d'ambiente. Una stringa in cui un pattern di `hindsight_secrets.py`
   trova un segreto diventa `[REDACTED]` per intero, e i valori di `OPENAI_API_KEY`,
   `TYPESAFE_API_KEY`, `VOYAGE_API_KEY` spariscono ovunque, nomi dei campi compresi; un campo il cui
-  nome finisce in `_key`, `token`, `secret`, `password` o `authorization` perde il valore, anche
-  oggetto o lista (restano i booleani). `redacted: true` dice che il record non è più fedele
+  nome contiene `secret`, `passw`, `credential`, `authorization` o `api_key`, o finisce in `token`,
+  `pwd`, `_key` o `Key`, perde il valore, anche oggetto o lista (restano i booleani). `redacted: true` dice che il record non è più fedele
   all'esecuzione. Con una di queste chiavi sotto gli 8 caratteri il record non viene scritto
   (avviso su stderr): un valore così corto non si toglie in modo sicuro.
   Lo stesso se la redazione rende uguali due nomi di campo.

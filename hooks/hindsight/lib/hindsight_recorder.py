@@ -44,11 +44,14 @@ except ImportError:
 VERSION = 1
 REDACTED = "[REDACTED]"
 KEY_ENV = ("OPENAI_API_KEY", "TYPESAFE_API_KEY", "VOYAGE_API_KEY")
-# Campi il cui valore e' sempre un segreto: il nome finisce come quelli di
-# OUTCOME_SECRET_PATTERNS (aws_secret_access_key, github_token, db_password,
-# x-api-key). Nei JSON parsati nome e valore sono separati e i pattern da soli
-# non li vedono. Restano max_tokens, keyword e i booleani di keys_present.
-SECRET_NAME = re.compile(r"(?:secret|passw(?:or)?d|token|[_-]key|apikey|authorization)$", re.I)
+# Campi il cui valore e' sempre un segreto: nei JSON parsati nome e valore sono
+# separati e i pattern da soli non li vedono. Ovunque nel nome: secret, passw,
+# credential, authorization, api key; in fondo: token, pwd, _key/-key o Key in
+# camelCase (aws_secret_access_key, password_hint, privateKey, GITHUB_TOKEN).
+# Restano max_tokens, keyword e i booleani di keys_present.
+SECRET_NAME = re.compile(
+    r"(?i:secret|passw|credential|authorization|api[_-]?key)|(?i:token|pwd|[_-]key)$|[a-z0-9]Key$"
+)
 # Coda del transcript: le stesse righe di load_transcript del worker (il recall
 # ne legge 80 con last_assistant_text).
 TRANSCRIPT_LINES = 200

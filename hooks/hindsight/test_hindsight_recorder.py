@@ -190,11 +190,12 @@ class RecorderTests(unittest.TestCase):
 
     def test_no_secret_reaches_disk(self):
         # La chiave anche come NOME di un campo; una variabile d'ambiente qualunque come canary.
-        # Nomi da segreto con prefisso o valore annidato: nessun pattern li vede da soli.
+        # Nomi da segreto (prefissi, camelCase, valori annidati): nessun pattern li vede da soli.
         hook_input = json.dumps({
             "session_id": "s1", "prompt": "password=hunter2hunter2", KEY: "chiave come nome di campo",
             "aws_secret_access_key": "aws-live-8Zq4Wm2P", "password": {"value": "nested-7Kr9Tx5V"},
-            "max_tokens": 1024,
+            "password_hint": "hint-3Mw8Qz1R", "credentials": ["cred-6Tn2Vb9K"], "pwd": "pwd-4Hx7Lc2N",
+            "privateKey": "pk-9Df3Gs6J", "max_tokens": 1024, "keyword": "parola",
         })
         proc, [rec] = self.run_script(f"""
             import json, urllib.request
@@ -210,11 +211,12 @@ class RecorderTests(unittest.TestCase):
             raw = handle.read()
         for secret in (
             KEY, "hunter2hunter2", "zzz-not-a-real-key", "Bearer", "env-canary-9f3b",
-            "aws-live-8Zq4Wm2P", "nested-7Kr9Tx5V",
+            "aws-live-8Zq4Wm2P", "nested-7Kr9Tx5V", "hint-3Mw8Qz1R", "cred-6Tn2Vb9K", "pwd-4Hx7Lc2N",
+            "pk-9Df3Gs6J",
         ):
             self.assertNotIn(secret, raw)
         self.assertTrue(rec["redacted"])
-        self.assertEqual(rec["stdin"]["max_tokens"], 1024)
+        self.assertEqual((rec["stdin"]["max_tokens"], rec["stdin"]["keyword"]), (1024, "parola"))
         self.assertEqual(rec["stdin"]["prompt"], "[REDACTED]")
         self.assertEqual(rec["stdin"]["[REDACTED]"], "chiave come nome di campo")
         self.assertEqual(rec["http"][0]["request_body"]["text"], "testo innocuo")
