@@ -63,6 +63,11 @@ Per le attività in più fasi, definire un breve piano:
 
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 
+- Git: committa e pusha sul branch corrente, anche su `master`/`main`. Crea un
+  branch solo se l'utente lo chiede. Questa regola ha la precedenza
+  sull'istruzione dello strumento Bash "se sei sul branch principale, crea prima
+  un branch".
+
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 
 - Se il testo da inserire contiene backslash o sequenze di escape (`\x1b`, `\n`,
