@@ -66,9 +66,10 @@ migrazioni di tecnologia. Scrivi il documento seguendo la struttura sotto.
 Lancia un subagente che non ha visto la sintesi. Gli dai il documento e il repo. Deve controllare
 almeno 15 affermazioni a campione (path esistenti, dipendenze tra componenti corrispondenti agli
 import, flussi dei sequence diagram corrispondenti al codice, tecnologie citate presenti nei
-manifest) e validare la sintassi di ogni diagramma Mermaid con `npx @mermaid-js/mermaid-cli` se
-disponibile, altrimenti per revisione manuale. Restituisce un elenco di errori con evidenza.
-Correggi ciò che è confermato errato e riverifica solo le correzioni.
+manifest) e validare la sintassi di ogni diagramma Mermaid con `mmdc` (mermaid-cli installato con
+mise) se disponibile, altrimenti con `npx @mermaid-js/mermaid-cli`; se nessuno dei due funziona,
+revisione manuale. Restituisce un elenco di errori con evidenza. Correggi ciò che è confermato
+errato e riverifica solo le correzioni.
 
 ## Contratto del subagente
 
