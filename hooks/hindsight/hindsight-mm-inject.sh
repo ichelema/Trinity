@@ -14,10 +14,14 @@ export HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
 
-PYTHONUTF8=1 "$HS_PY" <<'PY' 2>/dev/null
+# stderr su file (sovrascritto a ogni run) e NON /dev/null: vedi hindsight-recall.sh.
+PYTHONUTF8=1 "$HS_PY" <<'PY' 2>"$HS_CACHE_DIR/hs-mm-inject-stderr.log"
 import json, os, sys, time, urllib.request, urllib.error
 
 sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
+if os.environ.get("HINDSIGHT_RECORD") == "1":  # recorder dei golden (ICH-173)
+    import hindsight_recorder
+    hindsight_recorder.start("hindsight-mm-inject")
 from hindsight_config import load_config, resolve_bank, bank_url
 
 cfg = load_config()

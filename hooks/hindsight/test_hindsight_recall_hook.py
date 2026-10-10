@@ -188,7 +188,9 @@ class HookE2ETests(unittest.TestCase):
             hook["transcript_path"] = transcript_path
         hook_input = json.dumps(hook)
         env = {
-            **os.environ,
+            # Il recorder dei golden (ICH-173) solo se lo chiede il test: con
+            # HINDSIGHT_RECORD=1 nella shell la suite finirebbe nei record reali.
+            **{k: v for k, v in os.environ.items() if k != "HINDSIGHT_RECORD"},
             "HINDSIGHT_API_URL": f"http://127.0.0.1:{self.port}",
             "HS_OPENAI_URL": f"http://127.0.0.1:{self.port}/v1/chat/completions",
             "OPENAI_API_KEY": "test-key",
@@ -222,6 +224,7 @@ class HookE2ETests(unittest.TestCase):
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=60,
         )
+        self.last_stdout = proc.stdout
         self.assertEqual(proc.returncode, 0, proc.stderr)
         if not proc.stdout.strip():
             return None
@@ -572,6 +575,59 @@ class HookE2ETests(unittest.TestCase):
                 self.assertNotIn(self.PROMPT, item["content"])  # prompt nuovo escluso
                 self.assertEqual(self.queue_files(), [])
                 self.assertEqual(self.retain_pending_files(), [])
+
+    def test_recorder_keeps_output_and_records_recall_and_worker(self):
+        # ICH-173: stesso run con HINDSIGHT_RECORD a 0 e a 1 -> stesso stdout;
+        # con 1 un record del recall e uno del worker --queued, senza la chiave.
+        MockBackend.gate_spec = {
+            "action": "retain",
+            "reason": "durable_decision",
+            "preview": "Salvo la decisione e2e.",
+            "context": "dominio e2e",
+        }
+        MockBackend.recall_results = [
+            {"text": "kappa memo", "type": "world", "scores": {"reranker": 0.95}},
+        ]
+        transcript = self.write_transcript("risposta e2e")
+        stdout = {}
+        for record in ("0", "1"):
+            MockBackend.retain_posts = []
+            self.enqueue(session_id=f"rec-{record}", transcript_path=transcript)
+            self.run_hook(
+                self.PROMPT,
+                session_id=f"rec-{record}",
+                transcript_path=transcript,
+                extra_env={
+                    "XDG_CACHE_HOME": os.path.join(self.tmp.name, f"xdg-{record}"),
+                    "HINDSIGHT_RECORD": record,
+                },
+            )
+            stdout[record] = self.last_stdout
+            self.wait_for_retain_posts(1)
+        self.assertEqual(stdout["0"], stdout["1"])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "xdg-0", "trinity", "hs-golden")))
+        golden = os.path.join(self.tmp.name, "xdg-1", "trinity", "hs-golden")
+        [recall_path] = glob.glob(os.path.join(golden, "hindsight-recall", "*.json"))
+        # Il record del worker arriva al suo atexit, dopo la POST: si aspetta.
+        deadline = time.monotonic() + CHILD_TIMEOUT_S
+        while not glob.glob(os.path.join(golden, "hindsight-retain-worker", "*.json")):
+            self.assertLess(time.monotonic(), deadline, "record del worker --queued mai scritto")
+            time.sleep(0.1)
+        [worker_path] = glob.glob(os.path.join(golden, "hindsight-retain-worker", "*.json"))
+        texts = {}
+        for name, path in (("recall", recall_path), ("worker", worker_path)):
+            with open(path, encoding="utf-8") as handle:
+                texts[name] = handle.read()
+            self.assertNotIn("test-key", texts[name])  # OPENAI_API_KEY dei test
+        recall, worker = json.loads(texts["recall"]), json.loads(texts["worker"])
+        self.assertEqual((recall["stdin"]["session_id"], recall["exit_code"]), ("rec-1", 0))
+        self.assertEqual(recall["stdout"], stdout["1"])
+        self.assertTrue(any(ex["url"].endswith("/memories/recall") for ex in recall["http"]))
+        self.assertEqual((worker["argv"], worker["session_id"]), (["--queued", "rec-1"], "rec-1"))
+        self.assertIn(transcript, worker["transcripts"])
+        self.assertTrue(
+            any(ex["method"] == "POST" and ex["url"].endswith("/memories") for ex in worker["http"])
+        )
 
     def test_queued_stop_uncertain_asks_at_end_of_reply_merged_with_recall(self):
         # Gate "uncertain": pending salvato e istruzione in additionalContext

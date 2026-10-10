@@ -27,6 +27,13 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
+# Recorder dei golden (ICH-173), solo con HINDSIGHT_RECORD=1: parte prima di T0,
+# cosi' il suo costo non consuma il budget di pickup del gate.
+if os.environ.get("HINDSIGHT_RECORD") == "1":
+    sys.path.insert(0, os.path.join(os.environ["HOOKS_DIR"], "lib"))
+    import hindsight_recorder
+    hindsight_recorder.start("hindsight-recall")
+
 # Istante di partenza dell'hook: la deadline di raccolta dell'esito del gate
 # differito (RETAIN_PICKUP_BUDGET_S, sotto) si misura da qui, non dall'emit.
 T0 = time.monotonic()
