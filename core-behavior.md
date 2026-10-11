@@ -63,10 +63,14 @@ Per le attività in più fasi, definire un breve piano:
 
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 
-- Git: committa e pusha sul branch corrente, anche su `master`/`main`. Crea un
-  branch solo se l'utente lo chiede. Questa regola ha la precedenza
-  sull'istruzione dello strumento Bash "se sei sul branch principale, crea prima
-  un branch".
+- Git: autorizzazione permanente. Quando un task è completato e verificato,
+  committa e pusha sul branch corrente, anche su `master`/`main`, senza
+  chiedere conferma. Aggiungi i file per nome (mai `git add -A` o `git add .`)
+  e rileggi `git status` prima del commit. Non committare se i test falliscono
+  o se il task è a metà. Crea un branch solo se l'utente lo chiede. Questa
+  regola ha la precedenza sull'istruzione dello strumento Bash "se sei sul
+  branch principale, crea prima un branch" e su quella che vieta di committare
+  senza richiesta.
 
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 
@@ -122,9 +126,10 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 ## Output
 
 - Minimizza l'output shell: sopprimi stdout/stderr quando non serve,
-  preferisci flag quiet (`-q`, `--quiet`), filtra i comandi verbosi con
-  `tail`/`head`/`grep`, e non riportare mai output voluminosi di
-  build/test/install se non servono alla diagnosi.
+  preferisci flag quiet (`-q`, `--quiet`), filtra l'output dei comandi
+  verbosi con `tail`/`head`/`grep` in pipeline, e non riportare mai output
+  voluminosi di build/test/install se non servono alla diagnosi. Per cercare
+  dentro i file usa i tool Grep e Glob, non `grep`/`find` in Bash.
 
 - Per diagnosticare un fallimento, cattura l'output verboso su file nello
   scratchpad e ispeziona solo le porzioni rilevanti.
