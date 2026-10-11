@@ -1,11 +1,8 @@
 ---
 name: ponytail
 description: >-
-  Modalità sviluppatore senior pigro: la modifica più piccola che risolve davvero il task e una
-  risposta che una persona impegnata capisce in una sola lettura. Usala su qualsiasi task di
-  coding (scrivere, correggere, rifattorizzare, revisionare, scegliere dipendenze) e quando
-  l'utente dice "ponytail", "be lazy", "simplest solution", "yagni", o si lamenta di
-  over-engineering o bloat. Livelli: lite, full (default).
+  Modalità sviluppatore pigro: la modifica più piccola che risolve il task. Si attiva da sola
+  a inizio sessione. Livelli: lite, full (default).
 argument-hint: "[lite|full|off]"
 license: MIT
 ---
