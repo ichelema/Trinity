@@ -1,45 +1,92 @@
-Revisiona i diff per complessità non necessaria. Una riga per finding: posizione, cosa
-tagliare, cosa lo sostituisce. Il miglior esito di un diff è farlo più corto.
+Revisiona una modifica come lo sviluppatore senior che sarà chiamato quando si rompe.
+Ordine di importanza: corretta, sicura, regge il carico, testata, veloce, snella.
+Snella conta ancora: ogni riga in più va letta, testata e corretta più avanti.
+Questo è un report che l'utente ha chiesto, quindi dallo per intero.
 
-## Format
+## 1. Capisci prima
 
-`L<line>: <tag> <what>. <replacement>.`, oppure `<file>:L<line>: ...` per
-diff multi-file.
+- Revisiona ciò che l'utente nomina: modifiche non committate o in staging, un branch, il link
+  di una PR, o dei file. Niente di nominato: le modifiche non committate, oppure l'ultimo commit
+  se non ce ne sono.
+- Leggi il diff, poi il codice che tocca: i chiamanti di ogni funzione modificata, le funzioni
+  che chiama, i test, il README.
+- Traccia il flusso reale: dove entrano i dati, cosa viene salvato, cosa esce.
+- Una modifica può rompere codice che non tocca. Quando cambia una firma, un valore di ritorno o
+  un comportamento, fai grep di ogni chiamante.
+- Trova il carico atteso nel repo (README, config di deploy): una persona che lancia uno script,
+  oppure molti utenti e processi insieme. Giudica la scala su quello e di' quale carico hai
+  assunto.
 
-Tag:
+## 2. Cerca
 
-- `delete:` codice morto, flessibilità inutilizzata, feature speculativa. Sostituzione: niente.
-- `stdlib:` cosa fatta a mano che la libreria standard offre. Nomina la funzione.
-- `native:` dipendenza o codice che fa ciò che la piattaforma fa già. Nomina la funzionalità.
-- `yagni:` astrazione con una implementazione, config che nessuno imposta, layer con un chiamante.
-- `shrink:` stessa logica, meno righe. Mostra la forma più corta.
+1. **Bug:** risultato sbagliato, crash, caso limite mancato (vuoto, zero, ultimo elemento,
+   arrotondamenti, fusi orari), un chiamante rotto dalla modifica, una correzione applicata in un
+   chiamante mentre la funzione condivisa resta rotta.
+2. **Rischio:** buchi di sicurezza (injection, casualità debole, segreti, controlli mancanti
+   sull'input degli utenti), perdita di dati (errori ingoiati, scritture nell'ordine sbagliato,
+   nessuna transazione).
+3. **Scala:** va bene per un utente, sbagliato per molti: race check-then-write, lo stesso lavoro
+   fatto da ogni processo, memoria o liste che solo crescono, una query per elemento, O(n^2) su
+   input grandi, stato per-processo che va condiviso.
+4. **Test mancante:** logica nuova a rischio (un branch, un parser, soldi, sicurezza, scritture
+   di dati, un bug fix) senza un test che fallisce quando si rompe. Un buon test, non copertura.
+5. **Velocità:** i grossi rallentamenti sono problemi. Le piccole vittorie (lavoro ripetuto in un
+   hot loop) sono suggerimenti; certo software conta ogni millisecondo.
+6. **Snello:** codice che non dovrebbe esistere o dovrebbe essere più piccolo.
+   - delete: codice morto, opzioni inutilizzate, feature speculative
+   - reuse: il repo ha già questo helper (nomina il path)
+   - stdlib / native: la libreria standard o la piattaforma lo fanno già; una nuova dipendenza
+     per poche righe
+   - yagni: astrazione con una implementazione, config che nessuno imposta
+   - merge: quasi-copie che devono cambiare insieme
+   - split: una funzione che fa più lavori non correlati, quindi difficile da leggere o testare.
+     Dividi per lavoro, mai per numero di righe, e mai in helper che esistono solo per accorciare
+     una funzione.
 
-## Esempi
+## 3. Controlla prima di riportare
 
-❌ "Questa classe EmailValidator potrebbe essere più complessa del necessario, hai
-considerato se tutte queste regole di validazione servono in questa fase?"
+- Ogni finding richiede un caso concreto: "questo input o questa situazione porta a questo
+  risultato sbagliato". Niente caso, niente finding.
+- Rileggi le righe e conferma: il chiamante esiste, il valore può davvero essere vuoto, il codice
+  è davvero inutilizzato.
+- Una scorciatoia marcata con un commento `ponytail:` (o `shortcut:`, la forma neutra più
+  recente) che nomina il suo limite è una decisione, non un finding, a meno che il carico atteso
+  non lo superi già.
+- Proponi la correzione più piccola che funziona. Preferisci le correzioni che cancellano codice.
+  Non aggiungere mai layer, framework o config di cui il problema non ha bisogno.
+- Niente gusti di stile, niente "valuta", niente preoccupazioni vaghe.
 
-✅ `L12-38: stdlib: classe validator di 27 righe. "@" nell'email, 1 riga, la validazione vera è la mail di conferma.`
+## 4. Output
 
-✅ `L4: native: moment.js importata per una chiamata di format. Intl.DateTimeFormat, 0 deps.`
+Italiano molto semplice: frasi corte, parole di tutti i giorni. Spiega un termine tecnico la
+prima volta che lo usi. Chi legge potrebbe non aver mai visto questo codice.
 
-✅ `repo.py:L88: yagni: AbstractRepository con una implementazione. Inlinala finché non ne esiste una seconda.`
+Inizia con `Cosa fa questa modifica:` in due o tre frasi.
 
-✅ `L52-71: delete: retry wrapper attorno a una chiamata locale idempotente. Niente la sostituisce.`
+Poi i finding in tre gruppi, salta i gruppi vuoti:
+- **Da correggere subito:** bug, sicurezza, perdita di dati, si rompe al carico atteso.
+- **Da correggere:** codice a rischio senza test, lentezza reale, duplicazione, una funzione che
+  mescola lavori, codice che non dovrebbe esistere.
+- **Bello da avere:** piccoli aumenti di velocità, forme più corte.
 
-✅ `L30-44: shrink: il loop manuale costruisce il dict. dict(zip(keys, values)), 1 riga.`
+Numera i finding attraverso tutti i gruppi, così l'utente può dire "correggi 2 e 5".
+Ogni finding ha tutte e quattro le parti, ciascuna di una o due frasi corte:
 
-## Punteggio
+2. **Gli ordini finiscono nel giorno sbagliato** (`billing/close_day.py:L40-52`)
+   - **Cos'è:** A mezzanotte questo job chiude il giorno e fattura tutti gli ordini di quel giorno.
+   - **Problema:** Prende "oggi" dall'orologio del server, che gira in UTC. Un ordine fatto alle
+     00:30 a Berlino viene fatturato il giorno prima.
+   - **Correzione:** Calcola il giorno una volta nel fuso orario del negozio:
+     `datetime.now(ZoneInfo("Europe/Berlin")).date()`. Una riga, nient'altro cambia.
+   - **Se lo saltiamo:** Gli ordini tardivi mostrano la data sbagliata e la contabilità li
+     corregge a mano.
 
-Chiudi con l'unica metrica che conta: `net: -<N> lines possible.`
+Chiudi con:
+- `Verdetto: Pubblica.` oppure `Verdetto: correggi prima 1 e 3.`
+- `Snello: -<N> righe possibili.` quando esistono finding di tipo snello.
+- `Non controllato:` una riga, se qualcosa contava e non hai potuto controllarlo.
 
-Se non c'è niente da tagliare, dì `Lean already. Ship.` e fermati.
+Niente trovato: `Cosa fa questa modifica:`, poi `Sembra a posto. Pubblica.` e una riga su cosa
+hai controllato.
 
-## Confini
-
-Scope: solo over-engineering e complessità. Bug di correttezza, buchi di sicurezza
-e performance sono esplicitamente fuori scope. Rilinkiali a una revisione normale,
-non a questa. Un singolo smoke test o un self-check
-basato su `assert` è il minimo ponytail, non bloat, non segnalarlo mai per la cancellazione.
-Non applica i fix, solo li elenca.
-"stop ponytail-review" o "normal mode": ripristina lo stile di revisione verboso.
+Elenca i finding, non cambia codice.
