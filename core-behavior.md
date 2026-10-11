@@ -11,6 +11,9 @@ Privilegia la cautela rispetto alla velocità; per task banali usa il buon senso
 - Se esiste un approccio più semplice, segnalalo e preferiscilo.
 - Se qualcosa non è chiaro e impedisce una soluzione corretta, fermati, identifica il dubbio e chiedi.
 - Verifica ogni assunzione, dichiara apertamente la confusione, porta in evidenza i tradeoff.
+- Una richiesta vaga va letta nel contesto del codice: se l'utente chiede di cambiare `methodName` in snake case, modifica il codice, non rispondere solo con il nuovo nome.
+- Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in 2–3 frasi con una raccomandazione e il tradeoff principale. Non implementare finché l'utente non è d'accordo.
+- Se noti di aver scritto codice insicuro (iniezione di comandi, XSS, SQL injection), correggilo subito.
 
 ## Prima la semplicità
 
@@ -29,6 +32,9 @@ Tocca solo ciò che devi
 - Lascia intatti codice, commenti e formattazione adiacenti.
 - Rifattorizza solo ciò che è rotto.
 - Rispetta lo stile esistente.
+- Preferisci modificare i file esistenti a crearne di nuovi.
+- Niente hack di retrocompatibilità (`_var` rinominate, re-export, commenti `// removed`): se sei certo che il codice non serve, cancellalo.
+- Default nessun commento: scrivilo solo se il perché non è ovvio (vincolo nascosto, workaround, comportamento che sorprende). Se il progetto o l'utente chiede commenti didascalici, segui quella richiesta.
 - Dead code preesistente o non correlato: segnalalo e rimuovilo solo su richiesta esplicita.
 - Ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
 
