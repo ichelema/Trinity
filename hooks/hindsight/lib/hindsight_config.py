@@ -197,17 +197,23 @@ DEFAULTS = {
     # Tetto sul blocco iniettato da hindsight-mm-inject.sh: Claude Code tronca
     # l'output degli hook oltre 10.000 char (inline resta solo un preview ~2KB),
     # quindi si sta sotto con margine. Da hindsight-api 0.8.5 (issue #2756) il
-    # max_tokens dei mental model e' finalmente un cap reale su tutti i percorsi
-    # del reflect agent, MA non usarlo per far stare N pagine in questo budget:
-    # provato il 2026-07-25 con cap 700 e 850, le pagine perdono meta' contenuto
-    # (spariti i workaround specifici, non solo la coda) e l'ultima frase resta
-    # mozza. Il motivo: il modello non sa contare i token, ignora il "target
-    # budget" del prompt e a fermarlo e' il max_completion_tokens dell'API, che
-    # taglia di netto (finish_reason=length). Per accorciare le pagine si agisce
-    # sulla fonte: vincolo di formato nella source_query ("max N voci, una riga
-    # ciascuna, forma sintomo -> fix, niente intro/conclusione"). Le voci il
-    # modello le conta: dal 2026-07-25 le 3 pagine stanno in ~6.6k char (era
-    # 10.4k) e il taglio proporzionale qui sotto non scatta piu'.
+    # max_tokens dei mental model arriva a tutti i percorsi del reflect agent,
+    # MA non usarlo per far stare N pagine in questo budget: l'effetto non e'
+    # prevedibile. Due prove:
+    # - 2026-07-25, cap 700 e 850 (prima di gpt-5.6-luna sul reflect): le
+    #   pagine perdono meta' contenuto (spariti i workaround specifici, non
+    #   solo la coda) e l'ultima frase resta mozza (finish_reason=length).
+    # - 2026-10-11, project-conventions, reflect su gpt-5.6-luna: 2048 ->
+    #   3703 char, 1024 -> 2721, 500 -> 2417 e 2154 (due refresh). Mai una
+    #   frase mozza: il cap fa pressione ma non e' un tetto. Attenzione al
+    #   rumore: due refresh con lo stesso cap variano fino al 17%. A 500 il
+    #   modello abbandona il formato della source_query (paragrafi invece
+    #   dell'elenco puntato, 2 prove su 2).
+    # Per accorciare le pagine si agisce sulla fonte: vincolo di formato nella
+    # source_query ("max N voci, una riga ciascuna, forma sintomo -> fix,
+    # niente intro/conclusione"). Le voci il modello le conta: dal 2026-07-25
+    # le 3 pagine stanno in ~6.6k char (era 10.4k) e il taglio proporzionale
+    # di hindsight-mm-inject.sh (a fine riga, con marcatore) non scatta piu'.
     "mental_models_inject_max_chars": 9500,
     "mental_models": [],
     # Multi-bank mental model: sorgente delle "knowledge page" iniettate a
