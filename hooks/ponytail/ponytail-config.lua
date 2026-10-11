@@ -1,5 +1,5 @@
 -- ponytail-config.lua — configurazione + stato runtime condivisi.
--- Port fedele di ponytail-config.js + ponytail-runtime.js. JSON con dkjson.
+-- JSON con dkjson.
 
 local source = debug.getinfo(1, "S").source
 local script_dir = source:match("^@(.*)[/\\]") or "."
