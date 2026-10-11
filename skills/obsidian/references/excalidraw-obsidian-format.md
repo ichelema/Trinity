@@ -34,7 +34,7 @@ Usare questi placeholder in modo coerente. Non introdurre varianti locali non do
 | Placeholder | Significato | Uso |
 |---|---|---|
 | `{PROJECT_DIR}` | Directory progetto locale (Windows path) | `export_scene` / `import_scene` / `dump-scene` |
-| `{OBSIDIAN_VAULT}` | Directory root del vault (Windows path) | dove l'hook pubblica; `Write`/`Edit` della nota |
+| `{OBSIDIAN_VAULT}` | Directory root del vault: valore di `echo "$OBSIDIAN_VAULT"` | dove l'hook pubblica; `Write`/`Edit` della nota |
 | `<DRAWING_NAME>` | Nome base del disegno senza estensione | produce `.excalidraw` → `.excalidraw.md` |
 | `<NOTE_NAME>` | Nome base della nota senza estensione | produce `.md` |
 | `<RELATIVE_FOLDER>` | Cartella nel vault, relativa alla root | sottocartella di destinazione/embed |

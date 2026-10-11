@@ -156,10 +156,9 @@ regole operative shell/path, navigazione codice via LSP, Nushell, struttura dire
 Non è un file di sistema speciale: viene iniettato come **contesto** a ogni sessione da un hook 
 `SessionStart`, e il suo stdout entra nel contesto del modello.
 
-L'hook non fa un semplice `cat`: passa per lo script `hooks/bin/inject-core-behavior.sh`, che **espande 
-solo le variabili machine-specific** (`${OBSIDIAN_VAULT}`, `${OBSIDIAN_VAULT_NAME}`) via `envsubst`, 
-lasciando letterale tutto il resto (inclusi gli esempi Nushell con `$PATH`/`$r`). Così il file 
-versionato non contiene path hardcoded → il plugin è portabile tra macchine.
+L'hook non fa un semplice `cat`: passa per lo script `hooks/bin/inject-core-behavior.sh`, che tiene solo 
+i blocchi dell'OS corrente e scarta i blocchi manuali `RECALL`/`RETAIN` dove `recall_enabled` / 
+`retain_enabled` (in `hindsight.config.json`) sono `true`. Il resto del file resta letterale.
 
 ```json
 // hooks/hooks.json → SessionStart
@@ -702,9 +701,9 @@ dell'installazione. Su un'altra macchina (o su Linux) il path cambia. Senza ques
 in avvio, resto invariato); serve solo se riattivi `excalidraw`, disattivato di default.
 
 Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
-valore (es. `"/home/sphynx/Obsidian/Sinapsi"`): `core-behavior.md` resta identico, l'iniezione 
-lo espande con i valori locali. La versione MSYS del path si ricava con `cygpath -u`, non serve 
-una variabile separata.
+valore (es. `"/home/sphynx/Obsidian/Sinapsi"`). La variabile la leggono l'hook 
+`excalidraw-to-obsidian.rb` e la skill `obsidian` (con `echo "$OBSIDIAN_VAULT"`). La versione MSYS 
+del path si ricava con `cygpath -u`, non serve una variabile separata.
 
 | Cosa | Come è risolto |
 |---|---|
@@ -717,9 +716,6 @@ una variabile separata.
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
 | server MCP neovim (§7) | `${MCP_NEOVIM_DIR}` — **da definire per-macchina** (deploy del fork mcp-neovim-server, fuori dal repo; il sorgente sta in `D:/Sviluppo/Progetti`) |
 
-> Dipendenza: l'espansione usa `envsubst` (pacchetto `gettext`, presente di default su MSYS2/Linux/Mac). 
-> Se manca, lo script ricade su `sed`. Se le env non sono impostate, il testo iniettato mostra un 
-> avviso esplicito anziché un valore vuoto.
 
 ---
 

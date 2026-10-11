@@ -17,7 +17,7 @@ invece di rispondere a memoria.
 
 ## Configurazione
 
-- Vault: `{OBSIDIAN_VAULT}`
+- Vault: il percorso è nella variabile d'ambiente `OBSIDIAN_VAULT` (nome in `OBSIDIAN_VAULT_NAME`). Leggilo con `echo "$OBSIDIAN_VAULT"` prima di usare percorsi file. Nei documenti `{OBSIDIAN_VAULT}` indica questo valore.
 - MCP Obsidian: `obsidian_semantic_notes_vault`
 - Plugin rilevanti:
   - `obsidian-excalidraw-plugin`
