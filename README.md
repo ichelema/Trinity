@@ -643,10 +643,10 @@ refresh_mental_model — si auto-recuperano al ciclo successivo). L'avviso arriv
 default `true`, indipendente da `recall_enabled`/`retain_enabled`).
 
 **Mental model — iniezione a SessionStart.** Oltre al recall real-time per prompt, Hindsight
-inietta all'avvio di una sessione nuova (`startup`) tre **mental model** sintetici via `hindsight-mm-inject.sh`:
+inietta all'avvio di una sessione nuova (`startup`) due **mental model** sintetici via `hindsight-mm-inject.sh`:
 riassunti tematici generati interrogando il bank con query predefinite, che danno al modello
 un profilo costante dell'utente e del progetto senza aspettare che il recall lo ricostruisca
-dal flusso dei prompt. Configurati in `hindsight.config.json` → `mental_models`:
+dal flusso dei prompt. Il plugin ne definisce tre in `hindsight.config.json` → `mental_models`:
 
 | id | Cosa sintetizza |
 |---|---|
@@ -655,7 +655,9 @@ dal flusso dei prompt. Configurati in `hindsight.config.json` → `mental_models
 | `recurring-learnings` | bug ricorrenti, workaround, lezioni apprese sul campo, criticità toolchain |
 
 `mental_models_inject_on_start: true` e `mental_models_inject_ids` nel config del plugin
-controllano quali vengono caricati. Il token budget è `mental_model_max_tokens` (plugin: 2048).
+controllano quali vengono caricati: `recurring-learnings` resta nel bank ma non è nella lista.
+Il token budget è `mental_model_max_tokens` (plugin: 1024): vale solo alla creazione (`seed`),
+un mental model esistente tiene il valore impostato sul server.
 
 I mental model sono definiti dal plugin e vivono nel bank core condiviso. La sorgente dei
 bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a `recall_banks`);

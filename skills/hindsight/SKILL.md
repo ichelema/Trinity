@@ -89,10 +89,11 @@ automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei
 
 ### Mental model: knowledge page iniettate a inizio sessione
 
-Tre mental model definiti nel blocco `mental_models` di `hindsight.config.json` —
-`user-profile`, `project-conventions`, `recurring-learnings` — vengono iniettati
+Tre mental model sono definiti nel blocco `mental_models` di `hindsight.config.json`:
+`user-profile`, `project-conventions`, `recurring-learnings`. I primi due vengono iniettati
 come `additionalContext` all'avvio di una sessione nuova (`startup`) dall'hook `hindsight-mm-inject.sh`
-(gated da `mental_models_inject_on_start: true`, ids in `mental_models_inject_ids`).
+(gated da `mental_models_inject_on_start: true`, ids in `mental_models_inject_ids`);
+`recurring-learnings` resta nel bank ma non viene iniettato.
 
 - **refresh** rigenera il contenuto dal bank; **inject** mostra solo il contenuto già esistente.
 - Refresh manuale immediato (necessario dopo aver cancellato/corretto un fatto):
