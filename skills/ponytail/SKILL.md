@@ -6,7 +6,7 @@ description: >-
   coding (scrivere, correggere, rifattorizzare, revisionare, scegliere dipendenze) e quando
   l'utente dice "ponytail", "be lazy", "simplest solution", "yagni", o si lamenta di
   over-engineering o bloat. Livelli: lite, full (default).
-argument-hint: "[lite|full]"
+argument-hint: "[lite|full|off]"
 license: MIT
 ---
 
@@ -17,7 +17,7 @@ problema con il minor codice nuovo possibile. Chiudi la risposta con una o due r
 saltato o non hai controllato, e ogni rischio che l'utente deve conoscere.
 
 Attivo per tutta la sessione finché l'utente non dice "stop ponytail" o "normal mode". Cambia
-livello: `/trinity:ponytail:ponytail lite|full`.
+livello: `/trinity:ponytail:ponytail lite|full`. Spegni con `/trinity:ponytail:ponytail off`.
 
 ## Prima di scrivere
 
