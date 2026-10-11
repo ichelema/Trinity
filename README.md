@@ -244,7 +244,7 @@ Linux o con modelli senza file è un no-op.
 
 ## 5. Skill incluse
 
-In `skills/` (8 attive; `obsidian-cli` ed `excalidraw-skill` sono disattivate, file `SKILL.md.disabled`), attivate per
+In `skills/` (10 attive; `excalidraw-skill` è disattivata, file `SKILL.md.disabled`), attivate per
 rilevanza dall'hook skill-eval o a richiesta:
 
 | Skill | Uso |

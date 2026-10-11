@@ -3,8 +3,8 @@ name: obsidian
 description: >-
   Esperto di Obsidian e del suo vault: note, frontmatter, wikilink, backlink, tag, graph, Dataview,
   Templater, Canvas, Bases, plugin, `.excalidraw.md`, daily note. Cerca, sintetizza, crea e modifica
-  note del vault, anche con il server MCP o la CLI `obsidian`. Solo per note e contenuti del vault,
-  non per file generici del filesystem.
+  note del vault tramite il server MCP. Solo per note e contenuti del vault, non per file generici
+  del filesystem.
 ---
 
 # SKILL
@@ -23,13 +23,9 @@ invece di rispondere a memoria.
   - `obsidian-excalidraw-plugin`
   - `obsidian-advanced-uri`
   - `Semantic Notes Vault MCP`
-- Skill operative correlate:
-  - `obsidian-cli` per interazioni col Vault tramite terminale/CLI
 
 Il server MCP fornisce accesso semantico al Vault: ricerca, lettura, creazione/modifica note,
-graph/backlink, Dataview e Bases se disponibili. La skill `obsidian-cli` fornisce accesso operativo
-via terminale quando la richiesta implica comandi CLI, automazioni o operazioni dirette sul Vault
-tramite `obsidian`.
+graph/backlink, Dataview e Bases se disponibili.
 
 ---
 
@@ -62,23 +58,15 @@ contenuto operativo.
 
 | Skill                       | Quando usarla                                                                                                                                                                                                                                                                                 | Scopo                                                                                          |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| la skill `obsidian-cli`     | quando l'utente chiede di interagire con Obsidian o col Vault tramite CLI, terminale, shell, script, automazioni, cron, comandi `obsidian`, gestione task, search, read/write/append/prepend, move/rename/delete, sync history, file history, Bases, backlinks, orfani o broken links via CLI | eseguire o costruire operazioni tramite Obsidian CLI senza riscrivere qui la command reference |
 | la skill `excalidraw-skill` | quando bisogna lavorare su canvas live Excalidraw prima del salvataggio/conversione nel Vault                                                                                                                                                                                                 | creare o manipolare scene Excalidraw operative prima della conversione in `.excalidraw.md`     |
 
 Regola di routing:
 
-- se la richiesta riguarda contenuti reali del Vault senza vincolo CLI, usare prima il MCP
+- se la richiesta riguarda contenuti reali del Vault, usare prima il MCP
   `obsidian_semantic_notes_vault`;
-- se la richiesta cita CLI, terminale, shell, script, automation, cron o comandi `obsidian`, usare
-  la skill `obsidian-cli`;
 - se il MCP `obsidian_semantic_notes_vault` non è disponibile o una sua chiamata fallisce
   (tipicamente perché Obsidian non è aperto), avvisare esplicitamente l'utente che il MCP non
-  risponde e che probabilmente Obsidian non è in esecuzione; ricorrere alla skill `obsidian-cli`
-  come fallback solo dopo questo avviso;
-- se serve sapere flag, subcommand o output format della CLI, leggere la command reference indicata
-  dalla skill `obsidian-cli`;
-- non usare la skill CLI per spiegazioni concettuali su Obsidian, configurazioni GUI, teoria PKM o
-  esempi non operativi.
+  risponde e che probabilmente Obsidian non è in esecuzione.
 
 ---
 
@@ -133,11 +121,9 @@ Se non ti e chiara la struttura guarda immagine in `references/struttura directo
 
 ## Regola principale
 
-Se la richiesta riguarda contenuti specifici del Vault e non richiede esplicitamente CLI/terminale,
-usare il MCP `obsidian_semantic_notes_vault`. Se la richiesta chiede di agire tramite CLI,
-terminale, shell, script o comandi `obsidian`, usare la skill correlata `obsidian-cli`. Se il MCP
-non risponde (Obsidian non aperto), avvisare l'utente prima di ricorrere alla skill `obsidian-cli`
-come fallback. Non inventare note, path, backlink, frontmatter o risultati.
+Per contenuti specifici del Vault usare il MCP `obsidian_semantic_notes_vault`. Se il MCP non
+risponde (Obsidian non aperto), avvisare l'utente. Non inventare note, path, backlink, frontmatter o
+risultati.
 
 Usare MCP per:
 
