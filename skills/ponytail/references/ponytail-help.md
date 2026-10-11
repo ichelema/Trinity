@@ -23,10 +23,6 @@ Il livello resta fino a cambiato o a fine sessione.
 | **ponytail-gain**   | `/trinity:ponytail:ponytail-gain`   | Scoreboard dell'impatto misurato: meno codice, meno costo, più velocità.                                                                 |
 | **ponytail-help**   | `/trinity:ponytail:ponytail-help`   | Questa card.                                                                                                                             |
 
-Codex CLI e l'estensione IDE invocano le skill con `$ponytail:ponytail`,
-`$ponytail:ponytail-review` o `$ponytail:ponytail-help`. Claude Code e OpenCode usano le forme
-slash-command qui sopra (OpenCode offre tutte e sei come slash command).
-
 ## Disattiva
 
 Dì "stop ponytail" o "normal mode". Riprendi quando vuoi con `/trinity:ponytail:ponytail`.
@@ -55,7 +51,7 @@ Risoluzione: env var > file di config > `full`.
 
 Abilita l'auto-update una volta: apri `/plugin`, vai su Marketplaces, scegli ponytail, Abilita auto-update. Claude Code scarica poi le nuove versioni all'avvio (esegui `/reload-plugins` quando lo richiede). Refresh manuale: `/plugin marketplace update ponytail` poi `/reload-plugins`.
 
-Se `/plugin` non è riconosciuto, la tua Claude Code è obsoleta. Aggiornala (`npm install -g @anthropic-ai/claude-code@latest`, o `brew upgrade claude-code`) e riavvia. Gli altri host usano il loro flusso di update.
+Se `/plugin` non è riconosciuto, la tua Claude Code è obsoleta. Aggiornala (`npm install -g @anthropic-ai/claude-code@latest`, o `brew upgrade claude-code`) e riavvia.
 
 ## Altro
 
