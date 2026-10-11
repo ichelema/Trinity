@@ -643,7 +643,7 @@ refresh_mental_model — si auto-recuperano al ciclo successivo). L'avviso arriv
 default `true`, indipendente da `recall_enabled`/`retain_enabled`).
 
 **Mental model — iniezione a SessionStart.** Oltre al recall real-time per prompt, Hindsight
-inietta a ogni `SessionStart` tre **mental model** sintetici via `hindsight-mm-inject.sh`:
+inietta all'avvio di una sessione nuova (`startup`) tre **mental model** sintetici via `hindsight-mm-inject.sh`:
 riassunti tematici generati interrogando il bank con query predefinite, che danno al modello
 un profilo costante dell'utente e del progetto senza aspettare che il recall lo ricostruisca
 dal flusso dei prompt. Configurati in `hindsight.config.json` → `mental_models`:
