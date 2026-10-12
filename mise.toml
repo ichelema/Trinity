@@ -297,7 +297,12 @@ shell = "bash -c"
 # (default('') sul template) e gli errori di embed finirebbero solo in /tmp/hs.log,
 # mentre il task uscirebbe comunque con 0. VOYAGE_API_KEY resta senza guardia: senza
 # chiave il recall degrada (niente rerank), non muore.
-run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-...}"; : "${GEMINI_API_KEY:?manca la chiave: export GEMINI_API_KEY=...}"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
+#
+# HS_TLS_NO_X509_STRICT (solo in C:/certs/proxy.env, PC dietro il firewall ENINET): mette
+# in PYTHONPATH hooks/hindsight/lib/tls-compat, il cui sitecustomize.py toglie
+# VERIFY_X509_STRICT. Senza, Python 3.13 rifiuta i certificati del firewall ("Missing
+# Authority Key Identifier") e il server muore all'init degli embedding Gemini.
+run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-...}"; : "${GEMINI_API_KEY:?manca la chiave: export GEMINI_API_KEY=...}"; [ -n "${HS_TLS_NO_X509_STRICT:-}" ] && export PYTHONPATH="$PWD/hooks/hindsight/lib/tls-compat"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
 
 [tasks.stop-hindsight]
 description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"
