@@ -25,7 +25,7 @@ In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
 
 - Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
 - Entry-point: `hindsight-local-mcp` (in `Scripts/` del Python gestito da mise — esposto nel PATH via `[env]` di `.mise.toml`)
-- Versione verificata sul PC Windows: **0.10.3** (2026-10-12; il setup Linux risultava 0.10.2 dopo l'upgrade del 2026-10-04); verificare separatamente le altre macchine; query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
+- Versione verificata sul PC Windows: **1.0.0** (2026-10-14; il setup Linux risultava 0.10.2 dopo l'upgrade del 2026-10-04); verificare separatamente le altre macchine; query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
 - LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
 - Retain gate automatico: **`gpt-5.6-luna`** decide, **TypeSafe `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥ `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
 - Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
