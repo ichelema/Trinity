@@ -18,49 +18,38 @@ note_id: upUKWcMl76
 ---
 
 # Template-Atomic
----
+
+
 
 ## 🎯 Obiettivo
+
 *Dove voglio arrivare (il futuro, il risultato)*
 
----
+
 
 ## 📌 Contesto
+
 *Da dove parto e perché (il presente, le condizioni)*
 
----
-
 ## ...
-
----
 
 # 📝 Todo
 
 - [ ] 
-
----
 
 # 🧩 Connessioni principali
 
 ## 🌿Note Evergreen
 - 
 
----
-
 ## ⚛️ Note Atomic
 - 
-
----
 
 ## 🪶Note Literature
 - 
 
----
-
 ## 🗃️ Note Reference
 -
-
----
 
 # 🔗Base di conoscenza non collegate
 
