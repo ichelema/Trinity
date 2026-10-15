@@ -7,8 +7,8 @@
     "promote_exclude_banks": ["obsidian"]
   },
 
-  "recall_enabled": true,
-  "retain_enabled": true,
+  "recall_enabled": false,
+  "retain_enabled": false,
 
   "recall_budget": "mid",
   "recall_max_tokens": 2048,
