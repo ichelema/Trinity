@@ -163,7 +163,7 @@ dillo in una riga.
 
 <!-- /RECALL:manual -->
 
-<!-- RETAIN:manual --> <!-- Blocco iniettato SOLO con retain_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RETAIN_DROP=1): salva già il gate dell'hook Stop. -->
+<!-- RETAIN:manual --> <!-- Blocco iniettato SOLO con retain_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RETAIN_DROP=1): salva già il gate del retain automatico. -->
 ## Retain a fine task
 
 Al termine di un task significativo, valuta se il lavoro ha prodotto conoscenza

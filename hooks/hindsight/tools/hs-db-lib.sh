@@ -42,7 +42,7 @@ hs_db_require_pgbin() {
 # c'e' niente da perdere" porta dritto al DROP di un DB pieno.
 #
 # created_at NON basta: il retain usa un document_id stabile per sessione (vedi
-# compute_document_id nel worker), quindi ogni Stop successivo AGGIORNA lo stesso
+# compute_document_id nel worker), quindi ogni retain successivo AGGIORNA lo stesso
 # documento invece di inserirne uno nuovo; la consolidation fa lo stesso sulle
 # observation (fonde, non inserisce). Sul DB reale meta' dei documents e un quarto
 # delle memory_units hanno updated_at > created_at, con gap fino a 25 giorni: con

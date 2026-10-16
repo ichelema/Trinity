@@ -5,7 +5,7 @@ Ogni caso gira in un processo Python a se': il recorder sostituisce open,
 urlopen, subprocess.check_output, sys.stdout e sys.exit e registra un atexit, cose da
 non fare nel processo dei test. XDG_CACHE_HOME punta a una dir temporanea,
 quindi record e stato non toccano la cache reale. L'e2e del recall con il
-worker --queued sta in test_hindsight_recall_hook.py.
+worker --deferred sta in test_hindsight_recall_hook.py.
 """
 
 from __future__ import annotations
@@ -272,17 +272,18 @@ class RecorderTests(unittest.TestCase):
         self.assertIn("read_error", rec["http"][0])
 
     def test_state_and_transcript_are_snapshotted(self):
-        # Due sessioni in coda: il worker --queued s1 apre solo il transcript di s1.
-        queue = os.path.join(self.cache, "hs-retain-queue")
-        os.makedirs(queue)
+        # Due transcript: il worker --deferred col payload di s1 apre solo il
+        # transcript di s1.
+        outbox = os.path.join(self.cache, "hs-retain-outbox")
+        os.makedirs(outbox)
         transcripts = {}
-        for n, sid in enumerate(("s1", "s2")):
+        for sid in ("s1", "s2"):
             transcripts[sid] = os.path.join(self.tmp.name, f"{sid}.jsonl")
             with open(transcripts[sid], "w", encoding="utf-8") as handle:
                 handle.writelines(f'{{"n": {i}, "canary": "{sid}-only"}}\n' for i in range(250))
-            with open(os.path.join(queue, f"170000000000000{n}-1.json"), "w", encoding="utf-8") as handle:
-                json.dump({"session_id": sid, "transcript_path": transcripts[sid]}, handle)
-        entry = os.path.join(queue, "1700000000000000-1.json")
+        entry = os.path.join(outbox, "s1.out.json")
+        with open(entry, "w", encoding="utf-8") as handle:
+            json.dump({"output": {"systemMessage": "s1"}, "asks_consent": False}, handle)
         state = os.path.join(self.cache, "hs-retain-state.json")
         with open(state, "w", encoding="utf-8") as handle:
             json.dump({"a": 1}, handle)
@@ -314,16 +315,16 @@ class RecorderTests(unittest.TestCase):
                 json.dump({{"a": 2}}, f)
             """,
             script="hindsight-retain-worker",
-            args=("--queued", "s1"),
-            env={"HOOK_INPUT": json.dumps({"session_id": "parent"})},
+            args=("--deferred", "s1"),
+            env={"HOOK_INPUT": json.dumps({"session_id": "s1", "transcript_path": transcripts["s1"]})},
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual((rec["argv"], rec["session_id"]), (["--queued", "s1"], "s1"))
-        # HOOK_INPUT ereditato dal prompt che ha lanciato il worker: non e' il suo input.
-        self.assertIsNone(rec["stdin"])
+        self.assertEqual((rec["argv"], rec["session_id"]), (["--deferred", "s1"], "s1"))
+        # HOOK_INPUT ereditato dal prompt che ha lanciato il worker: e' il suo input.
+        self.assertEqual(rec["stdin"]["session_id"], "s1")
         before, after = rec["state_before"], rec["state_after"]
-        key = "hs-retain-queue/1700000000000000-1.json"
-        self.assertEqual(before[key]["content"]["session_id"], "s1")
+        key = "hs-retain-outbox/s1.out.json"
+        self.assertEqual(before[key]["content"]["output"]["systemMessage"], "s1")
         self.assertNotIn(key, after)
         self.assertEqual(before["hs-retain-state.json"]["content"], {"a": 1})
         self.assertEqual(after["hs-retain-state.json"]["content"], {"a": 2})
@@ -357,21 +358,19 @@ class RecorderTests(unittest.TestCase):
 
     def test_entry_points_record_only_with_record_1(self):
         # Guardia nei punti d'ingresso: un record per failcheck, mm-inject e
-        # worker (--queued e modalita' script) con HINDSIGHT_RECORD=1, nessuno
+        # worker (--deferred e modalita' script) con HINDSIGHT_RECORD=1, nessuno
         # con un altro valore.
-        queue = os.path.join(self.tmp.name, "queue")
-        os.makedirs(queue)
         env = {
             "HS_CFG_FAILCHECK_ENABLED": "false",
             "HS_CFG_MENTAL_MODELS_INJECT_ON_START": "false",
-            "HS_RETAIN_QUEUE_DIR": queue,
+            "HS_RETAIN_OUTBOX_DIR": os.path.join(self.tmp.name, "outbox"),
             "HS_RETAIN_STATE_DIR": self.tmp.name,
         }
         worker = os.path.join(HERE, "hindsight-retain-worker.py")
         runs = [
             ("hindsight-failcheck", [BASH, os.path.join(HERE, "hindsight-failcheck.sh").replace(os.sep, "/")]),
             ("hindsight-mm-inject", [BASH, os.path.join(HERE, "hindsight-mm-inject.sh").replace(os.sep, "/")]),
-            ("hindsight-retain-worker", [sys.executable, worker, "--queued", "sess-rec"]),
+            ("hindsight-retain-worker", [sys.executable, worker, "--deferred", "sess-rec"]),
             ("hindsight-retain-worker", [sys.executable, worker]),
         ]
         for value, expected in (("0", 0), ("1", 1)):

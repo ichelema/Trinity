@@ -74,15 +74,12 @@ def start(script: str) -> None:
     try:
         _t0 = time.monotonic()
         argv = sys.argv[1:]
-        # Il worker --queued eredita HOOK_INPUT dal prompt che l'ha
-        # lanciato: il suo input vero e' l'entry di coda, gia' in state_before.
-        raw = None if "--queued" in argv else os.environ.get("HOOK_INPUT")
-        stdin = _decode(raw)
+        # Anche il worker --deferred valuta l'HOOK_INPUT ereditato dal prompt
+        # che l'ha lanciato: e' il suo input vero.
+        stdin = _decode(os.environ.get("HOOK_INPUT"))
         cfg = load_config()
         state = _snapshot(_state_paths(cfg))
         session = stdin.get("session_id") if isinstance(stdin, dict) else None
-        if "--queued" in argv and argv.index("--queued") + 1 < len(argv):
-            session = argv[argv.index("--queued") + 1]
         now = datetime.now(timezone.utc)
         _name = now.strftime("%Y%m%dT%H%M%S%fZ") + f"-{os.getpid()}.json"
         _rec.update(
@@ -100,7 +97,7 @@ def start(script: str) -> None:
             keys_present={k: bool(os.environ.get(k)) for k in KEY_ENV},
             state_before=state,
         )
-        builtins.open = _recording_open(builtins.open, _transcript_paths(stdin, state))
+        builtins.open = _recording_open(builtins.open, _transcript_paths(stdin))
         urllib.request.urlopen = _recording_urlopen(urllib.request.urlopen)
         subprocess.check_output = _recording_check_output(subprocess.check_output)
         sys.stdout = _Tee(sys.stdout)
@@ -117,7 +114,7 @@ def _state_paths(cfg: dict) -> dict:
     base = cache_dir()
     env = os.environ.get
     return {
-        "hs-retain-queue": env("HS_RETAIN_QUEUE_DIR") or base + "/hs-retain-queue",
+        "hs-retain-outbox": env("HS_RETAIN_OUTBOX_DIR") or base + "/hs-retain-outbox",
         "hs-recall-pending": cfg.get("recall_pending_dir") or base + "/hs-recall-pending",
         "hs-retain-pending": env("HS_RETAIN_PENDING_DIR") or base + "/hs-retain-pending",
         "hs-invalidate-pending": env("HS_INVALIDATE_PENDING_DIR") or base + "/hs-invalidate-pending",
@@ -162,8 +159,8 @@ def _read_state(out: dict, key: str, path: str) -> None:
 
 def _open_shared(path: str):
     """Apre in lettura binaria. Su Windows con FILE_SHARE_DELETE, che open()
-    non concede: lo snapshot non blocca il remove o il rename di entry e
-    outbox fatto da un altro hook in quell'istante. Resta bloccato solo un
+    non concede: lo snapshot non blocca il remove o il rename di outbox e
+    pending fatto da un altro hook in quell'istante. Resta bloccato solo un
     os.replace SOPRA il file letto: Windows lo nega a qualunque lettore.
     io.open e non open: builtins.open e' intercettato (_recording_open)."""
     if sys.platform != "win32":
@@ -185,16 +182,12 @@ def _open_shared(path: str):
     return os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb")
 
 
-def _transcript_paths(stdin, state: dict) -> set:
-    """Transcript che lo script puo' leggere: quello del prompt (recall) e
-    quelli delle entry di coda (worker). Nel record finiscono solo quelli che
-    il codice apre davvero (un --queued non apre quelli delle altre sessioni)."""
-    paths = {stdin.get("transcript_path")} if isinstance(stdin, dict) else set()
-    for key, item in state.items():
-        content = item.get("content")
-        if key.startswith("hs-retain-queue/") and isinstance(content, dict):
-            paths.add(content.get("transcript_path"))
-    return {p for p in paths if isinstance(p, str) and p}
+def _transcript_paths(stdin) -> set:
+    """Transcript che lo script puo' leggere: quello del payload del prompt
+    (recall e worker --deferred). Nel record finisce solo se il codice lo
+    apre davvero."""
+    path = stdin.get("transcript_path") if isinstance(stdin, dict) else None
+    return {path} if isinstance(path, str) and path else set()
 
 
 def _recording_open(real, paths: set):

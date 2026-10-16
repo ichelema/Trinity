@@ -12,12 +12,13 @@ prompt successivo il context viene risolto con la catena esplicito
 repo/branch (HITL ICH-73); errore tecnico del gate -> fail-closed (nessuna
 POST, systemMessage non bloccante una sola volta per sessione, rollback del
 contatore di throttling cosi' la valutazione successiva riprova).
-Da ICH-86 il worker valuta a UserPromptSubmit l'entry accodata dallo Stop
-(coda hs-retain-queue, evaluate_queued): la
+Da ICH-86 il worker valuta a UserPromptSubmit il turno precedente, coi dati
+del payload del prompt (evaluate_deferred): la
 domanda del gate viaggia in additionalContext e chiude la risposta successiva.
-La valutazione differita gira in un processo detached (`--queued`) che scrive
-un outbox; qui il launcher e' sostituito da un thread in-process (fake_spawn)
-per restare ermetici — il vero processo e' coperto da test_hindsight_recall_hook."""
+La valutazione differita gira in un processo detached (`--deferred`) che
+scrive un outbox solo se ha qualcosa da mostrare; qui il launcher e'
+sostituito da un thread in-process (fake_spawn) per restare ermetici — il
+vero processo e' coperto da test_hindsight_recall_hook."""
 
 from __future__ import annotations
 
@@ -123,6 +124,13 @@ def write_jsonl(path: str, records: list[dict]) -> str:
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     return path
+
+
+class FakeProc(threading.Thread):
+    """Gate differito in un thread, col poll() di Popen: None finche' gira."""
+
+    def poll(self):
+        return None if self.is_alive() else 0
 
 
 class GateModuleTests(unittest.TestCase):
@@ -1460,7 +1468,7 @@ ASK_LAST = "as the very last thing in your reply, ask the user verbatim"
 
 class WorkerGateTests(unittest.TestCase):
     """Worker in modalita' "deferred" (ICH-86: valutazione a UserPromptSubmit
-    dell'entry accodata dallo Stop). L'output e' il dict ritornato da
+    del turno precedente). L'output e' il dict ritornato da
     evaluate(); non esiste piu' decision:block, la domanda viaggia in
     hookSpecificOutput.additionalContext e va posta in coda alla risposta."""
 
@@ -1509,7 +1517,7 @@ class WorkerGateTests(unittest.TestCase):
             "HS_RETAIN_STATE_DIR": self.tmp.name,
             "HS_RETAIN_PENDING_DIR": os.path.join(self.tmp.name, "pending"),
             "HS_INVALIDATE_PENDING_DIR": os.path.join(self.tmp.name, "invalidate"),
-            "HS_RETAIN_QUEUE_DIR": os.path.join(self.tmp.name, "queue"),
+            "HS_RETAIN_OUTBOX_DIR": os.path.join(self.tmp.name, "outbox"),
             "HOOK_INPUT": self.hook_input,
         }
         env_patch = mock.patch.dict(os.environ, env)
@@ -1532,6 +1540,12 @@ class WorkerGateTests(unittest.TestCase):
                 self.worker,
                 "recall_bank_urls",
                 return_value=["http://127.0.0.1:9/banks/t"],
+            ),
+            # Nessun processo vero: retain_at_prompt lancia il gate a ogni
+            # prompt. Di default e' gia' finito senza nulla da mostrare; i test
+            # che lo eseguono usano at_prompt (fake_spawn).
+            mock.patch.object(
+                self.worker, "_spawn_deferred", return_value=mock.Mock(poll=lambda: 0)
             ),
         ]
         for patch in patches:
@@ -1998,32 +2012,14 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(one["content"], "Perche' X.\n\n- fatto tre\n\n" + raw["content"])
         self.assertEqual({p["document_id"] for p in (raw, two, one)}, {raw["document_id"]})
 
-    # --- ICH-86: coda, evaluate_queued ------------------------------
-
-    def enqueue(self, hook: dict, name: str) -> str:
-        """Scrive un'entry di coda come farebbe lo Stop hook (HOOK_INPUT verbatim).
-        name = "<EPOCHREALTIME senza punto>-<pid>" (ordina per istante)."""
-        queue_dir = self.worker.retain_queue_dir()
-        os.makedirs(queue_dir, exist_ok=True)
-        path = os.path.join(queue_dir, name + ".json")
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(hook))
-        return path
-
-    def queue_names(self) -> list[str]:
-        """Nomi delle ENTRY di coda (gli outbox *.out.json della stessa dir
-        non sono entry: si controllano a parte con outbox())."""
-        queue_dir = self.worker.retain_queue_dir()
-        if not os.path.isdir(queue_dir):
-            return []
-        return sorted(n for n in os.listdir(queue_dir) if not n.endswith(".out.json"))
+    # --- ICH-86: evaluate_deferred ------------------------------
 
     def test_drop_unanswered_tail(self):
         drop = self.worker.drop_unanswered_tail
         u1, a1 = user_record("prima domanda"), assistant_record("prima risposta")
         u2, a2 = user_record("seconda domanda"), assistant_record("seconda risposta")
         reminder = user_record("<system-reminder>nota</system-reminder>")
-        # transcript "da Stop": finisce con l'assistant -> invariato
+        # turno completato: finisce con l'assistant -> invariato
         self.assertEqual(drop([u1, a1, u2, a2]), [u1, a1, u2, a2])
         # transcript "da UserPromptSubmit": il prompt nuovo (e i suoi wrapper
         # system-reminder, ruolo user) in coda vengono tolti
@@ -2051,84 +2047,45 @@ class WorkerGateTests(unittest.TestCase):
             [{"type": "user"}, {"type": "assistant"}],
         )
 
-    def test_dequeue_picks_newest_and_deletes_only_that_session(self):
-        old = dict(self.hook, marker="old")
-        new = dict(self.hook, marker="new")
-        other = dict(self.hook, session_id="sess-other", marker="other")
-        self.enqueue(old, "1700000000100000-11")
-        self.enqueue(other, "1700000000200000-12")
-        self.enqueue(new, "1700000000300000-13")
-        entry = self.worker.dequeue_for_session("sess-gate-test")
-        self.assertEqual(entry["marker"], "new")
-        # tutte le entry della sessione sparite, l'altra sessione intatta
-        self.assertEqual(self.queue_names(), ["1700000000200000-12.json"])
-        self.assertIsNone(self.worker.dequeue_for_session("sess-gate-test"))
-        self.assertIsNone(self.worker.dequeue_for_session(""))
-        self.assertEqual(self.queue_names(), ["1700000000200000-12.json"])
-        # coda inesistente: None senza errori
-        with mock.patch.dict(
-            os.environ, {"HS_RETAIN_QUEUE_DIR": os.path.join(self.tmp.name, "nope")}
-        ):
-            self.assertIsNone(self.worker.dequeue_for_session("sess-gate-test"))
-
-    def test_dequeue_handles_unparsable_entries(self):
-        queue_dir = self.worker.retain_queue_dir()
-        os.makedirs(queue_dir, exist_ok=True)
-        stale = os.path.join(queue_dir, "1700000000000000-1.json")
-        young = os.path.join(queue_dir, "1700000000500000-2.json")
-        for path in (stale, young):
-            with open(path, "w", encoding="utf-8") as handle:
-                handle.write('{"session_id": "sess-gate-test", "trunc')
-        os.utime(stale, (time.time() - 120, time.time() - 120))  # vecchia: via
-        self.enqueue(self.hook, "1700000000400000-3")
-        entry = self.worker.dequeue_for_session("sess-gate-test")
-        self.assertEqual(entry["session_id"], "sess-gate-test")
-        # la illeggibile vecchia e' stata cancellata, la giovane (forse in
-        # scrittura) e' rimasta
-        self.assertEqual(self.queue_names(), ["1700000000500000-2.json"])
-
-    def test_evaluate_queued_consumes_and_returns_output(self):
+    def test_evaluate_deferred_evaluates_hook_input(self):
         preview = "Vale la pena salvare la decisione sul gate?"
         gate = GateResult(action="uncertain", reason="borderline", preview=preview, context="dominio")
-        self.enqueue(self.hook, "1700000000100000-1")
         with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
             self.worker, "evaluate_retain", return_value=gate
         ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                out = self.worker.evaluate_queued("sess-gate-test")
+                out = self.worker.evaluate_deferred()
         urlopen.assert_not_called()
         self.assertIn(f"Vuoi che salvi questa memoria? — {preview} (sì/no)", self.context_of(out))
-        self.assertEqual(self.queue_names(), [])
-        # niente in coda: None, nessuna valutazione
-        with mock.patch.object(self.worker, "evaluate") as evaluate:
-            self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
-            evaluate.assert_not_called()
+        handle_retain_consent("no", "sess-gate-test", self.tmp.name)  # pulizia pending
+        # HOOK_INPUT illeggibile: niente transcript, niente da valutare
+        with mock.patch.object(self.worker, "HOOK_INPUT", "non json"), mock.patch.object(
+            self.worker, "CFG", self.cfg()
+        ), mock.patch.object(self.worker, "evaluate_retain") as gate_mock:
+            self.assertIsNone(self.worker.evaluate_deferred())
+        gate_mock.assert_not_called()
 
-    def test_evaluate_queued_retain_disabled_deletes_queue_without_work(self):
-        self.enqueue(self.hook, "1700000000100000-1")
+    def test_evaluate_deferred_retain_disabled_does_no_work(self):
         with mock.patch.object(
             self.worker, "CFG", self.cfg(retain_enabled=False)
         ), mock.patch.object(self.worker, "evaluate_retain") as gate, mock.patch.object(
             self.worker, "load_transcript"
         ) as load, mock.patch("urllib.request.urlopen") as urlopen:
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
+                self.assertIsNone(self.worker.evaluate_deferred())
         gate.assert_not_called()
         load.assert_not_called()
         urlopen.assert_not_called()
-        self.assertEqual(self.queue_names(), [])
 
-    def test_evaluate_queued_swallows_exceptions(self):
-        self.enqueue(self.hook, "1700000000100000-1")
+    def test_evaluate_deferred_swallows_exceptions(self):
         with mock.patch.object(
             self.worker, "evaluate", side_effect=RuntimeError("boom")
         ):
-            self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
-        self.assertEqual(self.queue_names(), [])  # consumata comunque
+            self.assertIsNone(self.worker.evaluate_deferred())
         with mock.patch.object(
-            self.worker, "dequeue_for_session", side_effect=OSError("disk")
+            self.worker, "parse_hook", side_effect=OSError("disk")
         ):
-            self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
+            self.assertIsNone(self.worker.evaluate_deferred())
 
     def test_force_env_bypasses_throttling_without_advancing_counter(self):
         cfg = self.cfg(retain_every_n_turns=3)
@@ -2199,18 +2156,19 @@ class WorkerGateTests(unittest.TestCase):
         return preview
 
     def fake_spawn(self, spawned: list):
-        """Launcher in-process al posto di _spawn_queued (che lancerebbe un
+        """Launcher in-process al posto di _spawn_deferred (che lancerebbe un
         VERO python detached, fuori dai mock): esegue lo stesso codice del
-        figlio — main(["--queued", sid]) -> evaluate_queued -> outbox — in un
-        thread, cosi' i test restano ermetici e veloci ma il protocollo
-        dell'outbox e' quello reale. Ritorna il thread (join nel chiamante).
+        figlio — main(["--deferred", sid]) -> evaluate_deferred sull'HOOK_INPUT
+        -> outbox — in un thread col poll() di Popen, cosi' i test restano
+        ermetici e veloci ma il protocollo dell'outbox e' quello reale.
+        Ritorna il thread (join nel chiamante).
         La lista `spawned` raccoglie (session_id, log_path) per le asserzioni."""
         worker = self.worker
 
         def _spawn(session_id, log_path):
             spawned.append((session_id, log_path))
-            thread = threading.Thread(
-                target=worker.main, args=(["--queued", session_id],), daemon=True
+            thread = FakeProc(
+                target=worker.main, args=(["--deferred", session_id],), daemon=True
             )
             thread.start()
             return thread
@@ -2239,7 +2197,7 @@ class WorkerGateTests(unittest.TestCase):
         with mock.patch.object(self.worker, "CFG", cfg or self.cfg()), mock.patch.object(
             self.worker, "evaluate_retain", gate_mock
         ), mock.patch.object(
-            self.worker, "_spawn_queued", self.fake_spawn(spawned)
+            self.worker, "_spawn_deferred", self.fake_spawn(spawned)
         ), mock.patch("urllib.request.urlopen", **urlopen_kwargs) as urlopen:
             with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
                 result = self.worker.retain_at_prompt(
@@ -2261,7 +2219,6 @@ class WorkerGateTests(unittest.TestCase):
 
     def test_retain_at_prompt_no_pending_runs_gate_and_output_is_idempotent(self):
         preview = "Vale la pena salvare la decisione sul gate?"
-        self.enqueue(self.hook, "1700000000100000-1")
         seen = {}
 
         def inspect(result, gate_mock, urlopen):
@@ -2290,7 +2247,6 @@ class WorkerGateTests(unittest.TestCase):
         )
         self.assertEqual(gate_mock.call_count, 1)
         urlopen.assert_not_called()
-        self.assertEqual(self.queue_names(), [])  # entry consumata dal figlio
         self.assertTrue(seen)
         # il launcher riceve la sessione e il log sotto cache_dir()
         self.assertEqual(len(result.spawned), 1)
@@ -2299,7 +2255,6 @@ class WorkerGateTests(unittest.TestCase):
 
     def test_retain_at_prompt_consent_saved_and_gate_still_runs(self):
         preview = self.make_pending()
-        self.enqueue(self.hook, "1700000000100000-1")
 
         def inspect(result, gate_mock, urlopen):
             self.assertTrue(result.saved)
@@ -2323,7 +2278,6 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(gate_mock.call_count, 1)
         # due POST: quella del consenso (pending) e quella del retain differito
         self.assertEqual(urlopen.call_count, 2)
-        self.assertEqual(self.queue_names(), [])
         # il pending e' consumato: un secondo si' non trova nulla
         self.assertIsNone(handle_retain_consent("si", "sess-gate-test", self.tmp.name))
 
@@ -2375,16 +2329,14 @@ class WorkerGateTests(unittest.TestCase):
             self.assertFalse(result.saved)
             self.assertFalse(result.stop_here)
             self.assertEqual(result.consent_output, {})
-            # nessuna entry in coda: nessun processo lanciato, {} subito
-            self.assertFalse(result.launched)
-            t0 = time.monotonic()
+            # il gate del turno precedente parte comunque: retain con context
+            # -> POST silenziosa, nessun output
+            self.assertTrue(result.launched)
             self.assertEqual(result.gate_output(time.monotonic() + 10), {})
-            self.assertLess(time.monotonic() - t0, 1.0)
 
         result, gate_mock, urlopen = self.at_prompt("parliamo di tutt'altro adesso", inspect)
-        gate_mock.assert_not_called()
-        urlopen.assert_not_called()
-        self.assertEqual(result.spawned, [])
+        self.assertEqual(gate_mock.call_count, 1)
+        self.assertEqual(urlopen.call_count, 1)  # solo la POST del gate: il pending e' scartato
 
         # Domanda POSTA (ultimo testo assistant la contiene): notifica classica.
         preview = self.make_pending()
@@ -2404,9 +2356,8 @@ class WorkerGateTests(unittest.TestCase):
 
         self.at_prompt("parliamo di tutt'altro adesso", inspect_asked)
 
-    def test_retain_at_prompt_error_restored_skips_gate_and_keeps_queue(self):
+    def test_retain_at_prompt_error_restored_skips_gate(self):
         self.make_pending()
-        entry = self.enqueue(self.hook, "1700000000100000-1")
 
         def inspect(result, gate_mock, urlopen):
             self.assertEqual(result.outcome["action"], "error")
@@ -2427,9 +2378,7 @@ class WorkerGateTests(unittest.TestCase):
         )
         gate_mock.assert_not_called()
         self.assertEqual(result.spawned, [])
-        # l'entry resta in coda per il prompt successivo
-        self.assertEqual(self.queue_names(), [os.path.basename(entry)])
-        # e il pending ripristinato e' ancora li': un secondo si' lo ritrova
+        # il pending ripristinato e' ancora li': un secondo si' lo ritrova
         with mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
             retry = handle_retain_consent("si", "sess-gate-test", self.tmp.name)
         self.assertEqual(retry["action"], "saved")
@@ -2444,7 +2393,6 @@ class WorkerGateTests(unittest.TestCase):
         # e il prompt successivo lo raccoglie (pickup) — qui la domanda del
         # pending, quindi il consenso di quel prompt viene saltato.
         preview = "Vale la pena salvare la decisione sul gate?"
-        self.enqueue(self.hook, "1700000000100000-1")
         log_path = os.path.join(self.tmp.name, "debug.log")
         cfg = self.cfg(debug_log_enabled=True, debug_log_file=log_path)
         release = threading.Event()
@@ -2508,12 +2456,11 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(outcome["action"], "saved")
 
     def test_retain_at_prompt_pickup_with_question_skips_consent_and_holds_launch(self):
-        # Outbox con domanda mai mostrata + pending in attesa + entry in coda:
-        # il consenso si salta (il "si'" non consuma il pending), l'entry NON
-        # viene valutata ora (un nuovo pending calpesterebbe quello appena
-        # mostrato) e resta in coda per il prompt dopo.
+        # Outbox con domanda mai mostrata + pending in attesa: il consenso si
+        # salta (il "si'" non consuma il pending) e il gate NON parte ora (un
+        # nuovo pending calpesterebbe quello appena mostrato): il turno rientra
+        # nella valutazione successiva.
         preview = self.make_pending()
-        entry = self.enqueue(self.hook, "1700000000100000-1")
         question = {
             "systemMessage": f"Hindsight: Vuoi che salvi questa memoria? — {preview} (sì/no)",
             "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "istruzione"},
@@ -2530,7 +2477,6 @@ class WorkerGateTests(unittest.TestCase):
         gate_mock.assert_not_called()
         urlopen.assert_not_called()
         self.assertEqual(result.spawned, [])
-        self.assertEqual(self.queue_names(), [os.path.basename(entry)])
         # pending intatto
         with mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
             self.assertEqual(handle_retain_consent("si", "sess-gate-test", self.tmp.name)["action"], "saved")
@@ -2538,10 +2484,9 @@ class WorkerGateTests(unittest.TestCase):
     def test_retain_at_prompt_pickup_without_question_runs_consent_and_launches(self):
         # Outbox SENZA domanda (es. notifica di gate error del prompt prima):
         # il consenso gira normalmente (qui: "si'" -> POST del pending), il suo
-        # output e' quello di gate_output(), e la coda si valuta comunque
-        # (processo lanciato; il suo outbox lo raccogliera' il prompt dopo).
+        # output e' quello di gate_output(), e il gate parte comunque
+        # (processo lanciato).
         preview = self.make_pending()
-        self.enqueue(self.hook, "1700000000100000-1")
         notice = {"systemMessage": "Hindsight: retain automatico non eseguito — errore tecnico del gate (x)."}
         self.worker._write_outbox("sess-gate-test", notice, False)
 
@@ -2554,15 +2499,12 @@ class WorkerGateTests(unittest.TestCase):
 
         result, gate_mock, urlopen = self.at_prompt("sì", inspect)
         self.assertEqual(len(result.spawned), 1)
-        self.assertEqual(gate_mock.call_count, 1)  # il figlio ha valutato l'entry
+        self.assertEqual(gate_mock.call_count, 1)  # il figlio ha valutato il turno
         self.assertEqual(urlopen.call_count, 2)  # POST del consenso + POST del retain
-        self.assertEqual(self.queue_names(), [])
-        # l'outbox del figlio (retain OK -> {}) aspetta il prompt successivo
-        with open(self.outbox(), encoding="utf-8") as handle:
-            self.assertEqual(json.load(handle), {"output": {}, "asks_consent": False})
+        # retain OK senza nulla da mostrare: nessun outbox per il prompt dopo
+        self.assertFalse(os.path.exists(self.outbox()))
 
-    def test_retain_at_prompt_retain_disabled_drops_entry_without_spawn(self):
-        self.enqueue(self.hook, "1700000000100000-1")
+    def test_retain_at_prompt_retain_disabled_no_spawn(self):
 
         def inspect(result, gate_mock, urlopen):
             self.assertFalse(result.launched)
@@ -2574,7 +2516,6 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(result.spawned, [])
         gate_mock.assert_not_called()
         urlopen.assert_not_called()
-        self.assertEqual(self.queue_names(), [])  # scartata in-process
         self.assertFalse(os.path.exists(self.outbox()))
 
     def test_retain_at_prompt_never_raises(self):
@@ -2589,25 +2530,23 @@ class WorkerGateTests(unittest.TestCase):
         self.assertFalse(result.stop_here)
         self.assertFalse(result.launched)
         self.assertEqual(result.gate_output(time.monotonic() + 1), {})
-        # un launcher rotto non butta via il consenso gia' calcolato e lascia
-        # l'entry in coda
+        # un launcher rotto non butta via il consenso gia' calcolato
         preview = self.make_pending()
-        entry = self.enqueue(self.hook, "1700000000100000-1")
         with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
-            self.worker, "_spawn_queued", side_effect=OSError("no python")
+            self.worker, "_spawn_deferred", side_effect=OSError("no python")
         ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
             result = self.worker.retain_at_prompt("sì", "sess-gate-test", self.tmp.name, "")
         self.assertEqual(result.outcome["action"], "saved")
         self.assertIn(preview, result.consent_output["systemMessage"])
         self.assertFalse(result.launched)
         self.assertEqual(result.gate_output(time.monotonic() + 1), {})
-        self.assertEqual(self.queue_names(), [os.path.basename(entry)])
 
-    def test_main_queued_writes_outbox(self):
-        # Il processo detached: main(["--queued", sid]) valuta l'entry e scrive
-        # SEMPRE l'outbox {"output", "asks_consent"}: True solo se pone la
-        # domanda del pending; False per retain-con-context (POST), retain
-        # disabilitato e coda vuota.
+    def test_main_deferred_writes_outbox_only_with_output(self):
+        # Il processo detached: main(["--deferred", sid]) valuta HOOK_INPUT e
+        # scrive l'outbox {"output", "asks_consent"} SOLO se c'e' qualcosa da
+        # mostrare (asks_consent True se pone la domanda del pending). Retain
+        # con context (POST), retain disabilitato e --deferred senza
+        # session_id non lasciano file.
         preview = "Vale la pena salvare la decisione sul gate?"
         cases = (
             (GateResult(action="uncertain", reason="borderline", preview=preview, context="dominio"), True, 0),
@@ -2615,137 +2554,139 @@ class WorkerGateTests(unittest.TestCase):
         )
         for gate, asks, posts in cases:
             with self.subTest(action=gate.action):
-                self.enqueue(self.hook, "1700000000100000-1")
                 stdout = io.StringIO()
                 with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
                     self.worker, "evaluate_retain", return_value=gate
                 ), mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
                     with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
-                        self.assertEqual(self.worker.main(["--queued", "sess-gate-test"]), 0)
+                        self.assertEqual(self.worker.main(["--deferred", "sess-gate-test"]), 0)
                 self.assertEqual(stdout.getvalue(), "")  # nulla su stdout: solo l'outbox
                 self.assertEqual(urlopen.call_count, posts)
-                self.assertEqual(self.queue_names(), [])
-                with open(self.outbox(), encoding="utf-8") as handle:
-                    box = json.load(handle)
-                self.assertIs(box["asks_consent"], asks)
-                self.assertNotIn("asks_consent", box["output"])
                 if asks:
+                    with open(self.outbox(), encoding="utf-8") as handle:
+                        box = json.load(handle)
+                    self.assertIs(box["asks_consent"], True)
+                    self.assertNotIn("asks_consent", box["output"])
                     self.assertIn(preview, self.context_of(box["output"]))
                     handle_retain_consent("no", "sess-gate-test", self.tmp.name)  # pulizia pending
+                    os.remove(self.outbox())
                 else:
-                    self.assertEqual(box["output"], {})
-                os.remove(self.outbox())
-        # retain disabilitato: entry consumata, outbox vuoto
-        self.enqueue(self.hook, "1700000000100000-1")
+                    self.assertFalse(os.path.exists(self.outbox()))
+        # retain disabilitato: nessuna valutazione, nessun outbox
         with mock.patch.object(self.worker, "CFG", self.cfg(retain_enabled=False)), mock.patch.object(
             self.worker, "evaluate_retain"
         ) as gate_mock:
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertEqual(self.worker.main(["--queued", "sess-gate-test"]), 0)
+                self.assertEqual(self.worker.main(["--deferred", "sess-gate-test"]), 0)
         gate_mock.assert_not_called()
-        self.assertEqual(self.queue_names(), [])
-        with open(self.outbox(), encoding="utf-8") as handle:
-            self.assertEqual(json.load(handle), {"output": {}, "asks_consent": False})
-        os.remove(self.outbox())
-        # coda vuota: outbox vuoto comunque (chi aspetta distingue "finito" da "in corso")
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(self.worker.main(["--queued", "sess-gate-test"]), 0)
-        with open(self.outbox(), encoding="utf-8") as handle:
-            self.assertEqual(json.load(handle), {"output": {}, "asks_consent": False})
-        # --queued senza session_id: exit 0, nessun outbox
-        os.remove(self.outbox())
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(self.worker.main(["--queued"]), 0)
-        self.assertEqual(self.queue_names(), [])
+        self.assertFalse(os.path.exists(self.outbox()))
+        # --deferred senza session_id: exit 0, nessuna valutazione
+        with mock.patch.object(self.worker, "evaluate") as evaluate:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(self.worker.main(["--deferred"]), 0)
+        evaluate.assert_not_called()
+        self.assertFalse(os.path.exists(self.outbox()))
 
-    def test_outbox_path_stays_inside_queue_dir(self):
-        queue_dir = self.worker.retain_queue_dir()
+    def test_outbox_path_stays_inside_outbox_dir(self):
+        outbox_dir = self.worker.retain_outbox_dir()
         for sid in ("../../etc/x", "a/b", "a\\b"):
             path = self.worker.outbox_path(sid)
-            self.assertEqual(os.path.dirname(path), queue_dir, sid)
+            self.assertEqual(os.path.dirname(path), outbox_dir, sid)
             self.assertTrue(path.endswith(".out.json"))
-        # e gli outbox non sono entry di coda: dequeue li ignora
-        self.worker._write_outbox("sess-gate-test", {}, False)
-        self.assertIsNone(self.worker.dequeue_for_session("sess-gate-test"))
-        self.assertTrue(os.path.exists(self.outbox()))
-
-    def test_sweep_stale_queue_removes_old_entries_silently(self):
+        # default: <cache_dir>/hs-retain-outbox
         cache = os.path.join(self.tmp.name, "xdg-cache")
-        stale = self.enqueue(dict(self.hook, session_id="sess-stale-old"), "1600000000000000-1")
-        fresh = self.enqueue(self.hook, "1700000000100000-2")
-        old_box = self.worker.outbox_path("sess-stale-old")
-        self.worker._write_outbox("sess-stale-old", {}, False)
-        old = time.time() - 25 * 3600
-        os.utime(stale, (old, old))
-        os.utime(old_box, (old, old))
-        log_path = os.path.join(self.tmp.name, "debug.log")
-        cfg = self.cfg(debug_log_enabled=True, debug_log_file=log_path)
-        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}), mock.patch.object(
-            self.worker, "CFG", cfg
-        ):
-            self.assertEqual(self.worker.sweep_stale_queue(), 1)
-        self.assertEqual(self.queue_names(), [os.path.basename(fresh)])
-        self.assertFalse(os.path.exists(old_box))
-        # niente marker per il failcheck: l'ultimo turno di una sessione chiusa
-        # resta sempre in coda, non e' un'anomalia
-        self.assertFalse(os.path.exists(os.path.join(cache, "trinity", "hs-retain-failed.log")))
-        events = [e for e in self.read_events(log_path) if e.get("reason") == "queue_stale"]
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["session"], "sess-sta")
-        # idempotente e silenzioso su coda pulita / inesistente
-        self.assertEqual(self.worker.sweep_stale_queue(), 0)
-        with mock.patch.dict(os.environ, {"HS_RETAIN_QUEUE_DIR": os.path.join(self.tmp.name, "nope")}):
-            self.assertEqual(self.worker.sweep_stale_queue(), 0)
-        # ...e retain_at_prompt lo esegue a ogni prompt (anche senza coda propria)
-        stale2 = self.enqueue(dict(self.hook, session_id="sess-stale-two"), "1600000000000000-3")
-        os.utime(stale2, (old, old))
-        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}):
-            self.at_prompt("prompt qualunque", lambda *_: None)
-        self.assertEqual(self.queue_names(), [])  # la fresh l'ha consumata il figlio, la stale lo sweep
+        with mock.patch.dict(os.environ, {"HS_RETAIN_OUTBOX_DIR": "", "XDG_CACHE_HOME": cache}):
+            self.assertEqual(
+                os.path.normpath(self.worker.retain_outbox_dir()),
+                os.path.normpath(os.path.join(cache, "trinity", "hs-retain-outbox")),
+            )
 
-    def test_should_retain_now_advance_crosses_multiples(self):
-        # 0 -> 4 con N=3 attraversa il 3: True; 4 -> 5 no; 5 -> 6 si'.
+    def test_gate_output_returns_when_process_exits_without_outbox(self):
+        # Esito senza nulla da mostrare: nessun outbox, e gate_output lo capisce
+        # dall'uscita del processo invece di aspettare la deadline.
+        def inspect(result, gate_mock, urlopen):
+            self.assertTrue(result.launched)
+            t0 = time.monotonic()
+            self.assertEqual(result.gate_output(time.monotonic() + 30), {})
+            self.assertLess(time.monotonic() - t0, 10)
+            self.assertIsNotNone(result._proc.poll())
+
+        _result, gate_mock, urlopen = self.at_prompt("prompt qualunque", inspect)
+        self.assertEqual((gate_mock.call_count, urlopen.call_count), (1, 1))
+        self.assertFalse(os.path.exists(self.outbox()))
+        # Outbox scritto subito prima dell'uscita (dopo la prima lettura): la
+        # rilettura dopo poll() lo raccoglie.
+        notice = {"systemMessage": "Hindsight: avviso"}
+
+        def poll():
+            self.worker._write_outbox("sess-gate-test", notice, False)
+            return 0
+
+        result = self.worker.PromptRetain("sess-gate-test")
+        result.launched = True
+        result._proc = mock.Mock(poll=poll)
+        self.assertEqual(result.gate_output(time.monotonic() + 30), notice)
+        self.assertFalse(os.path.exists(self.outbox()))
+
+    def test_should_retain_now_counts_one_per_call(self):
+        # +1 per chiamata (= per prompt valutato), True ogni N; force non avanza.
         cfg = self.cfg(retain_every_n_turns=3)
         with mock.patch.object(self.worker, "CFG", cfg):
-            self.assertTrue(self.worker.should_retain_now("sess-gate-test", advance=4))
+            self.assertEqual(
+                [self.worker.should_retain_now("sess-gate-test") for _ in range(4)],
+                [False, False, True, False],
+            )
             self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 4)
-            self.assertFalse(self.worker.should_retain_now("sess-gate-test", advance=1))
-            self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 5)
-            self.assertTrue(self.worker.should_retain_now("sess-gate-test"))
-            self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 6)
-            # advance non valido -> 1; force non avanza
-            self.assertFalse(self.worker.should_retain_now("sess-gate-test", advance=0))
-            self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 7)
-            self.assertTrue(self.worker.should_retain_now("sess-gate-test", force=True, advance=5))
-            self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 7)
+            self.assertTrue(self.worker.should_retain_now("sess-gate-test", force=True))
+            self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 4)
 
-    def test_dequeue_counts_skipped_entries_and_throttling_advances(self):
-        # 3 Stop accumulati senza prompt in mezzo (3 entry della stessa
-        # sessione): il dequeue ne tiene una e ne scarta 2 -> queued_skipped=2,
-        # e con stop_count=0, N=3 il gate viene chiamato SUBITO (3 Stop
-        # avvenuti = un multiplo attraversato) invece di slittare di due turni.
-        for i in range(3):
-            self.enqueue(dict(self.hook, marker=i), f"170000000010000{i}-1")
-        entry = self.worker.dequeue_for_session("sess-gate-test")
-        self.assertEqual(entry["marker"], 2)
-        self.assertEqual(entry["queued_skipped"], 2)
-        # entry singola: 0
-        self.enqueue(self.hook, "1700000000200000-1")
-        self.assertEqual(self.worker.dequeue_for_session("sess-gate-test")["queued_skipped"], 0)
-
-        cfg = self.cfg(retain_every_n_turns=3)
-        gate = GateResult(action="retain", reason="durable_decision", preview="x", context="dominio")
-        for i in range(3):
-            self.enqueue(dict(self.hook, marker=i), f"170000000030000{i}-1")
-        with mock.patch.object(self.worker, "CFG", cfg), mock.patch.object(
-            self.worker, "evaluate_retain", return_value=gate
-        ) as gate_mock, mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
-        self.assertEqual(gate_mock.call_count, 1)
-        self.assertEqual(urlopen.call_count, 1)
-        self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 3)
-        self.assertEqual(self.queue_names(), [])
+    def test_turn_incomplete_is_skipped_without_advancing_counter(self):
+        # Prompt accodato mentre Claude lavora (ultima risposta ferma su un
+        # tool) o turno interrotto: niente gate e contatore fermo. Turno finito
+        # (end_turn): il contatore avanza come sempre.
+        start = [
+            user_record("domanda abbastanza lunga per superare i filtri del retain"),
+            assistant_record("Deciso: usiamo il gate semantico prima della POST."),
+            user_record("secondo prompt abbastanza lungo per il retain"),
+        ]
+        tool_use = {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "stop_reason": "end_turn",  # visto nei transcript reali: conta il tool_use
+                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "git status"}}],
+            },
+        }
+        tool_result = {
+            "type": "user",
+            "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]},
+        }
+        interrupted = {
+            "type": "user",
+            "message": {"role": "user", "content": [{"type": "text", "text": "[Request interrupted by user]"}]},
+        }
+        finished = assistant_record("Fatto, turno chiuso.")
+        finished["message"]["stop_reason"] = "end_turn"
+        cases = (
+            ("tool_use", [*start, tool_use, tool_result, user_record("messaggio accodato")], 0),
+            ("interrupted", [*start, assistant_record("risposta tronc"), interrupted, user_record("nuovo")], 0),
+            ("end_turn", [*start, finished, user_record("nuovo prompt")], 1),
+        )
+        state = os.path.join(self.tmp.name, "hs-retain-state.json")
+        for name, records, count in cases:
+            with self.subTest(name):
+                if os.path.exists(state):
+                    os.remove(state)
+                path = write_jsonl(os.path.join(self.tmp.name, f"{name}.jsonl"), records)
+                rc, out, gate_mock, _urlopen = self.run_main(
+                    self.cfg(retain_every_n_turns=3),
+                    GateResult(action="skip", reason="trivial_or_ephemeral"),
+                    hook=dict(self.hook, transcript_path=path),
+                )
+                self.assertEqual((rc, out), (0, None))
+                gate_mock.assert_not_called()  # turno incompleto o throttling (1 su 3)
+                stop_count = self.read_state()["sess-gate-test"]["stop_count"] if os.path.exists(state) else 0
+                self.assertEqual(stop_count, count)
 
     def test_post_failure_writes_durable_marker(self):
         cache = os.path.join(self.tmp.name, "xdg-cache")
@@ -2767,29 +2708,6 @@ class WorkerGateTests(unittest.TestCase):
         self.assertTrue(ts.endswith("Z"), ts)
         self.assertTrue(msg.startswith("non arrivato al server — "), msg)
         self.assertIn("connection refused", msg)
-
-    def test_post_failure_consumes_entry_without_reenqueue(self):
-        # Limite ACCETTATO (asimmetria col path del consenso, che ripristina il
-        # pending): la POST diretta fallita NON ri-accoda l'entry — al prompt
-        # dopo sarebbe comunque throttlata senza un rollback di stop_count — e
-        # la finestra si perde con il solo marker durevole per il failcheck.
-        # Il test fissa questo comportamento perche' non cambi per sbaglio.
-        cache = os.path.join(self.tmp.name, "xdg-cache")
-        self.enqueue(self.hook, "1700000000100000-1")
-        gate = GateResult(action="retain", reason="durable_decision", preview="x", context="dominio")
-        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": cache}), mock.patch.object(
-            self.worker, "CFG", self.cfg()
-        ), mock.patch.object(
-            self.worker, "evaluate_retain", return_value=gate
-        ), mock.patch("urllib.request.urlopen", side_effect=OSError("connection refused")):
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                out = self.worker.evaluate_queued("sess-gate-test")
-        self.assertIsNone(out)
-        self.assertEqual(self.queue_names(), [])  # consumata, nessun re-enqueue
-        self.assertFalse(os.path.isdir(os.path.join(self.tmp.name, "pending")))  # e nessun pending
-        marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
-        with open(marker, encoding="utf-8") as handle:
-            self.assertIn("non arrivato al server", handle.read())
 
 
 CONTRADICTED = {
@@ -3084,9 +3002,11 @@ class InvalidationTests(unittest.TestCase):
         """Gate del turno ancora in corso (carried over): potrebbe porre una
         domanda, quindi il turno non e' libero."""
         self.run_main(self.cfg(), self.uncertain_contradicting())
-        with mock.patch.object(self.worker, "CFG", self.cfg()):
+        with mock.patch.object(self.worker, "CFG", self.cfg()), mock.patch.object(
+            self.worker, "_spawn_deferred", return_value=mock.Mock(poll=lambda: None)
+        ):
             result = self.worker.retain_at_prompt("no", "sess-gate-test", self.tmp.name, "")
-            result.launched = True
+            self.assertTrue(result.launched)
             self.assertEqual(result.gate_output(time.monotonic()), {})
         _result, out, _methods = self.prompt_turn("spiegami il gate")
         self.assert_asks_invalidation(out)

@@ -29,7 +29,7 @@ riga repo/branch (fallback_context, zero rete).
 Nello stesso passaggio della copertura il gate indica le memorie candidate
 smentite dalla finestra (contradicted + contradiction_reason, ICH-152): il
 worker chiede all'utente e solo dopo il "si'" handle_invalidate_consent le
-ritira (state=invalidated, reversibile). Nel drain nessun ritiro.
+ritira (state=invalidated, reversibile).
 """
 
 from __future__ import annotations

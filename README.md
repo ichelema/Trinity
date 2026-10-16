@@ -85,9 +85,9 @@ Eventi registrati dal plugin:
 | Evento | Matcher | Comandi |
 |---|---|---|
 | `SessionStart` | — | attende il server Hindsight sulla VPS (apre il tunnel SSH se `HINDSIGHT_SSH_TUNNEL` è impostata) · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model · **cattura il modello** (`capture-model.sh`, §3.1) |
-| `UserPromptSubmit` | — | skill-eval · Hindsight **recall** (che prima consuma il consenso e valuta il retain accodato allo Stop precedente: gate → POST o domanda) · failcheck |
+| `UserPromptSubmit` | — | skill-eval · Hindsight **recall** (che prima consuma il consenso e valuta per il retain il turno precedente: gate → POST o domanda) · failcheck |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian (inattivo finché il server `excalidraw` è disattivato) |
-| `Stop` | — | suono di fine · Hindsight **retain** (solo enqueue: scrive il payload in `hs-retain-queue/` e risponde `{}`; la valutazione è differita al prossimo `UserPromptSubmit`, l'ultimo turno di una sessione chiusa resta in coda e lo sweep a 24 h lo scarta — ICH-86) |
+| `Stop` | — | suono di fine |
 | `MessageDisplay` | — | **riscrittura in italiano semplice** (`gate.sh` → `rewrite.sh`, §3.1) |
 | `Notification` | `permission_prompt` | suono + toast Windows |
 
@@ -739,32 +739,31 @@ sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain
 "Recall a inizio task" (marker `RECALL:manual`) sono iniettate solo dove `recall_enabled` è `false`,
 perché con l'hook attivo le memorie arrivano già a ogni prompt.
 
-**Retain differito: Stop accoda, UserPromptSubmit valuta (ICH-86).**
-L'hook `Stop` (`hindsight-retain.sh`) non valuta più nulla: è puro bash, scrive il payload del
-hook verbatim in `$XDG_CACHE_HOME/trinity/hs-retain-queue/<EPOCHREALTIME>-<pid>.json` e
-risponde `{}` (niente gate, niente `decision: block`, niente Python sul percorso caldo). Al
-prompt successivo `hindsight-recall.sh` delega tutto il lato retain al worker
-(`hindsight-retain-worker.py:retain_at_prompt`, l'hook ha solo poche righe di colla): prima il
-*pickup* dell'esito del gate del prompt precedente, se non era arrivato in tempo (outbox
-`hs-retain-queue/<session_id>.out.json`; se porta la domanda del pending, mai mostrata, il
-consenso di questo prompt si salta e la domanda esce ora); poi il consenso del pending
+**Retain differito: al prompt successivo, senza coda (ICH-86).**
+Nessun hook `Stop`: il turno si valuta al prompt successivo, coi dati del payload di quel prompt
+(`session_id`, `cwd`, `transcript_path`). `hindsight-recall.sh` delega tutto il lato retain al
+worker (`hindsight-retain-worker.py:retain_at_prompt`, l'hook ha solo poche righe di colla):
+prima il *pickup* dell'esito del gate del prompt precedente, se non era arrivato in tempo
+(outbox `hs-retain-outbox/<session_id>.out.json`; se porta la domanda del pending, mai mostrata,
+il consenso di questo prompt si salta e la domanda esce ora); poi il consenso del pending
 (`handle_retain_consent`, che risponde alla domanda precedente), in modo sincrono; poi il gate
-differito in un **processo detached** (`hindsight-retain-worker.py --queued <session_id>` →
-`evaluate_queued`) **parallelo al recall** — prende l'entry più recente della sessione,
-cancella tutte le sue entry, scarta i messaggi utente in coda al transcript (il prompt appena
-inviato) e valuta la finestra del turno completato: `retain` → POST silenziosa,
-`uncertain`/context mancante → pending + istruzione in `additionalContext` (la domanda chiude
-la risposta successiva); l'esito finisce nell'outbox. L'hook intanto fa il recall e al momento
-dell'emit aspetta l'outbox solo fino a **3 s** dal suo avvio (`gate_output`; gate tipico ≈ 3-5 s,
-quindi la domanda di solito esce nello stesso prompt): se il processo non ha finito l'hook esce
-comunque, nulla viene ucciso né perso, e l'esito viene raccolto al prompt successivo (eventi
-debug `retain_deferred` `carried_over` / `picked_up`) — niente più stallo del prompt in attesa di
-gate + POST. Entry di coda più vecchie di 24 h (di qualunque sessione: l'ultimo turno di una
-sessione chiusa non viene mai valutato) vengono rimosse in silenzio (evento debug `retain_skip`
-`queue_stale`). Il throttling: `stop_count` avanza una volta per **ogni Stop realmente
-avvenuto** (l'entry valutata più le più vecchie scartate dal dequeue), stessa cadenza
-`retain_every_n_turns`; con `HS_RETAIN_FORCE` (force) non avanza. Con `retain_enabled: false`
-il file di coda viene scritto e scartato: nessun transcript letto, nessun LLM, nessuna POST.
+differito in un **processo detached** (`hindsight-retain-worker.py --deferred <session_id>` →
+`evaluate_deferred`) **parallelo al recall** — eredita l'`HOOK_INPUT` del prompt, scarta i
+messaggi utente in coda al transcript (il prompt appena inviato) e valuta la finestra del turno
+completato: `retain` → POST silenziosa, `uncertain`/context mancante → pending + istruzione in
+`additionalContext` (la domanda chiude la risposta successiva); l'outbox si scrive **solo se c'è
+qualcosa da mostrare** (domanda, avviso, debug). L'hook intanto fa il recall e al momento
+dell'emit aspetta l'outbox solo fino a **3 s** dal suo avvio (`gate_output`, che smette subito se
+il processo è uscito senza outbox; gate tipico ≈ 3-5 s, quindi la domanda di solito esce nello
+stesso prompt): se il processo non ha finito l'hook esce comunque, nulla viene ucciso né perso, e
+l'esito viene raccolto al prompt successivo (eventi debug `retain_deferred` `carried_over` /
+`picked_up`) — niente stallo del prompt in attesa di gate + POST. L'ultimo turno di una sessione
+non ha un prompt dopo e non viene valutato, senza lasciare file. Un turno non finito (prompt
+accodato mentre Claude lavora, o turno interrotto con Esc) si salta senza far avanzare il
+contatore e rientra nella finestra successiva (`retain_skip` `turn_incomplete`). Il throttling: `stop_count`
+(nome storico) avanza di uno per prompt valutato, cadenza `retain_every_n_turns`; con
+`HS_RETAIN_FORCE` (force) non avanza. Con `retain_enabled: false` non parte nessun processo:
+nessun transcript letto, nessun LLM, nessuna POST.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (`promote_model`, gpt-5.6-luna: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
@@ -792,7 +791,7 @@ differita al prompt successivo (vedi sopra) e la POST è comunque asincrona lato
 Se l'estrazione LLM fallisce (es. credito OpenAI esaurito), la
 memoria **non viene salvata** senza che nessuno se ne accorga. L'hook `hindsight-failcheck.sh`
 (terzo hook di `UserPromptSubmit`) interroga l'endpoint `/operations?status=failed` su tutti
-i bank (retain + recall) a ogni prompt, deduplicando le notifiche via state file in `%TEMP%`
+i bank (retain + recall) a ogni prompt, deduplicando le notifiche via state file `$XDG_CACHE_HOME/trinity/hs-failcheck-seen.json`
 con finestra di 24h. Le failed vengono classificate in due categorie: **retain falliti**
 (perdita di memoria — critici) e **task di mantenimento falliti** (consolidation,
 refresh_mental_model — si auto-recuperano al ciclo successivo). L'avviso arriva come

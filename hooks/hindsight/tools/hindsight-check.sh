@@ -90,14 +90,14 @@ for expected in "claude-code"; do
 	if echo " $TAGS " | grep -q " $expected "; then
 		ok "tag '$expected' presente nel bank"
 	else
-		ko "tag '$expected' assente — retain non ha mai tagato (nessun turno accodato allo Stop e' mai stato valutato al prompt successivo?)"
+		ko "tag '$expected' assente — retain non ha mai tagato (nessun turno e' mai stato valutato al prompt successivo?)"
 	fi
 done
 [ -n "$TAGS" ] && note "tutti i tag visti: $TAGS"
 
 # --- 5. HOOK SCRIPT ESEGUIBILI ---
 sect "5. Script hook"
-for s in hindsight-recall.sh hindsight-retain.sh hindsight-retain-worker.py; do
+for s in hindsight-recall.sh hindsight-retain-worker.py; do
 	if [ -r "$HOOKS_DIR/$s" ]; then
 		ok "$s presente e leggibile"
 	else
@@ -121,32 +121,12 @@ HOOKSJSON="$HOOKS_DIR/../hooks.json"
 if [ -r "$HOOKSJSON" ]; then
 	if python -c "import json; json.load(open(r'$(w $HOOKSJSON)'))" 2>/dev/null; then
 		ok "hooks.json valido"
-		for hook in "hindsight-recall.sh" "hindsight-retain.sh"; do
-			if grep -q "$hook" "$HOOKSJSON"; then
-				ok "$hook registrato in hooks.json"
-			else
-				ko "$hook NON registrato in hooks.json"
-			fi
-		done
-		# Da ICH-86 lo Stop hook non valuta piu' nulla: accoda il payload in
-		# hs-retain-queue/ e risponde '{}'. Deve restare SINCRONO comunque:
-		# l'enqueue deve essere completato prima che parta il prompt successivo,
-		# altrimenti il gate differito dell'hook recall (retain_at_prompt ->
-		# evaluate_queued) non troverebbe l'entry
-		# (nessun decision:block da proteggere: conta solo l'ordine Stop -> UPS).
-		RETAIN_ASYNC=$(python -c "
-import json, sys
-h = json.load(open(sys.argv[1], encoding='utf-8'))
-flags = [hk.get('async', False)
-         for grp in h['hooks'].get('Stop', [])
-         for hk in grp.get('hooks', [])
-         if 'hindsight-retain.sh' in hk.get('command', '')]
-print(flags[0] if flags else 'missing')
-" "$(w "$HOOKSJSON")" 2>/dev/null)
-		if [ "$RETAIN_ASYNC" = "False" ]; then
-			ok "retain hook sincrono (niente async — l'enqueue termina prima del prompt successivo)"
+		# Il retain automatico parte da hindsight-recall.sh (UserPromptSubmit):
+		# nessuno Stop hook.
+		if grep -q "hindsight-recall.sh" "$HOOKSJSON"; then
+			ok "hindsight-recall.sh registrato in hooks.json"
 		else
-			ko "retain hook con 'async: true' o entry assente ($RETAIN_ASYNC) — l'entry di coda potrebbe non esserci al prompt successivo"
+			ko "hindsight-recall.sh NON registrato in hooks.json"
 		fi
 	else
 		ko "hooks.json non e' JSON valido"
@@ -175,27 +155,11 @@ else
 	fi
 fi
 
-# --- 9. END-TO-END RETAIN: Stop hook accoda, worker valuta (ICH-86) ---
-sect "9. End-to-end: Stop hook (enqueue) + retain worker"
-# 9a. Lo Stop hook e' puro enqueue: con un HOOK_INPUT deve scrivere ESATTAMENTE un
-# file in $XDG_CACHE_HOME/trinity/hs-retain-queue/ (contenuto = payload verbatim)
-# e stampare '{}'. XDG_CACHE_HOME temporanea: non si sporca la coda reale (una
-# entry finta con session_id 'check-…' verrebbe valutata al prompt successivo).
-QTMP=$(mktemp -d /tmp/hs-queue-XXXXXX)
-QPAYLOAD='{"session_id":"check-queue","transcript_path":"/nonexistent.jsonl","cwd":"/tmp","hook_event_name":"Stop"}'
-QOUT=$(printf '%s' "$QPAYLOAD" | XDG_CACHE_HOME="$QTMP" bash "$HOOKS_DIR/hindsight-retain.sh" 2>/dev/null)
-QFILES=$(ls "$QTMP/trinity/hs-retain-queue"/*.json 2>/dev/null | wc -l | tr -d ' ')
-QBODY=$(cat "$QTMP"/trinity/hs-retain-queue/*.json 2>/dev/null)
-if [ "$QOUT" = "{}" ] && [ "$QFILES" = "1" ] && [ "$QBODY" = "$QPAYLOAD" ]; then
-	ok "Stop hook accoda un solo file (payload verbatim) e risponde '{}'"
-else
-	ko "Stop hook: output '${QOUT:0:40}', file in coda: $QFILES, payload verbatim: $([ "$QBODY" = "$QPAYLOAD" ] && echo si || echo no)"
-fi
-rm -rf "$QTMP"
-
+# --- 9. END-TO-END RETAIN: worker valuta (ICH-86) ---
+sect "9. End-to-end: retain worker"
 # 9b. Il worker in modalita' script (senza flag) valuta $HOOK_INPUT in "deferred"
 # esattamente come il gate differito lanciato da retain_at_prompt() nell'hook
-# recall a UserPromptSubmit (evaluate_queued). I log '[retain]' vanno su stderr,
+# recall a UserPromptSubmit (`--deferred`, evaluate_deferred). I log '[retain]' vanno su stderr,
 # HSGATE su stdout: il file di log raccoglie entrambi (2>&1).
 # HS_RETAIN_FORCE bypassa il throttling ma NON l'interruttore master retain_enabled:
 # col retain off il worker esce prima del POST, quindi l'e2e non e' applicabile -> skip.

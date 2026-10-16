@@ -14,9 +14,9 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hindsight.config.json` (root del plugin)            | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
 | `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV; i bool solo `1/true/yes` o `0/false/no`. Un override env non convertibile o non valido viene ignorato e resta il valore precedente (file o default) |
-| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: lato retain delegato al worker (`retain_at_prompt`: pickup dell'esito del gate precedente, consenso retain pending, poi gate differito del turno accodato in un processo detached **parallelo** al recall) → recupera memorie e le inietta come `additionalContext`, fondendo l'esito del gate all'emit (attesa max 3 s, altrimenti raccolto al prompt dopo). Sincrono |
+| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: lato retain delegato al worker (`retain_at_prompt`: pickup dell'esito del gate precedente, consenso retain pending, poi gate differito del turno precedente, con l'`HOOK_INPUT` del prompt, in un processo detached **parallelo** al recall) → recupera memorie e le inietta come `additionalContext`, fondendo l'esito del gate all'emit (attesa max 3 s, altrimenti raccolto al prompt dopo). Sincrono |
 | `hindsight_recall_lib.py`                            | Helper del recall (`build_recall_payload`, `last_assistant_text`, `strip_memory_block`)                                                                          |
-| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (sincrono, solo enqueue in `hs-retain-queue/`); il worker valuta l'entry al prompt successivo (da `hindsight-recall.sh`) e salva un riassunto del turno nel bank (ICH-86) |
+| `hindsight-retain-worker.py`                         | Worker del retain (nessuno Stop hook): lanciato da `hindsight-recall.sh`, valuta il turno precedente al prompt successivo e salva un riassunto del turno nel bank (ICH-86) |
 | `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
 | `hindsight-check.sh`                                 | **Diagnostica live** server + hook (vedi §10)                                                                                                      |
 | `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                                                                       |
@@ -36,8 +36,8 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 "recall_result_filter_threshold": 0.8,          // bypass su scores.reranker >= soglia
 "recall_pending_ttl": 900,                      // validità del consenso medium (s)
 "recall_debug_in_context": false,               // mostra route + memorie iniettate
-"retain_enabled": false,         // MASTER SWITCH: retain automatico (Stop → coda → valutazione al prompt successivo) SPENTO — si salva solo via retain MCP
-"retain_every_n_turns": 3        // throttling retain: salva 1 turno accodato ogni N (inattivo finché retain_enabled è false)
+"retain_enabled": false,         // MASTER SWITCH: retain automatico (valutazione del turno al prompt successivo) SPENTO — si salva solo via retain MCP
+"retain_every_n_turns": 3        // throttling retain: valuta 1 prompt ogni N (inattivo finché retain_enabled è false)
 ```
 
 ---
@@ -145,21 +145,22 @@ che di default non è leggibile da altri utenti della macchina.
 ## 9. Retain — throttling
 
 > ⚠️ Oggi il retain automatico è **spento** (`retain_enabled: false` in `hindsight.config.json`):
-> l'hook Stop accoda comunque il payload, il worker lo scarta senza valutarlo e si salva solo via
-> retain MCP. Il resto della sezione descrive la meccanica quando l'interruttore è attivo.
+> l'hook recall non lancia il worker e si salva solo via retain MCP. Il resto della sezione
+> descrive la meccanica quando l'interruttore è attivo.
 
 `should_retain_now()` salva 1 turno ogni `retain_every_n_turns` (3): turni 1-2 → `retain_skip`
-`reason=throttling`, turno 3 → salva. Contatore `stop_count` per sessione in
-`%TEMP%\hs-retain-state.json`: da ICH-86 avanza una volta per **ogni Stop realmente avvenuto**
-— l'entry di coda valutata a UserPromptSubmit più le entry più vecchie della stessa sessione
-scartate dal dequeue (`queued_skipped`), e salva quando l'avanzamento attraversa un multiplo di
-N — stessa cadenza di prima. **Eccezione**: `HS_RETAIN_FORCE` forza sempre il salvataggio
-(e non avanza il contatore).
+`reason=throttling`, turno 3 → salva. Contatore `stop_count` (nome storico) per sessione in
+`$XDG_CACHE_HOME/trinity/hs-retain-state.json` (fallback `~/.cache/trinity/`; `HS_RETAIN_STATE_DIR`
+per i test): avanza di uno per **ogni prompt valutato** a
+UserPromptSubmit, e salva quando arriva a un multiplo di N. I turni nati senza prompt (notifiche
+di task in background) non lo fanno avanzare, ma restano nella finestra valutata.
+**Eccezione**: `HS_RETAIN_FORCE` forza sempre il salvataggio (e non avanza il contatore).
 
-Altri `retain_skip.reason`: `no_transcript`, `no_content` e
-`queue_stale` (entry di coda più vecchia di 24 h, di solito l'ultimo turno di una sessione
-chiusa: mai valutata, rimossa in silenzio). Il gate differito gira in un processo detached
-(`--queued`) e scrive un outbox: se non finisce entro il budget di pickup dell'hook (3 s) non
+Altri `retain_skip.reason`: `no_transcript` (anche al primo prompt di una sessione: nessun turno
+completato), `no_content` e `turn_incomplete` (prompt accodato mentre Claude lavora, o turno
+interrotto: il contatore non avanza e il turno rientra nella finestra successiva). L'ultimo turno
+di una sessione non ha un prompt dopo e non viene valutato. Il gate differito gira in un processo detached (`--deferred`) e scrive un outbox solo
+se ha qualcosa da mostrare: se non finisce entro il budget di pickup dell'hook (3 s) non
 si perde nulla — eventi debug `retain_deferred` `carried_over` (l'hook è uscito senza
 aspettarlo) e `picked_up` (il prompt successivo ha raccolto l'esito).
 

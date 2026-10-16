@@ -11,12 +11,11 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
-| `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: pickup dell'esito del gate del prompt precedente, consenso del retain pending, poi gate differito dell'entry accodata allo Stop precedente in un processo detached parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit (attesa max 3 s, altrimenti raccolto al prompt dopo) — un solo JSON in output |
+| `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: pickup dell'esito del gate del prompt precedente, consenso del retain pending, poi gate differito sul turno precedente, con l'`HOOK_INPUT` di questo prompt, in un processo detached parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit (attesa max 3 s, altrimenti raccolto al prompt dopo) — un solo JSON in output |
 | `hindsight-failcheck.sh`     | UserPromptSubmit   | segnala via additionalContext i retain falliti in silenzio lato server (`GET .../operations?status=failed`: l'estrazione fatti è async e può fallire dopo l'accepted), i fallimenti locali del retain e la degradazione del reranker; de-dup via state file, una notifica per evento; indipendente da `recall_enabled` |
 | `hindsight-ensure-up.sh`     | SessionStart       | attende la readiness del server MCP (che gira solo sulla VPS); se `HINDSIGHT_SSH_TUNNEL` è impostata apre il tunnel SSH. Nessun avvio locale |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
-| `hindsight-retain.sh`        | Stop               | puro bash: accoda il payload del hook in `$HS_CACHE_DIR/hs-retain-queue/` e risponde `{}` (nessuna valutazione qui) |
-| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--queued <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'entry della sessione e scrive l'outbox `hs-retain-queue/<session>.out.json`) (non è un hook a sé) |
+| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--deferred <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'`HOOK_INPUT` ereditato dal prompt e scrive l'outbox `hs-retain-outbox/<session>.out.json` solo se c'è qualcosa da mostrare) (non è un hook a sé) |
 
 ## 🌐 Server remoto (solo VPS)
 
@@ -40,7 +39,7 @@ posizionamento è il vincolo centrale: chi li importa deve puntare a `lib/`.
 | `hindsight_recall_lib.py` | costruzione del payload di recall                                                |
 | `hindsight_recall_filter.py` | filtro Luna low/medium/high, consenso naturale e pending per-sessione          |
 | `hindsight_recorder.py`   | recorder dei golden per il porting (ICH-173): con `HINDSIGHT_RECORD=1` ogni hook Python e il worker scrivono un record JSON in `$HS_CACHE_DIR/hs-golden/` (vedi «Recorder dei golden») |
-| `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank; segnala anche i candidati smentiti dalla finestra (ICH-152): il worker chiede «Ritiro la memoria contraddetta?» e solo dopo il «sì» li ritira (PATCH `state=invalidated`, reversibile; pending in `$HS_CACHE_DIR/hs-invalidate-pending/`, mai nel drain); se il turno ha già la domanda del retain, la domanda di ritiro slitta al primo turno libero (ICH-166) |
+| `hindsight_retain_gate.py` | gate semantico pre-retain (ICH-67): decide retain/skip/uncertain sulla finestra del turno, con dedup contro i candidati già nel bank; segnala anche i candidati smentiti dalla finestra (ICH-152): il worker chiede «Ritiro la memoria contraddetta?» e solo dopo il «sì» li ritira (PATCH `state=invalidated`, reversibile; pending in `$HS_CACHE_DIR/hs-invalidate-pending/`); se il turno ha già la domanda del retain, la domanda di ritiro slitta al primo turno libero (ICH-166) |
 | `hindsight_secrets.py`    | pattern dei segreti condivisi (ICH-159): `SECRET_PATTERNS` per il benchmark del gate, `OUTCOME_SECRET_PATTERNS` per gli esiti dei comandi nel retain worker |
 | `hs-python.sh`            | sourced da ogni hook: risolve in `HS_PY` un interprete Python utilizzabile (indipendente dal PATH di sessione) ed esporta `PYTHONUTF8=1` |
 
@@ -66,13 +65,12 @@ mostra route, conteggi e testo completo delle sole memorie effettivamente iniett
 
 Per il porting nella mod `trinity-memory` (ICH-173): con `HINDSIGHT_RECORD=1` nell'ambiente di
 Claude Code ogni esecuzione di `hindsight-recall.sh`, `hindsight-failcheck.sh`,
-`hindsight-mm-inject.sh` e del worker (`--queued`, modalità script) scrive un record
+`hindsight-mm-inject.sh` e del worker (`--deferred`, modalità script) scrive un record
 JSON in `$HS_CACHE_DIR/hs-golden/<script>/<UTC>-<pid>.json` (`lib/hindsight_recorder.py`). Con un
 valore diverso da `1`, o senza la variabile, il modulo non viene nemmeno importato.
 
 Il record (`version: 1`) contiene: argv, pid/ppid, cwd, piattaforma, orari, `session_id`, `stdin`
-(`HOOK_INPUT`; `null` nel worker `--queued`, il cui input è l'entry di coda in
-`state_before`), config effettiva, presenza delle chiavi API (mai i valori), ogni `urlopen`
+(`HOOK_INPUT`, anche nel worker `--deferred`, che lo eredita dal prompt), config effettiva, presenza delle chiavi API (mai i valori), ogni `urlopen`
 (metodo, URL, timeout, body inviato, status, body **letto dal chiamante**, errori), ogni
 `subprocess.check_output` (git), stdout, `exit_code`, traceback, file di stato prima e dopo
 (`state_before`/`state_after`, contenuto intero), coda dei transcript che il codice apre (le

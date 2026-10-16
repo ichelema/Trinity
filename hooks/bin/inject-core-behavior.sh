@@ -9,7 +9,7 @@ FILE="$ROOT/core-behavior.md"
 
 # La sezione "Retain a fine task" (marker RETAIN:manual) vale solo nei progetti
 # SENZA retain automatico: dove retain_enabled e' true salva gia' il gate
-# dell'hook Stop, e la regola agent-side creerebbe salvataggi doppi. Config
+# del retain automatico, e la regola agent-side creerebbe salvataggi doppi. Config
 # risolta dal loader centralizzato (rispetta l'override di progetto via
 # CLAUDE_PROJECT_DIR). Se python non risponde, la sezione resta: con gli hook
 # rotti il retain MCP e' l'unica strada che funziona.

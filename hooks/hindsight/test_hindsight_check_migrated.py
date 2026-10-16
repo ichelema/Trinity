@@ -607,16 +607,14 @@ class RetainGateConfigTests(unittest.TestCase):
 
 
 class RetainWiringTests(unittest.TestCase):
-    """Sezione 21: wiring testuale ICH-86 — Stop puro enqueue, retain differito
-    nell'hook recall, entry point del worker."""
+    """Sezione 21: wiring testuale ICH-86 — nessuno Stop hook, retain
+    differito nell'hook recall, entry point del worker."""
 
-    def test_stop_hook_is_pure_enqueue(self):
-        retain_sh = read(HERE / "hindsight-retain.sh")
-        self.assertIn("hs-retain-queue", retain_sh)
-        # niente HSGATE / stop_hook_active: non c'e' piu' nessun
-        # decision:block da proteggere
-        self.assertNotIn("HSGATE", retain_sh)
-        self.assertNotIn("stop_hook_active", retain_sh)
+    def test_no_stop_hook(self):
+        # Il retain parte dal prompt successivo (hindsight-recall.sh): nessuno
+        # Stop hook registrato e nessuno script che accodi il turno.
+        self.assertNotIn("Stop", json.loads(read(HOOKS_JSON))["hooks"])
+        self.assertEqual(list(HERE.glob("hindsight-retain*.sh")), [])
 
     def test_recall_hook_delegates_retain_at_prompt(self):
         self.assertIn("retain_at_prompt", read(HERE / "hindsight-recall.sh"))
@@ -628,12 +626,13 @@ class RetainWiringTests(unittest.TestCase):
         self.assertIn("save_retain_pending", worker_src)
         self.assertTrue((HERE / "lib" / "hindsight_retain_gate.py").is_file())
         # ICH-86: pickup + consenso + gate differito in un processo detached
-        # (--queued), consumo della coda, scarto dei messaggi utente in coda
-        # al transcript (la finestra deve essere quella del turno COMPLETATO).
+        # (--deferred) sull'HOOK_INPUT del prompt, scarto dei messaggi utente
+        # in coda al transcript (la finestra deve essere quella del turno
+        # COMPLETATO).
         for needle in (
             "def retain_at_prompt",
-            "def evaluate_queued",
-            "--queued",
+            "def evaluate_deferred",
+            "--deferred",
             "def drop_unanswered_tail",
             "handle_retain_consent",
         ):
