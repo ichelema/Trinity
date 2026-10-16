@@ -1,5 +1,5 @@
 ---
-description: Audit di qualità dell'intero repo: bug, sicurezza, carico, test mancanti, cosa cancellare
+description: "Audit di qualità dell'intero repo: bug, sicurezza, carico, test mancanti, cosa cancellare"
 disable-model-invocation: true
 ---
 

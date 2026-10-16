@@ -1,5 +1,5 @@
 ---
-description: Revisione di qualità di una modifica: bug, sicurezza, carico, test mancanti, velocità, cosa tagliare
+description: "Revisione di qualità di una modifica: bug, sicurezza, carico, test mancanti, velocità, cosa tagliare"
 disable-model-invocation: true
 ---
 
