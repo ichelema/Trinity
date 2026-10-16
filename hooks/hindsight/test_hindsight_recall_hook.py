@@ -144,11 +144,15 @@ class HookE2ETests(unittest.TestCase):
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), MockBackend)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        # Cache per classe e non per test: l'interprete Python degli hook si
+        # risolve (e si cacha) una volta sola.
+        cls.cache_home = tempfile.mkdtemp(prefix="hs-e2e-cache-")
 
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        shutil.rmtree(cls.cache_home, ignore_errors=True)
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -218,6 +222,11 @@ class HookE2ETests(unittest.TestCase):
             # chiamerebbe TypeSafe (o fallirebbe chiuso senza chiave). Il
             # filtro e' coperto da test_hindsight_retain_gate.
             "HS_CFG_RETAIN_JEV_ENABLED": "false",
+            # Cache e debug log isolati: senza, la suite scriverebbe nel debug
+            # log del plugin (acceso nella config) e in ~/.cache/trinity
+            # (hs-retain.log, pending di ritiro, marker letti dal failcheck).
+            "XDG_CACHE_HOME": self.cache_home,
+            "HS_CFG_DEBUG_LOG_FILE": os.path.join(self.tmp.name, "hindsight-debug.log"),
             **(extra_env or {}),
         }
         proc = subprocess.run(

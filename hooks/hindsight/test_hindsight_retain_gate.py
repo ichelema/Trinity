@@ -81,6 +81,16 @@ def setUpModule():
     patch = mock.patch.object(hindsight_retain_gate, "ask_jev", return_value=(JEV_PASS, 1.0))
     patch.start()
     unittest.addModuleCleanup(patch.stop)
+    # Cache e debug log isolati: niente scritture in ~/.cache/trinity ne' nel
+    # debug log del plugin (acceso nella config). Prima di load_worker().
+    tmp = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(tmp.cleanup)
+    env = mock.patch.dict(
+        os.environ,
+        {"XDG_CACHE_HOME": tmp.name, "HS_CFG_DEBUG_LOG_FILE": os.path.join(tmp.name, "hindsight-debug.log")},
+    )
+    env.start()
+    unittest.addModuleCleanup(env.stop)
 
 
 def fake_api(response: dict, latency: float = 7.0):

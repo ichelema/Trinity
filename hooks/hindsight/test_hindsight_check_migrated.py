@@ -42,6 +42,16 @@ def load_worker():
 WORKER = load_worker()
 
 
+def setUpModule():
+    # Cache isolata: resolve_bank("auto", ...) sulle dir temporanee dei test
+    # scriverebbe la cache degli slug in ~/.cache/trinity/hs-repo-cache.
+    tmp = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(tmp.cleanup)
+    env = mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp.name})
+    env.start()
+    unittest.addModuleCleanup(env.stop)
+
+
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 

@@ -99,7 +99,12 @@ class RecorderTests(unittest.TestCase):
             for k, v in os.environ.items()
             if not k.startswith(("HS_", "HINDSIGHT_", "HOOK_INPUT")) and k not in KEY_ENV
         }
-        self.env.update(XDG_CACHE_HOME=self.tmp.name, PYTHONUTF8="1")
+        # Debug log del plugin (acceso nella config) in tmp anche lui.
+        self.env.update(
+            XDG_CACHE_HOME=self.tmp.name,
+            PYTHONUTF8="1",
+            HS_CFG_DEBUG_LOG_FILE=os.path.join(self.tmp.name, "hindsight-debug.log"),
+        )
 
     def tearDown(self):
         self.tmp.cleanup()
