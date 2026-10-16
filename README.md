@@ -96,7 +96,7 @@ Esempio — un hook del plugin (da `hooks/hooks.json`):
 ```json
 {
   "type": "command",
-  "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
+  "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh\"",
   "timeout": 60
 }
 ```
@@ -160,11 +160,17 @@ L'hook non fa un semplice `cat`: passa per lo script `hooks/bin/inject-core-beha
 i blocchi dell'OS corrente e scarta i blocchi manuali `RECALL`/`RETAIN` dove `recall_enabled` / 
 `retain_enabled` (in `hindsight.config.json`) sono `true`. Il resto del file resta letterale.
 
+Lo script legge i due flag in puro bash, senza Python, con la stessa precedenza di
+`hooks/hindsight/lib/hindsight_config.py`: plugin → progetto (`$CLAUDE_PROJECT_DIR`) → env `HS_CFG_*`.
+Su Windows/MSYS ogni processo costa centinaia di ms e il timeout è di 5 s: con due avvii di Python
+l'hook andava in timeout e la sessione partiva senza regole. Il test
+`hooks/hindsight/test_inject_core_behavior.py` controlla che bash e Python diano lo stesso risultato.
+
 ```json
 // hooks/hooks.json → SessionStart
 {
   "type": "command",
-  "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh",
+  "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh\"",
   "timeout": 5
 }
 ```
