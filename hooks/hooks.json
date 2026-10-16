@@ -4,17 +4,17 @@
       "matcher": "",
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-ensure-up.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-ensure-up.sh\"",
           "timeout": 50
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh\"",
           "timeout": 5
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-model-behavior.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-model-behavior.sh\"",
           "timeout": 5
         }
       ]
@@ -22,7 +22,7 @@
       "matcher": "startup",
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-mm-inject.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-mm-inject.sh\"",
           "timeout": 25
         }
       ]
@@ -48,12 +48,12 @@
     "UserPromptSubmit": [{
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-recall.sh\"",
           "timeout": 60
         },
         {
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh\"",
           "timeout": 30
         }
       ]
@@ -70,7 +70,7 @@
       "matcher": "mcp__plugin_trinity_excalidraw__export_scene",
       "hooks": [{
         "type": "command",
-        "command": "ruby ${CLAUDE_PLUGIN_ROOT}/hooks/excalidraw/excalidraw-to-obsidian.rb",
+        "command": "ruby \"${CLAUDE_PLUGIN_ROOT}/hooks/excalidraw/excalidraw-to-obsidian.rb\"",
         "timeout": 10
       }]
     }],
@@ -78,7 +78,7 @@
       "matcher": "permission_prompt",
       "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bin/windows-toast.sh",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/windows-toast.sh\"",
           "timeout": 10,
           "async": true
         }
