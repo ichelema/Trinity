@@ -833,25 +833,42 @@ Il plugin non contiene path hardcoded: i valori che cambiano da macchina a macch
 da **variabili d'ambiente** nell'env utente di `~/.claude/settings.json`.
 
 Quel file **non si edita a mano** e **non è più in questo repo**: dal 2026-10-01 lo genera
-chezmoi dal repo dotfiles (`ichelema/dotfiles`): un solo template `dot_claude/settings.json.tmpl`,
-con le parti che cambiano per OS (env, path, `statusLine`, `model`) in blocchi
-`{{ if eq .chezmoi.os "windows" }}`. Flusso: modifica il template → push/pull → `chezmoi apply`
-(o `chezmoi update`) su ogni macchina. chezmoi possiede l'intero file: se Claude lo riscrive a
-runtime, `apply` chiede prima di sovrascrivere. `TRINITY_PLUGIN_DIR` sta nel blocco env di ogni OS.
+chezmoi dal repo dotfiles (`ichelema/dotfiles`), con due file (dal 2026-10-03):
 
-Le variabili qui sotto vanno quindi nel **blocco env dell'OS** del template
-`dot_claude/settings.json.tmpl` del repo dotfiles:
+- **`.chezmoitemplates/claude-settings.json`** — il template con tutto il contenuto. Le parti che
+  cambiano per OS (env, path, `statusLine`, `model`) stanno in blocchi `{{ if eq .chezmoi.os "windows" }}`;
+  quelle che cambiano per singola macchina in blocchi sull'hostname (es. `HINDSIGHT_SSH_TUNNEL`,
+  assente solo sulla VPS: `{{ if ne .chezmoi.hostname "ov-beb073" }}`).
+- **`dot_claude/modify_settings.json`** — un *modify-template* (chezmoi gli passa il file attuale e
+  scrive ciò che restituisce): parte dal template e ci rimette `model`, `modelSettings` e `fastMode`
+  del file attuale, così modello, effort e fast mode scelti in sessione sopravvivono ad `apply`. Se
+  il risultato coincide col file attuale, lo lascia com'è.
 
-```json
-{
+Flusso: modifica il template → push/pull → `chezmoi apply` (o `chezmoi update`) su ogni macchina.
+Tutte le altre chiavi si cambiano **nel template**: `apply` riscrive il file a partire da lì.
+`TRINITY_PLUGIN_DIR` sta nel blocco env di ogni OS.
+
+Le variabili qui sotto vanno quindi nel **blocco env dell'OS** di
+`.chezmoitemplates/claude-settings.json` (estratto):
+
+```text
   "env": {
-    "OBSIDIAN_VAULT": "D:/Obsidian/Sinapsi",
-    "OBSIDIAN_VAULT_NAME": "Sinapsi",
-    "MCP_EXCALIDRAW_DIR": "E:/msys64/home/Sphynx/.local/opt/mcp_excalidraw",
-    "MCP_DEBUGGER_DIR": "E:/AI/tools/mcp-debugger",
-    "MCP_NEOVIM_DIR": "E:/AI/tools/mcp-neovim-server"
-  }
-}
+{{- if eq .chezmoi.os "windows" }}
+    "OBSIDIAN_VAULT": "e:/obsidian/sinapsi",
+    "OBSIDIAN_VAULT_NAME": "sinapsi",
+    "MCP_EXCALIDRAW_DIR": "e:/msys64/home/sphynx/.local/opt/mcp_excalidraw",
+    "MCP_DEBUGGER_DIR": "e:/ai/tools/mcp-debugger",
+    "MCP_NEOVIM_DIR": "e:/ai/tools/mcp-neovim-server",
+    "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity"
+{{- else }}
+    "OBSIDIAN_VAULT": "/Dati/Obsidian/Sinapsi",
+    "OBSIDIAN_VAULT_NAME": "sinapsi",
+    "MCP_EXCALIDRAW_DIR": "/home/ichelema/.local/opt/mcp_excalidraw",
+    "MCP_DEBUGGER_DIR": "/Dati/AI/tools/mcp-debugger",
+    "MCP_NEOVIM_DIR": "/Dati/AI/tools/mcp-neovim-server",
+    "TRINITY_PLUGIN_DIR": "/Dati/AI/Claude/Trinity"
+{{- end }}
+  },
 ```
 
 `MCP_EXCALIDRAW_DIR` serve al server MCP `excalidraw`: punta a uno
@@ -860,7 +877,7 @@ dell'installazione. Su un'altra macchina (o su Linux) il path cambia. Senza ques
 in avvio, resto invariato); serve solo se riattivi `excalidraw`, disattivato di default.
 
 Su un'altra macchina con lo stesso vault sincronizzato in un path diverso, basta cambiare il 
-valore (es. `"/home/sphynx/Obsidian/Sinapsi"`). La variabile la leggono l'hook 
+valore (es. su Linux `"/Dati/Obsidian/Sinapsi"`). La variabile la leggono l'hook 
 `excalidraw-to-obsidian.rb` e la skill `obsidian` (con `echo "$OBSIDIAN_VAULT"`). La versione MSYS 
 del path si ricava con `cygpath -u`, non serve una variabile separata.
 
@@ -869,7 +886,7 @@ del path si ricava con `cygpath -u`, non serve una variabile separata.
 | root del progetto | `${CLAUDE_PROJECT_DIR}` (gli hook la ricevono da Claude Code) — già automatico |
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
-| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
+| root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `.chezmoitemplates/claude-settings.json` (repo dotfiles) |
 | tunnel Hindsight (§9.1) | `${HINDSIGHT_SSH_TUNNEL}` — host SSH della VPS (`hindsight-vps`), **solo sui PC**; sulla VPS non va impostata (nel repo dotfiles: `.chezmoitemplates/claude-settings.json`, blocco `{{ if ne .chezmoi.hostname "ov-beb073" }}`) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; serve solo se riattivi il server, disattivato di default) |
