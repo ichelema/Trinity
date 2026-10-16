@@ -26,7 +26,7 @@ che altrimenti risolvono i path relativamente a sé stessi.
 ### Cosa è plugin e cosa è ambiente
 
 I **file** del plugin vivono tutti qui dentro. Le **risorse runtime** restano sulla macchina: il 
-tunnel SSH verso il server Hindsight (che gira solo sulla VPS, vedi §9), i binari (`mise`, `node`, `ffplay`, `pwsh`), 
+tunnel SSH verso il server Hindsight (che gira solo sulla VPS, vedi §9.1), i binari (`mise`, `node`, `ffplay`, `pwsh`), 
 il CA bundle (`C:/certs/cacert.pem`), le chiavi API (env utente). 
 Il plugin è il *cervello*; server, DB e runtime sono il *corpo* installato sul sistema.
 
@@ -438,7 +438,173 @@ Regole della copia:
 
 ---
 
-## 9. Memoria Hindsight (multi-bank: core + bank per progetto)
+## 9. Memoria Hindsight (server sulla VPS, multi-bank: core + bank per progetto)
+
+### 9.1 Dove gira: server sulla VPS, PC solo client
+
+Dal 2026-10-16 il server Hindsight (API, MCP, worker, Postgres `pg0`, Control Plane) gira **solo**
+sulla VPS `infomaniak`. I PC (Windows e Linux) sono solo client: niente server né database delle
+memorie in locale, raggiungono la VPS con un **tunnel SSH** (collegamento cifrato che fa comparire
+sul PC le porte del server). Le memorie stanno in un posto solo: non si dividono tra macchine e non
+servono dump/restore tra PC. **Nessun fallback**: se la VPS non risponde la sessione parte senza
+memorie e l'hook lo dice.
+
+```text
+PC Windows / Linux                    VPS infomaniak (systemd --user)
+Claude Code + hook Trinity
+127.0.0.1:8888 ═══ tunnel SSH ══════► hindsight.service       API + MCP 127.0.0.1:8888
+127.0.0.1:9999 ═══ (porta 22) ══════► hindsight-cp.service    Control Plane localhost:9999
+niente server, niente Postgres        Postgres pg0 127.0.0.1:5432 (dentro hindsight.service)
+                                      hindsight-backup.timer  dump giornaliero, ultimi 5
+```
+
+**Servizi sulla VPS.** Unit `systemd --user` in `~/.config/systemd/user/`, con linger attivo
+(girano anche senza login). Non sono versionate: il loro testo è qui sotto.
+
+| Unit | Cosa fa |
+|---|---|
+| `hindsight.service` | API + MCP (`hindsight-local-mcp`) su `127.0.0.1:8888`, **senza auth**: ascolta solo in locale. `Restart=always`; prima di partire verifica che `OPENAI_API_KEY` e `GEMINI_API_KEY` siano in `~/.zshenv` |
+| `hindsight-cp.service` | Control Plane (`mise run control-plane`) su `localhost:9999` |
+| `hindsight-backup.timer` | ogni giorno `mise run db-dump` in `~/backups/hindsight`; restano gli ultimi 5 dump (`HS_BACKUP_KEEP`) |
+
+<details><summary>Testo delle unit</summary>
+
+```ini
+# ~/.config/systemd/user/hindsight.service
+[Unit]
+Description=Hindsight memory server (Trinity)
+After=network-online.target
+
+[Service]
+# zsh legge ~/.zshenv, dove stanno le chiavi API: niente secondo file di segreti
+# Fail-fast: senza chiavi il server partirebbe lo stesso e l'errore uscirebbe solo al primo retain
+ExecStartPre=/usr/bin/zsh -c ': $${OPENAI_API_KEY:?manca OPENAI_API_KEY in ~/.zshenv} $${GEMINI_API_KEY:?manca GEMINI_API_KEY in ~/.zshenv}'
+ExecStart=/usr/bin/zsh -c 'exec mise -C /Dati/AI/Claude/Trinity exec -- hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info'
+Restart=always
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target
+
+# ~/.config/systemd/user/hindsight-cp.service
+[Unit]
+Description=Hindsight Control Plane (Trinity)
+After=hindsight.service
+
+[Service]
+ExecStart=/usr/bin/zsh -c 'exec mise -C /Dati/AI/Claude/Trinity run control-plane'
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+
+# ~/.config/systemd/user/hindsight-backup.service
+[Unit]
+Description=Dump giornaliero del DB Hindsight
+
+[Service]
+Type=oneshot
+Environment=HS_BACKUP_DIR=%h/backups/hindsight
+ExecStart=/usr/bin/zsh -c 'exec mise -C /Dati/AI/Claude/Trinity run db-dump'
+
+# ~/.config/systemd/user/hindsight-backup.timer
+[Unit]
+Description=Dump giornaliero del DB Hindsight
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target
+```
+
+Attivazione: `systemctl --user daemon-reload && systemctl --user enable --now hindsight.service
+hindsight-cp.service hindsight-backup.timer` (linger: `loginctl enable-linger`, una volta).
+
+</details>
+
+Gestione sulla VPS:
+
+```bash
+systemctl --user status hindsight hindsight-cp hindsight-backup.timer
+systemctl --user restart hindsight
+journalctl --user -u hindsight -f
+```
+
+- **Restore**: `mise run db-restore` (oppure `mise run db-restore -- file.dump`) ferma da solo
+  `hindsight-cp` e `hindsight`, fa un dump di sicurezza e rifiuta se il DB ha scritture più recenti
+  del dump (`--force` per procedere). Non riavvia nulla: poi `systemctl --user start hindsight hindsight-cp`.
+- **Upgrade Python**: dopo `mise upgrade python` serve `mise run install-hindsight` e poi
+  `systemctl --user restart hindsight`.
+
+La configurazione del servizio (provider LLM/embedding/reranker, `control-plane`, `install-hindsight`,
+`db-dump`/`db-restore`) è in **`mise.toml`**: è la fonte di verità del runtime Hindsight. Le chiavi del
+server (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `VOYAGE_API_KEY`) stanno sulla VPS in `~/.zshenv`.
+
+**Tunnel dai PC.** chezmoi mette `HINDSIGHT_SSH_TUNNEL=hindsight-vps` nell'env di
+`~/.claude/settings.json` su ogni macchina tranne la VPS (template `.chezmoitemplates/claude-settings.json`
+del repo dotfiles, blocco `{{ if ne .chezmoi.hostname "ov-beb073" }}`): sulla VPS gli hook parlano
+direttamente col server. A ogni `SessionStart` `hindsight-ensure-up.sh`:
+
+1. se l'MCP su `127.0.0.1:8888` risponde già, esce subito;
+2. altrimenti, se la variabile c'è, apre in background
+   `ssh -N -L 127.0.0.1:8888:127.0.0.1:8888 -L 127.0.0.1:9999:localhost:9999 hindsight-vps`
+   (bind solo su `127.0.0.1`, così le porte non finiscono in LAN; con `ExitOnForwardFailure`
+   ssh esce se la porta 8888 è già occupata);
+3. attende l'MCP al massimo 40 s; se non arriva stampa *"Hindsight non raggiungibile …"* e i tool
+   `hindsight/*` mancano nella sessione.
+
+Il tunnel resta aperto anche dopo la chiusura di Claude: è innocuo, `ServerAliveInterval` lo chiude
+se la connessione cade e la sessione successiva lo riapre. Il Control Plane si apre dal PC su
+`http://localhost:9999`.
+
+**Aggiungere un PC.** Ogni PC ha una chiave SSH sua, senza passphrase e ristretta al solo tunnel: se
+rubata non apre una shell e non raggiunge Postgres, e si revoca togliendo la sua riga.
+
+```bash
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/hindsight_tunnel -C "hindsight-tunnel@<host>"
+```
+
+Sulla VPS, in `~/.ssh/authorized_keys` (una riga per PC):
+
+```text
+restrict,port-forwarding,permitopen="127.0.0.1:8888",permitopen="localhost:9999",command="/bin/false" ssh-ed25519 AAAA... hindsight-tunnel@<host>
+```
+
+Sul PC, in `~/.ssh/config`:
+
+```text
+Host hindsight-vps
+    HostName <IP della VPS>
+    User ichelema
+    IdentityFile ~/.ssh/hindsight_tunnel
+    IdentitiesOnly yes
+```
+
+Poi `chezmoi update` (porta `HINDSIGHT_SSH_TUNNEL`). Verifica: `ssh hindsight-vps` si chiude subito
+senza shell, e una nuova sessione Claude parte senza l'avviso.
+
+**Copia dei backup fuori dalla VPS.** Il PC Linux, quando è acceso, scarica ogni giorno una copia
+speculare dei dump: timer `--user` `hindsight-backup-pull.timer` (`OnCalendar=daily`, `Persistent=true`:
+recupera i giri persi a PC spento) che lancia `rsync -a --delete hindsight-backup: ~/backups/hindsight-vps/`.
+La chiave dedicata `~/.ssh/hindsight_backup` (voce `Host hindsight-backup` in `~/.ssh/config`) può
+solo leggere la cartella dei dump:
+
+```text
+restrict,command="/usr/bin/rrsync -ro /home/ichelema/backups/hindsight" ssh-ed25519 AAAA... hindsight-backup@<host>
+```
+
+Se il PC Linux resta spento a lungo, la copia esterna invecchia.
+
+**Chiavi API sui PC.** Filtro del recall, gate del retain e rerank multi-bank girano negli hook sul
+PC: se riattivi recall/retain automatici, sul PC servono ancora `OPENAI_API_KEY`, `TYPESAFE_API_KEY`
+e `VOYAGE_API_KEY`.
+
+### 9.2 Bank, recall e retain
 
 La memoria è organizzata a **due livelli** (dal 2026-06-12): un bank **CORE** condiviso
 (`trinity-project`, le informazioni trasversali — preferenze utente, vincoli d'ambiente,
@@ -609,26 +775,6 @@ progetto. Lo stato (revisionati, anche respinti, + cache dei verdetti triage) è
 `logs/promote-state.json`. Lo scan+triage si lancia a mano:
 `python hooks/hindsight/ops/hindsight-promote.py --triage` (nessun job schedulato).
 
-**Server remoto (solo VPS, nessun fallback locale).** Il server Hindsight gira **solo** sulla VPS
-`infomaniak` come servizi `systemd --user`: `hindsight.service` (API+MCP su `127.0.0.1:8888`, senza
-auth: ascolta solo in locale), `hindsight-cp.service` (Control Plane su `:9999`) e
-`hindsight-backup.timer` (`mise run db-dump` con `HS_BACKUP_DIR=~/backups/hindsight`; restano gli
-ultimi 5 dump). Gestione: `systemctl --user status|restart hindsight`, log
-`journalctl --user -u hindsight`. I PC sono solo client: l'env `HINDSIGHT_SSH_TUNNEL=hindsight-vps`
-(in `~/.claude/settings.json`, generato da chezmoi) fa aprire a `hindsight-ensure-up.sh` il tunnel
-SSH che porta `127.0.0.1:8888` e `localhost:9999` in locale; la chiave SSH è dedicata e ristretta
-(`restrict,port-forwarding,permitopen="127.0.0.1:8888",permitopen="localhost:9999",command="/bin/false"`).
-Se il server non è raggiungibile l'hook lo dice e i tool `hindsight/*` mancano in sessione. Il
-Control Plane si apre su `http://localhost:9999` via tunnel.
-
-- **Restore** (sulla VPS): `systemctl --user stop hindsight-cp hindsight` → `mise run db-restore` →
-  `systemctl --user start hindsight hindsight-cp`.
-- **Upgrade Python** (sulla VPS): dopo `mise upgrade python` serve `mise run install-hindsight` e
-  `systemctl --user restart hindsight`.
-
-La configurazione del servizio (provider LLM/embedding, `control-plane`, `install-hindsight`,
-`db-dump`/`db-restore`) è in **`mise.toml`**: è la fonte di verità del runtime Hindsight.
-
 **Override della config per-progetto.** I parametri runtime degli hook (budget, tag, 
 `recall/retain_enabled`, timeout, …) stanno in **`hindsight.config.json` nella root del plugin**. 
 Un progetto può personalizzarli mettendo un proprio `hindsight.config.json` **nella sua root**: 
@@ -724,7 +870,7 @@ del path si ricava con `cygpath -u`, non serve una variabile separata.
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
-| tunnel Hindsight (§9) | `${HINDSIGHT_SSH_TUNNEL}` — host SSH della VPS (`hindsight-vps`), **solo sui PC**; sulla VPS non va impostata |
+| tunnel Hindsight (§9.1) | `${HINDSIGHT_SSH_TUNNEL}` — host SSH della VPS (`hindsight-vps`), **solo sui PC**; sulla VPS non va impostata (nel repo dotfiles: `.chezmoitemplates/claude-settings.json`, blocco `{{ if ne .chezmoi.hostname "ov-beb073" }}`) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; serve solo se riattivi il server, disattivato di default) |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
@@ -920,8 +1066,10 @@ Gli alias Anthropic in `litellm_config.yaml` puntano agli ultimi modelli: `claud
 Opus 5.5, `claude-sonnet` → Sonnet 5.5, `claude-fable` → Fable 5.1, `claude-haiku` → Haiku 5.5;
 `claude-opus-4-6` resta disponibile come voce separata.
 
-Nel setup Windows descritto qui il DB di LiteLLM usa lo stesso Postgres embedded di
-Hindsight, ma su un database separato chiamato `litellm`.
+Nel setup Windows descritto qui il DB di LiteLLM (database `litellm`) sta nel cluster Postgres
+embedded `pg0` locale, che `litellm-start-proxy.sh` avvia da sé. Fino al 2026-10-16 lo stesso
+cluster ospitava anche Hindsight; ora Hindsight gira sulla VPS (§9.1) e il suo vecchio DB resta lì
+solo come copia di riserva, non aggiornata. Il cluster non va cancellato: serve a LiteLLM.
 
 #### Il proxy su Linux (dal 2026-08-14)
 
@@ -967,7 +1115,7 @@ PRISMA_ENGINE="$(ls -1 "$HOME"/.cache/prisma-python/binaries/*/*/node_modules/@p
 
 **Cluster Postgres separato nel setup Linux qui descritto, non una garanzia universale.**
 LiteLLM è configurato con un cluster utente in `~/.litellm/pgdata` sulla porta **5433**,
-distinto dal pg0 di Hindsight (5432). Non è un servizio: lo avvia
+distinto dal pg0 (5432) che ospitava Hindsight prima del passaggio alla VPS (§9.1). Non è un servizio: lo avvia
 `litellm-start-proxy.sh` se non risponde già, con `-k /tmp` perché la socket dir di
 default `/run/postgresql` la crea solo il servizio systemd di sistema.
 Verificare la configurazione effettiva per macchina: database distinti nello stesso
@@ -1079,14 +1227,14 @@ DeepSeek non supporta livelli graduati di effort (solo thinking on/off): due mod
 Trinity/
 ├── core-behavior.md         comportamento iniettato al SessionStart
 ├── .mcp.json                server MCP (playwright, ticktick, obsidian; excalidraw disattivato — hindsight a scope user, §7)
-├── mise.toml                env + task (servizio Hindsight, dashboard, benchmark, check)
+├── mise.toml                env + task (servizio Hindsight della VPS, Control Plane, backup, benchmark, check)
 ├── commands/                slash command (/trinity:*)
 ├── skills/                  8 skill attive
 ├── hooks/
 │   ├── hooks.json           registrazione hook (sostituisce "hooks" di settings.json)
 │   ├── skill-eval/          suggerimento skill (skill-eval.pl + skill-rules.json/schema)
 │   ├── bin/                  script helper: inject-*.sh, play-sound.sh, windows-toast.*
-│   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
+│   └── hindsight/           recall, retain, ensure-up (tunnel verso la VPS), failcheck, mental model, lib, mcp (shim per-progetto), ops, tools
 │       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 ├── scripts/                 script di servizio: bin/
 ├── scheduler/               3 job Windows schedulati: nb-auth-refresh · nb-check · yt-check
