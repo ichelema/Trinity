@@ -15,7 +15,7 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 | `hindsight-failcheck.sh`     | UserPromptSubmit   | segnala via additionalContext i retain falliti in silenzio lato server (`GET .../operations?status=failed`: l'estrazione fatti è async e può fallire dopo l'accepted), i fallimenti locali del retain e la degradazione del reranker; de-dup via state file, una notifica per evento; indipendente da `recall_enabled` |
 | `hindsight-ensure-up.sh`     | SessionStart       | attende la readiness del server MCP (che gira solo sulla VPS); se `HINDSIGHT_SSH_TUNNEL` è impostata apre il tunnel SSH. Nessun avvio locale |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
-| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--deferred <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'`HOOK_INPUT` ereditato dal prompt e scrive l'outbox `hs-retain-outbox/<session>.out.json` solo se c'è qualcosa da mostrare) (non è un hook a sé) |
+| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--deferred <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'`HOOK_INPUT` ereditato dal prompt e scrive l'outbox `hs-retain-outbox/<session>.out.json` solo se c'è qualcosa da mostrare; salta i turni non finiti, cioè prompt accodato a metà turno o turno interrotto, con `retain_skip turn_incomplete` e senza far avanzare il contatore) (non è un hook a sé) |
 
 ## 🌐 Server remoto (solo VPS)
 
@@ -102,6 +102,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
 | `hindsight-set-mission.sh`   | manuale                                                           | imposta retain/reflect mission sul bank                      |
 | `hindsight-reflect.sh`       | slash-command `/reflect` (fallback)                               | sintesi strategica via `reflect`                             |
+| `hindsight-promote.py`       | slash-command `/trinity:promote`                                  | promozione curata dei fatti dai bank di progetto al core: scan → triage LLM → review umana → move |
 
 ## 📁 `tools/` — manutenzione manuale
 
@@ -133,7 +134,9 @@ nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event 
 
 Ogni script trova i fratelli **relativamente a sé stesso**, mai con path assoluti cablati:
 
-- `.sh`: `HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"`, poi `sys.path` punta a `$HOOKS_DIR/lib` (hook in cima) o `$HOOKS_DIR/../lib` (script in `ops/`/`tools/`).
+- `.sh`: `HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` (gli hook di ogni prompt,
+  `hindsight-recall.sh` e `hindsight-failcheck.sh`, usano `HOOKS_DIR="${BASH_SOURCE[0]%/*}"`: niente
+  subshell né `dirname`, che su Windows/MSYS2 costano ~400 ms), poi `sys.path` punta a `$HOOKS_DIR/lib` (hook in cima) o `$HOOKS_DIR/../lib` (script in `ops/`/`tools/`).
 - `.py`: `sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))` (o `"..","lib"` dalle sottocartelle).
 
 Spostando un file, aggiornare **solo** la sua riga di risoluzione path e i chiamanti esterni
