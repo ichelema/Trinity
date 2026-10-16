@@ -11,13 +11,20 @@ Sono gli unici file invocati direttamente da Claude Code. Registrati in
 
 | File                         | Evento Claude Code | Cosa fa                                                                                 |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
-| `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: pickup dell'esito del gate del prompt precedente, consenso del retain pending, poi gate differito dell'entry accodata allo Stop precedente in un processo detached parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit (attesa max 6 s, altrimenti raccolto al prompt dopo) — un solo JSON in output |
+| `hindsight-recall.sh`        | UserPromptSubmit   | delega il lato retain al worker (`retain_at_prompt`: pickup dell'esito del gate del prompt precedente, consenso del retain pending, poi gate differito dell'entry accodata allo Stop precedente in un processo detached parallelo al recall, ICH-86), esegue recall fresco, filtra i risultati e inietta solo memorie high o autorizzate; fonde l'esito del gate all'emit (attesa max 3 s, altrimenti raccolto al prompt dopo) — un solo JSON in output |
 | `hindsight-failcheck.sh`     | UserPromptSubmit   | segnala via additionalContext i retain falliti in silenzio lato server (`GET .../operations?status=failed`: l'estrazione fatti è async e può fallire dopo l'accepted), i fallimenti locali del retain e la degradazione del reranker; de-dup via state file, una notifica per evento; indipendente da `recall_enabled` |
-| `hindsight-ensure-up.sh`     | SessionStart       | se il server :8888 è giù, lo avvia (`mise run start-hindsight`) e attende il boot; spawna la sentinella |
+| `hindsight-ensure-up.sh`     | SessionStart       | attende la readiness del server MCP (che gira solo sulla VPS); se `HINDSIGHT_SSH_TUNNEL` è impostata apre il tunnel SSH. Nessun avvio locale |
 | `hindsight-mm-inject.sh`     | SessionStart       | (gated) inietta le "knowledge page" / mental model a inizio sessione                    |
 | `hindsight-retain.sh`        | Stop               | puro bash: accoda il payload del hook in `$HS_CACHE_DIR/hs-retain-queue/` e risponde `{}` (nessuna valutazione qui) |
-| `hindsight-sentinel.sh`      | — (detached)       | singleton spawnato da ensure-up: quando non resta alcun processo claude vivo drena la coda del retain (`hindsight-retain-worker.py --drain`), attende i retain in volo e ferma server + Postgres (sostituisce l'hook SessionEnd, sempre cancellato: issue #32712) |
-| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--queued <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'entry della sessione e scrive l'outbox `hs-retain-queue/<session>.out.json`), `--drain` dalla sentinella (non è un hook a sé) |
+| `hindsight-retain-worker.py` | —                  | worker del retain: tutta la logica retain del prompt (`retain_at_prompt()`: pickup + consenso + lancio del gate differito, importato da `hindsight-recall.sh`), `--queued <session>` come processo detached lanciato da `retain_at_prompt` (valuta l'entry della sessione e scrive l'outbox `hs-retain-queue/<session>.out.json`) (non è un hook a sé) |
+
+## 🌐 Server remoto (solo VPS)
+
+Il server Hindsight gira **solo** sulla VPS `infomaniak` (unit `systemd --user`: `hindsight.service`,
+`hindsight-cp.service`, `hindsight-backup.timer`). I PC sono client: con `HINDSIGHT_SSH_TUNNEL=hindsight-vps`
+(in `~/.claude/settings.json`) `hindsight-ensure-up.sh` apre il tunnel SSH che porta `127.0.0.1:8888`
+(API+MCP) e `localhost:9999` (Control Plane) in locale. Nessun avvio/spegnimento locale, nessun fallback.
+Dettagli operativi in `README.md` (root) e `skills/hindsight/README.md`.
 
 ## 📁 `lib/` — libreria condivisa
 
@@ -59,12 +66,12 @@ mostra route, conteggi e testo completo delle sole memorie effettivamente iniett
 
 Per il porting nella mod `trinity-memory` (ICH-173): con `HINDSIGHT_RECORD=1` nell'ambiente di
 Claude Code ogni esecuzione di `hindsight-recall.sh`, `hindsight-failcheck.sh`,
-`hindsight-mm-inject.sh` e del worker (`--queued`, `--drain`, modalità script) scrive un record
+`hindsight-mm-inject.sh` e del worker (`--queued`, modalità script) scrive un record
 JSON in `$HS_CACHE_DIR/hs-golden/<script>/<UTC>-<pid>.json` (`lib/hindsight_recorder.py`). Con un
 valore diverso da `1`, o senza la variabile, il modulo non viene nemmeno importato.
 
 Il record (`version: 1`) contiene: argv, pid/ppid, cwd, piattaforma, orari, `session_id`, `stdin`
-(`HOOK_INPUT`; `null` nel worker `--queued`/`--drain`, il cui input è l'entry di coda in
+(`HOOK_INPUT`; `null` nel worker `--queued`, il cui input è l'entry di coda in
 `state_before`), config effettiva, presenza delle chiavi API (mai i valori), ogni `urlopen`
 (metodo, URL, timeout, body inviato, status, body **letto dal chiamante**, errori), ogni
 `subprocess.check_output` (git), stdout, `exit_code`, traceback, file di stato prima e dopo
@@ -94,9 +101,6 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 
 | File                         | Chi lo chiama                                                     | Cosa fa                                                      |
 | ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
-| `hindsight-drain-retain.py`  | `hindsight-sentinel.sh` (dopo il `--drain` del worker)            | attende che i retain in volo siano estratti dal server prima dello stop |
-| `hindsight-stop-services.sh` | `hindsight-sentinel.sh`, `mise run stop-hindsight`                | ferma server MCP + Postgres embedded                         |
-| `kill-port.sh`               | `mise` (control-plane/dashboard)                                  | uccide il processo su una porta (via `Get-NetTCPConnection`) |
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
 | `hindsight-set-mission.sh`   | manuale                                                           | imposta retain/reflect mission sul bank                      |
 | `hindsight-reflect.sh`       | slash-command `/reflect` (fallback)                               | sintesi strategica via `reflect`                             |
@@ -108,9 +112,9 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | `hindsight-check.sh`        | **diagnostica live** del setup (server, endpoint, hook, mental model, debug log). Uso: `bash hooks/hindsight/tools/hindsight-check.sh` |
 | `hindsight_export.py`       | esporta i documenti del bank in JSON (output in `data/exports/`)                                                                                                   |
 | `hindsight_import.py`       | re-importa/re-retain i documenti (es. dopo cambio modello embedding)                                                                                               |
-| `hs-db-dump.sh`             | dump portabile del DB Hindsight (`pg_dump -Fc`) per il sync tra macchine — `mise run db-dump`                                                                      |
-| `hs-db-restore.sh`          | restore dal dump con guardrail anti-perdita (rifiuta se il DB locale ha scritture più recenti) — `mise run db-restore`                                             |
-| `hs-db-lib.sh`              | sourced da `hs-db-dump.sh`/`hs-db-restore.sh`: risolve binari Postgres del cluster e parametri di connessione per-OS                                               |
+| `hs-db-dump.sh`             | dump del DB Hindsight (`pg_dump -Fc`), solo sulla VPS — `mise run db-dump` (timer `hindsight-backup.timer`)                                                                      |
+| `hs-db-restore.sh`          | restore dal dump con guardrail anti-perdita (rifiuta se il DB ha scritture più recenti), solo sulla VPS — `systemctl --user stop hindsight-cp hindsight` → `mise run db-restore` → `systemctl --user start hindsight hindsight-cp`                                             |
+| `hs-db-lib.sh`              | sourced da `hs-db-dump.sh`/`hs-db-restore.sh`: risolve binari Postgres del cluster pg0 e parametri di connessione (solo Linux/VPS)                                               |
 
 ## 📁 `data/` — artefatti
 
@@ -119,7 +123,7 @@ I vecchi dump SQL del lab non sono stati migrati (dismessi nella fusione del 202
 
 ## 📁 altre sottocartelle
 
-- `benchmark/` — corpora e script di benchmark embedding/reranker (task `mise embed-bench`, `rerank-bench`).
+- `benchmark/` — corpora e script di benchmark embedding/reranker (task `mise embed-bench`).
 
 Per analizzare `hindsight-debug.log` (JSONL) basta una riga di Nushell:
 

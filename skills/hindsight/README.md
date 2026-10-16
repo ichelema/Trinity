@@ -14,13 +14,12 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `hindsight.config.json` (root del plugin)            | Config tunabile (URL bank, parametri recall/retain/reflect). Base; un `<progetto>/hindsight.config.json` ne sovrascrive le chiavi (merge a strati) |
 | `hindsight_config.py`                                | Loader: `DEFAULTS` hardcoded → file JSON → override env (`HS_CFG_<CHIAVE>`). Le liste accettano JSON o CSV; i bool solo `1/true/yes` o `0/false/no`. Un override env non convertibile o non valido viene ignorato e resta il valore precedente (file o default) |
-| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: lato retain delegato al worker (`retain_at_prompt`: pickup dell'esito del gate precedente, consenso retain pending, poi gate differito del turno accodato in un processo detached **parallelo** al recall) → recupera memorie e le inietta come `additionalContext`, fondendo l'esito del gate all'emit (attesa max 6 s, altrimenti raccolto al prompt dopo). Sincrono |
+| `hindsight-recall.sh`                                | Hook **UserPromptSubmit**: lato retain delegato al worker (`retain_at_prompt`: pickup dell'esito del gate precedente, consenso retain pending, poi gate differito del turno accodato in un processo detached **parallelo** al recall) → recupera memorie e le inietta come `additionalContext`, fondendo l'esito del gate all'emit (attesa max 3 s, altrimenti raccolto al prompt dopo). Sincrono |
 | `hindsight_recall_lib.py`                            | Helper del recall (`build_recall_payload`, `last_assistant_text`, `strip_memory_block`)                                                                          |
-| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (sincrono, solo enqueue in `hs-retain-queue/`); il worker valuta l'entry al prompt successivo (da `hindsight-recall.sh`) o nel `--drain` della sentinella e salva un riassunto del turno nel bank (ICH-86) |
+| `hindsight-retain.sh` + `hindsight-retain-worker.py` | Hook **Stop** (sincrono, solo enqueue in `hs-retain-queue/`); il worker valuta l'entry al prompt successivo (da `hindsight-recall.sh`) e salva un riassunto del turno nel bank (ICH-86) |
 | `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
 | `hindsight-check.sh`                                 | **Diagnostica live** server + hook (vedi §10)                                                                                                      |
 | `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                                                                       |
-| `benchmark/hindsight_bench.rb`                       | **Benchmark velocità/qualità provider LLM** (retain+recall su corpus dedicato). Vedi §13                                                           |
 
 ---
 
@@ -154,15 +153,13 @@ che di default non è leggibile da altri utenti della macchina.
 `%TEMP%\hs-retain-state.json`: da ICH-86 avanza una volta per **ogni Stop realmente avvenuto**
 — l'entry di coda valutata a UserPromptSubmit più le entry più vecchie della stessa sessione
 scartate dal dequeue (`queued_skipped`), e salva quando l'avanzamento attraversa un multiplo di
-N — stessa cadenza di prima; **non** avanza nel drain. **Eccezione**: il `--drain` della
-sentinella (e `HS_RETAIN_FORCE`) forzano sempre il salvataggio, per catturare la coda della
-sessione.
+N — stessa cadenza di prima. **Eccezione**: `HS_RETAIN_FORCE` forza sempre il salvataggio
+(e non avanza il contatore).
 
-Altri `retain_skip.reason`: `no_transcript`, `no_content`, `gate_uncertain_drain` e
-`gate_error_drain` (in drain non c'è nessuno a cui chiedere: uncertain ed errore del gate si
-lasciano cadere), `queue_stale` (entry di coda più vecchia di 24 h mai valutata: rimossa con
-marker in `hs-retain-failed.log`). Il gate differito gira in un processo detached
-(`--queued`) e scrive un outbox: se non finisce entro il budget di pickup dell'hook (6 s) non
+Altri `retain_skip.reason`: `no_transcript`, `no_content` e
+`queue_stale` (entry di coda più vecchia di 24 h, di solito l'ultimo turno di una sessione
+chiusa: mai valutata, rimossa in silenzio). Il gate differito gira in un processo detached
+(`--queued`) e scrive un outbox: se non finisce entro il budget di pickup dell'hook (3 s) non
 si perde nulla — eventi debug `retain_deferred` `carried_over` (l'hook è uscito senza
 aspettarlo) e `picked_up` (il prompt successivo ha raccolto l'esito).
 
@@ -195,10 +192,15 @@ PYTHONUTF8=1 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/tools/hindsight-check.sh"
 ## 11. Comandi utili
 
 ```bash
-# Avvio/stop server
-mise run start-hindsight ; mise run stop-hindsight
+# Server (sulla VPS, systemd --user): stato, riavvio, log
+systemctl --user status hindsight ; systemctl --user restart hindsight
+journalctl --user -u hindsight -n 50
 
-# Server up? (404 = up)
+# Restore del DB (VPS)
+systemctl --user stop hindsight-cp hindsight && mise run db-restore
+systemctl --user start hindsight hindsight-cp
+
+# Server up via tunnel SSH (HINDSIGHT_SSH_TUNNEL)? (404 = up)
 curl -fsS -m 3 http://127.0.0.1:8888/ -o /dev/null -w "%{http_code}\n"
 
 # Suite di test
@@ -209,10 +211,6 @@ nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip
 
 # Leggere un valore di config
 PYTHONUTF8=1 python "$TRINITY_PLUGIN_DIR/hooks/hindsight/lib/hindsight_config.py" --get recall_timeout
-
-# Benchmark provider LLM (retain+recall su corpus dedicato) — vedi §13
-ruby hooks/hindsight/benchmark/hindsight_bench.rb
-BENCH_ONLY=openai-nano,groq-gptoss20b ruby hooks/hindsight/benchmark/hindsight_bench.rb
 ```
 
 ---
@@ -232,24 +230,10 @@ Nel bank `trinity-project`:
 
 | File                     | Ruolo                                                                                                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hindsight_bench.rb`     | Orchestratore: per ogni provider riavvia il server, fa retain del corpus, recall delle query, misura latenza/token/fatti/hit-rate. Verifica il provider attivo dal log (`verify_active_provider`) e ripristina la produzione a fine run |
-| `bench_corpus.json`      | 10 documenti + 6 query (con `expected`/`min_hits` per l'hit-rate)                                                                                                                                                                       |
-| `bench_results/<runid>/` | JSON per provider + `summary.csv` + `server_logs/`                                                                                                                                                                                      |
 | `hindsight_embed_bench.py` | Benchmark **embedding** (Gemini vs candidati remoti vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Lancio: `mise run embed-bench`                              |
-| `hindsight_rerank_bench.rb` | Benchmark **reranker** su corpus rank-aware (MRR, recall@k). Ferma/riavvia il server :8888 più volte e lo ripristina alla fine (~5-10 min). Lancio: `mise run rerank-bench`                                                          |
 | `hindsight_recall_quality_bench.py` | **Qualità del recall** end-to-end su un bank reale con gold set (`gold_questions.json`): MRR, R@1, R@3. Lancio a mano da `hooks/hindsight/benchmark/`                                                                       |
 
-**Lancio**:
-
-```bash
-cd hooks/hindsight/benchmark && ruby hindsight_bench.rb
-# o limitato ad alcuni provider:
-BENCH_ONLY=openai-nano,groq-gptoss20b ruby hindsight_bench.rb
-```
-
-Ripristina automaticamente la produzione alla fine (`openai gpt-4.1-mini`, il LLM globale — solo le variabili LLM; per l'env completo rilanciare `mise run stop-hindsight && mise run start-hindsight`).
-
-**Config Groq nel benchmark** (free tier 8000 TPM): `max_ctok: 4000` — **deve** essere > `RETAIN_CHUNK_SIZE` (default 3000) o il server non parte; `pace_s: 10` — attesa tra chiamate per simulare un uso ravvicinato (sul free tier riattiva di proposito il rate-limit). Su **Dev Tier** rimuovere `pace_s`; `max_ctok` resta 4000.
+> `hindsight_bench.rb` e `hindsight_rerank_bench.rb` (e il corpus `bench_corpus.json`) sono stati rimossi con il passaggio al server solo-VPS: riavviavano il server locale. Restano nella storia git; sotto, i risultati storici.
 
 **Esito chiave (2026-05-25)** — all'epoca restò `gpt-4.1-nano` in produzione (storico: dal 2026-08-09 il retain di produzione è `gpt-5.6-luna` via `openai-responses`, A/B ICH-62):
 
@@ -298,9 +282,9 @@ NB: è config del bank (DB Postgres), quindi **sopravvive ai `pip upgrade`** del
 
 **GOTCHA — cambiare l'embedding obbliga a ricostruire il bank.** La dimensione dei vettori cambia (es. 384→1024→1536) e il server **rifiuta di partire** se il bank ha dati: `Cannot change embedding dimension from X to Y: memory_units contains N rows`. Rebuild:
 
-1. Postgres embedded in `$HOMEDRIVE$HOMEPATH/.pg0` (drive del profilo Windows, es. C: o D:) — db `hindsight`, user/pass `hindsight`/`hindsight`, porta 5432, `psql.exe` in `installation/18.1.0/bin/` (credenziali in `instances/hindsight-mcp/instance.json`).
+1. Sulla VPS, con il servizio fermo (`systemctl --user stop hindsight-cp hindsight`) e Postgres embedded in `~/.pg0` rialzato a mano (`LD_LIBRARY_PATH=~/.pg0/installation/18.1.0/lib ~/.pg0/installation/18.1.0/bin/pg_ctl -D ~/.pg0/instances/hindsight-mcp/data -w start`) — db `hindsight`, user/pass `hindsight`/`hindsight`, porta 5432, `psql` in `~/.pg0/installation/18.1.0/bin/` (credenziali in `instances/hindsight-mcp/instance.json`).
 2. `TRUNCATE public.memory_units, public.mental_models, public.documents, public.entities, public.entity_cooccurrences, public.memory_links, public.unit_entities, public.chunks, public.async_operations, public.audit_log CASCADE;` (preserva `banks` e `alembic_version`).
-3. Riavvia → la migrazione fa `ALTER` della colonna a `vector(<nuova dim>)` sul bank vuoto. Bank benchmark orfani: `DELETE FROM public.banks WHERE bank_id LIKE 'bench-%'`.
+3. Riavvia (`systemctl --user start hindsight hindsight-cp`) → la migrazione fa `ALTER` della colonna a `vector(<nuova dim>)` sul bank vuoto. Bank benchmark orfani: `DELETE FROM public.banks WHERE bank_id LIKE 'bench-%'`.
 
 Il rebuild **azzera il bank Hindsight** (la memoria file-based è separata e resta intatta).
 
@@ -343,16 +327,16 @@ i tool `agent_knowledge_*` nei tool locali `mcp__hindsight__*`.
 
 ---
 
-## 16. Interfaccia web (Control Plane) — task mise
+## 16. Interfaccia web (Control Plane)
 
 > Sessione del 2026-05-26.
 
-Una UI **opzionale** e indipendente dal server MCP, avviata via task mise, **in foreground**
-(Ctrl-C; a differenza di `start-hindsight` che è daemon `setsid nohup`).
+Una UI **opzionale** e indipendente dal server MCP, servita sulla VPS da `hindsight-cp.service` e
+raggiunta via tunnel SSH su `http://localhost:9999`.
 
-| UI                | Porta | Avvio                    | Stop                          | Cos'è                                                                                                           |
-| ----------------- | ----- | ------------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Control Plane** | 9999  | `mise run control-plane` | `mise run stop-control-plane` | Web UI ufficiale Hindsight (Next.js via npx, **non nel repo**). Sfoglia bank/entità/operations, testa recall    |
+| UI                | Porta | Avvio                                       | Cos'è                                                                                                           |
+| ----------------- | ----- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Control Plane** | 9999  | `hindsight-cp.service` (VPS; a mano `mise run control-plane`) | Web UI ufficiale Hindsight (Next.js via npx, **non nel repo**). Sfoglia bank/entità/operations, testa recall    |
 
 Per analizzare `hindsight-debug.log` (JSONL) non serve una UI, basta una riga di Nushell:
 `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
@@ -361,11 +345,11 @@ Per analizzare `hindsight-debug.log` (JSONL) non serve una UI, basta una riga di
 
 Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../developer/services.md`):
 
-- **API service** (`hindsight-api`, :8888) — il motore retain/recall/reflect. È quello che avviamo con `start-hindsight`. È il "data plane".
+- **API service** (`hindsight-api`, :8888) — il motore retain/recall/reflect. Gira come `hindsight.service` sulla VPS. È il "data plane".
 - **Worker** — processore task in background; qui è interno all'API (default, ok per uso singolo).
 - **Control Plane** (:9999) — solo la UI. Non ha dati propri: si collega all'API.
 
-### Gotcha d'ambiente Windows/MSYS2 (tutti risolti in `.mise.toml`)
+### Gotcha del Control Plane (task `control-plane` in `mise.toml`)
 
 1. **npx del Node MSYS2 è rotto.** `/ucrt64/bin/npx` crasha su qualsiasi pacchetto
    (segfault/`std::bad_weak_ptr`), mentre `node -e` funziona. → Installato Node nativo Windows via
@@ -377,20 +361,14 @@ Hindsight è composto da tre servizi (vedi `references/hindsight-docs/.../develo
    `localhost`. → Il task forza `HOSTNAME=localhost ... --hostname localhost` (anche per non esporlo
    in LAN: la UI non ha API key di default, vedi `HINDSIGHT_CP_ACCESS_KEY`).
 
-3. **Stop dei processi nativi Windows.** Node è un processo Windows nativo: il `netstat` MSYS
-   non vede sempre la sua porta. → Il task `stop-control-plane` usa `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh
-   <porta> [label]`, che risolve il PID via `Get-NetTCPConnection` (PowerShell 7,
-   `C:/Appl/PowerShell/pwsh.exe`) e fa `Stop-Process -Force`.
-
 ### Comandi
 
 ```bash
-# Control Plane (Web UI, :9999)
-mise run control-plane          # foreground; → http://localhost:9999
-mise run stop-control-plane
+# Sulla VPS
+systemctl --user status hindsight-cp
+journalctl --user -u hindsight-cp -n 50
 
-# Stop manuale di una porta qualsiasi
-bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh" 9999 control-plane
+# Dal PC: apri http://localhost:9999 (tunnel aperto da hindsight-ensure-up.sh)
 ```
 
 ---

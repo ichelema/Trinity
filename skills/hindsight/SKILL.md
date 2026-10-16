@@ -1,6 +1,6 @@
 ---
 name: hindsight
-description: Hindsight persistent memory system for AI agents. Use when working with retain/recall/reflect operations, memory banks. In questo progetto Hindsight gira come MCP server locale — vedi "Setup attivo in questo progetto" sotto per le operazioni quotidiane.
+description: Hindsight persistent memory system for AI agents. Use when working with retain/recall/reflect operations, memory banks. In questo progetto Hindsight gira come MCP server sulla VPS, raggiunto via tunnel SSH — vedi "Setup attivo in questo progetto" sotto per le operazioni quotidiane.
 ---
 
 # Hindsight Memory System
@@ -19,32 +19,25 @@ http://localhost:8888/mcp/trinity-project/
 
 ## Setup attivo in questo progetto
 
-In `E:\AI\Claude\Trinity` Hindsight è installato come **MCP server locale**.
+In questo progetto Hindsight gira **solo sulla VPS `infomaniak`** (servizi `systemd --user`); i PC sono client e lo raggiungono con un tunnel SSH.
 
 **Stack:**
 
 - Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
-- Entry-point: `hindsight-local-mcp` (in `Scripts/` del Python gestito da mise — esposto nel PATH via `[env]` di `.mise.toml`)
-- Versione verificata sul PC Windows: **1.0.0** (2026-10-14; il setup Linux risultava 0.10.2 dopo l'upgrade del 2026-10-04); verificare separatamente le altre macchine; query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
+- Entry-point: `hindsight-local-mcp` (sulla VPS, lanciato dal servizio via `mise exec`)
+- Versione verificata: **1.0.0** (2026-10-14, PC Windows; la VPS va verificata a parte); query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
 - LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
 - Retain gate automatico: **`gpt-5.6-luna`** decide, **TypeSafe `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥ `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
 - Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
 - Reranker: **`voyage/rerank-3`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
 - Altre feature 0.9.0 attive: recency decay esponenziale (halflife 60 giorni), audit log server-side (retention 30 giorni), `HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS=true` (estrazione fallita dopo i retry → operation `failed`, intercettata da `hindsight-failcheck.sh`)
-- Storage: embedded PostgreSQL in `~/.pg0/hindsight-mcp/`
+- Storage: embedded PostgreSQL in `~/.pg0/` sulla VPS
 - Endpoint MCP: `http://localhost:8888/mcp/trinity-project/` (bank statico per-progetto)
 - Registrato a **scope user** come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (bank risolto per-progetto; vedi sotto)
-- **Avvio / stop del server:**
-
-```bash
-mise run start-hindsight   # lancia in background, log in /tmp/hs.log
-mise run stop-hindsight    # Windows: taskkill | Linux: pkill (branch per-OS in ops/hindsight-stop-services.sh)
-```
-
-> **Cluster condiviso:** `stop-hindsight` e `hindsight-sentinel.sh` arrestano anche
-> il Postgres embedded tramite `hindsight-stop-services.sh`. Non usarli con LiteLLM
-> attivo sullo stesso cluster, anche se usa un database distinto: fermare prima
-> LiteLLM ed evitare lo shutdown automatico della sentinella mentre è attivo.
+- **Server (VPS):** `hindsight.service`, `hindsight-cp.service` e `hindsight-backup.timer` (`systemd --user`). Gestione: `systemctl --user status|restart hindsight`, log `journalctl --user -u hindsight`. Backup: gli ultimi 5 dump in `~/backups/hindsight`.
+- **Client (PC):** env `HINDSIGHT_SSH_TUNNEL=hindsight-vps` (in `~/.claude/settings.json`, generato da chezmoi): `hindsight-ensure-up.sh` apre il tunnel che porta `127.0.0.1:8888` (API+MCP) e `localhost:9999` (Control Plane) in locale. Chiave SSH dedicata e ristretta (`restrict,port-forwarding,permitopen="127.0.0.1:8888",permitopen="localhost:9999",command="/bin/false"`). Nessun avvio locale e nessun fallback.
+- **Restore del DB (VPS):** `systemctl --user stop hindsight-cp hindsight` → `mise run db-restore` → `systemctl --user start hindsight hindsight-cp`.
+- **Upgrade Python (VPS):** dopo `mise upgrade python` serve `mise run install-hindsight` e `systemctl --user restart hindsight`.
 
 Verifica veloce che il server risponda:
 
@@ -84,8 +77,8 @@ REST. Per accedere a un bank arbitrario usa l'API REST
 **Promozione progetto → core**: comando `/trinity:promote` (curata, mai
 automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei tag
 `repo:`/`branch:`). Meccanica in `hooks/hindsight/ops/hindsight-promote.py`
-(`--scan/--triage/--move/--reject/--status`); job settimanale
-`scheduler/promote_scan/` che genera `logs/promote-candidates.json`.
+(`--scan/--triage/--move/--reject/--status`); lo scan+triage si lancia a mano
+e genera `logs/promote-candidates.json`.
 
 ### Mental model: knowledge page iniettate a inizio sessione
 
@@ -103,29 +96,21 @@ come `additionalContext` all'avvio di una sessione nuova (`startup`) dall'hook `
 
 | Componente | Trigger/uso | Cosa fa |
 | ---------- | ----------- | ------- |
-| `hindsight-ensure-up.sh` | SessionStart | Avvia il server se giù e attende la readiness dell'endpoint MCP (elimina la race "tool `hindsight/*` non registrati") |
+| `hindsight-ensure-up.sh` | SessionStart | Attende la readiness dell'endpoint MCP, aprendo prima il tunnel SSH se `HINDSIGHT_SSH_TUNNEL` è impostata (elimina la race "tool `hindsight/*` non registrati") |
 | `hindsight-mm-inject.sh` | SessionStart | Inietta i mental model (vedi sopra) |
 | `hindsight-failcheck.sh` | UserPromptSubmit | Segnala operation async `failed` lato server (retain accettato ma estrazione fallita) e la degradazione del reranker; de-dup via state file |
-| `hindsight-sentinel.sh` | detached da ensure-up | Sostituisce l'hook SessionEnd (che Claude Code cancella, issue #32712): quando l'ultimo processo claude termina drena la coda del retain (`hindsight-retain-worker.py --drain`: valuta le entry accodate dagli Stop non ancora consumate, force e senza domande), attende i retain in volo e spegne server + Postgres |
-| `ops/hindsight-drain-retain.py` | pre-stop | Attende che i retain in volo raggiungano stato terminale prima dello shutdown (mediana estrazione 32s: uno stop cieco perderebbe la memoria senza errori) |
-| `mise run db-dump` / `db-restore` | manuale | `pg_dump`/restore del DB Hindsight per il sync tra macchine (`tools/hs-db-dump.sh`, `hs-db-restore.sh` con guardrail anti-perdita) |
+| `mise run db-dump` / `db-restore` | manuale | `pg_dump`/restore del DB Hindsight, solo sulla VPS (`tools/hs-db-dump.sh`, `hs-db-restore.sh` con guardrail anti-perdita) |
 | `tools/hindsight_export.py` / `hindsight_import.py` | cambio provider embedding | Export dei documenti → re-retain sul nuovo embedding (il cambio di dimensione obbliga al rebuild del bank) |
-| `mise run api-check` / `cp-check` | scheduler | Segnalano nuove release di `hindsight-api(-slim)` su PyPI e del Control Plane su npm (exit 10 se disponibili; cp-check usa lo state file `cp-last-seen.state`) |
 
 ### Interfaccia web: Control Plane
 
-Una UI **opzionale**, indipendente dal server MCP, via task mise e **in foreground** (Ctrl-C per fermarla, a differenza di `start-hindsight` che è daemon):
+Una UI **opzionale**, indipendente dal server MCP, servita sulla VPS da `hindsight-cp.service` e raggiunta via tunnel su `http://localhost:9999`:
 
-| UI                                             | Porta | Avvio                    | Stop                          | A cosa serve                                                                                                    |
-| ---------------------------------------------- | ----- | ------------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Control Plane** (Web UI ufficiale Hindsight) | 9999  | `mise run control-plane` | `mise run stop-control-plane` | Sfogliare bank/agent, entità e relazioni, storico operations, testare query di recall. Si collega all'API :8888 |
-
-```bash
-mise run control-plane    # → http://localhost:9999  (bind localhost)
-```
+| UI                                             | Porta | Avvio                    | A cosa serve                                                                                                    |
+| ---------------------------------------------- | ----- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| **Control Plane** (Web UI ufficiale Hindsight) | 9999  | `hindsight-cp.service` (VPS; a mano `mise run control-plane`) | Sfogliare bank/agent, entità e relazioni, storico operations, testare query di recall. Si collega all'API :8888 |
 
 - **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `localhost` con `HOSTNAME=localhost` e `--hostname localhost` (no LAN; configurazione conservata dal workaround storico dell'origin mismatch). URL consigliato: `http://localhost:9999`. Non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi.
-- Stop affidabile via `$TRINITY_PLUGIN_DIR/hooks/hindsight/ops/kill-port.sh <porta>` (su Windows usa `Get-NetTCPConnection` perché il netstat MSYS non vede sempre i processi nativi; su Linux usa `lsof`/`fuser`).
 - Per analizzare `hindsight-debug.log` (JSONL) non serve una UI: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
 
 > Panoramica memoria: vedi `README.md` §9. Dettagli di avvio e bind `HOSTNAME`:
@@ -456,10 +441,10 @@ Quando devi decidere tra diversi approcci, chiama `mcp__hindsight__reflect`:
 
 | Sintomo                                                   | Causa probabile                                          | Fix                                                                           |
 | --------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Tool `hindsight/*` non visibile in sessione               | Server giù o sessione aperta prima dell'hook di start    | `mise run start-hindsight`, poi nuova sessione Claude Code                    |
+| Tool `hindsight/*` non visibile in sessione               | Tunnel SSH non attivo o servizio giù sulla VPS           | Verifica `HINDSIGHT_SSH_TUNNEL`, poi `systemctl --user status hindsight` (VPS) e nuova sessione                    |
 | Server crash all'avvio con `UnicodeEncodeError 'charmap'` | `PYTHONUTF8` non esportato                               | Verifica `[env]` di `.mise.toml` (vedi memory `feedback-python-utf8-windows`) |
 | `recall` torna vuoto subito dopo un `retain`              | Estrazione fatti ancora in corso, perché è async         | Polla `get_operation(operation_id)` finché `completed`, poi ricalla           |
-| `OPENAI_API_KEY not set` nel log del server               | Variabile non esportata nella shell che lancia il server | Verifica con `mise env`                                                       |
+| `OPENAI_API_KEY not set` nel log del server               | Variabile non disponibile al servizio sulla VPS          | Verifica con `mise env` e `journalctl --user -u hindsight`                                                       |
 
 ## Sicurezza
 

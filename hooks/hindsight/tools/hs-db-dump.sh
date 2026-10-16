@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Dump portabile del database Hindsight (pg_dump -Fc) per il sync tra macchine.
-#
-# Flusso multi-macchina (uso ALTERNATO, mai concorrente):
-#   lasci una macchina  -> mise run db-dump     (il dump finisce in BACKUP_DIR,
-#                                                di default sulla chiavetta)
-#   arrivi sull'altra   -> mise run db-restore  (guardrail anti-perdita incluso)
+# Dump del database Hindsight (pg_dump -Fc). Gira sulla VPS: a mano o dal timer
+# systemd hindsight-backup.timer (con HS_BACKUP_DIR=~/backups/hindsight).
+# Il ripristino e' `mise run db-restore` (guardrail anti-perdita incluso).
 #
 # Output: <BACKUP_DIR>/hindsight-<UTC>.dump + .meta.json (host, data, watermark)
 #         + file LATEST col nome dell'ultimo dump. Tiene le ultime

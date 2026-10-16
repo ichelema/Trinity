@@ -1,14 +1,19 @@
 # mise.toml del plugin trinity — runtime del SERVIZIO Hindsight (server MCP :8888).
 #
 # Questo file NON è caricato automaticamente da Claude Code né da mise nei progetti:
-# viene usato esplicitamente dagli hook del plugin via `mise -C <plugin_root> run <task>`
-# (vedi hooks/hindsight/hindsight-ensure-up.sh). Hindsight è un singleton di macchina:
-# l'env qui sotto serve SOLO al processo server al momento del lancio, i progetti
-# parlano con il server già configurato via HTTP.
+# lo usano i servizi systemd --user della VPS (`mise -C <repo> exec -- hindsight-local-mcp`,
+# `mise run control-plane`, `mise run db-dump`) e i task lanciati a mano. L'env qui sotto
+# serve SOLO al processo server; i PC parlano con la VPS via tunnel SSH.
 #
-# I benchmark (embed-bench/rerank-bench) e i check aggiornamenti (api-check/cp-check,
-# in scheduler/) sono stati migrati qui dal repo Trinity. I task relativi sono in
-# fondo a questo file.
+# SICUREZZA: il server ascolta solo su 127.0.0.1 (--host nell'unit systemd; il default
+# del pacchetto è 0.0.0.0) e NON ha autenticazione. Se un giorno lo esponi oltre
+# localhost, PRIMA abilita l'auth (servono entrambe, la chiave da sola non attiva nulla):
+#   HINDSIGHT_API_TENANT_EXTENSION=hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
+#   HINDSIGHT_API_TENANT_API_KEY=<chiave>
+# e ogni client (hook REST, shim MCP, Control Plane) deve mandare "Authorization: Bearer <chiave>".
+#
+# Benchmark (embed-bench) e check aggiornamenti (nb-check/yt-check, in scheduler/) sono
+# in fondo a questo file.
 
 [tools]
 python = "3.13"
@@ -16,9 +21,8 @@ python = "3.13"
 # via `npx @vectorize-io/hindsight-control-plane`). NB: l'npx del Node MSYS2 UCRT64
 # (/ucrt64/bin) crasha (segfault/bad_weak_ptr) — questo Node mise lo rimpiazza.
 node = "lts"
-# Ruby per l'hook PostToolUse excalidraw-to-obsidian.rb, i check dello scheduler e i
-# benchmark Ruby (hindsight_bench.rb, hindsight_rerank_bench.rb). Ruby gestito da
-# mise, NON quello MSYS2.
+# Ruby per l'hook PostToolUse excalidraw-to-obsidian.rb e i
+# check aggiornamenti. Ruby gestito da mise, NON quello MSYS2.
 ruby = "4.0.7"
 
 [env]
@@ -46,8 +50,8 @@ HINDSIGHT_API_LLM_MODEL = "gpt-4.1-mini"
 # La chiave viene risolta a runtime dall'env utente (OPENAI_API_KEY), non hardcodata qui.
 # default(''): il fail-fast sulla chiave mancante NON può stare qui. Questo blocco [env]
 # mise lo valuta prima di OGNI comando, quindi senza default il template rompe anche
-# `mise install`, `stop-hindsight`, `db-dump`, `cp-check` — che con OpenAI non c'entrano.
-# La validazione è in [tasks.start-hindsight], l'unico task che usa davvero il LLM.
+# `mise install`, `db-dump`, `yt-check` — che con OpenAI non c'entrano. Una chiave
+# mancante emerge al primo retain, non al boot del servizio.
 HINDSIGHT_API_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 # Salta la chiamata di verifica LLM al boot (2026-06-12): avvio più rapido per
 # hindsight-ensure-up.sh a inizio sessione, e niente hang se il proxy ENINET fa MITM.
@@ -70,7 +74,7 @@ HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value
 HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 
 # --- LLM dedicato al RETAIN (estrazione fatti) via Responses API (ICH-62) ----
-# Bench estrazione 2026-08-09 (hindsight_bench.rb, 10 doc / 6 query gold),
+# Bench estrazione 2026-08-09 (10 doc / 6 query gold),
 # gpt-4.1-mini vs gpt-5.6-luna su openai-responses, effort default "low":
 #   retain avg 4.77s → 3.23s, retain max 9.14s → 6.06s
 #   fatti estratti 25 → 34 (stesso corpus), recall hit-rate 100% = 100% (6/6)
@@ -255,7 +259,7 @@ HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS = "true"
 HINDSIGHT_API_MCP_ENABLED_TOOLS = "retain,sync_retain,recall,reflect,get_operation,list_operations,cancel_operation,list_memories,get_memory,list_documents,get_document,update_memory,invalidate_memory,delete_document,list_tags,get_bank"
 
 [tasks.install-hindsight]
-description = "Installa/aggiorna hindsight-api-slim (server Python locale, espone MCP) tramite pip del Python mise."
+description = "Installa/aggiorna hindsight-api-slim (server Hindsight della VPS, espone API e MCP) tramite pip del Python mise."
 shell = "bash -c"
 run = [
   # NON usare il meta-pacchetto "hindsight-api": e' un alias di hindsight-api-slim[all],
@@ -273,48 +277,9 @@ run = [
   'rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-python-real.path" "${XDG_CACHE_HOME:-$HOME/.cache}/trinity/hs-python-final.path"',
 ]
 
-[tasks.start-hindsight]
-description = "Avvia hindsight-local-mcp in background (porta 8888). Log in /tmp/hs.log."
-# Mise su Windows usa cmd.exe per default — forziamo bash per via di `& disown` e `/tmp/`.
-# --daemon non funziona su Windows (fork unavailable). setsid + nohup + disown:
-#   - setsid: nuova sessione → child non riceve SIGHUP quando il terminale chiude
-#   - nohup: extra sicurezza; < /dev/null: chiude stdin; & disown: fuori dal job control
-# Senza setsid+nohup, su MSYS/Windows il child viene reaped quando il bash dell'hook esce.
-shell = "bash -c"
-# --host 127.0.0.1: il default del pacchetto è 0.0.0.0 e il server NON ha autenticazione.
-# Se un giorno esponi oltre localhost (es. VPS), PRIMA abilita l'auth, altrimenti la
-# memoria è leggibile/cancellabile da chiunque raggiunga la porta:
-#   HINDSIGHT_API_TENANT_EXTENSION=hindsight_api.extensions.builtin.tenant:ApiKeyTenantExtension
-#   HINDSIGHT_API_TENANT_API_KEY=<chiave>
-# Nota: servono entrambe — la chiave da sola non attiva nulla. Poi ogni client (hook REST,
-# shim MCP, Control Plane, dashboard) deve mandare "Authorization: Bearer <chiave>".
-#
-# Le guardie ${...:?} sono il fail-fast sulle chiavi: qui e non nel blocco [env] (vedi
-# HINDSIGHT_API_LLM_API_KEY). OpenAI: SKIP_LLM_VERIFICATION=true salta il check al boot,
-# senza guardia il server partirebbe con chiave vuota e il danno emergerebbe al primo
-# retain. Gemini (provider embedding "google" dal 2026-07-27): il server detached
-# parte anche con chiave vuota
-# (default('') sul template) e gli errori di embed finirebbero solo in /tmp/hs.log,
-# mentre il task uscirebbe comunque con 0. VOYAGE_API_KEY resta senza guardia: senza
-# chiave il recall degrada (niente rerank), non muore.
-#
-# HS_TLS_NO_X509_STRICT (solo in C:/certs/proxy.env, PC dietro il firewall ENINET): mette
-# in PYTHONPATH hooks/hindsight/lib/tls-compat, il cui sitecustomize.py toglie
-# VERIFY_X509_STRICT. Senza, Python 3.13 rifiuta i certificati del firewall ("Missing
-# Authority Key Identifier") e il server muore all'init degli embedding Gemini.
-run = ': "${OPENAI_API_KEY:?manca la chiave: export OPENAI_API_KEY=sk-...}"; : "${GEMINI_API_KEY:?manca la chiave: export GEMINI_API_KEY=...}"; [ -n "${HS_TLS_NO_X509_STRICT:-}" ] && export PYTHONPATH="$PWD/hooks/hindsight/lib/tls-compat"; setsid nohup hindsight-local-mcp --host 127.0.0.1 --port 8888 --log-level info > /tmp/hs.log 2>&1 < /dev/null & disown'
-
-[tasks.stop-hindsight]
-description = "Ferma il server hindsight-local-mcp (+ python figlio) e il Postgres embedded del bank"
-# Forziamo bash: lo script usa taskkill //T (path assoluto) e pg_ctl.
-# Path relativo: mise esegue il task con cwd = config_root (= root del plugin).
-# {{config_root}} darebbe backslash Windows che la bash spezzerebbe.
-shell = "bash -c"
-run = "bash hooks/hindsight/ops/hindsight-stop-services.sh"
-
-# --- Sync del DB tra macchine (uso alternato, mai concorrente) ---------------
+# --- Backup / restore del DB (solo VPS) --------------------------------------
 [tasks.db-dump]
-description = "pg_dump del DB hindsight per il sync tra macchine (default: E:/var/backups/hindsight sulla chiavetta; Linux: ~/backups/hindsight)"
+description = "pg_dump del DB hindsight (default: ~/backups/hindsight, override con HS_BACKUP_DIR). Gira sulla VPS via hindsight-backup.timer"
 shell = "bash -c"
 run = "bash hooks/hindsight/tools/hs-db-dump.sh"
 
@@ -338,40 +303,18 @@ description = "Avvia il Control Plane (Web UI Hindsight) su http://localhost:999
 shell = "bash -c"
 run = "HOSTNAME=localhost npx --yes @vectorize-io/hindsight-control-plane --hostname localhost --api-url http://localhost:8888"
 
-[tasks.stop-control-plane]
-description = "Ferma il Control Plane (processo Node in ascolto su :9999)"
-shell = "bash -c"
-run = "bash hooks/hindsight/ops/kill-port.sh 9999 control-plane"
-
 # --- Benchmark qualità (embedding / reranker) ------------------------------
 # Ereditano l'[env] del plugin (provider + chiavi) → girano con la config di produzione.
-# Script rilocabili (corpora via __dir__/__file__). hindsight_bench.rb (bench LLM provider)
-# e hindsight_recall_quality_bench.py restano lanciabili a mano da hooks/hindsight/benchmark/.
+# Script rilocabili (corpora via __dir__/__file__). hindsight_recall_quality_bench.py
+# resta lanciabile a mano da hooks/hindsight/benchmark/.
 [tasks.embed-bench]
 description = "Confronta gli embedding (Gemini vs candidati remoti vs bge-m3 locale) a livello vettoriale puro su corpus sintetico IT/EN (MRR, recall@k). NON tocca il bank né Postgres. Foreground (~minuti, scarica bge-m3 al primo run)."
 shell = "bash -c"
 run = "python hooks/hindsight/benchmark/hindsight_embed_bench.py"
 
-[tasks.rerank-bench]
-description = "Confronta i reranker su corpus rank-aware (MRR, recall@k). Ferma/riavvia il server :8888 più volte e lo ripristina alla fine (~5-10 min). Eredita l'[env] di produzione."
-shell = "bash -c"
-run = "ruby hooks/hindsight/benchmark/hindsight_rerank_bench.rb"
-
 # --- Check aggiornamenti (scheduler) ---------------------------------------
 # Lanciabili a mano o da System Scheduler (Splinterware) via scheduler/*/*-scheduled.cmd
 # (i job vanno registrati con i path di questo repo — vedi i README in scheduler/).
-# cp-check.rb tiene lo stato (ultima release vista) in un file .state accanto
-# allo script; api-check.rb legge la versione installata dal Python di mise.
-[tasks.api-check]
-description = "Controlla se su PyPI è uscita una versione di hindsight-api/hindsight-api-slim più recente di quella installata. Exit 10 se sì."
-shell = "bash -c"
-run = "ruby scheduler/check_update_hindsight_api/api-check.rb"
-
-[tasks.cp-check]
-description = "Segnala (una volta sola) una nuova release del Control Plane su npm; il task control-plane è sempre-latest via npx. Exit 10 se sì."
-shell = "bash -c"
-run = "ruby scheduler/check_update_hindsight_control_plane/cp-check.rb"
-
 [tasks.nb-check]
 description = "Controlla se su PyPI è uscita una versione di notebooklm-py più recente di quella installata in E:/AI/tools/notebooklm. Exit 10 se sì."
 shell = "bash -c"
@@ -392,11 +335,6 @@ run = "setsid nohup node $HOME/.local/opt/mcp_excalidraw/dist/server.js > /tmp/e
 description = "Ferma il frontend canvas Excalidraw (porta 3000), solo se il server su :3000 è effettivamente Excalidraw."
 shell = "bash -c"
 run = "ruby scripts/stop-excalidraw.rb"
-
-[tasks.promote-scan]
-description = "Scan + triage LLM dei bank Hindsight di progetto: candidati alla promozione sul core in logs/promote-candidates.json. NON promuove (review umana via /trinity:promote)."
-shell = "bash -c"
-run = "python hooks/hindsight/ops/hindsight-promote.py --triage"
 
 # --- Release plugin --------------------------------------------------------
 # Parte meccanica della release: bump version + commit + tag LOCALE.

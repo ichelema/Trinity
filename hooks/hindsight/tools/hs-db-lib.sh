@@ -1,39 +1,14 @@
 # Sourced da hs-db-dump.sh / hs-db-restore.sh: risolve i binari Postgres del
-# cluster pg0 e i parametri di connessione, per-OS. Nessun path hardcoded:
-# tutto sovrascrivibile via env (HS_PG*, HS_BACKUP_DIR).
-#
-# Il cluster pg0 vive nel profilo dell'utente:
-#   Windows: %HOMEDRIVE%%HOMEPATH%/.pg0  (USERPROFILE e' redirezionato alla
-#            chiavetta e pg0 usa il profilo REALE via platformdirs)
-#   Linux:   $HOME/.pg0
+# cluster pg0 e i parametri di connessione. Girano SOLO sulla VPS Linux (il server
+# Hindsight vive li'). Tutto sovrascrivibile via env (HS_PG*, HS_BACKUP_DIR).
+# Il cluster pg0 vive in $HOME/.pg0.
 
-case "$(uname -s)" in
-MINGW* | MSYS* | CYGWIN*)
-	_HS_OS=windows
-	_PG_HOME_U="$(cygpath -u "$HOMEDRIVE$HOMEPATH")"
-	PGBIN="${HS_PGBIN:-$(ls -d "$_PG_HOME_U"/.pg0/installation/*/bin 2>/dev/null | sort -V | tail -1)}"
-	_EXE=".exe"
-	# Default: i dump viaggiano sulla chiavetta (fa da corriere tra le macchine).
-	BACKUP_DIR="${HS_BACKUP_DIR:-E:/var/backups/hindsight}"
-	;;
-*)
-	_HS_OS=linux
-	PGBIN="${HS_PGBIN:-$(ls -d "$HOME"/.pg0/installation/*/bin 2>/dev/null | sort -V | tail -1)}"
-	_EXE=""
-	# Come su Windows i dump vanno sulla chiavetta (fa da corriere tra le
-	# macchine); se non e' montata si ripiega sul profilo locale.
-	_HS_USB="/run/media/$(id -un)/SPHYNX"
-	if [ -d "$_HS_USB" ]; then
-		BACKUP_DIR="${HS_BACKUP_DIR:-$_HS_USB/var/backups/hindsight}"
-	else
-		BACKUP_DIR="${HS_BACKUP_DIR:-$HOME/backups/hindsight}"
-	fi
-	;;
-esac
+PGBIN="${HS_PGBIN:-$(ls -d "$HOME"/.pg0/installation/*/bin 2>/dev/null | sort -V | tail -1)}"
+BACKUP_DIR="${HS_BACKUP_DIR:-$HOME/backups/hindsight}"
 
-PG_DUMP="$PGBIN/pg_dump$_EXE"
-PG_RESTORE="$PGBIN/pg_restore$_EXE"
-PSQL="$PGBIN/psql$_EXE"
+PG_DUMP="$PGBIN/pg_dump"
+PG_RESTORE="$PGBIN/pg_restore"
+PSQL="$PGBIN/psql"
 
 # Credenziali dell'istanza pg0 "hindsight-mcp" (fisse nel suo instance.json).
 export PGPASSWORD="${HS_PGPASSWORD:-hindsight}"
@@ -118,5 +93,5 @@ hs_db_exists() {
 }
 
 hs_db_host_label() {
-	printf '%s' "${COMPUTERNAME:-$(hostname 2>/dev/null || echo host-sconosciuto)}"
+	hostname 2>/dev/null || echo host-sconosciuto
 }

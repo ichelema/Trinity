@@ -12,10 +12,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -121,70 +122,58 @@ class ThrottlingTests(unittest.TestCase):
             self.assertTrue(WORKER.should_retain_now("", every_n=3))
 
 
-def _posix_ere(pattern: str) -> str:
-    """Traduce le classi POSIX usate nella sentinella in sintassi `re`."""
-    return pattern.replace("[[:space:]]", r"\s")
+class EnsureUpTests(unittest.TestCase):
+    """Sezione 14 (seconda parte): niente SessionEnd; l'hook SessionStart non
+    avvia nessun server locale, apre solo il tunnel SSH se HINDSIGHT_SSH_TUNNEL
+    e' impostata. curl e ssh sono finti (primi nel PATH)."""
 
+    HOOK = HERE / "hindsight-ensure-up.sh"
+    BASH = shutil.which("bash") or "bash"  # su Windows "bash" nudo sarebbe WSL
 
-class SentinelShutdownTests(unittest.TestCase):
-    """Sezione 14 (seconda parte): shutdown via sentinella, niente SessionEnd,
-    regex claude_alive estratte DAL file (non riscritte qui, se no il test
-    verifica se stesso)."""
-
-    SENTINEL = HERE / "hindsight-sentinel.sh"
-
-    def test_shutdown_chain_and_no_session_end_hook(self):
+    def test_no_session_end_hook(self):
         # Claude Code cancella SEMPRE l'hook SessionEnd alla chiusura
-        # interattiva (issue #32712): lo shutdown e' delegato alla sentinella.
+        # interattiva (issue #32712).
         self.assertNotIn('"SessionEnd"', read(HOOKS_JSON))
-        self.assertIn("hindsight-sentinel.sh", read(HERE / "hindsight-ensure-up.sh"))
-        self.assertIn("hindsight-stop-services.sh", read(self.SENTINEL))
 
-    def test_claude_alive_counts_sessions_by_binary_name(self):
-        sentinel = read(self.SENTINEL)
-        rx_win = re.search(r"grep -icE '([^']*)'", sentinel)
-        rx_lin = re.search(r"pgrep -fc '([^']*)'", sentinel)
-        self.assertIsNotNone(rx_win, "regex Windows di claude_alive non estraibile")
-        self.assertIsNotNone(rx_lin, "regex Linux di claude_alive non estraibile")
-        win = re.compile(_posix_ere(rx_win.group(1)), re.IGNORECASE)
-        lin = re.compile(_posix_ere(rx_lin.group(1)))
+    def run_hook(self, tunnel, ready_before):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            ready, ssh_log = tmp / "ready", tmp / "ssh.log"
+            if ready_before:
+                ready.touch()
+            r = ready.as_posix()
+            curl = [
+                "#!/usr/bin/env bash",
+                f"""case " $* " in *" -X "*) [ -e "{r}" ] && echo '{{"serverInfo":1}}' ;; *) echo 000 ;; esac""",
+            ]
+            ssh = ["#!/usr/bin/env bash", f'echo "$*" > "{ssh_log.as_posix()}"; touch "{r}"']
+            for name, lines in (("curl", curl), ("ssh", ssh)):
+                (tmp / name).write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+            for name in ("curl", "ssh"):
+                os.chmod(tmp / name, 0o755)
+            env = {**os.environ, "PATH": f"{tmp.as_posix()}{os.pathsep}{os.environ['PATH']}"}
+            env.pop("HINDSIGHT_SSH_TUNNEL", None)
+            if tunnel:
+                env["HINDSIGHT_SSH_TUNNEL"] = tunnel
+            proc = subprocess.run(
+                [self.BASH, self.HOOK.as_posix()], env=env, capture_output=True,
+                text=True, encoding="utf-8", timeout=40,
+            )
+            deadline = time.time() + 5  # ssh parte detached
+            while tunnel and not ssh_log.exists() and time.time() < deadline:
+                time.sleep(0.1)
+            return proc, ssh_log.read_text(encoding="utf-8") if ssh_log.exists() else None
 
-        # DEVONO contare: CLI (padre MSYS), CLI da Windows e app desktop.
-        for p in (
-            "/e/msys64/home/Sphynx/.local/bin/claude",
-            r"C:\Users\x\AppData\Local\AnthropicClaude\claude.exe",
-            r"D:\msys64\home\Sphynx\.local\bin\claude.exe",
-        ):
-            self.assertTrue(win.search(p), f"non conta una sessione viva: {p}")
-        # NON devono contare: altri binari Anthropic e wrapper 'claude-*'.
-        for p in (
-            r"C:\Users\x\AppData\Local\AnthropicClaude\app-1.0\resources\chrome-native-host.exe",
-            "/e/msys64/home/Sphynx/.local/bin/claude-wrapper.sh",
-            "/usr/bin/zsh",
-        ):
-            self.assertFalse(win.search(p), f"conta un processo che non e' una sessione: {p}")
+    def test_already_ready_exits_0_without_tunnel(self):
+        proc, ssh_args = self.run_hook("hindsight-vps", ready_before=True)
+        self.assertEqual((proc.returncode, proc.stdout), (0, ""), proc.stderr)
+        self.assertIsNone(ssh_args)
 
-        # pgrep -f legge la cmdline INTERA: la sentinella non deve contare se
-        # stessa (la config dir '/.claude/' compare sempre nella sua riga).
-        self.assertFalse(
-            lin.search(
-                "bash /home/s/.claude/skills/trinity/hooks/hindsight/hindsight-sentinel.sh"
-            ),
-            "la regex Linux fa auto-match sulla sentinella (server mai spento)",
-        )
-        self.assertTrue(
-            lin.search("/usr/local/bin/claude"),
-            "regex Linux ancorata al path di installazione",
-        )
-        # Lancio per nome dal PATH: argv[0] e' la parola nuda, senza slash.
-        self.assertTrue(
-            lin.search("claude --resume abc"),
-            "regex Linux non conta il lancio per nome (cmdline senza slash)",
-        )
-        self.assertFalse(
-            lin.search("claude-wrapper.sh --loop"),
-            "regex Linux conta un wrapper claude-*",
-        )
+    def test_opens_tunnel_when_not_ready(self):
+        proc, ssh_args = self.run_hook("hindsight-vps", ready_before=False)
+        self.assertEqual((proc.returncode, proc.stdout), (0, ""), proc.stderr)
+        self.assertIn("-L 127.0.0.1:8888:127.0.0.1:8888 -L 127.0.0.1:9999:localhost:9999 hindsight-vps", ssh_args)
+        self.assertIn("BatchMode=yes", ssh_args)
 
 
 class CentralConfigTests(unittest.TestCase):
@@ -584,17 +573,6 @@ class PostRecallFilterTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[:200])
         self.assertTrue((PLUGIN_ROOT / "commands" / "promote.md").is_file())
-        sched = PLUGIN_ROOT / "scheduler" / "promote_scan"
-        # Il [ -x ] di bash MSYS riflette l'exec bit tracciato da git;
-        # os.access(..., X_OK) su Windows e' vero per qualunque file esistente,
-        # quindi si asserisce direttamente il mode git (100755).
-        mode = subprocess.check_output(
-            ["git", "-C", str(PLUGIN_ROOT), "ls-files", "-s", "--",
-             "scheduler/promote_scan/promote-scan-scheduled.sh"],
-            text=True,
-        ).split()[0]
-        self.assertEqual(mode, "100755")
-        self.assertTrue((sched / "promote-scan-scheduled.cmd").is_file())
 
 
 class RetainGateConfigTests(unittest.TestCase):
@@ -630,7 +608,7 @@ class RetainGateConfigTests(unittest.TestCase):
 
 class RetainWiringTests(unittest.TestCase):
     """Sezione 21: wiring testuale ICH-86 — Stop puro enqueue, retain differito
-    nell'hook recall, drain della sentinella, entry point del worker."""
+    nell'hook recall, entry point del worker."""
 
     def test_stop_hook_is_pure_enqueue(self):
         retain_sh = read(HERE / "hindsight-retain.sh")
@@ -642,9 +620,6 @@ class RetainWiringTests(unittest.TestCase):
 
     def test_recall_hook_delegates_retain_at_prompt(self):
         self.assertIn("retain_at_prompt", read(HERE / "hindsight-recall.sh"))
-
-    def test_sentinel_drains_retain_queue(self):
-        self.assertIn("--drain", read(HERE / "hindsight-sentinel.sh"))
 
     def test_worker_integrates_gate_and_deferred_evaluation(self):
         worker_src = read(HERE / "hindsight-retain-worker.py")

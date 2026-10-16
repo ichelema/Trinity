@@ -15,7 +15,7 @@
 #      di riferimento è CLAUDE_PROJECT_DIR, che Claude Code passa nell'env di
 #      ogni server MCP stdio. Se python/resolve falliscono → fallback core
 #      (degradazione sicura, mai crash).
-#   2. attende che il server Hindsight sia pronto (ad avviarlo ci pensa l'hook
+#   2. attende che il server Hindsight sia pronto (sulla VPS gira come servizio; il tunnel SSH lo apre l'hook
 #      SessionStart hindsight-ensure-up.sh; qui solo polling readiness).
 #   3. exec del bridge stdio↔streamable-HTTP (mcp-remote sul node di mise)
 #      verso http://127.0.0.1:8888/mcp/<bank>/.

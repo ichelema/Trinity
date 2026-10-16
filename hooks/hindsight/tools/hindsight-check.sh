@@ -40,23 +40,7 @@ if [ "$HTTP" != "000" ] && [ -n "$HTTP" ]; then
 	ok "server risponde su $SERVER_ROOT (HTTP $HTTP, 404 atteso)"
 else
 	ko "server NON risponde su $SERVER_ROOT"
-	note "fix: 'mise run start-hindsight' e ricontrolla tra 20s"
-fi
-
-case "$(uname -s)" in
-MINGW* | MSYS* | CYGWIN*)
-	# netstat.exe nativo: quello MSYS non vede sempre i processi Windows.
-	PID=$(/c/Windows/System32/netstat.exe -ano 2>/dev/null | grep ":8888" | grep LISTENING | awk '{print $NF}' | tr -d '\r' | head -1)
-	;;
-*)
-	PID=$(ss -ltnp 2>/dev/null | grep ':8888' | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
-	[ -n "$PID" ] || PID=$(lsof -ti tcp:8888 -sTCP:LISTEN 2>/dev/null | head -1)
-	;;
-esac
-if [ -n "$PID" ]; then
-	ok "porta 8888 LISTENING (PID $PID)"
-else
-	ko "porta 8888 non in LISTENING"
+	note "fix: verifica il tunnel SSH (HINDSIGHT_SSH_TUNNEL) e il servizio sulla VPS: systemctl --user status hindsight"
 fi
 
 # --- 2. ENDPOINT REST CHIAVE ---
@@ -106,7 +90,7 @@ for expected in "claude-code"; do
 	if echo " $TAGS " | grep -q " $expected "; then
 		ok "tag '$expected' presente nel bank"
 	else
-		ko "tag '$expected' assente — retain non ha mai tagato (nessun turno accodato allo Stop e' mai stato valutato al prompt successivo o nel drain della sentinella?)"
+		ko "tag '$expected' assente — retain non ha mai tagato (nessun turno accodato allo Stop e' mai stato valutato al prompt successivo?)"
 	fi
 done
 [ -n "$TAGS" ] && note "tutti i tag visti: $TAGS"
@@ -196,7 +180,7 @@ sect "9. End-to-end: Stop hook (enqueue) + retain worker"
 # 9a. Lo Stop hook e' puro enqueue: con un HOOK_INPUT deve scrivere ESATTAMENTE un
 # file in $XDG_CACHE_HOME/trinity/hs-retain-queue/ (contenuto = payload verbatim)
 # e stampare '{}'. XDG_CACHE_HOME temporanea: non si sporca la coda reale (una
-# entry finta con session_id 'check-…' verrebbe valutata al drain della sentinella).
+# entry finta con session_id 'check-…' verrebbe valutata al prompt successivo).
 QTMP=$(mktemp -d /tmp/hs-queue-XXXXXX)
 QPAYLOAD='{"session_id":"check-queue","transcript_path":"/nonexistent.jsonl","cwd":"/tmp","hook_event_name":"Stop"}'
 QOUT=$(printf '%s' "$QPAYLOAD" | XDG_CACHE_HOME="$QTMP" bash "$HOOKS_DIR/hindsight-retain.sh" 2>/dev/null)

@@ -13,7 +13,7 @@ repo/branch (HITL ICH-73); errore tecnico del gate -> fail-closed (nessuna
 POST, systemMessage non bloccante una sola volta per sessione, rollback del
 contatore di throttling cosi' la valutazione successiva riprova).
 Da ICH-86 il worker valuta a UserPromptSubmit l'entry accodata dallo Stop
-(coda hs-retain-queue, evaluate_queued) o in drain a fine sessione: la
+(coda hs-retain-queue, evaluate_queued): la
 domanda del gate viaggia in additionalContext e chiude la risposta successiva.
 La valutazione differita gira in un processo detached (`--queued`) che scrive
 un outbox; qui il launcher e' sostituito da un thread in-process (fake_spawn)
@@ -729,7 +729,7 @@ class GateModuleTests(unittest.TestCase):
     def test_schema_and_enums_consistent(self):
         self.assertEqual(set(GATE_SCHEMA["properties"]["action"]["enum"]), GATE_ACTIONS)
         self.assertEqual(set(GATE_SCHEMA["properties"]["reason"]["enum"]), GATE_REASONS)
-        self.assertNotIn("gate_error", GATE_REASONS)  # sentinella solo fail-closed
+        self.assertNotIn("gate_error", GATE_REASONS)  # marcatore solo fail-closed
         # La mappa reason->action e' esplicita anche nel prompt: ogni action e
         # ogni reason del validatore devono comparirvi (niente drift silenzioso).
         for name in sorted(GATE_ACTIONS | GATE_REASONS):
@@ -1780,16 +1780,6 @@ class WorkerGateTests(unittest.TestCase):
         urlopen.assert_not_called()
         self.assertIn("Jev: nessun punteggio, errore dopo 5000.0 ms", out["systemMessage"])
 
-    def test_jev_outcomes_in_drain_save_nothing_silently(self):
-        for gate_result in (
-            GateResult(action="skip", reason="jev_rejected", preview="p", jev_score=0.2),
-            GateResult(action="skip", reason="gate_error", error="jev: TimeoutError: x"),
-        ):
-            rc, out, _gate, urlopen = self.run_main(self.cfg(), gate_result, mode="drain")
-            self.assertEqual(rc, 0)
-            urlopen.assert_not_called()
-            self.assertIsNone(out)
-
     def test_jev_error_is_fail_closed_with_single_notice(self):
         cfg = self.cfg(retain_every_n_turns=3)
         jev_error = GateResult(
@@ -2008,7 +1998,7 @@ class WorkerGateTests(unittest.TestCase):
         self.assertEqual(one["content"], "Perche' X.\n\n- fatto tre\n\n" + raw["content"])
         self.assertEqual({p["document_id"] for p in (raw, two, one)}, {raw["document_id"]})
 
-    # --- ICH-86: coda, drain, evaluate_queued ------------------------------
+    # --- ICH-86: coda, evaluate_queued ------------------------------
 
     def enqueue(self, hook: dict, name: str) -> str:
         """Scrive un'entry di coda come farebbe lo Stop hook (HOOK_INPUT verbatim).
@@ -2097,24 +2087,6 @@ class WorkerGateTests(unittest.TestCase):
         # scrittura) e' rimasta
         self.assertEqual(self.queue_names(), ["1700000000500000-2.json"])
 
-    def test_drain_queue_one_per_session_and_empties(self):
-        a_old = dict(self.hook, marker="a-old")
-        a_new = dict(self.hook, marker="a-new")
-        b = dict(self.hook, session_id="sess-b", marker="b")
-        no_sid = {"transcript_path": self.transcript, "marker": "no-sid"}
-        no_sid2 = {"transcript_path": self.transcript, "marker": "no-sid-2"}
-        self.enqueue(a_old, "1700000000100000-1")
-        self.enqueue(b, "1700000000200000-2")
-        self.enqueue(no_sid, "1700000000250000-2")
-        self.enqueue(a_new, "1700000000300000-3")
-        self.enqueue(no_sid2, "1700000000350000-2")
-        entries = self.worker.drain_queue()
-        self.assertEqual(
-            sorted(e["marker"] for e in entries), ["a-new", "b", "no-sid", "no-sid-2"]
-        )
-        self.assertEqual(self.queue_names(), [])
-        self.assertEqual(self.worker.drain_queue(), [])
-
     def test_evaluate_queued_consumes_and_returns_output(self):
         preview = "Vale la pena salvare la decisione sul gate?"
         gate = GateResult(action="uncertain", reason="borderline", preview=preview, context="dominio")
@@ -2158,80 +2130,20 @@ class WorkerGateTests(unittest.TestCase):
         ):
             self.assertIsNone(self.worker.evaluate_queued("sess-gate-test"))
 
-    def test_drain_uncertain_skips_without_pending_or_post(self):
-        rc, out, gate_mock, urlopen = self.run_main(
-            self.cfg(),
-            GateResult(action="uncertain", reason="borderline", preview="Forse X.", context="dominio"),
-            mode="drain",
-        )
-        self.assertEqual(rc, 0)
-        self.assertIsNone(out)
-        self.assertEqual(gate_mock.call_count, 1)
-        urlopen.assert_not_called()
-        self.assertFalse(os.path.isdir(os.path.join(self.tmp.name, "pending")))
-        # e nemmeno un "si" al prompt dopo trova nulla
-        self.assertIsNone(handle_retain_consent("si", "sess-gate-test", self.tmp.name))
-
-    def test_drain_retain_without_context_posts_with_fallback(self):
-        with mock.patch.object(
-            self.worker,
-            "git_info",
-            return_value={"repo": "Trinity", "branch": "main", "commit": "abc"},
-        ):
-            rc, out, _gate, urlopen = self.run_main(
-                self.cfg(),
-                GateResult(action="retain", reason="durable_decision", preview="Salvo X.", context=""),
-                mode="drain",
-            )
-        self.assertEqual(rc, 0)
-        self.assertIsNone(out)
-        self.assertEqual(urlopen.call_count, 1)
-        item = json.loads(urlopen.call_args[0][0].data.decode("utf-8"))["items"][0]
-        self.assertEqual(item["context"], "sessione Claude Code nel repo Trinity, branch main")
-        self.assertIn("document_id", item)
-        self.assertFalse(os.path.isdir(os.path.join(self.tmp.name, "pending")))
-
-    def test_drain_forces_past_throttling_and_gate_error_is_silent(self):
+    def test_force_env_bypasses_throttling_without_advancing_counter(self):
         cfg = self.cfg(retain_every_n_turns=3)
         retain = GateResult(action="retain", reason="durable_decision", preview="x", context="dominio")
-        # in deferred la 1a valutazione e' throttlata...
+        # la 1a valutazione e' throttlata...
         rc, out, gate_mock, urlopen = self.run_main(cfg, retain)
         gate_mock.assert_not_called()
         urlopen.assert_not_called()
-        # ...in drain no: gate chiamato e POST fatta, contatore fermo
-        rc, out, gate_mock, urlopen = self.run_main(cfg, retain, mode="drain")
+        # ...con HS_RETAIN_FORCE no: gate chiamato e POST fatta, contatore fermo
+        with mock.patch.dict(os.environ, {"HS_RETAIN_FORCE": "1"}):
+            rc, out, gate_mock, urlopen = self.run_main(cfg, retain)
         self.assertEqual((rc, out), (0, None))
         self.assertEqual(gate_mock.call_count, 1)
         self.assertEqual(urlopen.call_count, 1)
         self.assertEqual(self.read_state()["sess-gate-test"]["stop_count"], 1)
-        # errore del gate in drain: skip silenzioso, niente notifica ne' rollback
-        rc, out, gate_mock, urlopen = self.run_main(
-            cfg, GateResult(action="skip", reason="gate_error", error="TimeoutError: x"), mode="drain"
-        )
-        self.assertEqual((rc, out), (0, None))
-        urlopen.assert_not_called()
-        state = self.read_state()["sess-gate-test"]
-        self.assertEqual(state["stop_count"], 1)
-        self.assertNotIn("gate_error_notified", state)
-
-    def test_main_drain_evaluates_each_entry_best_effort(self):
-        self.enqueue(self.hook, "1700000000100000-1")
-        self.enqueue(dict(self.hook, session_id="sess-b"), "1700000000200000-2")
-        seen = []
-
-        def fake_evaluate(entry, mode):
-            seen.append((entry["session_id"], mode))
-            if entry["session_id"] == "sess-gate-test":
-                raise RuntimeError("boom")
-            return 0, None
-
-        stderr = io.StringIO()
-        with mock.patch.object(self.worker, "evaluate", side_effect=fake_evaluate):
-            with redirect_stdout(io.StringIO()), redirect_stderr(stderr):
-                self.assertEqual(self.worker.main(["--drain"]), 0)
-        self.assertIn("drain error: RuntimeError: boom", stderr.getvalue())
-        self.assertEqual(seen, [("sess-gate-test", "drain"), ("sess-b", "drain")])
-        self.assertEqual(self.queue_names(), [])
 
     def test_main_default_prints_hsgate_line(self):
         preview = "Vale la pena salvare la decisione sul gate?"
@@ -2752,13 +2664,12 @@ class WorkerGateTests(unittest.TestCase):
             path = self.worker.outbox_path(sid)
             self.assertEqual(os.path.dirname(path), queue_dir, sid)
             self.assertTrue(path.endswith(".out.json"))
-        # e gli outbox non sono entry di coda: dequeue/drain li ignorano
+        # e gli outbox non sono entry di coda: dequeue li ignora
         self.worker._write_outbox("sess-gate-test", {}, False)
-        self.assertEqual(self.worker.drain_queue(), [])
         self.assertIsNone(self.worker.dequeue_for_session("sess-gate-test"))
         self.assertTrue(os.path.exists(self.outbox()))
 
-    def test_sweep_stale_queue_marks_and_removes_old_entries(self):
+    def test_sweep_stale_queue_removes_old_entries_silently(self):
         cache = os.path.join(self.tmp.name, "xdg-cache")
         stale = self.enqueue(dict(self.hook, session_id="sess-stale-old"), "1600000000000000-1")
         fresh = self.enqueue(self.hook, "1700000000100000-2")
@@ -2775,12 +2686,9 @@ class WorkerGateTests(unittest.TestCase):
             self.assertEqual(self.worker.sweep_stale_queue(), 1)
         self.assertEqual(self.queue_names(), [os.path.basename(fresh)])
         self.assertFalse(os.path.exists(old_box))
-        marker = os.path.join(cache, "trinity", "hs-retain-failed.log")
-        with open(marker, encoding="utf-8") as handle:
-            lines = handle.read().splitlines()
-        self.assertEqual(len(lines), 1, lines)
-        self.assertIn("piu' vecchia di 24h", lines[0])
-        self.assertIn("sess-sta", lines[0])
+        # niente marker per il failcheck: l'ultimo turno di una sessione chiusa
+        # resta sempre in coda, non e' un'anomalia
+        self.assertFalse(os.path.exists(os.path.join(cache, "trinity", "hs-retain-failed.log")))
         events = [e for e in self.read_events(log_path) if e.get("reason") == "queue_stale"]
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["session"], "sess-sta")
@@ -3059,28 +2967,6 @@ class InvalidationTests(unittest.TestCase):
         self.assertTrue(urlopen.call_args[0][0].full_url.endswith("/banks/t/memories"))
         self.assertIn("Ritiro la memoria contraddetta?", out["systemMessage"])
 
-    def test_drain_never_invalidates(self):
-        for gate in (
-            self.contradicting_gate(),
-            self.contradicting_gate(
-                action="retain", reason="durable_decision", preview="X.", context="dominio"
-            ),
-            # ICH-166: nemmeno un ritiro rinviato
-            self.uncertain_contradicting(),
-            self.contradicting_gate(action="retain", reason="durable_decision", preview="X."),
-        ):
-            rc, out, _gate, urlopen = self.run_main(self.cfg(), gate, mode="drain")
-            self.assertEqual(rc, 0)
-            self.assertIsNone(out)
-            for call in urlopen.call_args_list:
-                self.assertEqual(call[0][0].get_method(), "POST")
-        outcome, urlopen = self.invalidate_consent("sì")
-        self.assertIsNone(outcome)
-        urlopen.assert_not_called()
-        _result, out, methods = self.prompt_turn("spiegami il gate")
-        self.assertEqual(out, {})
-        self.assertEqual(methods, [])
-
     def test_retain_question_wins_over_contradiction(self):
         """Uncertain pone gia' la sua domanda: niente seconda domanda nello
         stesso turno e nessun ritiro che un "si'" possa eseguire (ICH-166: il
@@ -3311,12 +3197,12 @@ class WindowContentTests(unittest.TestCase):
     def test_failed_command_reports_exit_and_last_line(self):
         content = self.chunk([
             user_record("avvia il server"),
-            self.bash("t1", "mise run start-hindsight"),
+            self.bash("t1", "systemctl --user start hindsight"),
             self.result("t1", "Exit code 1\navvio...\nOSError: porta 8888 occupata", is_error=True),
             assistant_record("Il server non parte."),
         ])
         self.assertTrue(content.startswith("## Command outcomes"))
-        self.assertIn("mise run start-hindsight → Exit code 1 | OSError: porta 8888 occupata", content)
+        self.assertIn("systemctl --user start hindsight → Exit code 1 | OSError: porta 8888 occupata", content)
         self.assertLess(content.index("## Command outcomes"), content.index("## Conversation"))
 
     def test_rejected_tool_use_is_not_a_failure(self):

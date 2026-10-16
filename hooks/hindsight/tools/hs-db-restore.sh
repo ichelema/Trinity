@@ -7,18 +7,51 @@
 # Uso: hs-db-restore.sh [file.dump] [--force]
 #   senza argomento usa l'ultimo dump (file LATEST in BACKUP_DIR).
 #
-# Sequenza: guardrail (sola lettura) -> dump di sicurezza locale -> stop del
-# solo server MCP (su Windows Postgres resta su; su Linux muore col server e
-# viene rialzato standalone con pg_ctl) -> pg_restore su un DB TEMPORANEO ->
-# validazione -> swap per rinomina (terminate connessioni) -> drop del vecchio.
-# Al termine riavvia il server con `mise run start-hindsight` (o riapri una
-# sessione Claude Code).
+# Gira SOLO sulla VPS. Sequenza: verifica del file di dump -> stop dei servizi
+# systemd (`systemctl --user stop hindsight-cp hindsight`; Postgres e' figlio di
+# pg0 dentro il servizio e muore con lui, quindi viene rialzato standalone con
+# pg_ctl per la durata del restore) -> guardrail -> dump di sicurezza (a servizi
+# fermi: nessuna scrittura puo' sfuggire a entrambi) -> pg_restore su un
+# DB TEMPORANEO -> validazione -> swap per rinomina (terminate connessioni) ->
+# drop del vecchio. Al termine NON riavvia nulla: rilancia a mano
+# `systemctl --user start hindsight hindsight-cp`.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/hs-db-lib.sh"
 
 hs_db_require_pgbin
+
+# Postgres standalone (pg_ctl): il cluster pg0 e' figlio del servizio hindsight,
+# quindi a servizio fermo e' giu'. La trap di uscita lo riferma (PG_STANDALONE).
+PG_STANDALONE=0
+PGDATA_DIR="${HS_PGDATA:-$HOME/.pg0/instances/hindsight-mcp/data}"
+# LD_LIBRARY_PATH: i binari portabili di pg0 cercano le proprie librerie
+# condivise (libicuuc & c.) che il loader di sistema non conosce.
+pg_ctl_standalone() {
+	LD_LIBRARY_PATH="$PGBIN/../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+		"$PGBIN/pg_ctl" -D "$PGDATA_DIR" "$@"
+}
+start_pg_standalone() {
+	echo "[db-restore] Postgres non risponde: lo avvio standalone (servizio hindsight fermo)"
+	pg_ctl_standalone -w -l /tmp/hs-pg-standalone.log start > /dev/null || {
+		echo "[db-restore] ERRORE: avvio standalone di Postgres fallito (log: /tmp/hs-pg-standalone.log)" >&2
+		exit 1
+	}
+	PG_STANDALONE=1
+}
+stop_pg_standalone() {
+	[ "$PG_STANDALONE" -eq 1 ] || return 0
+	# Un postmaster rimasto sulla 5432 impedirebbe al servizio hindsight di ripartire.
+	pg_ctl_standalone -m fast -w stop > /dev/null 2>&1 ||
+		echo "[db-restore] ATTENZIONE: stop del Postgres standalone fallito — fermalo (pg_ctl -D $PGDATA_DIR stop) prima di avviare hindsight" >&2
+	return 0
+}
+# Trap anticipata: il Postgres standalone puo' partire prima dei guardrail e
+# va rifermato anche se questi rifiutano. Sostituita da cleanup() allo step 4.
+trap stop_pg_standalone EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 DUMP=""
 FORCE=0
@@ -70,6 +103,22 @@ if ! "$PG_RESTORE" --list "$DUMP" > /dev/null 2>&1; then
 	exit 1
 fi
 
+# Ferma i servizi PRIMA di leggere watermark e fare il dump di sicurezza: con
+# API e worker vivi una scrittura tra dump e stop non sarebbe ne' nel dump di
+# sicurezza ne' nel DB ripristinato. Solo per il DB del server ('hindsight'):
+# con un target diverso (es. test) il servizio puo' restare su. Da qui in poi i
+# servizi restano FERMI anche se un guardrail rifiuta: si riavviano a mano.
+if [ "$PGDATABASE" = "hindsight" ]; then
+	systemctl --user stop hindsight-cp hindsight || {
+		echo "[db-restore] ERRORE: systemctl --user stop hindsight-cp hindsight fallito — DB non toccato" >&2
+		exit 1
+	}
+	echo "[db-restore] servizi fermati: a fine lavoro riavviali con  systemctl --user start hindsight hindsight-cp"
+	# Postgres e' figlio di pg0 dentro il servizio e muore con lui: lo si rialza
+	# standalone per il restore (la trap di uscita lo riferma).
+	hs_db_ping || start_pg_standalone
+fi
+
 # Prerequisito: Postgres raggiungibile. Senza questa probe hs_db_exists non
 # distingue "DB assente" (primo restore) da "server muto" (Postgres che sta
 # ancora partendo): si classificherebbe 'primo restore' — niente guardrail ne'
@@ -77,7 +126,7 @@ fi
 # arriverebbe allo swap del DB reale senza alcuna protezione.
 if ! hs_db_ping; then
 	echo "[db-restore] RIFIUTATO: Postgres non risponde su $PGHOST:$PGPORT." >&2
-	echo "               Avvia il cluster (mise run start-hindsight) e riprova." >&2
+	echo "               Controlla il cluster pg0 (HS_PGDATA, HS_PGPORT) e riprova." >&2
 	exit 1
 fi
 
@@ -143,43 +192,6 @@ if [ -n "$LOCAL_WM" ]; then
 	done
 fi
 
-# --- 3. Ferma il SOLO server MCP (Postgres deve restare raggiungibile) -------
-# Serve solo se il target e' il DB a cui il server e' connesso ('hindsight'):
-# con un target diverso (es. test) il server puo' restare su.
-PG_STANDALONE=0
-PGDATA_DIR="${HS_PGDATA:-$HOME/.pg0/instances/hindsight-mcp/data}"
-if [ "$PGDATABASE" = "hindsight" ]; then
-	case "$_HS_OS" in
-	windows) /c/Windows/System32/taskkill.exe //F //T //IM hindsight-local-mcp.exe > /dev/null 2>&1 || true ;;
-	*)
-		pkill -TERM -f hindsight-local-mcp > /dev/null 2>&1 || true
-		# Attendi la fine dello shutdown: subito dopo il TERM server (e Postgres)
-		# possono essere ancora vivi, e la probe hs_db_ping sotto mentirebbe.
-		for _ in 1 2 3 4 5 6 7 8 9 10; do
-			pgrep -f hindsight-local-mcp > /dev/null 2>&1 || break
-			sleep 1
-		done
-		;;
-	esac
-	sleep 1
-	# Su Linux Postgres NON resta su: pg0 lo avvia come figlio di
-	# hindsight-local-mcp, quindi il kill qui sopra spegne anche lui (su Windows
-	# e' un processo staccato e sopravvive). Lo si rialza standalone per la
-	# durata del restore; la trap di uscita lo riferma, e il riavvio finale
-	# resta comunque a `mise run start-hindsight`.
-	if [ "$_HS_OS" != windows ] && ! hs_db_ping; then
-		echo "[db-restore] Postgres e' sceso insieme al server MCP: lo rialzo standalone"
-		# LD_LIBRARY_PATH: i binari portabili di pg0 cercano le proprie librerie
-		# condivise (libicuuc & c.) che il loader di sistema non conosce.
-		LD_LIBRARY_PATH="$PGBIN/../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-			"$PGBIN/pg_ctl" -D "$PGDATA_DIR" -w -l /tmp/hs-pg-standalone.log start > /dev/null || {
-			echo "[db-restore] ERRORE: avvio standalone di Postgres fallito (log: /tmp/hs-pg-standalone.log)" >&2
-			exit 1
-		}
-		PG_STANDALONE=1
-	fi
-fi
-
 # --- 4. Restore su un DB TEMPORANEO ------------------------------------------
 # Il DB corrente non si tocca finche' il restore non e' riuscito: prima si faceva
 # DROP + CREATE e solo dopo pg_restore, quindi un dump troncato (che supera --list,
@@ -213,13 +225,10 @@ cleanup() {
 		drop_newdb
 		;;
 	esac
-	# Se Postgres l'abbiamo alzato noi (standalone, Linux), va rifermato DOPO le
+	# Se Postgres l'abbiamo alzato noi (standalone), va rifermato DOPO le
 	# pulizie qui sopra (usano psql): un postmaster orfano sulla 5432
-	# impedirebbe a start-hindsight di riportare su il cluster pg0.
-	if [ "$PG_STANDALONE" -eq 1 ]; then
-		LD_LIBRARY_PATH="$PGBIN/../lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-			"$PGBIN/pg_ctl" -D "$PGDATA_DIR" -m fast -w stop > /dev/null 2>&1 || true
-	fi
+	# impedirebbe al servizio hindsight di riportare su il cluster pg0.
+	stop_pg_standalone
 	exit "$rc"
 }
 trap cleanup EXIT
@@ -271,5 +280,5 @@ if [ "$RENAMED" -eq 1 ] && ! "$PSQL" "${PGARGS[@]}" -d postgres -qc "DROP DATABA
 fi
 
 echo "[db-restore] OK — watermark del DB ripristinato: $NEW_WM"
-echo "[db-restore] riavvia il server: mise run start-hindsight (o riapri Claude Code)"
+echo "[db-restore] il servizio resta FERMO: riavvialo con  systemctl --user start hindsight hindsight-cp"
 exit 0

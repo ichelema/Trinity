@@ -1000,8 +1000,8 @@ class HookE2ETests(unittest.TestCase):
 
     def test_stop_hook_skips_queue_when_retain_disabled(self):
         # retain_enabled false: nessuno consuma la coda, quindi l'hook non deve
-        # accodare - le entry scadrebbero a 24h e lo sweep del worker le
-        # segnalerebbe come drain mancato. Sempre '{}' su stdout.
+        # accodare - le entry resterebbero in coda inutilmente fino ai 24h dello
+        # sweep del worker. Sempre '{}' su stdout.
         cache_home = os.path.join(self.tmp.name, "xdg-cache-off")
         proc = subprocess.run(
             [BASH, STOP_HOOK],

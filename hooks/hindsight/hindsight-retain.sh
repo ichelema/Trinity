@@ -11,9 +11,9 @@
 #     evaluate_queued(session_id) -> prende l'entry piu' recente di questa
 #     sessione, la valuta col gate e fa la POST (o mette in pending + domanda
 #     in coda alla risposta successiva) e scrive l'esito in un outbox che
-#     l'hook raccoglie entro un breve budget, o il prompt dopo;
-#   - a chiusura, hindsight-sentinel.sh lancia il worker con `--drain` e valuta
-#     le entry rimaste (la coda della sessione, senza domande).
+#     l'hook raccoglie entro un breve budget, o il prompt dopo.
+# L'entry dell'ultimo turno di una sessione chiusa non viene mai valutata: la
+# toglie lo sweep dei 24h del worker.
 # Coda: $HS_CACHE_DIR/hs-retain-queue/<EPOCHREALTIME senza punto>-<pid>.json,
 # HOOK_INPUT verbatim; il nome ordina per istante di scrittura. Percorso caldo
 # a ZERO fork: solo builtin ed espansioni bash (mkdir/chmod solo alla prima
@@ -27,8 +27,7 @@ set -uo pipefail
 IFS= read -r -d '' HOOK_INPUT || true
 
 # Guardia anti-coda-morta: con retain_enabled false nessuno consuma le entry.
-# Restano in coda fino allo sweep dei 24h del worker, che le segnala come
-# "la sentinella non ha drenato?" - falso allarme a ogni sessione. Zero fork
+# Restano in coda fino allo sweep dei 24h del worker. Zero fork
 # (`read` builtin, niente command substitution), stessa precedenza di
 # lib/hindsight_config.py: plugin -> progetto -> env. Fail-open: flag
 # illeggibile => si accoda come prima.
@@ -81,6 +80,6 @@ if [ -n "$HOOK_INPUT" ]; then
 fi
 
 # exit 0 sempre e '{}' su stdout: nessuna decisione da comunicare qui; l'esito
-# della valutazione arrivera' col prossimo prompt (o nel drain di chiusura).
+# della valutazione arrivera' col prossimo prompt.
 echo '{}'
 exit 0

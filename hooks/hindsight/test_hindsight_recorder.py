@@ -357,7 +357,7 @@ class RecorderTests(unittest.TestCase):
 
     def test_entry_points_record_only_with_record_1(self):
         # Guardia nei punti d'ingresso: un record per failcheck, mm-inject e
-        # worker (--drain e modalita' script) con HINDSIGHT_RECORD=1, nessuno
+        # worker (--queued e modalita' script) con HINDSIGHT_RECORD=1, nessuno
         # con un altro valore.
         queue = os.path.join(self.tmp.name, "queue")
         os.makedirs(queue)
@@ -371,7 +371,7 @@ class RecorderTests(unittest.TestCase):
         runs = [
             ("hindsight-failcheck", [BASH, os.path.join(HERE, "hindsight-failcheck.sh").replace(os.sep, "/")]),
             ("hindsight-mm-inject", [BASH, os.path.join(HERE, "hindsight-mm-inject.sh").replace(os.sep, "/")]),
-            ("hindsight-retain-worker", [sys.executable, worker, "--drain"]),
+            ("hindsight-retain-worker", [sys.executable, worker, "--queued", "sess-rec"]),
             ("hindsight-retain-worker", [sys.executable, worker]),
         ]
         for value, expected in (("0", 0), ("1", 1)):

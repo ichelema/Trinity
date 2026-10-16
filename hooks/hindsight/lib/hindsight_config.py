@@ -183,8 +183,8 @@ DEFAULTS = {
     # "## Hindsight retain debug" visibile (systemMessage) e nel contesto,
     # speculare a recall_debug_in_context.
     "retain_debug_in_context": False,
-    # Triage della promozione progetto -> core (/trinity:promote e job
-    # settimanale promote_scan): decide "questo fatto resterebbe utile su un
+    # Triage della promozione progetto -> core (/trinity:promote e
+    # scan manuale con hindsight-promote.py --triage): decide "questo fatto resterebbe utile su un
     # progetto diverso?". Chiave dedicata perche' il compito non c'entra col
     # gate del retain (nasceva separata dall'estrazione dei domini del context,
     # rimossa da ICH-73).

@@ -82,7 +82,7 @@ def wait_ready(url, deadline):
 
 
 # Gli hook SessionStart girano IN PARALLELO (doc Claude Code): hindsight-ensure-up.sh
-# sta avviando il server proprio ora. A freddo le GET sotto arriverebbero prima che sia
+# sta aprendo il tunnel verso la VPS proprio ora. Le GET sotto arriverebbero prima che sia
 # pronto e tornerebbero a mani vuote. Attendi la readiness (budget affine a ensure-up),
 # poi procedi; se non e' pronto entro il budget, esci pulito (best-effort invariato).
 # Un 404 sul primo id conta come pronto: server e DB su, l'id semplicemente non c'e'.

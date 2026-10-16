@@ -74,9 +74,9 @@ def start(script: str) -> None:
     try:
         _t0 = time.monotonic()
         argv = sys.argv[1:]
-        # Il worker --queued/--drain eredita HOOK_INPUT dal prompt che l'ha
+        # Il worker --queued eredita HOOK_INPUT dal prompt che l'ha
         # lanciato: il suo input vero e' l'entry di coda, gia' in state_before.
-        raw = None if ("--queued" in argv or "--drain" in argv) else os.environ.get("HOOK_INPUT")
+        raw = None if "--queued" in argv else os.environ.get("HOOK_INPUT")
         stdin = _decode(raw)
         cfg = load_config()
         state = _snapshot(_state_paths(cfg))

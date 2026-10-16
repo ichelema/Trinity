@@ -26,7 +26,7 @@ che altrimenti risolvono i path relativamente a sé stessi.
 ### Cosa è plugin e cosa è ambiente
 
 I **file** del plugin vivono tutti qui dentro. Le **risorse runtime** restano sulla macchina: il 
-server Hindsight (`localhost:8888`), il Postgres embedded, i binari (`mise`, `node`, `ffplay`, `pwsh`), 
+tunnel SSH verso il server Hindsight (che gira solo sulla VPS, vedi §9), i binari (`mise`, `node`, `ffplay`, `pwsh`), 
 il CA bundle (`C:/certs/cacert.pem`), le chiavi API (env utente). 
 Il plugin è il *cervello*; server, DB e runtime sono il *corpo* installato sul sistema.
 
@@ -84,10 +84,10 @@ Eventi registrati dal plugin:
 
 | Evento | Matcher | Comandi |
 |---|---|---|
-| `SessionStart` | — | avvia server Hindsight · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model · **cattura il modello** (`capture-model.sh`, §3.1) |
+| `SessionStart` | — | attende il server Hindsight sulla VPS (apre il tunnel SSH se `HINDSIGHT_SSH_TUNNEL` è impostata) · **inietta `core-behavior.md`** · **inietta `CLAUDE_<MODELLO>.md`** (§4.1) · inietta mental model · **cattura il modello** (`capture-model.sh`, §3.1) |
 | `UserPromptSubmit` | — | skill-eval · Hindsight **recall** (che prima consuma il consenso e valuta il retain accodato allo Stop precedente: gate → POST o domanda) · failcheck |
 | `PostToolUse` | `mcp__plugin_trinity_excalidraw__export_scene` | esporta canvas Excalidraw → vault Obsidian (inattivo finché il server `excalidraw` è disattivato) |
-| `Stop` | — | suono di fine · Hindsight **retain** (solo enqueue: scrive il payload in `hs-retain-queue/` e risponde `{}`; la valutazione è differita al prossimo `UserPromptSubmit`, la coda residua la drena la sentinella — ICH-86) |
+| `Stop` | — | suono di fine · Hindsight **retain** (solo enqueue: scrive il payload in `hs-retain-queue/` e risponde `{}`; la valutazione è differita al prossimo `UserPromptSubmit`, l'ultimo turno di una sessione chiusa resta in coda e lo sweep a 24 h lo scarta — ICH-86) |
 | `MessageDisplay` | — | **riscrittura in italiano semplice** (`gate.sh` → `rewrite.sh`, §3.1) |
 | `Notification` | `permission_prompt` | suono + toast Windows |
 
@@ -467,7 +467,7 @@ Il blocco `bank` di `hindsight.config.json` governa tutto:
   **voyage/rerank-2.5** via API Voyage (gli score di bank diversi non sono confrontabili tra loro),
   filtro sotto `recall_min_rerank_score` (**0.6** nel plugin, solo percorso multi-bank) e
   taglio a `recall_max_results_multibank` candidati (5 nel plugin). Se Voyage non risponde,
-  il multi-bank segue la failover chain configurata; la sentinella segnala i risultati senza
+  il multi-bank segue la failover chain configurata; un marker (poi notificato dal failcheck) segnala i risultati senza
   `scores.reranker`. Il core entra **solo se listato**: `["auto"]` da solo = progetto totalmente
   isolato. Con un solo bank risolto il percorso è la singola POST di sempre; la soglia globale
   client non si applica, ma i floor `min_scores` server-side sì (bullet successivo).
@@ -573,7 +573,7 @@ sessione, mentre le regole "Retain a fine task" sono iniettate solo dove `retain
 "Recall a inizio task" (marker `RECALL:manual`) sono iniettate solo dove `recall_enabled` è `false`,
 perché con l'hook attivo le memorie arrivano già a ogni prompt.
 
-**Retain differito: Stop accoda, UserPromptSubmit valuta, la sentinella drena (ICH-86).**
+**Retain differito: Stop accoda, UserPromptSubmit valuta (ICH-86).**
 L'hook `Stop` (`hindsight-retain.sh`) non valuta più nulla: è puro bash, scrive il payload del
 hook verbatim in `$XDG_CACHE_HOME/trinity/hs-retain-queue/<EPOCHREALTIME>-<pid>.json` e
 risponde `{}` (niente gate, niente `decision: block`, niente Python sul percorso caldo). Al
@@ -589,21 +589,16 @@ cancella tutte le sue entry, scarta i messaggi utente in coda al transcript (il 
 inviato) e valuta la finestra del turno completato: `retain` → POST silenziosa,
 `uncertain`/context mancante → pending + istruzione in `additionalContext` (la domanda chiude
 la risposta successiva); l'esito finisce nell'outbox. L'hook intanto fa il recall e al momento
-dell'emit aspetta l'outbox solo fino a **6 s** dal suo avvio (`gate_output`; gate tipico ≈ 3-5 s,
+dell'emit aspetta l'outbox solo fino a **3 s** dal suo avvio (`gate_output`; gate tipico ≈ 3-5 s,
 quindi la domanda di solito esce nello stesso prompt): se il processo non ha finito l'hook esce
 comunque, nulla viene ucciso né perso, e l'esito viene raccolto al prompt successivo (eventi
 debug `retain_deferred` `carried_over` / `picked_up`) — niente più stallo del prompt in attesa di
-gate + POST. Entry di coda più vecchie di 24 h (di qualunque sessione: la sentinella non ha
-drenato) vengono rimosse con marker in `hs-retain-failed.log` (`retain_skip.reason`
+gate + POST. Entry di coda più vecchie di 24 h (di qualunque sessione: l'ultimo turno di una
+sessione chiusa non viene mai valutato) vengono rimosse in silenzio (evento debug `retain_skip`
 `queue_stale`). Il throttling: `stop_count` avanza una volta per **ogni Stop realmente
 avvenuto** (l'entry valutata più le più vecchie scartate dal dequeue), stessa cadenza
-`retain_every_n_turns`; nel drain (`force`) non avanza. A
-chiusura la sentinella lancia `hindsight-retain-worker.py --drain` prima di
-`ops/hindsight-drain-retain.py`: la coda residua è valutata in modalità *drain* (force, nessuna
-domanda: `retain` → POST, con context di ripiego repo/branch se il gate non l'ha dato;
-`uncertain` ed errore del gate → skip, `retain_skip.reason` `gate_uncertain_drain` /
-`gate_error_drain`). Con `retain_enabled: false` il file di coda viene scritto e scartato:
-nessun transcript letto, nessun LLM, nessuna POST.
+`retain_every_n_turns`; con `HS_RETAIN_FORCE` (force) non avanza. Con `retain_enabled: false`
+il file di coda viene scritto e scartato: nessun transcript letto, nessun LLM, nessuna POST.
 
 **Promozione progetto → core (curata, mai automatica).** Il funnel è scan → triage LLM
 (`promote_model`, gpt-5.6-luna: *"resterebbe utile su un progetto completamente diverso?"*) → review umana →
@@ -611,12 +606,28 @@ move: comando **`/trinity:promote`**, meccanica in `hooks/hindsight/ops/hindsigh
 Il move ritiene l'`original_text` sul core (con strip dei tag `repo:`/`branch:`, che nello
 scope all_strict impedirebbero la fusione cross-repo) e cancella il documento dal bank
 progetto. Lo stato (revisionati, anche respinti, + cache dei verdetti triage) è in
-`logs/promote-state.json`. Il job settimanale `scheduler/promote_scan/` esegue solo
-scan+triage e apre un alert se ci sono candidati (vedi il suo README).
+`logs/promote-state.json`. Lo scan+triage si lancia a mano:
+`python hooks/hindsight/ops/hindsight-promote.py --triage` (nessun job schedulato).
 
-La configurazione del servizio (provider LLM/embedding, env TLS, task 
-`start/stop-hindsight`, `control-plane`) è in **`mise.toml`**, usato dagli hook via 
-`mise -C <plugin_root> run <task>`. È la fonte di verità del runtime Hindsight.
+**Server remoto (solo VPS, nessun fallback locale).** Il server Hindsight gira **solo** sulla VPS
+`infomaniak` come servizi `systemd --user`: `hindsight.service` (API+MCP su `127.0.0.1:8888`, senza
+auth: ascolta solo in locale), `hindsight-cp.service` (Control Plane su `:9999`) e
+`hindsight-backup.timer` (`mise run db-dump` con `HS_BACKUP_DIR=~/backups/hindsight`; restano gli
+ultimi 5 dump). Gestione: `systemctl --user status|restart hindsight`, log
+`journalctl --user -u hindsight`. I PC sono solo client: l'env `HINDSIGHT_SSH_TUNNEL=hindsight-vps`
+(in `~/.claude/settings.json`, generato da chezmoi) fa aprire a `hindsight-ensure-up.sh` il tunnel
+SSH che porta `127.0.0.1:8888` e `localhost:9999` in locale; la chiave SSH è dedicata e ristretta
+(`restrict,port-forwarding,permitopen="127.0.0.1:8888",permitopen="localhost:9999",command="/bin/false"`).
+Se il server non è raggiungibile l'hook lo dice e i tool `hindsight/*` mancano in sessione. Il
+Control Plane si apre su `http://localhost:9999` via tunnel.
+
+- **Restore** (sulla VPS): `systemctl --user stop hindsight-cp hindsight` → `mise run db-restore` →
+  `systemctl --user start hindsight hindsight-cp`.
+- **Upgrade Python** (sulla VPS): dopo `mise upgrade python` serve `mise run install-hindsight` e
+  `systemctl --user restart hindsight`.
+
+La configurazione del servizio (provider LLM/embedding, `control-plane`, `install-hindsight`,
+`db-dump`/`db-restore`) è in **`mise.toml`**: è la fonte di verità del runtime Hindsight.
 
 **Override della config per-progetto.** I parametri runtime degli hook (budget, tag, 
 `recall/retain_enabled`, timeout, …) stanno in **`hindsight.config.json` nella root del plugin**. 
@@ -713,6 +724,7 @@ del path si ricava con `cygpath -u`, non serve una variabile separata.
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `dot_claude/settings.json.tmpl` (repo dotfiles) |
+| tunnel Hindsight (§9) | `${HINDSIGHT_SSH_TUNNEL}` — host SSH della VPS (`hindsight-vps`), **solo sui PC**; sulla VPS non va impostata |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; serve solo se riattivi il server, disattivato di default) |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
@@ -723,13 +735,11 @@ del path si ricava con `cygpath -u`, non serve una variabile separata.
 
 ## 11. Job schedulati
 
-Su **Windows** i job girano via **System Scheduler (Splinterware)**; sul **server Linux**
-gli stessi job — limitati a quelli sensati sul server — girano via **timer systemd**
-(vedi [`scheduler/systemd/README.md`](scheduler/systemd/README.md) e la sottosezione 11.2).
+I job girano su Windows via **System Scheduler (Splinterware)**.
 
 ### 11.1 Windows — System Scheduler
 
-Sei job girano in background via **System Scheduler (Splinterware)**, lo scheduler a
+Tre job girano in background via **System Scheduler (Splinterware)**, lo scheduler a
 icona nella tray di Windows. Non sono hook Claude Code: girano indipendentemente dalla
 sessione, secondo una cadenza configurata nella GUI del programma. Ogni job segue la stessa
 struttura a tre livelli:
@@ -744,14 +754,10 @@ System Scheduler (orario programmato)
 Il `.cmd` è necessario perché System Scheduler è un eseguibile Windows puro: non può lanciare
 direttamente uno script MSYS2 senza che qualcuno prima imposti l'ambiente UCRT64. Il `.sh`
 gestisce log (una riga JSON per run), alert via Notepad e codici d'uscita standard (`0` = OK,
-`10` = novità/candidati, `3` = server Hindsight giù — il job salta senza tentare la
-connessione).
+`10` = novità).
 
 | Job | Cartella | Cadenza | Cosa fa |
 |---|---|---|---|
-| `api-check` | `scheduler/check_update_hindsight_api/` | settimanale | Controlla PyPI: nuova versione di `hindsight-api` o `hindsight-api-slim` rispetto a quella installata. Baseline = versione installata (si alza da sola dopo ogni upgrade, niente pin da aggiornare) |
-| `cp-check` | `scheduler/check_update_hindsight_control_plane/` | settimanale | Controlla npm: nuova versione di `@vectorize-io/hindsight-control-plane` rispetto all'ultima release vista in `cp-last-seen.state`. Primo run: seed silenzioso; poi avviso una sola volta per nuova release e baseline aggiornata automaticamente. Nessun pin: `control-plane` usa npx sempre-latest |
-| `promote-scan` | `scheduler/promote_scan/` | settimanale | Scansiona i bank Hindsight di progetto, triage LLM (`promote_model`, oggi gpt-5.6-luna) dei fatti candidati alla promozione sul core. Non promuove nulla: apre un alert se ci sono candidati per `/trinity:promote`. Verdetti cachati in `logs/promote-state.json` |
 | `nb-auth-refresh` | `scheduler/notebooklm/` | ogni 15–20 min | Rinnova i cookie di sessione di `notebooklm-py` (`__Secure-1PSIDTS`) prima che scadano. Dopo 3 fallimenti consecutivi apre un alert con le istruzioni per rigenerare i cookie SID di base |
 | `nb-check` | `scheduler/check_update_notebooklm/` | settimanale | Controlla PyPI: nuova versione di `notebooklm-py` rispetto a quella installata in `E:/AI/tools/notebooklm`. Baseline = versione installata (dal dist-info locale). Nota: la versione corrente viene da GitHub (`main`, exe-free); l'alert si attiverà quando PyPI raggiungerà la stessa versione |
 | `yt-check` | `scheduler/check_update_yt_extract/` | settimanale | Controlla GitHub (`/releases/latest`, fallback `/tags`): nuova versione del plugin `yt-extract` rispetto al clone locale `E:/AI/tools/claude-code-youtube-extract`. Baseline = prima riga `## [X.Y.Z]` del `CHANGELOG.md`. Ricorda: dopo ogni `git pull` va riapplicata la patch `run_ytdlp()` (exe-free) |
@@ -759,7 +765,7 @@ connessione).
 **Alert**: quando un job trova qualcosa da segnalare, scrive `*-ALERT.txt` nella sua cartella
 e lo apre in Notepad. Quando non c'è più nulla, **rimuove** l'alert: la sola presenza del
 file è un segnale affidabile. La variabile `*_NO_OPEN=1` evita l'apertura del Notepad nei
-test manuali (es. `PROMOTE_NO_OPEN=1 bash scheduler/promote_scan/promote-scan-scheduled.sh`).
+test manuali (es. `NB_NO_OPEN=1 bash scheduler/check_update_notebooklm/nb-check-scheduled.sh`).
 
 **Configurazione comune in System Scheduler:**
 
@@ -773,22 +779,6 @@ test manuali (es. `PROMOTE_NO_OPEN=1 bash scheduler/promote_scan/promote-scan-sc
 
 I dettagli di ogni job (campi esatti, note TLS/proxy, variabili override, test manuali) stanno
 nel `README.md` della rispettiva cartella.
-
-### 11.2 Linux (server) — timer systemd
-
-Sul server Linux non c'è System Scheduler: gli `*-scheduled.sh` (già bash portabile) sono
-lanciati **direttamente** da timer systemd utente, senza il ponte `.cmd`. Girano solo i 3 job
-sensati sul server; `nb-check`, `yt-check` e `nb-auth-refresh` restano Windows-only (dipendono
-dagli strumenti exe-free in `E:/AI/tools` e dai cookie del browser dell'utente).
-
-| Unit | Cadenza | Job |
-|---|---|---|
-| `trinity-promote-scan` | dom 09:00 | scan+triage candidati promozione |
-| `trinity-api-check` | dom 09:15 | nuove versioni `hindsight-api`/`-slim` su PyPI |
-| `trinity-cp-check` | dom 09:30 | nuova versione Control Plane su npm vs ultima release vista (`cp-last-seen.state`) |
-
-Installazione (unit utente, niente root), verifica e gestione: vedi
-[`scheduler/systemd/README.md`](scheduler/systemd/README.md).
 
 ---
 
@@ -983,11 +973,6 @@ default `/run/postgresql` la crea solo il servizio systemd di sistema.
 Verificare la configurazione effettiva per macchina: database distinti nello stesso
 cluster non isolano lo shutdown.
 
-> **Cluster condiviso:** `mise run stop-hindsight` e `hindsight-sentinel.sh` chiamano
-> `hindsight-stop-services.sh`, che arresta anche Postgres, non solo Hindsight.
-> Non usarli con LiteLLM attivo sullo stesso cluster; prima fermare LiteLLM ed evitare
-> che la sentinella spenga il cluster alla chiusura dell'ultima sessione Claude.
-
 Con questi tre pezzi a posto l'avvio è un comando solo:
 
 ```bash
@@ -1104,6 +1089,6 @@ Trinity/
 │   └── hindsight/           recall, retain, ensure-up, shutdown, lib, mcp (shim per-progetto), ops, tools
 │       └── benchmark/       benchmark embedding/reranker/recall (sviluppo)
 ├── scripts/                 script di servizio: bin/
-├── scheduler/               6 job Windows schedulati: api-check · cp-check · promote-scan · nb-auth-refresh · nb-check · yt-check
+├── scheduler/               3 job Windows schedulati: nb-auth-refresh · nb-check · yt-check
 └── sound/                   notifiche audio
 ```
