@@ -89,6 +89,8 @@ python scripts/linear_prune.py --team ICH --dry-run [--limit N]
 - `<doc-or-file>` is either an inline GraphQL string or a path to a `.graphql` file.
 - Rate-limit headers (`x-ratelimit-*`) and `x-complexity` are logged to **stderr** after every call.
 - 429 raises and exits non-zero with `retry-after` in the message. The CLI does not auto-retry.
+- Irreversible operations (`permanentlyDelete`, `organizationDelete*`, `cycleArchive`,
+  `commentDelete`) are refused without `--force`. Ask the user first, then re-run with `--force`.
 - Personal keys (`lin_api_…`) go in `Authorization` raw; OAuth tokens (`lin_oauth_…`) get a `Bearer ` prefix automatically.
 
 ## One worked example end-to-end

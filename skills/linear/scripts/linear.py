@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -149,9 +150,22 @@ query IntrospectType($name: String!) {
 """
 
 
+# Operazioni senza ritorno (niente cestino né unarchive): servono la conferma dell'utente e --force.
+IRREVERSIBLE = re.compile(r"\b(permanentlyDelete|organizationDelete\w*|cycleArchive|commentDelete)\b")
+
+
+def check_irreversible(document: str, variables: dict[str, Any], force: bool) -> None:
+    hit = IRREVERSIBLE.search(document) or IRREVERSIBLE.search(json.dumps(variables))
+    if hit and not force:
+        raise LinearError(
+            f"irreversible operation ({hit.group(1)}): ask the user to confirm, then re-run with --force"
+        )
+
+
 def cmd_query(args: argparse.Namespace, api_key: str, url: str) -> int:
     document = load_document(args.document)
     variables = load_variables(args.variables)
+    check_irreversible(document, variables, args.force)
     body = post_graphql(document, variables, api_key, url)
     json.dump(body.get("data", body), sys.stdout, indent=2, sort_keys=False)
     sys.stdout.write("\n")
@@ -187,11 +201,13 @@ def build_parser() -> argparse.ArgumentParser:
     q = sub.add_parser("query", help="Run a GraphQL query")
     q.add_argument("document", help="GraphQL string or path to .graphql file")
     q.add_argument("--variables", help='JSON string of variables, or "@path/to/file.json"')
+    q.add_argument("--force", action="store_true", help="allow irreversible operations (after user confirmation)")
     q.set_defaults(func=cmd_query)
 
     m = sub.add_parser("mutation", help="Run a GraphQL mutation")
     m.add_argument("document", help="GraphQL string or path to .graphql file")
     m.add_argument("--variables", help='JSON string of variables, or "@path/to/file.json"')
+    m.add_argument("--force", action="store_true", help="allow irreversible operations (after user confirmation)")
     m.set_defaults(func=cmd_mutation)
 
     i = sub.add_parser("introspect", help="Fetch schema info for a single type")

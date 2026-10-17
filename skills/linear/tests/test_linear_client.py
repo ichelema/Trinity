@@ -353,3 +353,35 @@ def test_load_variables_reports_bad_json_and_missing_file(tmp_path: Path) -> Non
     good = tmp_path / "vars.json"
     good.write_text('{"id": "ICH-1"}', encoding="utf-8")
     assert linear.load_variables(f"@{good}") == {"id": "ICH-1"}
+
+
+@respx.mock
+def test_irreversible_mutation_needs_force(api_key: str) -> None:
+    route = respx.post(linear.DEFAULT_URL).mock(
+        return_value=httpx.Response(200, json={"data": {"issueDelete": {"success": True}}})
+    )
+    hard = "mutation($id: String!) { issueDelete(id: $id, permanentlyDelete: true) { success } }"
+    args = linear.build_parser().parse_args(["mutation", hard, "--variables", '{"id": "ICH-1"}'])
+    with pytest.raises(linear.LinearError, match="irreversible operation"):
+        args.func(args, api_key, linear.DEFAULT_URL)
+    assert not route.called
+
+    # Vale anche col valore in una variabile e col sottocomando "query" (stesso trasporto).
+    via_vars = "mutation($i: String!, $p: Boolean) { issueDelete(id: $i, permanentlyDelete: $p) { success } }"
+    args = linear.build_parser().parse_args(["query", via_vars, "--variables", '{"i": "ICH-1", "p": true}'])
+    with pytest.raises(linear.LinearError, match="permanentlyDelete"):
+        args.func(args, api_key, linear.DEFAULT_URL)
+
+    args = linear.build_parser().parse_args(["mutation", hard, "--variables", '{"id": "ICH-1"}', "--force"])
+    assert args.func(args, api_key, linear.DEFAULT_URL) == 0
+    assert route.called
+
+
+@respx.mock
+def test_soft_delete_runs_without_force(api_key: str) -> None:
+    respx.post(linear.DEFAULT_URL).mock(
+        return_value=httpx.Response(200, json={"data": {"issueDelete": {"success": True}}})
+    )
+    soft = "mutation($id: String!) { issueDelete(id: $id) { success } }"
+    args = linear.build_parser().parse_args(["mutation", soft, "--variables", '{"id": "ICH-1"}'])
+    assert args.func(args, api_key, linear.DEFAULT_URL) == 0
