@@ -418,6 +418,5 @@ Una UI **opzionale**, indipendente dal server MCP, servita sulla VPS da `hindsig
 | Sintomo                                                   | Causa probabile                                          | Fix                                                                           |
 | --------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Tool `hindsight/*` non visibile in sessione               | Tunnel SSH non attivo o servizio giù sulla VPS           | Verifica `HINDSIGHT_SSH_TUNNEL`, poi `systemctl --user status hindsight` (VPS) e nuova sessione                    |
-| Server crash all'avvio con `UnicodeEncodeError 'charmap'` | `PYTHONUTF8` non esportato                               | Verifica `[env]` di `.mise.toml` (vedi memory `feedback-python-utf8-windows`) |
 | `recall` torna vuoto subito dopo un `retain`              | Estrazione fatti ancora in corso, perché è async         | Polla `get_operation(operation_id)` finché `completed`, poi ricalla           |
 | `OPENAI_API_KEY not set` nel log del server               | Variabile non disponibile al servizio sulla VPS          | Verifica con `mise env` e `journalctl --user -u hindsight`                                                       |
