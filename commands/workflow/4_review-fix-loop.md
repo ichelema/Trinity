@@ -1,19 +1,19 @@
 ---
 description:
-  Due review indipendenti in parallelo (trinity:reviewer su Fable, gpt-bridge:reviewer su GPT) su worktree isolati, loop
-  di fix minimi e report finale
+  Due review indipendenti in parallelo (trinity:reviewer su Fable, gpt-bridge:reviewer su GPT) su
+  worktree isolati, loop di fix minimi e report finale
 argument-hint: <issue-id...> <model>
 disable-model-invocation: true
 ---
 
 Esegui due review indipendenti e parallele della PR delle issue indicate su worktree isolati, poi
-applica i fix che meritano di essere fatti in un loop, finché non emergono più finding. In uscita,
-report sintetico.
+applica i fix dei finding reali in un loop di al massimo 3 round. In uscita, smista i finding
+residui (fix, issue Linear o PR in draft) senza perderne nessuno e scrivi un report sintetico.
 
-Le due review usano lo stesso prompt del reviewer su due modelli diversi: `trinity:reviewer` su Fable
-e `gpt-bridge:reviewer` su GPT 5.6 sol xhigh (via proxy LiteLLM, servito dalla mod gpt-bridge).
-Se `gpt-bridge:reviewer` non compare tra i subagent_type disponibili, la mod non è caricata: fermati
-e dillo all'utente prima di creare i worktree.
+Le due review usano lo stesso prompt del reviewer su due modelli diversi: `trinity:reviewer` su
+Fable e `gpt-bridge:reviewer` su GPT 5.6 sol xhigh (via proxy LiteLLM, servito dalla mod
+gpt-bridge). Se `gpt-bridge:reviewer` non compare tra i subagent_type disponibili, la mod non è
+caricata: fermati e dillo all'utente prima di creare i worktree.
 
 L'ultimo argomento è il modello: identifica il worktree di implementazione creato da
 `/1_create-worktree` (e quindi il branch della PR). Non sceglie il modello di esecuzione.
@@ -72,17 +72,19 @@ Per ogni round:
 2. Esegui `/trinity:workflow:3_independent-review` sui due worktree in parallelo, uno per reviewer,
    con argomenti `<issue-id...> <model> <review-wt-path>`. Il command ha
    `disable-model-invocation: true`: né tu né un subagente potete invocarlo come slash command, e un
-   `/...` nel prompt di un subagente non viene espanso.
-   Ogni reviewer scrive i file di appoggio solo in `<review-wt-path>/.review-tmp/`, mai altrove.
-   - review `fable`: tool Agent con `subagent_type: trinity:reviewer`; nel prompt digli
-     di leggere `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con
-     quegli argomenti al posto di `$ARGUMENTS`;
+   `/...` nel prompt di un subagente non viene espanso. Ogni reviewer scrive i file di appoggio solo
+   in `<review-wt-path>/.review-tmp/`, mai altrove.
+   - review `fable`: tool Agent con `subagent_type: trinity:reviewer`; nel prompt digli di leggere
+     `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con quegli
+     argomenti al posto di `$ARGUMENTS`;
    - review `gpt`: tool Agent con `subagent_type: gpt-bridge:reviewer`, stesso prompt della review
      `fable`. Il subagente gira su GPT via proxy LiteLLM con tool e permessi nativi, e compare nel
      pannello degli agenti come l'altro.
+
    Lancia le due Agent nello stesso messaggio, così girano in parallelo. Se `<model>` coincide con
    uno dei due modelli di review (`fable` o `gpt`), segnalalo: quella review gira sullo stesso
    modello che ha scritto il codice ed è meno indipendente.
+
 3. Raccogli i due report.
 4. Rimuovi i due worktree leggendo e seguendo
    `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` (per lo stesso motivo non puoi
