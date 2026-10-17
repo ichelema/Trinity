@@ -138,7 +138,7 @@ Non salvare:
 
 ## Quando usare recall proattivamente
 
-Il recall automatico è spento (`recall_enabled: false` in `hindsight.config.json`): chiama `recall` a mano, secondo la sezione «Recall a inizio task» di `core-behavior.md`.
+Se `recall_enabled` è `false` in `hindsight.config.json`, nessun hook fa il recall: chiama `recall` a mano, secondo la sezione «Recall a inizio task» di `core-behavior.md`.
 
 All’inizio di un nuovo task, dopo un reset del contesto, oppure quando l’utente fa riferimento a lavoro precedente, usa Hindsight recall.
 
@@ -324,7 +324,7 @@ In questo progetto Hindsight gira **solo sulla VPS `infomaniak`** (servizi `syst
 - Entry-point: `hindsight-local-mcp` (sulla VPS, lanciato dal servizio via `mise exec`)
 - Versione verificata: **1.0.0** (2026-10-14, PC Windows; la VPS va verificata a parte); query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
 - LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
-- Retain gate automatico: **`gpt-5.6-luna`** decide, **TypeSafe `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥ `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
+- Retain automatico: attivo solo se `retain_enabled` è `true` in `hindsight.config.json`; con `false` si salva solo con `retain` MCP. Il gate: **`gpt-5.6-luna`** decide, **TypeSafe `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥ `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
 - Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
 - Reranker: **`voyage/rerank-3`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
 - Altre feature 0.9.0 attive: recency decay esponenziale (halflife 60 giorni), audit log server-side (retention 30 giorni), `HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS=true` (estrazione fallita dopo i retry → operation `failed`, intercettata da `hindsight-failcheck.sh`)
@@ -348,7 +348,7 @@ Dal 2026-06-12 la memoria è a due livelli: il bank **CORE** `trinity-project`
 (informazioni trasversali) + un **bank per progetto** isolato, governati dal
 blocco `bank` di `hindsight.config.json`:
 
-- `retain_bank: "auto"` → il retain automatico scrive sul bank del progetto
+- `retain_bank: "auto"` → il retain automatico (se `retain_enabled` è `true`) scrive sul bank del progetto
   corrente (slug dal remote `origin`, fallback basename; fuori da git o nel
   repo Trinity stesso → core). Il bank si auto-crea al primo retain.
 - `recall_banks: ["auto", "core"]` → il recall fa fan-out parallelo su
