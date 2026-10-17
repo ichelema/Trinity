@@ -7,6 +7,9 @@ disable-model-invocation: true
 
 # ADHD
 
+Indice: Pre-flight · The loop (Phase 1 Diverge, Phase 2 Focus) · Frames · Output shape ·
+Anti-patterns · Calibration · Upstream
+
 Stop picking the textbook answer. The first three answers the model would
 give are the answers a senior engineer would give in thirty seconds.
 Correct. Forgettable. The interesting answers live past number three, in
@@ -56,21 +59,22 @@ strangles the generator.
 
 For the problem P:
 
-1. Pick 5 cognitive frames from the table below. Bias toward engineering
+1. Pick N cognitive frames from the table below (default 5, see Calibration). Bias toward engineering
    tags when the problem is code-shaped. Always include at least one wild
    frame to keep range.
 
-2. Spawn 5 **parallel** Agent/Task tool calls. One per frame. Each Agent
+2. Spawn N **parallel** Agent/Task tool calls. One per frame. Each Agent
    gets only:
    - the problem P
    - any context the user provided
    - the chosen frame's vantage prompt
    - a system instruction that forbids evaluation
 
-   The exact instruction to give each Agent:
+   The exact instruction to give each Agent (K = ideas per frame, default 6, see
+   Calibration):
 
    > You are in DIVERGENT mode. You are a generator, not a critic.
-   > Generate 6 short distinct ideas under this frame. Each idea is one
+   > Generate K short distinct ideas under this frame. Each idea is one
    > phrase or one sentence. Do not evaluate. Do not rank. Do not hedge.
    > The first three obvious answers everyone would give are banned.
    > Push past them into the awkward middle.
@@ -78,7 +82,7 @@ For the problem P:
    > `[{"text": "...", "rationale": "..."}, ...]`
 
 3. **Critical invariant.** The Agent calls must be parallel and isolated.
-   Do NOT serialize them. Do NOT pass one branch's output as context to
+   Do not serialize them. Do not pass one branch's output as context to
    another. Branches that see each other anchor each other and the whole
    method collapses to a wider single thought.
 
@@ -116,7 +120,7 @@ After all branches return:
 
 ## Frames
 
-Pick 5 per run.
+Pick N per run (default 5, see Calibration).
 
 | Frame | Vantage prompt | Tags |
 |---|---|---|
@@ -162,22 +166,24 @@ prose. The structure is the point.
 
 ## Anti-patterns
 
-These are how this skill goes wrong. Watch for them.
+Before rendering the Output shape, check every item below. If one fires, go
+back to the step in brackets, then check the whole list again.
 
 - **Convergence disguised as divergence.** Ten minor variations of one idea
   is not breadth. If every candidate shares the same underlying assumption,
-  you have not diverged. You have decorated.
+  you have not diverged. You have decorated. [Phase 1, with 2 new frames]
 - **Weird-for-weird's-sake with no convergence.** A pile of 30 unsorted
-  absurdities is as useless as one safe answer. Always converge.
+  absurdities is as useless as one safe answer. Always converge. [Phase 2,
+  step 3]
 - **Walls of equally-weighted prose.** Cluster, label, pull out the best.
-  Structure is half the value.
+  Structure is half the value. [Phase 2, step 2]
 - **Refusing to commit.** After diverging, take a position on what is
   actually promising. "Here are 20 ideas, you decide" is a cop-out.
-  Generate wide, but converge with a real opinion.
+  Generate wide, but converge with a real opinion. [Output shape, item 3]
 - **Skipping the isolation invariant.** If you simulate parallel branches
   by writing them sequentially in one context, you have not done ADHD. You
   have done a wider single thought. The Agent/Task tool gives each branch a
-  fresh context. Use it.
+  fresh context. Use it. [Phase 1, step 2]
 
 ## Calibration
 
@@ -190,21 +196,7 @@ These are how this skill goes wrong. Watch for them.
 - **When to stop diverging?** Stop when new candidates start repeating the
   shape of existing ones. The space is mapped. Do not pad to hit a number.
 
-## Cost
-
-5 diverge + 1 score + 1 cluster + 3 deepen ≈ 10 Agent calls per run.
-About 5 to 10x a single-shot answer. Not for every keystroke. For decision
-points where the cost of the obvious answer is high.
-
 ## Upstream
 
 Code, paper, evals, and contributing guide at
 https://github.com/UditAkhourii/adhd.
-
-## Source spec
-
-This skill operationalises a written spec on divergent ideation. The
-original prose is preserved in `SOURCE-SPEC.md` for reference. The
-implementation choices made here (parallel isolated Agent calls,
-mechanical generator/critic split, frame-based branching) follow from
-that spec.
