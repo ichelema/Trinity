@@ -40,6 +40,9 @@ Documentazione upstream in `references/hindsight-docs/references/`, da leggere d
 - `developer/configuration.md`: variabili `HINDSIGHT_API_*`
 - altre pagine: cerca con Grep o Glob nella stessa cartella
 
+`references/hindsight-architect/` e `references/hindsight-docs/` sono copie upstream
+(vectorize-io/hindsight): non modificarle, il prossimo allineamento le sovrascrive.
+
 ## Operazioni di memoria via MCP
 
 I tool MCP con prefisso `hindsight/` esposti dal setup locale sono filtrati da
@@ -410,8 +413,9 @@ Una UI **opzionale**, indipendente dal server MCP, servita sulla VPS da `hindsig
 - **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `localhost` con `HOSTNAME=localhost` e `--hostname localhost` (no LAN; configurazione conservata dal workaround storico dell'origin mismatch). URL consigliato: `http://localhost:9999`. Non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi.
 - Per analizzare `hindsight-debug.log` (JSONL) non serve una UI: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
 
-> Panoramica memoria: vedi `README.md` §9. Dettagli di avvio e bind `HOSTNAME`:
-> task `control-plane` in `mise.toml`.
+> Note operative in `README.md` (stessa cartella): «Mappa dei file», «Debug log»,
+> «Recall — come funziona», «Test», «Interfaccia web (Control Plane)».
+> Dettagli di avvio e bind `HOSTNAME`: task `control-plane` in `mise.toml`.
 
 ## Troubleshooting rapido
 

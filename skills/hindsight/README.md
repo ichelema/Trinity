@@ -1,10 +1,16 @@
 # Hindsight hooks — note di sessione
 
 Riepilogo di quanto appreso/modificato lavorando sugli hook Hindsight di Claude Code
-in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
+in `hooks/hindsight/` (radice del plugin). Documento operativo, non sostituisce
 `SKILL.md` (che resta la guida alle operazioni MCP retain/recall/reflect).
 
 > Sessione del 2026-05-25.
+
+Indice: 1 Mappa dei file · 2 Config attuale · 3 Debug log · 4 Recall — come funziona ·
+5 Timeout · 6 Niente `top_k`/`limit` lato server · 7 `recall_types` · 8 Stato pending ·
+9 Retain — throttling · 10 Test · 11 Comandi utili · 12 Memorie MCP salvate in sessione ·
+13 Benchmark provider LLM · 14 Configurazione multilingua · 15 Interfaccia web (Control Plane) ·
+16 Gate pre-recall
 
 ---
 
@@ -19,7 +25,6 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 | `hindsight-retain-worker.py`                         | Worker del retain (nessuno Stop hook): lanciato da `hindsight-recall.sh`, valuta il turno precedente al prompt successivo e salva un riassunto del turno nel bank (ICH-86) |
 | `hindsight_debug.py`                                 | Logging JSONL opzionale (recall/retain)                                                                                                            |
 | `hindsight-check.sh`                                 | **Diagnostica live** server + hook (vedi §10)                                                                                                      |
-| `logs/tail-hindsight.nu`                             | Viewer Nushell del debug log                                                                                                                       |
 
 ---
 
@@ -45,24 +50,11 @@ in `E:\AI\Claude\Trinity\hooks\hindsight\`. Documento operativo, non sostituisce
 ## 3. Debug log
 
 - **Abilitazione**: `debug_log_enabled: true`. È OFF nei `DEFAULTS` spediti (best-effort, costo ~0 da spento).
-- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log` (es. `E:\AI\Claude\Trinity\logs\`).
+- **Path quando `debug_log_file` è vuoto**: `<plugin>/logs/hindsight-debug.log`.
   Calcolato in `hindsight_debug.py::_log_path()` relativo al modulo (risale 3 livelli da
   `hooks/hindsight/lib/`), quindi è portabile se sposti il plugin.
 - **Formato**: JSONL, un evento per riga. Rotazione automatica a 5 MB → `.log.1`.
-- **Viewer**: `nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip`.
-
-### Colonne del viewer (`tail-hindsight.nu`)
-
-Sono ricostruite dai campi JSONL; vuote se l'evento non ha quel campo.
-
-| Colonna  | Campo                                                            | Su quali eventi      |
-| -------- | ---------------------------------------------------------------- | -------------------- |
-| `event`  | tipo evento                                                      | tutti                |
-| `status` | codice HTTP della POST                                           | solo `retain_result` |
-| `source` | `fresh` (ogni recall normale interroga il server)                 | solo `recall`        |
-| `n`      | `n_results` (conteggio GREZZO del server, **prima** dello slice) | solo `recall`        |
-| `doc`    | `doc_id`                                                         | `retain*`            |
-| `level`  | derivata (ERROR/SKIP/OK/INFO), non è un campo del log            | tutti                |
+- **Lettura**: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
 
 ---
 
@@ -207,8 +199,8 @@ curl -fsS -m 3 http://127.0.0.1:8888/ -o /dev/null -w "%{http_code}\n"
 # Suite di test
 PYTHONUTF8=1 bash "$TRINITY_PLUGIN_DIR/hooks/hindsight/tools/hindsight-check.sh"
 
-# Tail del debug log
-nu logs/tail-hindsight.nu --events recall,recall_error,recall_skip
+# Eventi recall dal debug log
+nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"
 
 # Leggere un valore di config
 PYTHONUTF8=1 python "$TRINITY_PLUGIN_DIR/hooks/hindsight/lib/hindsight_config.py" --get recall_timeout
@@ -227,7 +219,7 @@ Nel bank `trinity-project`:
 
 ## 13. Benchmark provider LLM (velocità/qualità)
 
-**Posizione**: `E:\AI\Claude\Trinity\hooks\hindsight\benchmark\` — spostato da `test/` il 2026-05-25. I path interni sono relativi a `__dir__`, quindi lo script è rilocabile (corpus e risultati vivono accanto al `.rb`).
+**Posizione**: `hooks/hindsight/benchmark/` — spostato da `test/` il 2026-05-25. I path interni sono relativi a `__dir__`, quindi lo script è rilocabile (corpus e risultati vivono accanto al `.rb`).
 
 | File                     | Ruolo                                                                                                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -261,7 +253,7 @@ HINDSIGHT_API_EMBEDDINGS_GEMINI_OUTPUT_DIMENSIONALITY = 1536
 HINDSIGHT_API_RERANKER_LOCAL_MODEL                    = "BAAI/bge-reranker-v2-m3"
 ```
 
-Gemini (1536d, cloud, multilingue) evita il modello di embedding pesante in locale; richiede `GEMINI_API_KEY` nell'env. Il reranker all'epoca era locale; dal 2026-07-27 (sunset ZeroEntropy) in produzione è **`voyage/rerank-2.5`** via provider `litellm-sdk` (`VOYAGE_API_KEY`), con failover RRF (`HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"`); la riga `RERANKER_LOCAL_MODEL` resta in `mise.toml` ma non è il provider attivo. L'embedding multilingue permette comunque il match cross-lingua (query IT → fatti EN/IT). Verificato end-to-end.
+Gemini (1536d, cloud, multilingue) evita il modello di embedding pesante in locale; richiede `GEMINI_API_KEY` nell'env. Il reranker all'epoca era locale; dal 2026-07-27 (sunset ZeroEntropy) il server usa Voyage, dal 2026-10-04 **`voyage/rerank-3`** (prima `rerank-2.5`; il merge client-side multibank resta su `rerank-2.5`) via provider `litellm-sdk` (`VOYAGE_API_KEY`), con failover RRF (`HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"`); la riga `RERANKER_LOCAL_MODEL` resta in `mise.toml` ma non è il provider attivo. L'embedding multilingue permette comunque il match cross-lingua (query IT → fatti EN/IT). Verificato end-to-end.
 
 ### 14a. Lingua dei fatti generati — servono DUE mission (verificato 2026-05-25)
 
@@ -291,44 +283,7 @@ Il rebuild **azzera il bank Hindsight** (la memoria file-based è separata e res
 
 ---
 
-## 15. Command `/hindsight-create-agent` — subagent con memoria isolata
-
-**File**: `commands/hindsight-create-agent.md` (slash command, accanto a `reflect.md`).
-Crea un subagent in `.claude/agents/<nome>.md` con memoria persistente Hindsight sul bank
-`trinity-project`. Adattato dalla skill esterna `create-agent` del plugin marketplace, traducendo
-i tool `agent_knowledge_*` nei tool locali `mcp__hindsight__*`.
-
-**Uso**:
-
-```bash
-/hindsight-create-agent ruby-helper "assistente per script Ruby su MSYS2"
-```
-
-**Scelte di design** (specifiche di questo setup):
-
-| Aspetto              | Scelta                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| Server MCP           | Ereditato dalla sessione (`hindsight` in `.mcp.json`). Frontmatter usa `tools:`, **non** `mcpServers:` |
-| Bank                 | Inchiodato nell'URL MCP (`/mcp/trinity-project/`) → non passare `bank_id` ai tool                      |
-| Isolamento per-agent | Tag-namespace **`agent:<nome>`** su ogni `recall`/`retain`/`create_mental_model`                       |
-| Knowledge page       | = mental model. Id prefissato `<nome>-<argomento>`, taggato `agent:<nome>`                             |
-| Startup dell'agent   | `list_mental_models(tags=[agent:<nome>])` → `get_mental_model` → `recall(tags=[agent:<nome>])`         |
-
-**GOTCHA isolamento — verificato con collaudo live (2026-05-25):**
-
-- ✅ Il filtro per tag **isola** le memorie taggate: un fatto `agent:X` NON è visibile da un
-  `recall(tags=["agent:Y"])`. (Test: keyword `ZARQUON-7742` taggata `agent:test-isolation`,
-  invisibile da un namespace estraneo.)
-- ⚠️ I fatti **senza tag** (`tags: []`) restano **globali**: vengono restituiti a _qualsiasi_
-  namespace anche con `tags_match="any"`. Il filtro esclude i fatti con _altri_ tag, non quelli
-  non taggati.
-- → L'isolamento è **protettivo a senso unico**: un agent non inquina gli altri (se tagga sempre),
-  ma vede comunque il pool comune non taggato del progetto. Dipende dalla **disciplina di tagging**:
-  per questo il template impone il tag obbligatorio su ogni operazione.
-
----
-
-## 16. Interfaccia web (Control Plane)
+## 15. Interfaccia web (Control Plane)
 
 > Sessione del 2026-05-26.
 
@@ -374,7 +329,7 @@ journalctl --user -u hindsight-cp -n 50
 
 ---
 
-## 17. Gate pre-recall (ICH-66) — misurato e scartato
+## 16. Gate pre-recall (ICH-66) — misurato e scartato
 
 > Valutazione del 2026-08-10 su 100 prompt reali; benchmark rimossi con ICH-97
 > (il write-up completo era `hooks/hindsight/benchmark/RECALL_GATE_EVALUATION.md`).
