@@ -9,6 +9,10 @@ description: >-
 
 # SKILL
 
+Indice: Configurazione · References della skill · Skill operative correlate · Struttura del Vault ·
+Regola principale · Uso del MCP · Risposte basate sul Vault · Strategia operativa ·
+Anti-allucinazione · Stile · Salvataggio note con Excalidraw · Skill correlate
+
 Esperto di Obsidian, PKM, knowledge graph e dell'ecosistema plugin. Risposte precise, dirette e non
 generiche. Quando la richiesta riguarda contenuti reali del Vault, usare il server MCP Obsidian
 invece di rispondere a memoria.
@@ -18,11 +22,14 @@ invece di rispondere a memoria.
 ## Configurazione
 
 - Vault: il percorso è nella variabile d'ambiente `OBSIDIAN_VAULT` (nome in `OBSIDIAN_VAULT_NAME`). Leggilo con `echo "$OBSIDIAN_VAULT"` prima di usare percorsi file. Nei documenti `{OBSIDIAN_VAULT}` indica questo valore.
-- MCP Obsidian: `obsidian_semantic_notes_vault`
-- Plugin rilevanti:
+- MCP Obsidian: `obsidian_semantic_notes_vault` (`http://localhost:3002/mcp`, definito in `.mcp.json`
+  del plugin; risponde solo con Obsidian aperto)
+- Plugin community che devono essere attivi nel vault:
   - `obsidian-excalidraw-plugin`
   - `obsidian-advanced-uri`
-  - `Semantic Notes Vault MCP`
+  - `Semantic Notes Vault MCP` (espone il server MCP)
+- `prettier` per la nota del giorno: Arch `pacman -S --noconfirm prettier`; MSYS2
+  `pacman -S --noconfirm mingw-w64-ucrt-x86_64-prettier`
 
 Il server MCP fornisce accesso semantico al Vault: ricerca, lettura, creazione/modifica note,
 graph/backlink, Dataview e Bases se disponibili.
@@ -75,25 +82,28 @@ Regola di routing:
 Usare questa struttura come mappa operativa del Vault. Prima di creare o modificare file, verificare
 sempre path e note reali tramite MCP.
 
-| Area                   | Scopo              | Uso operativo                                                                                               |
-| ---------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `Inbox/`               | cattura grezza     | note temporanee, idee non processate, appunti rapidi                                                        |
-| `🌅Daily/`             | diario giornaliero | nota del giorno `YYYY-MM-DD.md`: storico del lavoro svolto, obiettivi, apprendimenti, riassunto sessione AI |
-| `Topic/`               | argomenti/MOC/Hub  | note indice, mappe tematiche, hub concettuali                                                               |
-| `Evergreen/`           | conoscenza stabile | note sintetiche, mature, riusabili nel tempo                                                                |
-| `Atomic/`              | idee atomiche      | singole idee Zettelkasten, concetti isolati e linkabili                                                     |
-| `Literature/`          | fonti              | appunti da libri, articoli, video, documentazione esterna                                                   |
-| `Reference/`           | reference          | documentazione tecnica, guide, snippet, materiale consultabile                                              |
-| `Progetti/Template/`   | template progetto  | strutture riusabili per nuovi progetti                                                                      |
-| `Progetti/Progress/`   | progetti attivi    | progetti in lavorazione                                                                                     |
-| `Progetti/Iniziare/`   | backlog iniziale   | progetti da avviare                                                                                         |
-| `Progetti/Futuro/`     | incubazione        | idee progettuali future                                                                                     |
-| `Progetti/Attesa/`     | waiting            | progetti in attesa di input esterni                                                                         |
-| `Progetti/Bloccato/`   | blocked            | progetti bloccati                                                                                           |
-| `Progetti/Completato/` | done               | progetti conclusi                                                                                           |
-| `Progetti/Sospeso/`    | paused             | progetti sospesi                                                                                            |
+I nomi delle cartelle contengono emoji: usali identici, altrimenti nasce una cartella nuova.
 
-Struttura interna consigliata per ogni progetto in `Progetti/Progress/<Nome Progetto>/`:
+| Area                       | Scopo              | Uso operativo                                                                                                       |
+| -------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `📥Inbox/`                 | cattura grezza     | note temporanee, idee non processate, appunti rapidi                                                                |
+| `🌅Daily/YYYY-MM/`         | diario giornaliero | nota del giorno `YYYY-MM-DD.md`: storico del lavoro svolto, obiettivi, apprendimenti, riassunto sessione AI         |
+| `🗂️Topic/`                 | argomenti/MOC/Hub  | note indice, mappe tematiche, hub concettuali                                                                       |
+| `🌿Evergreen/`             | conoscenza stabile | note sintetiche, mature, riusabili nel tempo                                                                        |
+| `⚛️Atomic/`                | idee atomiche      | singole idee Zettelkasten, concetti isolati e linkabili                                                             |
+| `🪶Literature/`            | fonti              | appunti da libri, articoli, video, documentazione esterna                                                           |
+| `🗃️Reference/`             | reference          | documentazione tecnica, guide, snippet, materiale consultabile                                                      |
+| `📂Files/`                 | allegati           | pdf, immagini, video e documenti linkati dalle note                                                                 |
+| `🛠️Progetti/🛠️Template/`   | template progetto  | strutture riusabili per nuovi progetti                                                                              |
+| `🛠️Progetti/🚀Progress/`   | progetti attivi    | progetti in lavorazione                                                                                             |
+| `🛠️Progetti/🟢Iniziare/`   | backlog iniziale   | progetti da avviare                                                                                                 |
+| `🛠️Progetti/✨Futuro/`     | incubazione        | idee progettuali future                                                                                             |
+| `🛠️Progetti/⏸Attesa/`      | waiting            | progetti in attesa di input esterni                                                                                 |
+| `🛠️Progetti/🚫Bloccato/`   | blocked            | progetti bloccati                                                                                                   |
+| `🛠️Progetti/✅Completato/` | done               | progetti conclusi                                                                                                   |
+| `🛠️Progetti/🗑️Sospeso/`    | paused             | progetti sospesi                                                                                                    |
+
+Struttura interna consigliata per ogni progetto in `🛠️Progetti/🚀Progress/<Nome Progetto>/`:
 
 | Cartella         | Contenuto                                                 |
 | ---------------- | --------------------------------------------------------- |
@@ -106,14 +116,14 @@ Struttura interna consigliata per ogni progetto in `Progetti/Progress/<Nome Prog
 
 Regole di destinazione:
 
-- nuova idea grezza → `Inbox/`;
-- concetto singolo → `Atomic/` o `Progetti/Progress/<progetto>/02_Atomic/`;
-- conoscenza consolidata → `Evergreen/` o `Progetti/Progress/<progetto>/01_Evergreen/`;
-- nota da fonte esterna → `Literature/` o `Progetti/Progress/<progetto>/03_Literature/`;
-- documentazione/reference → `Reference/` o `Progetti/Progress/<progetto>/04_Reference/`;
-- file, immagini, canvas o Excalidraw di progetto → `Progetti/Progress/<progetto>/05_Files/`;
-- nuova MOC o tema → `Topic/`;
-- nota del giorno / log giornaliero → `🌅Daily/YYYY-MM-DD.md`.
+- nuova idea grezza → `📥Inbox/`;
+- concetto singolo → `⚛️Atomic/` o `🛠️Progetti/🚀Progress/<progetto>/02_Atomic/`;
+- conoscenza consolidata → `🌿Evergreen/` o `🛠️Progetti/🚀Progress/<progetto>/01_Evergreen/`;
+- nota da fonte esterna → `🪶Literature/` o `🛠️Progetti/🚀Progress/<progetto>/03_Literature/`;
+- documentazione/reference → `🗃️Reference/` o `🛠️Progetti/🚀Progress/<progetto>/04_Reference/`;
+- file, immagini, canvas o Excalidraw di progetto → `🛠️Progetti/🚀Progress/<progetto>/05_Files/`;
+- nuova MOC o tema → `🗂️Topic/`;
+- nota del giorno / log giornaliero → `🌅Daily/YYYY-MM/YYYY-MM-DD.md`.
 
 Se non ti e chiara la struttura guarda immagine in `references/struttura directory del Vault.png`
 
@@ -182,7 +192,7 @@ Preservare sempre struttura, frontmatter, wikilink e block ID.
 
 Prima di creare una nota:
 
-1. cercare se esiste già qualcosa di simile;
+1. cercare se esiste già qualcosa di simile; se esiste, passa a «Modifica note» (append o patch);
 2. scegliere un path coerente;
 3. selezionare il template più adatto dalla cartella `templates/` della skill;
 4. usare frontmatter valido;
@@ -191,6 +201,19 @@ Prima di creare una nota:
 
 Usare sempre come base per la creazione della nota i template presenti in `templates/` e
 `templates/Template-Progetto`
+
+Copia il template identico, con queste eccezioni:
+
+- H1 = titolo della nota;
+- `data_creazione` e `data_modifica` = ora attuale (`YYYY-MM-DDTHH:mm`);
+- `note_id` = nuovo id casuale di 10 caratteri (un `note_id` copiato rompe il filtro
+  `exclude_note_id` del blocco `base`);
+- `tags` e `project` ricavati dal contenuto;
+- nei template di progetto: `project:` e i path `🛠️Progetti/🚀Progress/Template/...` del
+  blocco `base` usano il nome reale del progetto al posto di `Template`.
+
+Sezioni e blocco `base` restano identici. `templates/New-Project.md` è uno script Templater
+(`<%* … %>`): funziona solo dentro Obsidian, non copiarlo via MCP.
 
 Scegliendo in base al tipo di nota:
 
@@ -205,7 +228,7 @@ Scegliendo in base al tipo di nota:
 - `Template-Progetto/01_Evergreen/Progetto-Evergreen` → nota evergreen legata a un progetto;
 - `Template-Progetto/02_Atomic/Progetto-Atomic` → nota atomica legata a un progetto;
 - `Template-Progetto/03_Literature/Progetto-Literature` → nota literature legata a un progetto;
-- `Template-Progetto/04_Reference/Template-Reference.md` → nota (reference,documenti,pagine web)
+- `Template-Progetto/04_Reference/Progetto-Reference` → nota (reference,documenti,pagine web)
   legata a un progetto che hanno link al file si trova in `Template-Progetto/05_Files/file.jpg`;
 - `Template-Progetto/05_Files/file.png` → file di vario genere pdf, jpg, png, video, documenti
   relativi al progetto che verrano linkati nelle note andranno qui;
@@ -214,7 +237,9 @@ Non inventare strutture manuali se esiste un template adatto. Se il template ric
 cartella templates/, dichiararlo e usare il template più vicino senza alterare la semantica della
 nota.
 
-Dopo la creazione, riportare template usato, path, contenuto aggiunto e link inseriti.
+Dopo la creazione, rileggi la nota via MCP e controlla frontmatter valido, path con le emoji
+corrette e link: i link a note inesistenti vanno segnalati come proposti. Se un controllo fallisce,
+correggi e ricontrolla. Poi riporta template usato, path, contenuto aggiunto e link inseriti.
 
 ---
 
@@ -349,18 +374,6 @@ Non ho trovato una nota esistente con quel nome. Posso proporre un nuovo path co
 
 ---
 
-## Concetti core Obsidian
-
-- Vault: cartella su disco; note in `.md`.
-- Internal link: `[[folder/Nota]]` o `[[folder/Nota|Alias]]`.
-- Block reference: `[[folder/Nota#^blockid]]`.
-- Frontmatter: YAML tra `---` in cima al file.
-- Backlink/Graph: generati dai wikilink.
-- Canvas: file `.canvas` JSON.
-- Excalidraw: file `.excalidraw.md`.
-
----
-
 ## Stile
 
 Rispondere in modo pragmatico, sintetico e tecnico.
@@ -368,10 +381,6 @@ Rispondere in modo pragmatico, sintetico e tecnico.
 - Per richieste semplici: risposta diretta, senza MCP inutile.
 - Per richieste sul Vault: usare MCP, mostrare fonti e distinguere dati da inferenze.
 - Per modifiche: leggere prima, modificare con precisione, verificare dopo.
-
-## Generazioni grafici e disegni con excalidraw
-
-Per la generezaione di grafici e disegni vedi la skill `references/excalidraw-obsidian-format.md`
 
 ## Salvataggio note con Excalidraw
 
@@ -383,8 +392,8 @@ vault, accanto al file `.excalidraw.md`:
 | Disegno (gestito dall'hook)   | `Excalidraw/<nome>.excalidraw.md` |
 | Nota che incorpora il disegno | `Excalidraw/<nome-nota>.md`       |
 
-Regola: se la nota contiene `![[Excalidraw/...]]`, salvala in `Excalidraw/`. Non usare `Reference/`,
-`Evergreen/` o altre cartelle per queste note.
+Regola: se la nota contiene `![[Excalidraw/...]]`, salvala in `Excalidraw/`. Non usare `🗃️Reference/`,
+`🌿Evergreen/` o altre cartelle per queste note.
 
 ---
 
@@ -392,5 +401,3 @@ Regola: se la nota contiene `![[Excalidraw/...]]`, salvala in `Excalidraw/`. Non
 
 - Canvas live: la skill `excalidraw-skill`
 - Per il canvas work usa: la skill `excalidraw-skill`
-- Per il generare excalidraw: la skill `references/excalidraw-obsidian-format.md`
-- Per modifica e creazione nota del giorno: la skill `references/nota-del-giorno.md`

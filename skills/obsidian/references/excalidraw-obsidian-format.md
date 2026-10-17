@@ -1,5 +1,10 @@
 # Excalidraw Obsidian Format
 
+Indice: Regole operative essenziali · Convenzioni e placeholder · Formato file `.excalidraw.md` ·
+Embedding nelle note · Pattern comuni · Workflow canvas MCP → vault · Niente screenshot non
+richiesti · File-edit per modifiche multiple · Strategia di verifica · Regole negative · Aprire un
+file nel vault · Troubleshooting · Skill correlate
+
 Reference operativa per Claude Code: creare, salvare e incorporare file Excalidraw nel Vault Obsidian partendo dal canvas live MCP.
 
 Questo documento distingue in modo esplicito:
@@ -20,7 +25,7 @@ Questo documento distingue in modo esplicito:
 - **`export_scene` = pubblica nel vault**: l'hook converte e salva il `.excalidraw.md` direttamente nel vault (PostToolUse su `export_scene`), poi rimuove il grezzo. Tu non sposti nulla.
 - **Formato target nel vault**: usare sempre `.excalidraw.md` Obsidian-native.
 - **Embed Excalidraw**: usare sempre `![[<DRAWING_NAME>.excalidraw.md]]` con estensione completa.
-- **Aprire nel vault** (opzionale): tool MCP `obsidian-semantic-notes-vault`, chiamata `view open_in_obsidian` (path relativo).
+- **Aprire nel vault** (opzionale): tool MCP `obsidian_semantic_notes_vault`, chiamata `view open_in_obsidian` (path relativo).
 - **Creazione file nel vault**: note `.md` e disegni vanno creati automaticamente senza chiedere conferma, salvo indicazione esplicita dell'utente.
 - **Nessun controllo pesante non richiesto**: non usare screenshot per verificare il proprio lavoro; usare `describe_scene` o fidarsi della response del tool quando sufficiente.
 - **Nessuna lettura massiva del file esportato**: non leggere con `Read` il `.excalidraw` generato da `export_scene`, perché può superare i token limit.

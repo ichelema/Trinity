@@ -1,5 +1,8 @@
 # Creare e modificare le Note del Giorno in Obsidian
 
+Indice: Workflow · Struttura della nota · Regole operative essenziali · Formattazione con Prettier ·
+Strategia di verifica · Regole negative · Aprire un file nel vault
+
 Reference operativa per Claude Code: creare e aggiornare le Note del Giorno (daily
 note) nel Vault Obsidian, partendo dal Template `templates/Template-Daily.md`.
 
@@ -207,6 +210,14 @@ Dopo aver creato/aggiornato la nota, controlla che:
   nella sessione;
 - frontmatter e titolo rispettino i formati sopra;
 - non ci siano tag e nessun header contenga `:`.
+
+Se un controllo fallisce, torna al passo indicato del Workflow, poi ripeti tutta la verifica
+finché passano tutti i punti:
+
+- link `[[#...]]` non risolto, sessione senza i quattro `####`, frontmatter, titolo, tag o
+  header con `:` → passo 4 (Compila);
+- separatore `---` diventato `- ***` o mancante → passo 7 (Prettier), poi correggi i separatori;
+- issue non Done su Linear o dettagli tecnici che non combaciano → passo 1 (Raccogli).
 
 ---
 
