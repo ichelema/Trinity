@@ -33,6 +33,8 @@ lunghezza al pubblico e al formato richiesto nel piano (`brief.md`).
 
 ## Controllo finale
 
+Se un punto fallisce, correggi il report e ricontrolla tutta la lista.
+
 - Ogni affermazione ha una citazione.
 - Nessuna opinione senza fonte.
 - Terminologia coerente.

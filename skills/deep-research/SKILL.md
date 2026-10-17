@@ -55,6 +55,10 @@ fallisce ancora, continua e annota la lacuna.
 Leggi i file di output. Scegli le 5-10 affermazioni che reggono le conclusioni o che si
 contraddicono. Controlla ognuna con `references/fact-check.md`.
 
+Se un'affermazione portante risulta FALSE o UNVERIFIABLE, torna al passo 3 con una query
+mirata, una sola volta. Se resta aperta, annotala tra le lacune e togli la conclusione che
+si appoggia su di lei.
+
 ## 5. Sintesi e report
 
 - Raggruppa i risultati per tema. Unisci i duplicati e conserva le fonti.
