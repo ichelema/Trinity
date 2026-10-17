@@ -6,8 +6,7 @@ description: Hindsight persistent memory system for AI agents. Use when working 
 # Hindsight Memory System
 
 Indice: Sicurezza · Quale sub-skill caricare · Operazioni di memoria via MCP ·
-Quando usare retain, recall e reflect · IMPORTANTE: Quando Memorizzare e Richiamare ·
-Il campo `context` · Regole di Tagging · Migliori Pratiche · Esempi ·
+Quando usare retain, recall e reflect · Il campo `context` · Regole di Tagging · Esempi ·
 Setup attivo in questo progetto · Troubleshooting rapido
 
 Hindsight è un sistema di memoria persistente per agenti AI che implementa operazioni **retain / recall / reflect**.
@@ -119,6 +118,7 @@ Salva:
 - vincoli specifici del progetto
 - preferenze utente
 - lavoro irrisolto o follow-up futuri
+- workaround, incompatibilità e requisiti di versione
 
 Non salvare:
 
@@ -137,6 +137,8 @@ Non salvare:
 - Documentazione duplicata (es. CLAUDE.md è già caricato)
 
 ## Quando usare recall proattivamente
+
+Il recall automatico è spento (`recall_enabled: false` in `hindsight.config.json`): chiama `recall` a mano, secondo la sezione «Recall a inizio task» di `core-behavior.md`.
 
 All’inizio di un nuovo task, dopo un reset del contesto, oppure quando l’utente fa riferimento a lavoro precedente, usa Hindsight recall.
 
@@ -216,46 +218,6 @@ tags: claude-code (eventualmente + repo:<nome> per scoping di progetto)
 tags_match: any
 ```
 
-## IMPORTANTE: Quando Memorizzare le Informazioni
-
-Memorizza sempre le informazioni durature e utili dopo averle apprese.
-
-### Preferenze dell'Utente
-
-- Stile di codifica: indentazione, convenzioni di denominazione, preferenze linguistiche
-- Preferenze degli strumenti: gestori di pacchetti, editor, linter, formattatori
-- Preferenze di comunicazione
-- Convenzioni del progetto
-- Preferenze architettoniche
-
-### Risultati delle Procedure
-
-- Passaggi che hanno completato con successo un'attività
-- Comandi che hanno funzionato o fallito e perché
-- Soluzioni alternative (workaround) scoperte
-- Configurazioni che hanno risolto problemi
-- Flussi di debug affidabili
-
-### Apprendimenti dalle Attività
-
-- Bug riscontrati e relative soluzioni
-- Ottimizzazioni delle prestazioni che hanno funzionato
-- Decisioni architettoniche e relative motivazioni
-- Requisiti di dipendenza o di versione
-- Incompatibilità, casi limite e criticità (gotchas)
-
-## IMPORTANTE: Quando Richiamare le Informazioni
-
-Richiamale sempre prima di:
-
-- Iniziare qualsiasi attività non banale
-- Prendere decisioni implementative o architettoniche
-- Suggerire strumenti, librerie o flussi di lavoro
-- Risolvere problemi (troubleshooting)
-- Lavorare su codice, configurazione o infrastruttura precedentemente discussi
-- Effettuare il refactoring di codice esistente
-- Modificare test, CI, build, deploy o configurazione delle dipendenze
-
 ## Il campo `context`: descrittivo, non strutturale
 
 Il `context` del retain entra SOLO nel prompt dell'LLM estrattore come cornice
@@ -296,16 +258,6 @@ NON aggiungere tag semantici (`project`, `preferences`, `learning`, linguaggi,
 sottosistemi…): la selettività del recall la fa la query semantica; il dominio
 lo porta il `context`; le connessioni le fanno le entità estratte. Per un fatto
 intenzionalmente globale (valido su tutti i progetti), usa solo `claude-code`.
-
-## Migliori Pratiche
-
-1. Sii specifico: archivia informazioni concrete e attuabili.
-2. Includi il contesto: menziona progetti, strumenti, versioni, percorsi o comandi quando pertinenti.
-3. Richiama prima di agire: controlla i ricordi prima di fare supposizioni.
-4. Archivia i risultati: ricorda cosa ha funzionato e cosa è fallito.
-5. Usa tag mirati: preferisci pochi tag utili a molti tag generici.
-6. Usa `reflect` solo quando una risposta sintetizzata è migliore di un recupero diretto.
-7. Non archiviare segreti, token, password, chiavi private o credenziali sensibili.
 
 ## Esempi
 
