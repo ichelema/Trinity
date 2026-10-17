@@ -457,17 +457,11 @@ Leggi la sub-skill appropriata in base al contesto:
 | Scenario                                                                                   | Sub-skill da leggere                         |
 | ------------------------------------------------------------------------------------------ | -------------------------------------------- |
 | Progettare l'architettura memory per un'applicazione, pianificare bank config e tag schema | `@references/hindsight-architect/SKILL.md`   |
-| Usare Hindsight Cloud (memoria condivisa col team)                                         | `@references/hindsight-cloud/SKILL.md`       |
-| Usare Hindsight locale con `hindsight-embed` (preferenze personali)                        | `@references/hindsight-local/SKILL.md`       |
-| Usare un server Hindsight self-hosted                                                      | `@references/hindsight-self-hosted/SKILL.md` |
 | Consultare documentazione API, configurazione, SDK, retrieval strategies                   | `@references/hindsight-docs/SKILL.md`        |
 
 ## Routing rapido per keyword
 
 - **"memory architecture"**, **"bank config"**, **"tag schema"**, **"design memory"** → `hindsight-architect`
-- **"hindsight cloud"**, **"team memory"**, **"shared memory"**, **"vectorize.io"** → `hindsight-cloud`
-- **"hindsight local"**, **"hindsight-embed"**, **"daemon"**, **"local memory"** → `hindsight-local`
-- **"self-hosted"**, **"hindsight server"**, **"docker hindsight"** → `hindsight-self-hosted`
 - **"retain"**, **"recall"**, **"reflect"**, **"API"**, **"SDK"**, **"configurazione"**, **"retrieval"** → `hindsight-docs`
 
 ## Se il contesto non è chiaro
