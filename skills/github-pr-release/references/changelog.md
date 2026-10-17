@@ -1,5 +1,8 @@
 # CHANGELOG.md — struttura, curatela e scelta della versione
 
+Indice: Lingua · Struttura · Regole di curatela · Conversione da commit a voce di changelog ·
+Scegliere la versione · Citare le issue Linear nel changelog
+
 Il changelog è una lista **curata** dei cambiamenti rilevanti per utenti e
 integratori del progetto. Non è una copia di `git log`: il lettore vuole
 sapere cosa cambia per lui, non come è stato implementato.

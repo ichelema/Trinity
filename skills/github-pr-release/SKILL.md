@@ -14,8 +14,15 @@ description: >
 
 # Release e versionamento
 
+Indice: Confine con la skill linear · Flusso · Conferme · Non disallineare Linear ·
+Progetti con release automatizzata
+
 Porta un progetto da "ci sono modifiche" a "esiste una versione pubblicata":
 commit atomici → changelog curato → bump → tag → GitHub Release.
+
+Serve: `git`; `gh` autenticato (`gh auth login`), qui gestito da mise
+(`mise use -g gh`), su Arch anche `pacman -S --noconfirm github-cli`; `mise` per i
+progetti con task di release.
 
 ## Confine con la skill `linear`
 
@@ -46,7 +53,9 @@ Vedi "Non disallineare Linear" sotto.
    dall'ultimo tag (`git log <ultimo-tag>..HEAD --oneline`), aggiorna le voci di
    `[Unreleased]`, trasformalo in `## [x.y.z] - YYYY-MM-DD`, ricrea un
    `[Unreleased]` vuoto in cima.
-5. **Bump come commit a sé.** Aggiorna il file di versione del progetto e
+5. **Bump come commit a sé.** Se il progetto ha una task di release (es.
+   `mise run release <X.Y.Z>`, vedi "Progetti con release automatizzata"), usala al
+   posto dei comandi sotto. Altrimenti aggiorna il file di versione del progetto e
    committa separatamente dai commit della feature: chi legge la history deve
    distinguere "cosa è cambiato" da "quando è stato rilasciato".
 
@@ -56,8 +65,18 @@ Vedi "Non disallineare Linear" sotto.
    git tag -a v1.2.0 -m "Release v1.2.0"
    ```
 
-6. **Push, con conferma.** Un solo push per tutti i commit e il tag. Mostra cosa
-   verrebbe pubblicato e attendi un OK esplicito:
+6. **Checklist, poi push con conferma.** Prima del push copia questa lista nella
+   risposta e spunta ogni voce:
+
+   - [ ] working tree pulito → se no, torna al passo 1
+   - [ ] test passati → se no, torna al passo 3
+   - [ ] versione nel codice = versione nel changelog = tag → se no, torna al passo 4
+     o 5 (prima di ricreare il tag cancella quello locale con `git tag -d vX.Y.Z`)
+   - [ ] changelog con i cambiamenti importanti, senza rumore → se no, torna al passo 4
+
+   Se una voce fallisce, correggi e ripeti tutta la checklist. Poi fai un solo push
+   per tutti i commit e il tag. Mostra cosa verrebbe pubblicato e attendi un OK
+   esplicito:
 
    ```bash
    git push --follow-tags origin "$BASE"
@@ -68,12 +87,13 @@ Vedi "Non disallineare Linear" sotto.
 
    ```bash
    VERSION=1.2.0
+   NOTES=$(mktemp)
    awk -v ver="$VERSION" '$0 ~ "^## \\["ver"\\]" {flag=1; next} /^## \[/ {flag=0} flag' \
-     CHANGELOG.md > "$TMPDIR/release-notes.md"
+     CHANGELOG.md > "$NOTES"
 
    gh release create "v$VERSION" \
      --title "v$VERSION" \
-     --notes-file "$TMPDIR/release-notes.md"
+     --notes-file "$NOTES"
    ```
 
 ## Conferme
@@ -111,7 +131,7 @@ progetto la scriva.
 mise run release <NUOVA_VERSIONE>
 ```
 
-**Plugin Trinity** (`E:/AI/Claude/Trinity`): la versione sta in
+**Plugin Trinity** (`$TRINITY_PLUGIN_DIR`): la versione sta in
 `.claude-plugin/plugin.json`, la task `mise run release <X.Y.Z>` fa bump +
 commit `chore(plugin): bump X.Y.Z` + tag `vX.Y.Z` in locale. La "API pubblica"
 su cui giudicare il SemVer sono gli hook, i comandi, le skill, i tool MCP e lo
@@ -121,12 +141,3 @@ riavvio.
 
 Su Windows/MSYS2 il push via SSH dal Bash tool può fallire perché msys2 ignora
 `HOME`/config: in quel caso usa i percorsi SSH assoluti e ripeti.
-
-## Checklist pre-release
-
-Verifica e mostra l'esito:
-
-- [ ] working tree pulito
-- [ ] test passati
-- [ ] versione nel codice = versione nel changelog = tag
-- [ ] changelog che descrive i cambiamenti importanti, senza rumore
