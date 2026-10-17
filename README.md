@@ -554,7 +554,8 @@ server (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `VOYAGE_API_KEY`) stanno sulla VPS i
 
 **Tunnel dai PC.** chezmoi mette `HINDSIGHT_SSH_TUNNEL=hindsight-vps` nell'env di
 `~/.claude/settings.json` su ogni macchina tranne la VPS (template `.chezmoitemplates/claude-settings.json`
-del repo dotfiles, blocco `{{ if ne .chezmoi.hostname "ov-beb073" }}`): sulla VPS gli hook parlano
+del repo dotfiles, blocco `{{ if not (index . "vps") }}`, cioè `vps = true` nel `[data]` di
+`~/.config/chezmoi/chezmoi.toml` della VPS): sulla VPS gli hook parlano
 direttamente col server. A ogni `SessionStart` `hindsight-ensure-up.sh`:
 
 1. se l'MCP su `127.0.0.1:8888` risponde già, esce subito;
@@ -843,8 +844,8 @@ chezmoi dal repo dotfiles (`ichelema/dotfiles`), con due file (dal 2026-10-03):
 
 - **`.chezmoitemplates/claude-settings.json`** — il template con tutto il contenuto. Le parti che
   cambiano per OS (env, path, `statusLine`, `model`) stanno in blocchi `{{ if eq .chezmoi.os "windows" }}`;
-  quelle che cambiano per singola macchina in blocchi sull'hostname (es. `HINDSIGHT_SSH_TUNNEL`,
-  assente solo sulla VPS: `{{ if ne .chezmoi.hostname "ov-beb073" }}`).
+  quelle che cambiano per singola macchina in blocchi condizionali (es. `HINDSIGHT_SSH_TUNNEL`,
+  assente solo sulla VPS: `{{ if not (index . "vps") }}`, flag `vps = true` nel config chezmoi della VPS).
 - **`dot_claude/modify_settings.json`** — un *modify-template* (chezmoi gli passa il file attuale e
   scrive ciò che restituisce): parte dal template e ci rimette `model`, `modelSettings` e `fastMode`
   del file attuale, così modello, effort e fast mode scelti in sessione sopravvivono ad `apply`. Se
@@ -893,7 +894,7 @@ del path si ricava con `cygpath -u`, non serve una variabile separata.
 | root del plugin | `${CLAUDE_PLUGIN_ROOT}` — già automatico |
 | vault Obsidian | `${OBSIDIAN_VAULT}` / `${OBSIDIAN_VAULT_NAME}` — **da definire per-macchina** |
 | root di questo repo | `${TRINITY_PLUGIN_DIR}` (per i comandi delle skill) — **per-macchina**, nel blocco env dell'OS di `.chezmoitemplates/claude-settings.json` (repo dotfiles) |
-| tunnel Hindsight (§9.1) | `${HINDSIGHT_SSH_TUNNEL}` — host SSH della VPS (`hindsight-vps`), **solo sui PC**; sulla VPS non va impostata (nel repo dotfiles: `.chezmoitemplates/claude-settings.json`, blocco `{{ if ne .chezmoi.hostname "ov-beb073" }}`) |
+| tunnel Hindsight (§9.1) | `${HINDSIGHT_SSH_TUNNEL}` — host SSH della VPS (`hindsight-vps`), **solo sui PC**; sulla VPS non va impostata (nel repo dotfiles: `.chezmoitemplates/claude-settings.json`, blocco `{{ if not (index . "vps") }}`) |
 | token TickTick (§7) | `${TICKTICK_API_KEY}` — **da definire per-macchina**, ma nell'**env utente**, non qui: è un segreto (Windows: `SetEnvironmentVariable(…, "User")`; Linux: `~/.profile`) |
 | server MCP excalidraw | `${MCP_EXCALIDRAW_DIR}` — **da definire per-macchina** (path dello strumento esterno; serve solo se riattivi il server, disattivato di default) |
 | server MCP debugger (§7) | `${MCP_DEBUGGER_DIR}` — **da definire per-macchina** (installazione exe-free di mcp-debugger, fuori dal repo) |
