@@ -9,7 +9,12 @@
 # del recall ("Verify mutable facts...") cosi' il retain worker lo scarta (anti-loop).
 set -uo pipefail
 
-HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Parameter expansion e non $(cd "$(dirname ...)" && pwd): subshell + dirname
+# costano 200-650ms su MSYS. Stesso schema di hindsight-recall.sh.
+HOOKS_DIR="${BASH_SOURCE[0]%/*}"; [ "$HOOKS_DIR" = "${BASH_SOURCE[0]}" ] && HOOKS_DIR="."
+case "$HOOKS_DIR" in
+[A-Za-z]:/*) _hs_drive="${HOOKS_DIR%%:*}"; HOOKS_DIR="/${_hs_drive,,}${HOOKS_DIR#?:}" ;;
+esac
 export HOOKS_DIR
 
 . "$HOOKS_DIR/lib/hs-python.sh"
@@ -58,36 +63,40 @@ if not pairs:
     sys.exit(0)
 
 
-def http_status(url, timeout=3):
-    """Status HTTP, o None se la connessione fallisce (server non ancora su)."""
+def fetch(url, mid, timeout=2):
+    """(status, mental model). status None se la connessione fallisce (server
+    non ancora su); model None se la pagina manca o il JSON non e' valido.
+    detail=content: senza, il default e' "full" che trascina anche il
+    reflect_response (provenance, anche centinaia di KB) — qui inutile,
+    servono solo name e content."""
+    req = urllib.request.Request(f"{url}/mental-models/{mid}?detail=content", method="GET")
     try:
-        with urllib.request.urlopen(
-            urllib.request.Request(url, method="GET"), timeout=timeout
-        ) as res:
-            return res.status
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            status, body = res.status, res.read()
     except urllib.error.HTTPError as e:
-        return e.code  # 404/5xx: il server HA risposto
+        return e.code, None  # 404/5xx: il server HA risposto
     except Exception:
-        return None  # connessione rifiutata/timeout: non pronto
-
-
-def wait_ready(url, deadline):
-    """Attende che il server risponda con status < 500 entro deadline."""
-    while time.monotonic() < deadline:
-        st = http_status(url)
-        if st is not None and st < 500:
-            return True
-        time.sleep(1)
-    return False
+        return None, None  # connessione rifiutata/timeout: non pronto
+    try:
+        return status, json.loads(body.decode("utf-8", errors="replace"))
+    except ValueError:
+        return status, None
 
 
 # Gli hook SessionStart girano IN PARALLELO (doc Claude Code): hindsight-ensure-up.sh
-# sta aprendo il tunnel verso la VPS proprio ora. Le GET sotto arriverebbero prima che sia
-# pronto e tornerebbero a mani vuote. Attendi la readiness (budget affine a ensure-up),
-# poi procedi; se non e' pronto entro il budget, esci pulito (best-effort invariato).
-# Un 404 sul primo id conta come pronto: server e DB su, l'id semplicemente non c'e'.
-if not wait_ready(f"{pairs[0][0]}/mental-models/{pairs[0][1]}", time.monotonic() + 20):
-    sys.exit(0)
+# sta aprendo il tunnel verso la VPS proprio ora. Le GET arriverebbero prima che sia
+# pronto e tornerebbero a mani vuote. Ritenta la PRIMA pagina finche' il server non
+# risponde (budget affine a ensure-up); se non e' pronto entro il budget, esci pulito
+# (best-effort invariato). Un 404 conta come pronto: server e DB su, l'id non c'e'.
+# La prima GET fa da readiness e il suo risultato si riusa: niente richiesta in piu'.
+deadline = time.monotonic() + 20
+while True:
+    status, first = fetch(*pairs[0], timeout=3)
+    if status is not None and status < 500:
+        break
+    if time.monotonic() >= deadline:
+        sys.exit(0)
+    time.sleep(1)
 
 blocks = []
 _seen_ids = set()
@@ -95,14 +104,8 @@ for url, mid in pairs:
     if mid in _seen_ids:
         continue  # dedup per id: un id di progetto non deve riusare gli id core
     _seen_ids.add(mid)
-    try:
-        # detail=content: senza, il default e' "full" che trascina anche il
-        # reflect_response (provenance, anche centinaia di KB) — qui inutile,
-        # servono solo name e content.
-        req = urllib.request.Request(f"{url}/mental-models/{mid}?detail=content", method="GET")
-        with urllib.request.urlopen(req, timeout=2) as res:
-            m = json.loads(res.read().decode("utf-8", errors="replace"))
-    except Exception:
+    m = first if (url, mid) == pairs[0] else fetch(url, mid)[1]
+    if not isinstance(m, dict):
         continue  # server giu' o pagina assente: best-effort, salta
     content = (m.get("content") or "").strip()
     if not content:
