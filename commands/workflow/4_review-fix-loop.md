@@ -115,21 +115,60 @@ Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 - commit nella lingua del progetto Linear, uno per fix logico;
 - push per aggiornare la PR.
 
-Se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia: segnalalo
-nel report come criticità e chiedi.
+Se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia: trattalo
+come finding residuo (sezione "Finding residui").
 
 ## Loop
 
 Ripeti round → triage → fix finché un round completo non produce alcun finding da fixare, con un
-massimo di 3 round. Dal secondo round in poi fixa solo `BLOCKER`, `HIGH` e `MEDIUM`: i `LOW` vanno
-nel report come residui, non in un nuovo giro.
+massimo di 3 round di review. In ogni round fixa tutti i finding reali, `LOW` compresi.
 
-Fermati e segnala se:
+Esci dal loop e passa ai finding residui se:
 
-- hai completato il terzo round e restano finding da fixare: elencali nel report con il motivo;
+- hai completato la review del terzo round: i suoi finding sono finding residui;
 - due round consecutivi ripropongono lo stesso finding già scartato come falso positivo (i due
   reviewer non convergono: disaccordo di fondo);
 - un fix ne introduce un altro a valanga (il fix non era minimo).
+
+Non avviare mai un quarto round di review.
+
+## Finding residui
+
+Nessun finding si perde: ogni finding residuo finisce in un fix, in una issue Linear o nel commento
+sulla PR. Gestisci i residui in quest'ordine:
+
+1. `LOW`: fixali subito come in "Fix minimi e chirurgici", senza un nuovo round di review. Un `LOW`
+   senza fix minimo diventa una issue come un `MEDIUM`.
+2. `MEDIUM`: crea una issue Linear per finding.
+3. `BLOCKER` e `HIGH`: la PR non è pronta. Mettila in draft con `gh pr ready "<branch>" --undo`; se
+   il piano GitHub non supporta le draft, basta il commento.
+4. Scrivi il commento sulla PR, sempre.
+
+### Issue Linear
+
+Crea le issue senza chiedere conferma, con `issueCreate` via
+`${CLAUDE_PLUGIN_ROOT}/skills/linear/scripts/linear.py mutation`:
+
+- team e progetto della issue di origine (quella nel cui scope cade il finding);
+- titolo operativo e corpo con `Problem` e `Acceptance criteria` come in `/0_create-issue`, più file
+  e righe del finding;
+- tipo `bug`; priorità `3` per `MEDIUM`, `4` per `LOW`;
+- lingua del progetto Linear.
+
+Collega ogni issue alla issue di origine con `issueRelationCreate` di tipo `related`, non con
+`parentId`: una sub-issue può chiudersi in automatico con la issue padre al merge della PR. Rileggi
+ogni issue creata e controlla che team, progetto e relazione siano salvati.
+
+### Commento sulla PR
+
+Scrivi un solo commento, nella lingua del progetto Linear, con
+`gh pr comment "<branch>" --body-file -` (corpo da stdin). Il commento elenca:
+
+- i finding fixati, in breve;
+- i `LOW` fixati senza review dopo il terzo round, segnati come non riverificati;
+- i `BLOCKER` e `HIGH` aperti, con file e righe;
+- le issue create, con link;
+- i finding scartati come falsi positivi, con il motivo in una riga.
 
 ## Report finale
 
@@ -137,7 +176,7 @@ Report sintetico, solo informazioni rilevanti:
 
 - cosa è stato fixato (finding → fix, con file e righe);
 - trade-off introdotti dai fix (se presenti);
-- criticità residue o finding non risolti e perché;
+- finding residui e dove sono finiti (fix senza review, issue create con link, PR in draft);
 - verdetto finale: PR pronta per il merge o no.
 
 Se qualcosa non è chiaro, è contraddittorio o hai dubbi, chiedi prima di procedere. Altrimenti
