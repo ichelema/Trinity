@@ -18,6 +18,9 @@ Questo documento distingue in modo esplicito:
 > converte al formato nativo, **salva il `.excalidraw.md` nel vault** e rimuove il grezzo.
 > Non serve sapere *come* converte né spostare/aprire/modificare file a mano.
 
+> Il flusso canvas live funziona solo se `excalidraw-skill` è attiva (`SKILL.md`, non
+> `SKILL.md.disabled`) e il server MCP Excalidraw è configurato.
+
 ---
 
 ## Regole operative essenziali

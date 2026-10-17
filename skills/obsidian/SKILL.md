@@ -67,6 +67,9 @@ contenuto operativo.
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | la skill `excalidraw-skill` | quando bisogna lavorare su canvas live Excalidraw prima del salvataggio/conversione nel Vault                                                                                                                                                                                                 | creare o manipolare scene Excalidraw operative prima della conversione in `.excalidraw.md`     |
 
+Il canvas live funziona solo se `excalidraw-skill` è attiva (`SKILL.md`, non `SKILL.md.disabled`)
+e il server MCP Excalidraw è configurato.
+
 Regola di routing:
 
 - se la richiesta riguarda contenuti reali del Vault, usare prima il MCP
