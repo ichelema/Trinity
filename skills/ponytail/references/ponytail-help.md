@@ -1,7 +1,7 @@
 # Ponytail Help
 
-Mostra questa reference card quando viene invocata. One-shot, NON cambiare modalità, scrivere
-file flag o persistere qualcosa.
+Mostra questa reference card quando viene invocata. One-shot: non cambiare modalità, non scrivere
+file flag e non persistere niente.
 
 ## Livelli
 
@@ -37,7 +37,8 @@ Modalità di default = `full`, auto-attiva ogni sessione. Cambiala:
 export PONYTAIL_DEFAULT_MODE=lite
 ```
 
-**File di config** (`~/.config/ponytail/config.json`, Windows: `%APPDATA%\ponytail\config.json`):
+**File di config** (`$XDG_CONFIG_HOME/ponytail/config.json` se la variabile esiste, altrimenti
+`~/.config/ponytail/config.json`; su Windows `~` è `HOME` o `USERPROFILE`):
 ```json
 { "defaultMode": "lite" }
 ```
@@ -46,12 +47,6 @@ Imposta `"off"` per disabilitare l'auto-attivazione all'avvio della sessione, at
 manualmente con `/trinity:ponytail:ponytail` quando vuoi.
 
 Risoluzione: env var > file di config > `full`.
-
-## Update
-
-Abilita l'auto-update una volta: apri `/plugin`, vai su Marketplaces, scegli ponytail, Abilita auto-update. Claude Code scarica poi le nuove versioni all'avvio (esegui `/reload-plugins` quando lo richiede). Refresh manuale: `/plugin marketplace update ponytail` poi `/reload-plugins`.
-
-Se `/plugin` non è riconosciuto, la tua Claude Code è obsoleta. Aggiornala (`npm install -g @anthropic-ai/claude-code@latest`, o `brew upgrade claude-code`) e riavvia.
 
 ## Altro
 

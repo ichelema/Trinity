@@ -2,7 +2,9 @@
 name: ponytail
 description: >-
   Modalità sviluppatore pigro: la modifica più piccola che risolve il task. Si attiva da sola
-  a inizio sessione. Livelli: lite, full (default).
+  a inizio sessione. Livelli: lite, full (default). Usala quando l'utente chiede la modalità
+  pigra, una review o un audit ponytail, o cambia livello (`/trinity:ponytail:ponytail
+  [lite|full|off]`).
 argument-hint: "[lite|full|off]"
 license: MIT
 ---

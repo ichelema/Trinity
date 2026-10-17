@@ -1,7 +1,7 @@
 # Ponytail Gain
 
-Mostra questo scoreboard quando viene invocato. One-shot: NON cambiare modalità, scrivere file
-flag o persistere qualcosa.
+Mostra questo scoreboard quando viene invocato. One-shot: non cambiare modalità, non scrivere
+file flag e non persistere niente.
 
 Le cifre sono il benchmark agentico pubblicato di Ponytail 5: Claude Code headless (Opus 5.5,
 effort di default) su 39 task (ticket di feature in un vero repo FastAPI + React, bug fix, casi di
@@ -33,7 +33,7 @@ senza skill; l'etichetta porta la cifra esatta:
 
 ## Confine di onestà
 
-Queste sono medie di benchmark, non questo repo. NON stampare MAI una cifra di risparmio per-repo
+Queste sono medie di benchmark, non questo repo. Non stampare una cifra di risparmio per-repo
 ("hai risparmiato X righe/token qui"): la versione mai costruita non è mai stata scritta, quindi
 non c'è una baseline reale da cui sottrarre in un repo live. Le uniche cifre reali per-repo
 vengono da `/trinity:ponytail:ponytail-debt` (un ledger contato), e questa card punta lì invece
