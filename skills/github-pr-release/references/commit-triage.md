@@ -25,14 +25,14 @@ Un singolo intervento logico per commit. Per ogni gruppo prepara un messaggio
 `style`) coerente con lo storico del repository — guardalo con
 `git log --oneline -20` invece di assumere una convenzione.
 
-I messaggi di commit si scrivono **sempre in inglese**, anche quando la
-conversazione con l'utente è in un'altra lingua: la history è un artefatto
-pubblico del repository, la leggono `git blame`, le release notes e chiunque
-arrivi dopo, e sopravvive alla sessione in cui è stata prodotta.
+La lingua dei messaggi segue la regola "Lingua" di [changelog.md](changelog.md):
+lingua del progetto Linear se il progetto è tracciato con Linear (italiano di
+default, inglese con `lang:en`), inglese se non lo è. La conversazione con
+l'utente resta nella sua lingua.
 
-Dallo storico prendi la convenzione dei prefissi e degli scope, **non la
-lingua**: se i commit precedenti sono in un'altra lingua, la discontinuità è
-voluta e va nella direzione giusta. Non tornare indietro per uniformarti.
+Dallo storico prendi la convenzione dei prefissi e degli scope. Se lo storico usa
+una lingua diversa da quella della regola, segui la regola e non tornare indietro
+per uniformarti.
 
 ## 3. Mostra il piano e fermati
 

@@ -149,7 +149,8 @@ La lingua la decide il **progetto Linear**, non la conversazione:
 Leggi le label con la stessa query che usi per risolvere l'id
 (`projects { nodes { id name labels { nodes { name } } } }`); per una issue
 esistente usa `issue(id: $id) { project { labels { nodes { name } } } }`.
-Issue senza progetto: italiano.
+Issue senza progetto: italiano. Repository non tracciato con Linear: inglese
+(regola completa in `github-pr-release`, `references/changelog.md`, sezione "Lingua").
 
 Esempi:
 

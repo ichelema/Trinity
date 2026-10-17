@@ -9,15 +9,19 @@ sapere cosa cambia per lui, non come è stato implementato.
 
 ## Lingua
 
-Il CHANGELOG si scrive **sempre in inglese**, anche quando la conversazione con
-l'utente è in un'altra lingua. È il documento che raggiunge il pubblico più
-ampio del progetto: finisce nelle GitHub Release, lo leggono integratori che non
-hanno partecipato allo sviluppo, e resta la traccia consultabile a distanza di
-anni. Vale per le voci, per i titoli di sezione e per le note di migrazione.
+Una sola regola vale per CHANGELOG, messaggi di commit (vedi
+[commit-triage.md](commit-triage.md)) e titolo e descrizione delle Pull Request:
 
-Stessa regola per i messaggi di commit (vedi
-[commit-triage.md](commit-triage.md)) e per titolo e descrizione delle Pull
-Request. La conversazione con l'utente resta invece nella sua lingua.
+- **progetto tracciato con Linear** (esiste un progetto Linear per il repository;
+  cercalo per nome con la skill `linear`): lingua del progetto Linear, cioè italiano
+  di default e inglese con la label di progetto `lang:en` (sezione "Lingua" della
+  skill `linear`);
+- **progetto non tracciato con Linear**: inglese.
+
+Nel CHANGELOG la regola vale per le voci e per le note di migrazione; i titoli di
+sezione standard (`Added`, `Changed`, `Fixed`…) restano in inglese. La conversazione
+con l'utente resta invece nella sua lingua. Gli esempi sotto sono di un progetto
+tracciato con Linear, in italiano.
 
 ## Struttura
 
