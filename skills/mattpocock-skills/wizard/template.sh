@@ -129,6 +129,11 @@ ask_secret() {
 # any existing line). Idempotent.
 write_env() {
   local key="$1" value="$2" tmp
+  if [[ -z "$value" ]]; then
+    SKIPPED+=("$key in $ENV_FILE (empty value)")
+    warn "skipped $key: empty value, not written to $ENV_FILE"
+    return
+  fi
   touch "$ENV_FILE"
   tmp=$(mktemp)
   grep -vE "^${key}=" "$ENV_FILE" > "$tmp" || true
@@ -138,32 +143,50 @@ write_env() {
   printf '  %s✓ wrote%s %s → %s\n' "$GREEN" "$RESET" "$key" "$ENV_FILE"
 }
 
+# _gh_problem prints why gh can't be used, or nothing when it is ready.
+_gh_problem() {
+  command -v gh >/dev/null 2>&1 || { printf 'gh not found in PATH'; return; }
+  gh auth status >/dev/null 2>&1 || printf 'gh not authenticated (run: gh auth login)'
+}
+
 # set_secret NAME VALUE sets a GitHub Actions repo secret via gh. Falls back
-# to a warning (and records it) if gh is unavailable or unauthenticated.
+# to a warning with the reason (and records it) if it can't.
 set_secret() {
-  local name="$1" value="$2"
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    if printf '%s' "$value" | gh secret set "$name" >/dev/null 2>&1; then
+  local name="$1" value="$2" problem err
+  if [[ -z "$value" ]]; then
+    problem="empty value"
+  else
+    problem=$(_gh_problem)
+  fi
+  if [[ -z "$problem" ]]; then
+    if err=$(printf '%s' "$value" | gh secret set "$name" 2>&1 >/dev/null); then
       WRITTEN_SECRET+=("$name")
       printf '  %s✓ set%s GitHub secret %s\n' "$GREEN" "$RESET" "$name"
       return
     fi
+    problem="gh secret set failed: ${err:-no error output}"
   fi
-  SKIPPED+=("GitHub secret $name (set it manually: gh secret set $name)")
-  warn "skipped GitHub secret $name: gh not ready; set it later"
+  SKIPPED+=("GitHub secret $name ($problem; set it manually: gh secret set $name)")
+  warn "skipped GitHub secret $name: $problem"
 }
 
 # set_var NAME VALUE sets a GitHub Actions repo variable (non-secret).
 set_var() {
-  local name="$1" value="$2"
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    if gh variable set "$name" --body "$value" >/dev/null 2>&1; then
+  local name="$1" value="$2" problem err
+  if [[ -z "$value" ]]; then
+    problem="empty value"
+  else
+    problem=$(_gh_problem)
+  fi
+  if [[ -z "$problem" ]]; then
+    if err=$(gh variable set "$name" --body "$value" 2>&1 >/dev/null); then
       printf '  %s✓ set%s GitHub variable %s\n' "$GREEN" "$RESET" "$name"
       return
     fi
+    problem="gh variable set failed: ${err:-no error output}"
   fi
-  SKIPPED+=("GitHub variable $name")
-  warn "skipped GitHub variable $name, gh not ready; set it later"
+  SKIPPED+=("GitHub variable $name ($problem; set it manually: gh variable set $name)")
+  warn "skipped GitHub variable $name: $problem"
 }
 
 # finish clears, then shows a closing summary of everything configured.

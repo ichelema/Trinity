@@ -17,6 +17,12 @@
 
 set -euo pipefail
 
+# Without a terminal, `read` gets EOF and set -e would exit silently.
+[[ -t 0 ]] || {
+  echo "hitl-loop: stdin is not a terminal; ask the user to run this script in their own terminal, then read the KEY=VALUE lines it prints." >&2
+  exit 1
+}
+
 step() {
   printf '\n>>> %s\n' "$1"
   read -r -p "    [Enter when done] " _
