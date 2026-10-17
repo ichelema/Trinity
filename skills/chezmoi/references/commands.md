@@ -1,5 +1,8 @@
 # Commands and flags
 
+Indice: Commands by task · `status` codes · `chattr` · `init` URL shorthand ·
+`state` — reset script memory · Global flags · Common flags (many commands)
+
 Source: <https://www.chezmoi.io/reference/commands/>, <https://www.chezmoi.io/user-guide/command-overview/>.
 `chezmoi help <cmd>` for the full flag list.
 

@@ -1,5 +1,9 @@
 # Templates
 
+Indice: Data available as `.` · `.chezmoi.*` variables · Control flow & whitespace ·
+chezmoi functions (beyond sprig) · Reusable fragments: `.chezmoitemplates/` ·
+Init functions (only in `.chezmoi.<fmt>.tmpl`) · Directives · Debugging
+
 Source: <https://www.chezmoi.io/reference/templates/> (variables, functions, directives, init functions).
 
 A file is a template when it ends in `.tmpl` (or `chezmoi add -T` / `chattr +template`).

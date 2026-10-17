@@ -27,6 +27,10 @@ source dir (~/.local/share/chezmoi)   +   config (~/.config/chezmoi/chezmoi.toml
 Rule of thumb: **edit the source, never the target.** Editing `~/.zshrc` directly gets overwritten
 on the next `apply` (use `chezmoi edit`, or `chezmoi re-add` / `chezmoi merge` to pull changes back).
 
+Serve: `chezmoi`. Arch: `pacman -S --noconfirm chezmoi`. Windows: native `chezmoi.exe` (here
+copied by hand into `/ucrt64/bin`, no MSYS2 package; alternative `mise use -g chezmoi`). New
+machine from a dotfiles repo: the `get.chezmoi.io` one-liner in `references/commands.md`.
+
 ## Core workflow
 
 ```bash

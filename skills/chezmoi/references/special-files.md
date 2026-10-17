@@ -1,5 +1,8 @@
 # Special files and directories
 
+Indice: `.chezmoiroot` · `.chezmoidata.<fmt>` and `.chezmoidata/` · `.chezmoiignore` ·
+`.chezmoiremove` · `.chezmoiexternal.<fmt>` / `.chezmoiexternals/*.<fmt>` · `.chezmoiscripts/`
+
 Source: <https://www.chezmoi.io/reference/special-files/>, `/special-directories/`.
 
 All source entries starting with `.` are ignored except these.

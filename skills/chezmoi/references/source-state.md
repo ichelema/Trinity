@@ -1,5 +1,8 @@
 # Source state: names, attributes, target types
 
+Indice: Prefixes · Suffixes · Allowed attributes per target type (order is mandatory) ·
+Target types in detail · Scripts · Application order
+
 Source: <https://www.chezmoi.io/reference/source-state-attributes/>, `/target-types/`, `/application-order/`.
 
 ## Prefixes

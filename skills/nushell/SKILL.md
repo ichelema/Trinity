@@ -10,10 +10,13 @@ strutturati. Gli script si scrivono in JavaScript (`.mjs`, Bun), non in Nu.
 
 ## Environment (this setup)
 
-- Binary: `$HOME/.local/bin/nu` — not in the MSYS2 shell PATH, always use the full path.
+- Serve: Arch `pacman -S --noconfirm nushell`. Windows: native `nu.exe` from the Nushell GitHub
+  releases, copied into `/ucrt64/bin` (no MSYS2 package), plus the wrapper `$HOME/.local/bin/nu`
+  that sets `XDG_CONFIG_HOME` and runs it.
+- Binary: `$HOME/.local/bin/nu` — always use the full path.
 - On Windows it is a **native Windows binary**, not MSYS2: pass Windows paths (`C:/...`), never MSYS paths (`/c/...`, `/e/...`).
-  - Correct: `nu -c "open 'C:/Desktop/Claude/Main/data.json'"`
-  - Wrong: `nu -c "open '/c/Desktop/Claude/Main/data.json'"`
+  - Correct: `nu -c "open 'C:/path/to/data.json'"`
+  - Wrong: `nu -c "open '/c/path/to/data.json'"`
 - On Linux, if `nu` is not in `~/.local/bin`, use the one in PATH; paths are plain POSIX.
 - Do not pipe MSYS2 process output into `nu` (stdin issues) — read files with `open` and Windows paths instead.
 

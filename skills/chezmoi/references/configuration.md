@@ -1,5 +1,8 @@
 # Configuration file
 
+Indice: Generate it from `.chezmoi.<fmt>.tmpl` · Top-level variables · Sections · Hooks ·
+Interpreters
+
 Source: <https://www.chezmoi.io/reference/configuration-file/>.
 
 Location: `~/.config/chezmoi/chezmoi.{toml,yaml,json,jsonc}` (Windows: `%USERPROFILE%\.config\chezmoi\`).

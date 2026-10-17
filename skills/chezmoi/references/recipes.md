@@ -1,5 +1,12 @@
 # Recipes
 
+Indice: Repo layout that scales · Machine roles (work / home / server) ·
+Install packages when the list changes · Windows · Same file, different location per OS ·
+Manage only part of a file an app also writes · Shell config split into fragments ·
+Tool binaries from GitHub releases · SSH authorized_keys from GitHub ·
+Pull edits made directly in `~` back into the source · Test safely in a sandbox ·
+Auto-commit and push on every change
+
 Copy-and-adapt patterns. Each assumes data keys defined in `.chezmoi.toml.tmpl` (see configuration.md).
 
 ## Repo layout that scales

@@ -1,5 +1,7 @@
 # Secrets: encryption and password managers
 
+Indice: age (recommended) · gpg · Password managers · Patterns
+
 Source: <https://www.chezmoi.io/user-guide/encryption/>, <https://www.chezmoi.io/reference/templates/> (password manager functions).
 
 Two approaches — pick per secret:
