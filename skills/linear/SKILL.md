@@ -70,7 +70,6 @@ Cache the returned `id` for the rest of the session. Only override when the user
 | `references/common-queries.md` | Day-to-day reads + writes — issues, projects, comments, docs |
 | `references/webhooks.md` | Subscribing to issue / comment / project / cycle events |
 | `references/mutations-cheatsheet.md` | The "gap five" — cycles, workflow states, relations, templates, admin |
-| `references/cycles-daily-automation.md` | Running 1-cycle-per-day with rollover + 14-day rolling roadmap (uses `scripts/cycles_maintain.py`) |
 | `references/prune-archive.md` | Querying the local sqlite archive of pruned issues (written by `scripts/linear_prune.py`) |
 | `references/git-pr-workflow.md` | Branch/PR/merge: magic words, niente auto-merge, cleanup post-merge |
 
@@ -85,9 +84,6 @@ python scripts/linear.py introspect <TypeName>
 
 # Prune + sqlite archive (asks "yes" before deleting; --dry-run shows what it would delete).
 python scripts/linear_prune.py --team ICH --dry-run [--limit N]
-
-# Daily-cycle roadmap maintainer (idempotent; cron this once a day past AWST midnight).
-python scripts/cycles_maintain.py --team ICH [--days-ahead N] [--auto-assign] [--dry-run]
 ```
 
 - `<doc-or-file>` is either an inline GraphQL string or a path to a `.graphql` file.

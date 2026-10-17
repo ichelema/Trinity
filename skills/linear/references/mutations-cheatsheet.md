@@ -192,8 +192,6 @@ Variables: `{"id": "<old-cycle-uuid>", "input": {"completedAt": "2026-05-09T16:0
 
 Order matters: move issues *before* closing, otherwise they're orphans on a completed cycle that may behave oddly in burndowns. Filter the move set with the issue list query (`issues(filter: { state: { type: { in: ["started"] } } })`) to scope to in-progress only, or include `unstarted` to also pull todos forward.
 
-For a daily-cycle automation that does this on a schedule, see **`references/cycles-daily-automation.md`** and `scripts/cycles_maintain.py`.
-
 ### Workflow states — create
 
 Required: `teamId`, `type` (string — see enum below), `name`, `color`. `type` is `String!` not an enum input — pass quoted strings.
