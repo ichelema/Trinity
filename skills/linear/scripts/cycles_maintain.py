@@ -22,9 +22,9 @@ Linear quirks honoured:
   - cycleArchive is one-way (no cycleUnarchive); we close (completedAt) instead.
 
 Usage:
-  python scripts/cycles_maintain.py --team AGI
-  python scripts/cycles_maintain.py --team AGI --days-ahead 14 --dry-run
-  python scripts/cycles_maintain.py --team AGI --auto-assign
+  python scripts/cycles_maintain.py --team ICH
+  python scripts/cycles_maintain.py --team ICH --days-ahead 14 --dry-run
+  python scripts/cycles_maintain.py --team ICH --auto-assign
 """
 
 from __future__ import annotations
@@ -365,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cycles_maintain",
         description="Daily-cycle roadmap maintainer for a Linear team (AWST-aligned).",
     )
-    p.add_argument("--team", required=True, help="Team key, e.g. AGI")
+    p.add_argument("--team", required=True, help="Team key, e.g. ICH")
     p.add_argument("--days-ahead", type=int, default=DEFAULT_DAYS_AHEAD,
                    help=f"Future daily cycles to maintain (default: {DEFAULT_DAYS_AHEAD})")
     p.add_argument("--carry", default="started",

@@ -4,7 +4,7 @@
 
 This file is the day-to-day MCP-parity surface — the operations you'd reach for first when an agent says "look up X" or "save Y" in Linear. Each example is copy-paste ready: pass it to `scripts/linear.py query` or `mutation` with the variables shown.
 
-Examples marked **✓ live-tested** ran against a real workspace during Phase 1 build. Unmarked examples are composed from live introspection of the input types — the field names are correct; tune the variables to your workspace.
+Examples marked **✓ live-tested** ran against a real workspace. Unmarked examples are composed from live introspection of the input types — the field names are correct; tune the variables to your workspace.
 
 For the entity model, identifiers, and pagination conventions, load `references/schema-summary.md` first. For mutation gotchas (soft delete, save-vs-create, etc.), the same file's later sections.
 
@@ -72,11 +72,11 @@ mutation CreateIssue($input: IssueCreateInput!) {
 }
 ```
 
-Variables — the only required fields are `teamId` and `title`. The `teamId` below is the **AgileAndy** team (the default team unless the user names a different one — see SKILL.md "Default team"):
+Variables — the only required fields are `teamId` and `title`. The `teamId` below is the **Ichelema** team (the default team unless the user names a different one — see SKILL.md "Default team"):
 
 ```json
 {"input": {
-  "teamId": "a57f5901-d47d-4a05-a18e-cfbcfceff6a2",
+  "teamId": "<team-uuid>",
   "title": "auth: 401 on token refresh",
   "description": "Reproduces on Safari 17.x. See attached HAR.",
   "priority": 2
@@ -116,7 +116,7 @@ mutation CreateIssueRich($input: IssueCreateInput!) {
 
 ```json
 {"input": {
-  "teamId": "a57f5901-…",
+  "teamId": "<team-uuid>",
   "title": "Investigate slow dashboard load",
   "assigneeId": "b59f3c26-…",
   "labelIds": ["<label-uuid-1>", "<label-uuid-2>"],
@@ -631,15 +631,15 @@ mutation DeleteUpdate($id: String!) {
 
 ### Resolve a human-readable identifier to a UUID
 
-Many mutations want UUIDs. To go from `AGI-86` to a UUID:
+Many mutations want UUIDs. To go from `ICH-86` to a UUID:
 
 ```graphql
 query Resolve($id: String!) {
-  issue(id: $id) { id }       # 'id' arg accepts either UUID or "AGI-86"
+  issue(id: $id) { id }       # 'id' arg accepts either UUID or "ICH-86"
 }
 ```
 
-Pass `"AGI-86"` as `$id`. Linear's `issue(id)` accepts both formats; the returned `id` is always the UUID.
+Pass `"ICH-86"` as `$id`. Linear's `issue(id)` accepts both formats; the returned `id` is always the UUID.
 
 ### Paginate to exhaustion
 

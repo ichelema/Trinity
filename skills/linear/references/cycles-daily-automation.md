@@ -1,5 +1,8 @@
 # Daily-cycle automation
 
+Indice: Concept · Prerequisites · What the script does · CLI · Scheduling · Switching timezones ·
+Limitations · Bootstrapping a fresh team
+
 A pattern (and a script) for treating Linear cycles as **one-cycle-per-day**, with a rolling 14-day forward roadmap, rollover of stale open cycles, and optional auto-assignment of cycle-less work to today's cycle. AWST-aligned by default (`16:00 UTC` boundaries).
 
 The script lives at `scripts/cycles_maintain.py` and is **idempotent** — safe to re-run.
@@ -79,22 +82,22 @@ This catches "planned but not yet slotted" work. Skip the flag if you'd rather l
 
 ```bash
 # Daily cron — most setups.
-python scripts/cycles_maintain.py --team AGI
+python scripts/cycles_maintain.py --team ICH
 
 # 7-day window instead of 14.
-python scripts/cycles_maintain.py --team AGI --days-ahead 7
+python scripts/cycles_maintain.py --team ICH --days-ahead 7
 
 # Also include todos (unstarted) in the rollover sweep.
-python scripts/cycles_maintain.py --team AGI --carry started,unstarted
+python scripts/cycles_maintain.py --team ICH --carry started,unstarted
 
 # Plus auto-pull cycle-less planned work into today.
-python scripts/cycles_maintain.py --team AGI --auto-assign
+python scripts/cycles_maintain.py --team ICH --auto-assign
 
 # Inspect without mutating.
-python scripts/cycles_maintain.py --team AGI --dry-run
+python scripts/cycles_maintain.py --team ICH --dry-run
 
 # Pin "now" for replay / testing.
-python scripts/cycles_maintain.py --team AGI --now 2026-05-09T16:30:00.000Z --dry-run
+python scripts/cycles_maintain.py --team ICH --now 2026-05-09T16:30:00.000Z --dry-run
 ```
 
 Outputs a one-paragraph summary on stdout: today's cycle id and window, count of created/rolled-over/auto-assigned items, and the team's `cyclesEnabled` flag (a reminder if you forgot the disable step).
@@ -120,7 +123,7 @@ tail -f /tmp/cycles_maintain.log
 ### Cron
 
 ```cron
-5 16 * * * cd /path/to/linear && python scripts/cycles_maintain.py --team AGI >> /tmp/cycles_maintain.log 2>&1
+5 16 * * * cd /path/to/linear && python scripts/cycles_maintain.py --team ICH >> /tmp/cycles_maintain.log 2>&1
 ```
 
 ### GitHub Actions
@@ -138,7 +141,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: pip install httpx python-dotenv
-      - run: python scripts/cycles_maintain.py --team AGI
+      - run: python scripts/cycles_maintain.py --team ICH
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
 ```

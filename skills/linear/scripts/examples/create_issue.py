@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/examples/create_issue.py \\
-        --team-key AGI \\
+        --team-key ICH \\
         --title "auth: 401 on token refresh" \\
         --description "Reproduces on Safari 17.x." \\
         --priority 2
@@ -45,7 +45,7 @@ mutation Create($input: IssueCreateInput!) {
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--team-key", required=True, help="Team key, e.g. AGI")
+    parser.add_argument("--team-key", required=True, help="Team key, e.g. ICH")
     parser.add_argument("--title", required=True)
     parser.add_argument("--description", default="")
     parser.add_argument(

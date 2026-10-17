@@ -1,6 +1,8 @@
 # Prune archive — sqlite schema & query cookbook
 
-Reference for the sqlite store that `/linear-prune` writes to. Load this file when you need to **query** the archive of previously-pruned issues, **debug** a failed prune, or **understand the schema**.
+Indice: Schema · Cookbook · Idempotency · Recovery · Operational notes
+
+Reference for the sqlite store that `scripts/linear_prune.py` writes to (default `skills/linear/data/linear-archive/pruned.db`). Load this file when you need to **query** the archive of previously-pruned issues, **debug** a failed prune, or **understand the schema**.
 
 The archive lives at `./data/linear-archive/pruned.db` (override with `--db`). Failures go to `./data/linear-archive/failures.log` (append-only, tab-separated: `ISO-timestamp \t identifier \t message`).
 
@@ -15,13 +17,13 @@ Five tables. `issues` is the spine; the rest hang off it by `issue_id` (or `pare
 | Column | Type | Notes |
 |---|---|---|
 | `id` | TEXT PRIMARY KEY | Linear UUID (e.g. `2bb6ed30-…`) |
-| `identifier` | TEXT UNIQUE NOT NULL | `AGI-187` |
+| `identifier` | TEXT UNIQUE NOT NULL | `ICH-187` |
 | `title` | TEXT NOT NULL | |
 | `description` | TEXT | Raw markdown body |
 | `priority` | INTEGER | 0–4 (0=No, 1=Urgent, 4=Low) |
 | `estimate` | REAL | Story points / hours |
-| `team_key` | TEXT NOT NULL | e.g. `AGI` |
-| `team_name` | TEXT | e.g. `AgileAndy` |
+| `team_key` | TEXT NOT NULL | e.g. `ICH` |
+| `team_name` | TEXT | e.g. `Ichelema` |
 | `project_id`, `project_name` | TEXT | Null if unassigned |
 | `cycle_id`, `cycle_number` | TEXT / INTEGER | Null if no cycle |
 | `state_id`, `state_name`, `state_type` | TEXT | `state_type` ∈ `completed`, `canceled` |
@@ -58,11 +60,11 @@ Indexes: `idx_issues_state(state_name)`, `idx_issues_team(team_key)`, `idx_issue
 | Column | Type | Notes |
 |---|---|---|
 | `parent_id` | TEXT NOT NULL | The pruned issue's id |
-| `parent_identifier` | TEXT NOT NULL | e.g. `AGI-100` |
+| `parent_identifier` | TEXT NOT NULL | e.g. `ICH-100` |
 | `child_id`, `child_identifier` | TEXT NOT NULL | Each child of that parent |
 | PRIMARY KEY | `(parent_id, child_id)` | |
 
-Note: the **children rows are written from the parent's perspective**. If you prune an epic `AGI-100` that had three stories, you get three rows pointing back at the epic. If you prune one of those stories independently, it gets its own row in `issues` with `parent_identifier='AGI-100'`, but no `children` rows are added (a story has no children).
+Note: the **children rows are written from the parent's perspective**. If you prune an epic `ICH-100` that had three stories, you get three rows pointing back at the epic. If you prune one of those stories independently, it gets its own row in `issues` with `parent_identifier='ICH-100'`, but no `children` rows are added (a story has no children).
 
 ### `attachments`
 
@@ -105,7 +107,7 @@ sqlite3 data/linear-archive/pruned.db \
 # Full-record inspection — every column, one per line.
 # Invaluable for fidelity audits (e.g. "did the description survive?").
 sqlite3 data/linear-archive/pruned.db ".mode line" \
-  "SELECT * FROM issues WHERE identifier='AGI-167';"
+  "SELECT * FROM issues WHERE identifier='ICH-167';"
 ```
 
 ```bash
@@ -139,7 +141,7 @@ sqlite3 data/linear-archive/pruned.db \
 sqlite3 data/linear-archive/pruned.db \
   "SELECT user_name, created_at, body
    FROM comments
-   WHERE issue_id = (SELECT id FROM issues WHERE identifier = 'AGI-180')
+   WHERE issue_id = (SELECT id FROM issues WHERE identifier = 'ICH-180')
    ORDER BY created_at;"
 ```
 
@@ -147,7 +149,7 @@ sqlite3 data/linear-archive/pruned.db \
 # All children of a pruned epic.
 sqlite3 data/linear-archive/pruned.db \
   "SELECT child_identifier FROM children
-   WHERE parent_identifier = 'AGI-100'
+   WHERE parent_identifier = 'ICH-100'
    ORDER BY child_identifier;"
 ```
 
@@ -163,7 +165,7 @@ sqlite3 data/linear-archive/pruned.db \
 
 ```bash
 # Failed deletes — issues that were archived locally but Linear refused to delete.
-# These still exist in Linear; re-running /linear-prune will retry the delete.
+# These still exist in Linear; re-running scripts/linear_prune.py will retry the delete.
 cat data/linear-archive/failures.log
 ```
 
@@ -173,19 +175,19 @@ cat data/linear-archive/failures.log
 
 `archive_issue` uses `INSERT … ON CONFLICT(id) DO UPDATE`. Re-archiving the same Linear UUID (which only happens if the previous Linear delete failed) updates every column, including `pruned_at`, and **fully replaces** the child collections (labels / comments / children / attachments) — old rows are deleted first, then the current set is re-inserted. No stale or duplicated child rows.
 
-You can therefore safely re-run `/linear-prune` after a partial failure. The archive will converge to the latest snapshot.
+You can therefore safely re-run `scripts/linear_prune.py` after a partial failure. The archive will converge to the latest snapshot.
 
 ---
 
 ## Recovery
 
-Linear deletes from `/linear-prune` use `issueDelete(permanentlyDelete: true)` — **there is no trash to recover from**. The sqlite archive is the only copy.
+Linear deletes from `scripts/linear_prune.py` use `issueDelete(permanentlyDelete: true)` — **there is no trash to recover from**. The sqlite archive is the only copy.
 
 If you need to re-create a pruned issue in Linear:
 
-1. Read the row: `SELECT * FROM issues WHERE identifier='AGI-180'`.
+1. Read the row: `SELECT * FROM issues WHERE identifier='ICH-180'`.
 2. Read its labels, comments, children, attachments via the relations above.
-3. Use the `linear` skill to `issueCreate` a new issue with the captured fields. You'll get a new identifier (Linear doesn't let you reuse old ones), so the original `AGI-180` is gone forever — only the body, labels, comments, and links survive.
+3. Use the `linear` skill to `issueCreate` a new issue with the captured fields. You'll get a new identifier (Linear doesn't let you reuse old ones), so the original `ICH-180` is gone forever — only the body, labels, comments, and links survive.
 
 There is **no automated re-import**. By design — if you needed it back automatically, you wouldn't have pruned it.
 

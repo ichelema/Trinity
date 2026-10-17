@@ -9,7 +9,7 @@ Usage:
         --url https://your-receiver.example.com/linear \\
         --label "triage agent" \\
         --resource-types Issue Comment \\
-        --team-key AGI
+        --team-key ICH
 
 Captures the webhook secret to stdout exactly once — Linear will not
 return it again. Pipe it to your secret store immediately.

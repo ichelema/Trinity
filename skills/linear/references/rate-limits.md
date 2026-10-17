@@ -20,7 +20,7 @@ There is no separate "complexity remaining" header. The complexity budget is per
 
 ## Limits in practice
 
-Linear's docs quote 5,000 req/hr for personal API keys. **This workspace's key is currently 2,500 req/hr** (observed live during Phase 0 smoke). Treat the published number as a ceiling, not a guarantee — read `x-ratelimit-requests-limit` from the first response on a new key.
+Linear's docs quote 5,000 req/hr for personal API keys. Treat the published number as a ceiling, not a guarantee — read `x-ratelimit-requests-limit` from the first response on a new key.
 
 | Auth flow | Typical req/hr | Per-query complexity cap | Hourly complexity |
 |---|---|---|---|
@@ -30,7 +30,7 @@ Linear's docs quote 5,000 req/hr for personal API keys. **This workspace's key i
 
 ## Complexity examples (live data)
 
-Captured against a real workspace during Phase 0:
+Captured against a real workspace:
 
 | Operation | Complexity |
 |---|---|
@@ -53,7 +53,7 @@ The client raises `LinearError("rate limited (429); retry-after=…")` on HTTP 4
 3. Cap retries at 3. Linear's reset is a hard window — beyond 3 retries you're hitting the same wall.
 4. For *complexity* errors (HTTP 400 with `extensions.code = "RATELIMITED"` or similar), the fix is to reduce `first:` and prune fields, not to retry.
 
-The current CLI does **not** auto-retry. That's intentional for Phase 0 — agents calling this skill should see the failure and decide whether retry makes sense for their workflow. A retry helper can be added in Phase 4 (polish).
+The current CLI does **not** auto-retry. That's intentional — agents calling this skill should see the failure and decide whether retry makes sense for their workflow.
 
 ## Authoritative source
 

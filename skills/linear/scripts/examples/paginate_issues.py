@@ -6,7 +6,7 @@ Demonstrates the right way to exhaust a Connection field without setting
 references/schema-summary.md for the underlying pattern.
 
 Usage:
-    python scripts/examples/paginate_issues.py --team-key AGI
+    python scripts/examples/paginate_issues.py --team-key ICH
 """
 
 from __future__ import annotations

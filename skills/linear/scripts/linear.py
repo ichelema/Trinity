@@ -54,9 +54,12 @@ def load_document(arg: str) -> str:
 def load_variables(raw: str | None) -> dict[str, Any]:
     if raw is None:
         return {}
-    if raw.startswith("@"):
-        return json.loads(Path(raw[1:]).read_text(encoding="utf-8"))
-    return json.loads(raw)
+    try:
+        if raw.startswith("@"):
+            return json.loads(Path(raw[1:]).read_text(encoding="utf-8"))
+        return json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise LinearError(f"invalid --variables {raw[:60]!r}: {exc}") from exc
 
 
 def auth_header(api_key: str) -> str:
@@ -209,7 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     api_key = os.environ.get("LINEAR_API_KEY")
     if not api_key:
         print(
-            "error: LINEAR_API_KEY not set. Copy .env.example to .env and add your key.",
+            "error: LINEAR_API_KEY not set. Put LINEAR_API_KEY=<key> in skills/linear/.env "
+            "(see references/auth.md).",
             file=sys.stderr,
         )
         return 2

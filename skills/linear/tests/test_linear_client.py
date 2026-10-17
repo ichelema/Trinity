@@ -343,3 +343,13 @@ def test_mint_app_token_raises_on_unsupported_grant_type() -> None:
             client_id="cid",
             client_secret="csec",
         )
+
+
+def test_load_variables_reports_bad_json_and_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(linear.LinearError, match="invalid --variables"):
+        linear.load_variables("{bad")
+    with pytest.raises(linear.LinearError, match="invalid --variables"):
+        linear.load_variables(f"@{tmp_path / 'missing.json'}")
+    good = tmp_path / "vars.json"
+    good.write_text('{"id": "ICH-1"}', encoding="utf-8")
+    assert linear.load_variables(f"@{good}") == {"id": "ICH-1"}

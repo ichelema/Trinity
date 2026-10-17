@@ -13,9 +13,9 @@ The sqlite write commits before the Linear delete fires. A mid-run crash leaves
 exported rows in the DB; re-running picks up any survivors (UPSERT-safe).
 
 Usage:
-  python scripts/linear_prune.py --team AGI --dry-run
-  python scripts/linear_prune.py --team AGI --limit 1
-  python scripts/linear_prune.py --team AGI --no-confirm
+  python scripts/linear_prune.py --team ICH --dry-run
+  python scripts/linear_prune.py --team ICH --limit 1
+  python scripts/linear_prune.py --team ICH --no-confirm
 """
 
 from __future__ import annotations
@@ -34,8 +34,9 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from linear import LinearError, post_graphql  # noqa: E402
 
-DEFAULT_TEAM_KEY = "AGI"
-DEFAULT_DB_PATH = Path("data/linear-archive/pruned.db")
+DEFAULT_TEAM_KEY = "ICH"
+# Relativo alla skill, non alla cwd: l'archivio resta in skills/linear/data/ (gitignored).
+DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "linear-archive" / "pruned.db"
 PRUNE_STATE_TYPES = ["completed", "canceled"]  # captures Done, Cancelled, Duplicate
 PAGE_SIZE = 25  # keeps per-query complexity well under the 10k budget
 

@@ -160,7 +160,7 @@ Close (`cycleUpdate(completedAt: …)`) at session end. Don't archive — that's
 
 ### Sub-day boundaries — gotchas
 
-These bite the moment cycles get shorter than the auto-cadence and you start `cycleUpdate`-ing them. Discovered the hard way on AGI; codified here so you don't.
+These bite the moment cycles get shorter than the auto-cadence and you start `cycleUpdate`-ing them. Discovered the hard way on ICH; codified here so you don't.
 
 **1. `cycleUpdate` requires `new_startsAt > previous_startsAt + 24h` *strictly*.** Equal is rejected. Linear's error message reads "Please choose a start date that is after the start of the previous cycle" — the actual rule is the strict 24h offset, not the start-vs-start it implies. Curiously, Linear's *own* auto-created cycles touch at exactly equal boundaries, but you can't reproduce that via `cycleUpdate`.
 
@@ -262,7 +262,7 @@ The three engagement primitives missing from the MCP. None of them are gated beh
 
 ### Issue relations
 
-Mark one issue as related to another. Use cases: "this is a duplicate of AGI-42", "AGI-87 blocks AGI-91", "see also AGI-58".
+Mark one issue as related to another. Use cases: "this is a duplicate of ICH-42", "ICH-87 blocks ICH-91", "see also ICH-58".
 
 ```graphql
 mutation LinkIssues($input: IssueRelationCreateInput!) {
@@ -276,8 +276,8 @@ mutation LinkIssues($input: IssueRelationCreateInput!) {
 ```json
 {"input": {
   "type": "blocks",
-  "issueId": "AGI-87",
-  "relatedIssueId": "AGI-91"
+  "issueId": "ICH-87",
+  "relatedIssueId": "ICH-91"
 }}
 ```
 
@@ -290,7 +290,7 @@ mutation LinkIssues($input: IssueRelationCreateInput!) {
 | `related` | Loose link — informational. |
 | `similar` | Surfaced via Linear's similarity detection. |
 
-Both `issueId` and `relatedIssueId` accept a UUID or a human-readable identifier (`AGI-87`). The mutation resolves either form.
+Both `issueId` and `relatedIssueId` accept a UUID or a human-readable identifier (`ICH-87`). The mutation resolves either form.
 
 `issueRelationUpdate(id, input)` accepts the same fields with everything optional. Note: in the *update* input, `type` is loosely typed as `String` rather than the enum — pass quoted strings (`"blocks"`).
 
@@ -448,7 +448,7 @@ mutation Pin($input: FavoriteCreateInput!) {
 
 ```json
 {"input": {
-  "issueId": "AGI-87",
+  "issueId": "ICH-87",
   "folderName": "Right now"
 }}
 ```
@@ -538,7 +538,7 @@ Required: `email`. Optional: `role` (UserRoleType, defaults to `user`), `teamIds
 
 ```json
 {"input": {
-  "email": "new-engineer@agiledimensions.com.au",
+  "email": "user@example.com",
   "role": "admin",
   "teamIds": ["<team-uuid>"]
 }}

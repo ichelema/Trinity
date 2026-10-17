@@ -2,6 +2,26 @@
 
 Vale per ogni lavoro su issue Linear, indipendentemente dal backend.
 
+## Checklist da copiare e spuntare
+
+Copia questa lista nella risposta e spunta ogni passo. I dettagli sono nelle sezioni sotto.
+
+1. [ ] Working tree pulito (`git status --short`); se non lo è, fermati e chiedi.
+2. [ ] Branch di default rilevato con `gh repo view`.
+3. [ ] Relazioni `blockedBy` lette; se la issue è bloccata, mostra i blocchi e attendi.
+4. [ ] Branch creato con il `gitBranchName` di Linear.
+5. [ ] Issue portata a In Progress (una volta sola, solo da `backlog`/`unstarted`).
+6. [ ] PR aperta con riepilogo, dettagli, test eseguiti e riferimento alla issue.
+7. [ ] Controllo PR: titolo e descrizione nella lingua del progetto, magic word giusta
+   (closing o non-closing). Se un punto fallisce, correggi la PR e torna al passo 7.
+8. [ ] Stop: merge solo su richiesta esplicita dell'utente.
+9. [ ] Dopo il merge: branch di default, `git pull`, branch locale e remoto eliminati,
+   working tree pulito.
+10. [ ] Stato della issue controllato su Linear, non aggiornato a mano. Se doveva chiudersi
+    e non si è chiusa, mostralo all'utente con la magic word usata.
+
+Prima di consegnare, rileggi i passi 7 e 10: finisci solo quando passano entrambi.
+
 ## Branch
 
 - Più issue correlate: una issue principale, un solo branch, una sola PR.

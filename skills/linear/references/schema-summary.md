@@ -39,8 +39,8 @@ Linear consistently uses **two** identifiers per entity. Know the difference:
 | Field | Type | Example | Use |
 |---|---|---|---|
 | `id` | `String` (UUID v4) | `dab332d1-98c7-48e4-aa0a-0d987d033074` | Always accepted by mutations and `node(id)` lookups |
-| `identifier` | `String` (issues only) | `AGI-86` | Human-readable. Accepted by some queries but **not** mutations |
-| `key` (Team) | `String` | `AGI` | Short team prefix; rendered in `identifier` |
+| `identifier` | `String` (issues only) | `ICH-86` | Human-readable. Accepted by some queries but **not** mutations |
+| `key` (Team) | `String` | `ICH` | Short team prefix; rendered in `identifier` |
 | `slug` (Workspace, Project) | `String` | `agileandy` | URL fragment |
 
 **Rule:** mutations almost always want the UUID `id`, not `identifier` or `key`. If a query accepts both, the docs say so explicitly.
@@ -75,7 +75,7 @@ Most list fields take a `filter` arg with the connection's `*Filter` input type.
 ```graphql
 issues(
   filter: {
-    team: { key: { eq: "AGI" } }
+    team: { key: { eq: "ICH" } }
     state: { type: { in: ["started", "unstarted"] } }
     assignee: { isMe: { eq: true } }
     priority: { lte: 2 }
@@ -90,7 +90,7 @@ Common comparators by field type:
 | String | `eq`, `neq`, `in`, `nin`, `contains`, `startsWith`, `endsWith` (and `*IgnoreCase` variants). Enum-typed entity fields (e.g. `WorkflowState.type`) still expose **String** comparators on their filter input — pass quoted strings (`["unstarted", "started"]`), not bare enum literals. |
 | Number / DateTime | `eq`, `neq`, `lt`, `lte`, `gt`, `gte`, `in`, `nin` |
 | Boolean | `eq`, `neq` |
-| Relation | Nested filter object (`team: { key: { eq: "AGI" } }`) |
+| Relation | Nested filter object (`team: { key: { eq: "ICH" } }`) |
 | Logical | `and: [Filter]`, `or: [Filter]`, `not: Filter` |
 
 When in doubt, introspect the `*Filter` type: `linear.py introspect IssueFilter`.
@@ -120,7 +120,7 @@ Always select `success` and the entity's id/identifier so you have something to 
 
 ## Soft delete vs hard delete
 
-Caught this in Phase 0 — write it down loudly:
+Easy to miss:
 
 | Mutation | Default behaviour | Force hard delete |
 |---|---|---|
