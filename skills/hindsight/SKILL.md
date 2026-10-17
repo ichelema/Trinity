@@ -1,9 +1,14 @@
 ---
 name: hindsight
-description: Hindsight persistent memory system for AI agents. Use when working with retain/recall/reflect operations, memory banks. In questo progetto Hindsight gira come MCP server sulla VPS, raggiunto via tunnel SSH — vedi "Setup attivo in questo progetto" sotto per le operazioni quotidiane.
+description: Hindsight persistent memory system for AI agents. Use when working with retain/recall/reflect operations, memory banks. In questo progetto Hindsight gira come MCP server sulla VPS, raggiunto via tunnel SSH.
 ---
 
 # Hindsight Memory System
+
+Indice: Sicurezza · Quale sub-skill caricare · Operazioni di memoria via MCP ·
+Quando usare retain, recall e reflect · IMPORTANTE: Quando Memorizzare e Richiamare ·
+Il campo `context` · Regole di Tagging · Migliori Pratiche · Esempi ·
+Setup attivo in questo progetto · Troubleshooting rapido
 
 Hindsight è un sistema di memoria persistente per agenti AI che implementa operazioni **retain / recall / reflect**.
 
@@ -17,106 +22,26 @@ Endpoint:
 http://localhost:8888/mcp/trinity-project/
 ```
 
-## Setup attivo in questo progetto
+## Sicurezza
 
-In questo progetto Hindsight gira **solo sulla VPS `infomaniak`** (servizi `systemd --user`); i PC sono client e lo raggiungono con un tunnel SSH.
+La memoria non è la source of truth. Repository, file, test, lockfile, configurazioni e documentazione corrente hanno sempre priorità rispetto alla memoria persistente.
 
-**Stack:**
+## Quale sub-skill caricare
 
-- Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
-- Entry-point: `hindsight-local-mcp` (sulla VPS, lanciato dal servizio via `mise exec`)
-- Versione verificata: **1.0.0** (2026-10-14, PC Windows; la VPS va verificata a parte); query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
-- LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
-- Retain gate automatico: **`gpt-5.6-luna`** decide, **TypeSafe `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥ `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
-- Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
-- Reranker: **`voyage/rerank-3`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
-- Altre feature 0.9.0 attive: recency decay esponenziale (halflife 60 giorni), audit log server-side (retention 30 giorni), `HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS=true` (estrazione fallita dopo i retry → operation `failed`, intercettata da `hindsight-failcheck.sh`)
-- Storage: embedded PostgreSQL in `~/.pg0/` sulla VPS
-- Endpoint MCP: `http://localhost:8888/mcp/trinity-project/` (bank statico per-progetto)
-- Registrato a **scope user** come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (bank risolto per-progetto; vedi sotto)
-- **Server (VPS):** `hindsight.service`, `hindsight-cp.service` e `hindsight-backup.timer` (`systemd --user`). Gestione: `systemctl --user status|restart hindsight`, log `journalctl --user -u hindsight`. Backup: gli ultimi 5 dump in `~/backups/hindsight`.
-- **Client (PC):** env `HINDSIGHT_SSH_TUNNEL=hindsight-vps` (in `~/.claude/settings.json`, generato da chezmoi): `hindsight-ensure-up.sh` apre il tunnel che porta `127.0.0.1:8888` (API+MCP) e `localhost:9999` (Control Plane) in locale. Chiave SSH dedicata e ristretta (`restrict,port-forwarding,permitopen="127.0.0.1:8888",permitopen="localhost:9999",command="/bin/false"`). Nessun avvio locale e nessun fallback.
-- **Restore del DB (VPS):** `systemctl --user stop hindsight-cp hindsight` → `mise run db-restore` → `systemctl --user start hindsight hindsight-cp`.
-- **Upgrade Python (VPS):** dopo `mise upgrade python` serve `mise run install-hindsight` e `systemctl --user restart hindsight`.
+| Cosa devi fare | Dove |
+| --- | --- |
+| Usare retain, recall, reflect e gli altri tool MCP nel lavoro di ogni giorno | questo file |
+| Progettare la memoria di un'applicazione: bank config, tag schema, integrazione | `references/hindsight-architect/SKILL.md` |
+| Consultare la documentazione upstream: API, configurazione, SDK | i file sotto |
 
-Verifica veloce che il server risponda:
+Documentazione upstream in `references/hindsight-docs/references/`, da leggere direttamente:
 
-```bash
-curl -fsS -m 3 http://localhost:8888/ -o /dev/null -w "%{http_code}\n"  # 404 = up
-```
+- `best-practices.md`: regole upstream su mission, tag e formato dei contenuti
+- `developer/api/retain.md`, `recall.md`, `reflect.md`: parametri dei tre tool
+- `developer/configuration.md`: variabili `HINDSIGHT_API_*`
+- altre pagine: cerca con Grep o Glob nella stessa cartella
 
-### Multi-bank: core + bank per progetto
-
-Dal 2026-06-12 la memoria è a due livelli: il bank **CORE** `trinity-project`
-(informazioni trasversali) + un **bank per progetto** isolato, governati dal
-blocco `bank` di `hindsight.config.json`:
-
-- `retain_bank: "auto"` → il retain automatico scrive sul bank del progetto
-  corrente (slug dal remote `origin`, fallback basename; fuori da git o nel
-  repo Trinity stesso → core). Il bank si auto-crea al primo retain.
-- `recall_banks: ["auto", "core"]` → il recall fa fan-out parallelo su
-  progetto+core e fonde i risultati con un rerank globale voyage/rerank-2.5
-  (fallback interleaving se Voyage non risponde). Il core entra solo se listato.
-- URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
-
-**Tool MCP `hindsight/*` — quale bank vedono** (dal 2026-07-10, MCP per-progetto):
-il server "hindsight" è definito SOLO a scope user (`claude mcp add-json
-hindsight --scope user`) come shim stdio
-`hooks/hindsight/mcp/hindsight-mcp-shim.sh`, unico per tutti i progetti (una
-seconda definizione nel `.mcp.json` di Trinity causava il warning "Conflicting
-scopes" ed è stata rimossa). Lo shim risolve il bank con la stessa
-`resolve_bank` degli hook (slug dal remote origin via `CLAUDE_PROJECT_DIR`;
-repo Trinity o fuori-git → core `trinity-project`), attende la readiness del
-server e fa da ponte via `mcp-remote` sul node di mise.
-
-I tool MCP parlano comunque con UN solo bank per sessione: il fan-out
-progetto+core (`recall_banks: ["auto", "core"]`) resta esclusivo degli hook
-REST. Per accedere a un bank arbitrario usa l'API REST
-(`http://127.0.0.1:8888/v1/default/banks/<nome>/...`).
-
-**Promozione progetto → core**: comando `/trinity:promote` (curata, mai
-automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei tag
-`repo:`/`branch:`). Meccanica in `hooks/hindsight/ops/hindsight-promote.py`
-(`--scan/--triage/--move/--reject/--status`); lo scan+triage si lancia a mano
-e genera `logs/promote-candidates.json`.
-
-### Mental model: knowledge page iniettate a inizio sessione
-
-Tre mental model sono definiti nel blocco `mental_models` di `hindsight.config.json`:
-`user-profile`, `project-conventions`, `recurring-learnings`. I primi due vengono iniettati
-come `additionalContext` all'avvio di una sessione nuova (`startup`) dall'hook `hindsight-mm-inject.sh`
-(gated da `mental_models_inject_on_start: true`, ids in `mental_models_inject_ids`);
-`recurring-learnings` resta nel bank ma non viene iniettato.
-
-- **refresh** rigenera il contenuto dal bank; **inject** mostra solo il contenuto già esistente.
-- Refresh manuale immediato (necessario dopo aver cancellato/corretto un fatto):
-  `bash hooks/hindsight/ops/hindsight-mental-models.sh refresh --all`
-
-### Hook di sessione e strumenti operativi
-
-| Componente | Trigger/uso | Cosa fa |
-| ---------- | ----------- | ------- |
-| `hindsight-ensure-up.sh` | SessionStart | Attende la readiness dell'endpoint MCP, aprendo prima il tunnel SSH se `HINDSIGHT_SSH_TUNNEL` è impostata (elimina la race "tool `hindsight/*` non registrati") |
-| `hindsight-mm-inject.sh` | SessionStart | Inietta i mental model (vedi sopra) |
-| `hindsight-failcheck.sh` | UserPromptSubmit | Segnala operation async `failed` lato server (retain accettato ma estrazione fallita) e la degradazione del reranker; de-dup via state file |
-| `mise run db-dump` / `db-restore` | manuale | `pg_dump`/restore del DB Hindsight, solo sulla VPS (`tools/hs-db-dump.sh`, `hs-db-restore.sh` con guardrail anti-perdita) |
-| `tools/hindsight_export.py` / `hindsight_import.py` | cambio provider embedding | Export dei documenti → re-retain sul nuovo embedding (il cambio di dimensione obbliga al rebuild del bank) |
-
-### Interfaccia web: Control Plane
-
-Una UI **opzionale**, indipendente dal server MCP, servita sulla VPS da `hindsight-cp.service` e raggiunta via tunnel su `http://localhost:9999`:
-
-| UI                                             | Porta | Avvio                    | A cosa serve                                                                                                    |
-| ---------------------------------------------- | ----- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| **Control Plane** (Web UI ufficiale Hindsight) | 9999  | `hindsight-cp.service` (VPS; a mano `mise run control-plane`) | Sfogliare bank/agent, entità e relazioni, storico operations, testare query di recall. Si collega all'API :8888 |
-
-- **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `localhost` con `HOSTNAME=localhost` e `--hostname localhost` (no LAN; configurazione conservata dal workaround storico dell'origin mismatch). URL consigliato: `http://localhost:9999`. Non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi.
-- Per analizzare `hindsight-debug.log` (JSONL) non serve una UI: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
-
-> Panoramica memoria: vedi `README.md` §9. Dettagli di avvio e bind `HOSTNAME`:
-> task `control-plane` in `mise.toml`.
-
-### Operazioni di memoria via MCP
+## Operazioni di memoria via MCP
 
 I tool MCP con prefisso `hindsight/` esposti dal setup locale sono filtrati da
 `HINDSIGHT_API_MCP_ENABLED_TOOLS` in `mise.toml`: il catalogo upstream completo non
@@ -152,7 +77,7 @@ Tool ausiliari più usati:
 4. Entrambi i tipi vengono indicizzati con embeddings nel bank `trinity-project`
 5. `recall` cerca semanticamente su observation + world, restituisce ranked
 
-### Quando usare retain proattivamente
+## Quando usare retain proattivamente
 
 Alla fine di un task significativo, salva informazioni persistenti e durevoli.
 
@@ -211,7 +136,7 @@ Non salvare:
 - Stato effimero della sessione corrente
 - Documentazione duplicata (es. CLAUDE.md è già caricato)
 
-### Quando usare recall proattivamente
+## Quando usare recall proattivamente
 
 All’inizio di un nuovo task, dopo un reset del contesto, oppure quando l’utente fa riferimento a lavoro precedente, usa Hindsight recall.
 
@@ -259,7 +184,7 @@ Usa recall per recuperare:
 
 Considera la memoria richiamata come contesto consultivo, non come fonte di verità assoluta. Verifica sempre i fatti mutabili direttamente nel repository.
 
-# Quando usare reflect proattivamente
+## Quando usare reflect proattivamente
 
 Utilizza `mcp__hindsight__reflect` quando è necessaria una sintesi o un giudizio, non solo il recupero di informazioni.
 
@@ -437,7 +362,106 @@ Quando devi decidere tra diversi approcci, chiama `mcp__hindsight__reflect`:
 }
 ```
 
-### Troubleshooting rapido
+## Setup attivo in questo progetto
+
+In questo progetto Hindsight gira **solo sulla VPS `infomaniak`** (servizi `systemd --user`); i PC sono client e lo raggiungono con un tunnel SSH.
+
+**Stack:**
+
+- Pacchetto Python: `hindsight-api-slim[embedded-db]` (installato via `mise run install-hindsight`; NON il meta-pacchetto `hindsight-api`, alias di `[all]` che tira giù i modelli locali/PyTorch)
+- Entry-point: `hindsight-local-mcp` (sulla VPS, lanciato dal servizio via `mise exec`)
+- Versione verificata: **1.0.0** (2026-10-14, PC Windows; la VPS va verificata a parte); query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
+- LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B 2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
+- Retain gate automatico: **`gpt-5.6-luna`** decide, **TypeSafe `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥ `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
+- Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
+- Reranker: **`voyage/rerank-3`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati (per-budget spento). **Failover chain fail-open** (ICH-65): `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
+- Altre feature 0.9.0 attive: recency decay esponenziale (halflife 60 giorni), audit log server-side (retention 30 giorni), `HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS=true` (estrazione fallita dopo i retry → operation `failed`, intercettata da `hindsight-failcheck.sh`)
+- Storage: embedded PostgreSQL in `~/.pg0/` sulla VPS
+- Endpoint MCP: `http://localhost:8888/mcp/trinity-project/` (bank statico per-progetto)
+- Registrato a **scope user** come shim stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh` (bank risolto per-progetto; vedi sotto)
+- **Server (VPS):** `hindsight.service`, `hindsight-cp.service` e `hindsight-backup.timer` (`systemd --user`). Gestione: `systemctl --user status|restart hindsight`, log `journalctl --user -u hindsight`. Backup: gli ultimi 5 dump in `~/backups/hindsight`.
+- **Client (PC):** env `HINDSIGHT_SSH_TUNNEL=hindsight-vps` (in `~/.claude/settings.json`, generato da chezmoi): `hindsight-ensure-up.sh` apre il tunnel che porta `127.0.0.1:8888` (API+MCP) e `localhost:9999` (Control Plane) in locale. Chiave SSH dedicata e ristretta (`restrict,port-forwarding,permitopen="127.0.0.1:8888",permitopen="localhost:9999",command="/bin/false"`). Nessun avvio locale e nessun fallback.
+- **Restore del DB (VPS):** `systemctl --user stop hindsight-cp hindsight` → `mise run db-restore` → `systemctl --user start hindsight hindsight-cp`.
+- **Upgrade Python (VPS):** dopo `mise upgrade python` serve `mise run install-hindsight` e `systemctl --user restart hindsight`.
+
+Verifica veloce che il server risponda:
+
+```bash
+curl -fsS -m 3 http://localhost:8888/ -o /dev/null -w "%{http_code}\n"  # 404 = up
+```
+
+### Multi-bank: core + bank per progetto
+
+Dal 2026-06-12 la memoria è a due livelli: il bank **CORE** `trinity-project`
+(informazioni trasversali) + un **bank per progetto** isolato, governati dal
+blocco `bank` di `hindsight.config.json`:
+
+- `retain_bank: "auto"` → il retain automatico scrive sul bank del progetto
+  corrente (slug dal remote `origin`, fallback basename; fuori da git o nel
+  repo Trinity stesso → core). Il bank si auto-crea al primo retain.
+- `recall_banks: ["auto", "core"]` → il recall fa fan-out parallelo su
+  progetto+core e fonde i risultati con un rerank globale voyage/rerank-2.5
+  (fallback interleaving se Voyage non risponde). Il core entra solo se listato.
+- URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
+
+**Tool MCP `hindsight/*` — quale bank vedono** (dal 2026-07-10, MCP per-progetto):
+il server "hindsight" è definito SOLO a scope user (`claude mcp add-json
+hindsight --scope user`) come shim stdio
+`hooks/hindsight/mcp/hindsight-mcp-shim.sh`, unico per tutti i progetti (una
+seconda definizione nel `.mcp.json` di Trinity causava il warning "Conflicting
+scopes" ed è stata rimossa). Lo shim risolve il bank con la stessa
+`resolve_bank` degli hook (slug dal remote origin via `CLAUDE_PROJECT_DIR`;
+repo Trinity o fuori-git → core `trinity-project`), attende la readiness del
+server e fa da ponte via `mcp-remote` sul node di mise.
+
+I tool MCP parlano comunque con UN solo bank per sessione: il fan-out
+progetto+core (`recall_banks: ["auto", "core"]`) resta esclusivo degli hook
+REST. Per accedere a un bank arbitrario usa l'API REST
+(`http://127.0.0.1:8888/v1/default/banks/<nome>/...`).
+
+**Promozione progetto → core**: comando `/trinity:promote` (curata, mai
+automatica: scan → triage gpt-4.1-nano → review umana → move con strip dei tag
+`repo:`/`branch:`). Meccanica in `hooks/hindsight/ops/hindsight-promote.py`
+(`--scan/--triage/--move/--reject/--status`); lo scan+triage si lancia a mano
+e genera `logs/promote-candidates.json`.
+
+### Mental model: knowledge page iniettate a inizio sessione
+
+Tre mental model sono definiti nel blocco `mental_models` di `hindsight.config.json`:
+`user-profile`, `project-conventions`, `recurring-learnings`. I primi due vengono iniettati
+come `additionalContext` all'avvio di una sessione nuova (`startup`) dall'hook `hindsight-mm-inject.sh`
+(gated da `mental_models_inject_on_start: true`, ids in `mental_models_inject_ids`);
+`recurring-learnings` resta nel bank ma non viene iniettato.
+
+- **refresh** rigenera il contenuto dal bank; **inject** mostra solo il contenuto già esistente.
+- Refresh manuale immediato (necessario dopo aver cancellato/corretto un fatto):
+  `bash hooks/hindsight/ops/hindsight-mental-models.sh refresh --all`
+
+### Hook di sessione e strumenti operativi
+
+| Componente | Trigger/uso | Cosa fa |
+| ---------- | ----------- | ------- |
+| `hindsight-ensure-up.sh` | SessionStart | Attende la readiness dell'endpoint MCP, aprendo prima il tunnel SSH se `HINDSIGHT_SSH_TUNNEL` è impostata (elimina la race "tool `hindsight/*` non registrati") |
+| `hindsight-mm-inject.sh` | SessionStart | Inietta i mental model (vedi sopra) |
+| `hindsight-failcheck.sh` | UserPromptSubmit | Segnala operation async `failed` lato server (retain accettato ma estrazione fallita) e la degradazione del reranker; de-dup via state file |
+| `mise run db-dump` / `db-restore` | manuale | `pg_dump`/restore del DB Hindsight, solo sulla VPS (`tools/hs-db-dump.sh`, `hs-db-restore.sh` con guardrail anti-perdita) |
+| `tools/hindsight_export.py` / `hindsight_import.py` | cambio provider embedding | Export dei documenti → re-retain sul nuovo embedding (il cambio di dimensione obbliga al rebuild del bank) |
+
+### Interfaccia web: Control Plane
+
+Una UI **opzionale**, indipendente dal server MCP, servita sulla VPS da `hindsight-cp.service` e raggiunta via tunnel su `http://localhost:9999`:
+
+| UI                                             | Porta | Avvio                    | A cosa serve                                                                                                    |
+| ---------------------------------------------- | ----- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| **Control Plane** (Web UI ufficiale Hindsight) | 9999  | `hindsight-cp.service` (VPS; a mano `mise run control-plane`) | Sfogliare bank/agent, entità e relazioni, storico operations, testare query di recall. Si collega all'API :8888 |
+
+- **Control Plane**: app Next.js scaricata via `npx @vectorize-io/hindsight-control-plane` (non nel repo). Gira sul **Node gestito da mise** (`[tools] node`), perché l'`npx` del Node MSYS2 (`/ucrt64/bin`) crasha. È legato a `localhost` con `HOSTNAME=localhost` e `--hostname localhost` (no LAN; configurazione conservata dal workaround storico dell'origin mismatch). URL consigliato: `http://localhost:9999`. Non ha API key — `HINDSIGHT_CP_ACCESS_KEY` la protegge se la esponi.
+- Per analizzare `hindsight-debug.log` (JSONL) non serve una UI: `nu -c "open logs/hindsight-debug.log | lines | each { from json } | where event == 'recall'"`.
+
+> Panoramica memoria: vedi `README.md` §9. Dettagli di avvio e bind `HOSTNAME`:
+> task `control-plane` in `mise.toml`.
+
+## Troubleshooting rapido
 
 | Sintomo                                                   | Causa probabile                                          | Fix                                                                           |
 | --------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -445,25 +469,3 @@ Quando devi decidere tra diversi approcci, chiama `mcp__hindsight__reflect`:
 | Server crash all'avvio con `UnicodeEncodeError 'charmap'` | `PYTHONUTF8` non esportato                               | Verifica `[env]` di `.mise.toml` (vedi memory `feedback-python-utf8-windows`) |
 | `recall` torna vuoto subito dopo un `retain`              | Estrazione fatti ancora in corso, perché è async         | Polla `get_operation(operation_id)` finché `completed`, poi ricalla           |
 | `OPENAI_API_KEY not set` nel log del server               | Variabile non disponibile al servizio sulla VPS          | Verifica con `mise env` e `journalctl --user -u hindsight`                                                       |
-
-## Sicurezza
-
-La memoria non è la source of truth. Repository, file, test, lockfile, configurazioni e documentazione corrente hanno sempre priorità rispetto alla memoria persistente.
-
-## Quale sub-skill caricare
-
-Leggi la sub-skill appropriata in base al contesto:
-
-| Scenario                                                                                   | Sub-skill da leggere                         |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| Progettare l'architettura memory per un'applicazione, pianificare bank config e tag schema | `@references/hindsight-architect/SKILL.md`   |
-| Consultare documentazione API, configurazione, SDK, retrieval strategies                   | `@references/hindsight-docs/SKILL.md`        |
-
-## Routing rapido per keyword
-
-- **"memory architecture"**, **"bank config"**, **"tag schema"**, **"design memory"** → `hindsight-architect`
-- **"retain"**, **"recall"**, **"reflect"**, **"API"**, **"SDK"**, **"configurazione"**, **"retrieval"** → `hindsight-docs`
-
-## Se il contesto non è chiaro
-
-Carica `@references/hindsight-docs/SKILL.md` come punto di partenza: contiene l'intera documentazione tecnica e i casi d'uso.
