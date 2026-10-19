@@ -32,5 +32,5 @@ if ($session) { $lines.Add("Sessione: $session") }
 
 New-BurntToastNotification `
     -Text $lines.ToArray() `
-    -AppLogo "E:\msys64\home\Sphynx\claude.png" `
+    -AppLogo "D:\msys64\home\Sphynx\claude.png" `
     -ExpirationTime (Get-Date).AddSeconds(3)
