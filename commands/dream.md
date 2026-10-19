@@ -27,7 +27,7 @@ bank sbagliato.
 - Memoria file-based (tutti i progetti): `~/.claude/projects/*/memory/`
 - Trascrizioni sessioni (fonte ausiliaria, READ-ONLY): `~/.claude/projects/<project>/*.jsonl`
 - API REST Hindsight: `http://127.0.0.1:8888/v1/default`
-- Daily note (READ-ONLY, mai modificarle): `e:/obsidian/sinapsi/🌅Daily/YYYY-MM/YYYY-MM-DD.md`
+- Daily note (READ-ONLY, mai modificarle): `d:/obsidian/sinapsi/🌅Daily/YYYY-MM/YYYY-MM-DD.md`
 - Report: `${CLAUDE_PLUGIN_ROOT}/logs/dream/report-YYYY-MM-DD.md`
 - Stato: `${CLAUDE_PLUGIN_ROOT}/logs/dream/state.json`
 
@@ -69,7 +69,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 1. **Finestra**: leggi `state.json`. Finestra = da `last_audit` a adesso.
    Se il file non esiste (primo giro): ultimi 14 giorni.
 2. **Daily note**: elenca le daily nella finestra con Glob su
-   `e:/obsidian/sinapsi/*Daily/*/*.md` filtrando per data nel nome file
+   `d:/obsidian/sinapsi/*Daily/*/*.md` filtrando per data nel nome file
    (fallback: `ls` via Bash col path quotato se l'emoji dà problemi). Di ogni
    daily leggi solo le sezioni utili all'audit:
    - `## 🤖 Riassunto sessione Agente AI` — in particolare i `#### Dettagli tecnici`

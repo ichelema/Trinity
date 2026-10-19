@@ -9,7 +9,7 @@ scadano, così non devi rifare la procedura cURL ogni volta.
 `auth-refresh-scheduled.sh`, che esegue:
 
 ```
-/e/AI/tools/notebooklm-data/notebooklm auth refresh
+/d/AI/tools/notebooklm-data/notebooklm auth refresh
 ```
 
 tramite il launcher exe-free (Python di mise + `truststore` per il proxy Eni +
@@ -22,9 +22,9 @@ di base `SID`.
 | Campo             | Valore                                                                 |
 | ----------------- | ---------------------------------------------------------------------- |
 | Event Type        | Run Application                                                        |
-| Application       | `E:\AI\Claude\Trinity\scheduler\notebooklm\auth-refresh-scheduled.cmd` |
+| Application       | `D:\AI\Claude\Trinity\scheduler\notebooklm\auth-refresh-scheduled.cmd` |
 | Parameters        | *(vuoto)*                                                              |
-| Working Directory | `E:\AI\Claude\Trinity`                                                 |
+| Working Directory | `D:\AI\Claude\Trinity`                                                 |
 | State             | Minimized o Hidden                                                     |
 | Cadenza           | ogni 15–20 minuti (consigliata per profili idle)                       |
 
@@ -42,7 +42,7 @@ di base `SID`.
 
 - `NB_FAIL_THRESHOLD` — fallimenti consecutivi prima dell'alert (default `3`).
 - `NB_NO_OPEN=1` — non aprire Notepad sull'alert (per i test).
-- `NB_LAUNCHER` — override del path del launcher notebooklm (default `/e/AI/tools/notebooklm-data/notebooklm`; usato nei test per simulare un fallimento).
+- `NB_LAUNCHER` — override del path del launcher notebooklm (default `/d/AI/tools/notebooklm-data/notebooklm`; usato nei test per simulare un fallimento).
 
 ## Test manuale
 

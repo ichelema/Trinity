@@ -5,7 +5,7 @@
 # Viene invocato dal launcher nb-check-scheduled.cmd via login shell, quindi gira
 # già dentro MSYS2 UCRT64. Esegue `mise run nb-check`, registra l'esito in
 # nb-check-scheduled.log e, se è uscita una versione di notebooklm-py più
-# recente di quella installata in E:/AI/tools/notebooklm, lascia un file di
+# recente di quella installata in D:/AI/tools/notebooklm, lascia un file di
 # alert visibile (e lo apre in Notepad).
 #
 # Exit:  0  = nessuna novità   |   10 = update disponibile   |   altro = errore
@@ -49,11 +49,11 @@ if [[ "$RC" -eq 10 || "${NB_FORCE_ALERT:-0}" == "1" ]]; then
 		echo "ATTENZIONE: notebooklm-py è installato in modalità exe-free (flat-extract)."
 		echo "Non usare pip install — seguire la procedura manuale:"
 		echo
-		echo "  1. Backup:  cp -r E:/AI/tools/notebooklm E:/AI/tools/notebooklm.bak-\$(date +%Y%m%d)"
+		echo "  1. Backup:  cp -r D:/AI/tools/notebooklm D:/AI/tools/notebooklm.bak-\$(date +%Y%m%d)"
 		echo "  2. Download wheel da PyPI oppure sorgente GitHub (teng-lin/notebooklm-py)"
-		echo "  3. Estrai solo il package notebooklm/ e il dist-info in E:/AI/tools/notebooklm"
-		echo "  4. Verifica: find /e/AI/tools/notebooklm -iname '*.exe' -o -iname '*.dll' (deve essere vuoto)"
-		echo "  5. Smoke test: PYTHONPATH=E:/AI/tools/notebooklm python -m notebooklm.mcp --help"
+		echo "  3. Estrai solo il package notebooklm/ e il dist-info in D:/AI/tools/notebooklm"
+		echo "  4. Verifica: find /d/AI/tools/notebooklm -iname '*.exe' -o -iname '*.dll' (deve essere vuoto)"
+		echo "  5. Smoke test: PYTHONPATH=D:/AI/tools/notebooklm python -m notebooklm.mcp --help"
 		echo
 		echo "Vedi Hindsight (recall 'notebooklm aggiornamento exe-free') per i dettagli completi."
 	} >"$ALERT"

@@ -137,8 +137,8 @@ Risolvi il percorso assoluto del worktree in formato Windows dentro `.claude/wor
 
 `<repo-root>/.claude/worktrees/<prefix>+<base-name>`
 
-Esempio: se la root è `E:/AI/Claude/Trinity` e il prefisso è `improvments`, il worktree sarà
-`E:/AI/Claude/Trinity/.claude/worktrees/improvments+ICH-97-98-fable`.
+Esempio: se la root è `D:/AI/Claude/Trinity` e il prefisso è `improvments`, il worktree sarà
+`D:/AI/Claude/Trinity/.claude/worktrees/improvments+ICH-97-98-fable`.
 
 Crea il branch e il worktree usando il percorso assoluto Windows:
 
@@ -149,7 +149,7 @@ Non eseguire checkout, reset, stash o modifiche nel working tree originale.
 ## Compatibilità SmartGit
 
 SmartGit legge solo il back-pointer `<repo-root>/.git/worktrees/<prefix>+<base-name>/gitdir`. Avendo
-passato a `git worktree add` il percorso Windows, quel file è già in formato `E:/...`: non serve
+passato a `git worktree add` il percorso Windows, quel file è già in formato `D:/...`: non serve
 altro.
 
 Verifica che il back-pointer inizi con `<LETTERA>:/`; se è in formato POSIX (`/e/...`), fermati e

@@ -1,14 +1,14 @@
 # Reminder aggiornamenti — yt-extract plugin
 
-Sistema che **avvisa quando esce su GitHub una versione del plugin `yt-extract` più recente di quella installata in `E:/AI/tools/claude-code-youtube-extract`**, così si può fare l'upgrade quando si vuole.
+Sistema che **avvisa quando esce su GitHub una versione del plugin `yt-extract` più recente di quella installata in `D:/AI/tools/claude-code-youtube-extract`**, così si può fare l'upgrade quando si vuole.
 
 ## Contesto
 
-Il plugin `yt-extract` è un clone git di `muckybuzzwoo/claude-code-youtube-extract` installato in `E:/AI/tools/claude-code-youtube-extract`. La versione installata è letta dal `CHANGELOG.md` del clone locale (prima riga `## [X.Y.Z]`).
+Il plugin `yt-extract` è un clone git di `muckybuzzwoo/claude-code-youtube-extract` installato in `D:/AI/tools/claude-code-youtube-extract`. La versione installata è letta dal `CHANGELOG.md` del clone locale (prima riga `## [X.Y.Z]`).
 
 > **Nota (pacchetto nel bazar):** da ottobre 2026 yt-extract non è più dentro Trinity: vive come pacchetto in `D:/AI/my-bazar/skills/yt-extract/` (skill in `skills/yt-extract/`, subagent in `agents/extract-worker.md`, backend in `scripts/yt-extract.py`, namespace `yt-extract:`). Il clone qui monitorato resta lo **staging upstream** dove fare `git pull` + patch exe-free; dopo l'update va **risincronizzata** la copia nel bazar (vedi passo 3 sotto). Lo scheduler continua a leggere la versione dal `CHANGELOG.md` del clone.
 
-Il clone contiene una **patch locale a `scripts/yt-extract.py`** (funzione `run_ytdlp()`) che lo rende exe-free: invoca `python -m yt_dlp` con `PYTHONPATH=E:/AI/tools/yt-dlp` invece del comando esterno `yt-dlp`. Questa patch va **riapplicata dopo ogni `git pull`**, poiché il pull sovrascrive il codice di terzi.
+Il clone contiene una **patch locale a `scripts/yt-extract.py`** (funzione `run_ytdlp()`) che lo rende exe-free: invoca `python -m yt_dlp` con `PYTHONPATH=D:/AI/tools/yt-dlp` invece del comando esterno `yt-dlp`. Questa patch va **riapplicata dopo ogni `git pull`**, poiché il pull sovrascrive il codice di terzi.
 
 ## File in questa cartella
 
@@ -45,9 +45,9 @@ yt-check.rb                             ← CHANGELOG parse, GitHub API, exit 0/
 | ----------- | --------------------------------------------------------------------------------------- |
 | Event Type  | `Run Application`                                                                       |
 | Title       | `yt-extract — check nuova versione`                                                     |
-| Application | `E:\AI\Claude\Trinity\scheduler\check_update_yt_extract\yt-check-scheduled.cmd`        |
+| Application | `D:\AI\Claude\Trinity\scheduler\check_update_yt_extract\yt-check-scheduled.cmd`        |
 | Parameters  | _(vuoto)_                                                                               |
-| Working Dir | `E:\AI\Claude\Trinity`                                                                  |
+| Working Dir | `D:\AI\Claude\Trinity`                                                                  |
 | State       | `Minimized` (o `Hidden`)                                                                |
 
 **Tab _Schedule_:** cadenza **settimanale** consigliata.
@@ -63,18 +63,18 @@ mise run yt-check          # controlla (exit 10 = update disponibile)
 ## Come aggiornare (quando arriva l'alert)
 
 ```bash
-git -C /e/AI/tools/claude-code-youtube-extract pull
+git -C /d/AI/tools/claude-code-youtube-extract pull
 ```
 
 **Dopo il pull, riapplicare la patch exe-free a `run_ytdlp()`** in `scripts/yt-extract.py`:
-la funzione deve invocare `python -m yt_dlp` con `PYTHONPATH=E:/AI/tools/yt-dlp` invece del comando esterno `yt-dlp`.
+la funzione deve invocare `python -m yt_dlp` con `PYTHONPATH=D:/AI/tools/yt-dlp` invece del comando esterno `yt-dlp`.
 
 Vedi Hindsight (`recall "yt-extract patch exe-free"`) per il diff completo della patch.
 
 **Passo 3 — risincronizzare la copia nel bazar**:
 
 ```bash
-SRC="E:/AI/tools/claude-code-youtube-extract"; DST="D:/AI/my-bazar/skills/yt-extract"
+SRC="D:/AI/tools/claude-code-youtube-extract"; DST="D:/AI/my-bazar/skills/yt-extract"
 cp -r "$SRC/skills/yt-extract/." "$DST/skills/yt-extract/"
 cp "$SRC/agents/extract-worker.md" "$DST/agents/extract-worker.md"
 cp "$SRC/scripts/yt-extract.py"    "$DST/scripts/yt-extract.py"
@@ -90,6 +90,6 @@ del bazar, sync dei progetti che lo usano e **riavvio di Claude Code**.
 - **Versione locale**: letta dalla prima riga `## [X.Y.Z]` del `CHANGELOG.md` del clone. Stabile anche dopo la patch locale (che non tocca il CHANGELOG).
 - **GitHub API**: usa `/releases/latest` con fallback a `/tags` se non esistono release formali. Rate limit: 60 req/h senza token (ampiamente sufficiente per un check settimanale).
 - **TLS proxy ENINET**: `Net::HTTP` rispetta `SSL_CERT_FILE` impostato nell'`[env]` del `.mise.toml`.
-- **`mise` non nel PATH MSYS**: invocato col path assoluto `/e/msys64/home/Sphynx/.local/bin/mise.exe`.
+- **`mise` non nel PATH MSYS**: invocato col path assoluto `/d/msys64/home/Sphynx/.local/bin/mise.exe`.
 - **`YT_NO_OPEN=1`**: disabilita l'apertura di Notepad (utile per i test da terminale).
 - **`YT_FORCE_ALERT=1`**: forza la scrittura dell'alert anche se non c'è update (per testare il flusso).

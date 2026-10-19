@@ -41,7 +41,7 @@ Ricava il worktree di implementazione con la stessa regola di `/2_work-issue`
 
 La directory da recensire `<rev-path>` è `<review-path>` se è stato passato (worktree detached
 creato da `/4_review-fix-loop`). Altrimenti creala tu: un worktree detached (senza branch: non
-committi) dal commit della PR, con path assoluto in formato Windows (`E:/...`) su Windows/MSYS2:
+committi) dal commit della PR, con path assoluto in formato Windows (`D:/...`) su Windows/MSYS2:
 
 ```bash
 git fetch origin

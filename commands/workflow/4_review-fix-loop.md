@@ -58,7 +58,7 @@ non da un branch orfano.
 Per ogni round:
 
 1. Crea due worktree di review isolati e detached (senza branch: il reviewer non committa), uno per
-   reviewer, con path assoluti in formato Windows (`E:/...`) su Windows/MSYS2:
+   reviewer, con path assoluti in formato Windows (`D:/...`) su Windows/MSYS2:
    ```bash
    git fetch origin
    repo_root="$(git rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"

@@ -18,7 +18,7 @@ set -uo pipefail
 # Fallback robusto: in bash usa BASH_SOURCE, in zsh (come lo lancia il .cmd via
 # `zsh <script>`) BASH_SOURCE e' vuoto, quindi ripiega su $0 = path dello script.
 PROJ="${TRINITY_PLUGIN_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
-NB="${NB_LAUNCHER:-/e/AI/tools/notebooklm-data/notebooklm}"
+NB="${NB_LAUNCHER:-/d/AI/tools/notebooklm-data/notebooklm}"
 THRESHOLD="${NB_FAIL_THRESHOLD:-3}"
 
 cd "$PROJ" || {
@@ -78,8 +78,8 @@ fi
 	echo "  1. In Chrome loggato su https://notebooklm.google.com, premi F12 -> scheda Rete"
 	echo "  2. Ricarica la pagina, click destro su una richiesta a notebooklm.google.com"
 	echo "     -> Copia -> Copia come cURL (bash)"
-	echo "  3. Incolla in:  E:/AI/tools/notebooklm-data/curl.txt"
-	echo "  4. Esegui:      ruby E:/AI/tools/notebooklm-data/make_storage_state.rb"
+	echo "  3. Incolla in:  D:/AI/tools/notebooklm-data/curl.txt"
+	echo "  4. Esegui:      ruby D:/AI/tools/notebooklm-data/make_storage_state.rb"
 	echo
 	echo "Ultimo output di auth refresh:"
 	echo "  $OUT"

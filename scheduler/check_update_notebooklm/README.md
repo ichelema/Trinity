@@ -1,10 +1,10 @@
 # Reminder aggiornamenti — notebooklm-py
 
-Sistema che **avvisa quando esce su PyPI una versione di `notebooklm-py` più recente di quella installata in `E:/AI/tools/notebooklm`**, così si può fare l'upgrade quando si vuole.
+Sistema che **avvisa quando esce su PyPI una versione di `notebooklm-py` più recente di quella installata in `D:/AI/tools/notebooklm`**, così si può fare l'upgrade quando si vuole.
 
 ## Contesto
 
-`notebooklm-py` è installato in **modalità exe-free** (flat-extract manuale) perché l'EDR aziendale blocca i file `.exe` scritti su disco. Il package è in `E:/AI/tools/notebooklm`, i dati e il launcher sono in `E:/AI/tools/notebooklm-data`.
+`notebooklm-py` è installato in **modalità exe-free** (flat-extract manuale) perché l'EDR aziendale blocca i file `.exe` scritti su disco. Il package è in `D:/AI/tools/notebooklm`, i dati e il launcher sono in `D:/AI/tools/notebooklm-data`.
 
 Al 2026-06-28 la versione **0.8.0** (con supporto MCP via `fastmcp`) è installata da GitHub (branch `main`, commit `781dd4c9`), poiché su PyPI è ancora pubblicata la 0.7.2 senza MCP.
 
@@ -45,9 +45,9 @@ nb-check.rb                             ← glob dist-info, PyPI query, exit 0/1
 | ----------- | ------------------------------------------------------------------------------------ |
 | Event Type  | `Run Application`                                                                    |
 | Title       | `notebooklm-py — check nuova versione`                                               |
-| Application | `E:\AI\Claude\Trinity\scheduler\check_update_notebooklm\nb-check-scheduled.cmd`     |
+| Application | `D:\AI\Claude\Trinity\scheduler\check_update_notebooklm\nb-check-scheduled.cmd`     |
 | Parameters  | _(vuoto)_                                                                            |
-| Working Dir | `E:\AI\Claude\Trinity`                                                               |
+| Working Dir | `D:\AI\Claude\Trinity`                                                               |
 | State       | `Minimized` (o `Hidden`)                                                             |
 
 **Tab _Schedule_:** cadenza **settimanale** consigliata.
@@ -64,11 +64,11 @@ mise run nb-check          # controlla (exit 10 = update disponibile)
 
 `notebooklm-py` è installato in modalità exe-free — **non usare `pip install`**.
 
-1. Backup: `cp -r /e/AI/tools/notebooklm /e/AI/tools/notebooklm.bak-$(date +%Y%m%d)`
+1. Backup: `cp -r /d/AI/tools/notebooklm /d/AI/tools/notebooklm.bak-$(date +%Y%m%d)`
 2. Download wheel da PyPI (o sorgente da GitHub `teng-lin/notebooklm-py`)
-3. Estrai solo il package `notebooklm/` e il dist-info in `E:/AI/tools/notebooklm`
-4. Verifica assenza exe: `find /e/AI/tools/notebooklm -iname '*.exe' -o -iname '*.dll'` (output vuoto)
-5. Smoke test: `PYTHONPATH=E:/AI/tools/notebooklm python -m notebooklm.mcp --help`
+3. Estrai solo il package `notebooklm/` e il dist-info in `D:/AI/tools/notebooklm`
+4. Verifica assenza exe: `find /d/AI/tools/notebooklm -iname '*.exe' -o -iname '*.dll'` (output vuoto)
+5. Smoke test: `PYTHONPATH=D:/AI/tools/notebooklm python -m notebooklm.mcp --help`
 
 Vedi Hindsight (`recall "notebooklm aggiornamento exe-free"`) per la procedura completa.
 
@@ -76,6 +76,6 @@ Vedi Hindsight (`recall "notebooklm aggiornamento exe-free"`) per la procedura c
 
 - **Baseline = versione installata**: `nb-check.rb` legge il METADATA dal dist-info con un glob (`notebooklm_py-*.dist-info/METADATA`) — funziona indipendentemente dalla versione installata.
 - **TLS proxy ENINET**: `Net::HTTP` rispetta `SSL_CERT_FILE` impostato nell'`[env]` del `.mise.toml` (`C:/certs/cacert.pem`).
-- **`mise` non nel PATH MSYS**: invocato col path assoluto `/e/msys64/home/Sphynx/.local/bin/mise.exe`.
+- **`mise` non nel PATH MSYS**: invocato col path assoluto `/d/msys64/home/Sphynx/.local/bin/mise.exe`.
 - **`NB_NO_OPEN=1`**: disabilita l'apertura di Notepad (utile per i test da terminale).
 - **`NB_FORCE_ALERT=1`**: forza la scrittura dell'alert anche se non c'è update (per testare il flusso).

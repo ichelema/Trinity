@@ -80,7 +80,7 @@ merged/unmerged, presenza del branch remoto.
 ### 1. (Windows/MSYS2) ripristina il `gitdir` POSIX nel file `.git` del worktree
 
 I worktree creati con `/1_create-worktree`, `/3_independent-review` o `/4_review-fix-loop` (o
-toccati da SmartGit) hanno nel file `<wt-path>/.git` un `gitdir:` in forma Windows (`E:/AI/...`).
+toccati da SmartGit) hanno nel file `<wt-path>/.git` un `gitdir:` in forma Windows (`D:/AI/...`).
 Il git MSYS ci lavora (status, commit), ma `git worktree remove` fa una validazione testuale e
 fallisce con
 `validation failed, cannot remove working tree: '...' does not point back to '.git/worktrees/<nome>'`.
@@ -111,7 +111,7 @@ Solo se `status` non era vuoto E l'utente ha confermato di scartare le modifiche
 `git worktree remove --force "<wt-path>"`.
 
 **Non usare `git worktree prune`** né come scorciatoia né come passo di routine: su Windows/MSYS2
-con path `E:/...` nelle entry ha già cancellato worktree e branch estranei (li considera
+con path `D:/...` nelle entry ha già cancellato worktree e branch estranei (li considera
 "mancanti"). `git worktree remove` toglie già la sua entry. Per sola diagnosi è ammesso
 `git worktree prune --dry-run`.
 

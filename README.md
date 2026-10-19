@@ -4,14 +4,14 @@ Il **core dell'agente Trinity** come plugin Claude Code: memoria persistente Hin
 condiviso, skill, comandi e hook di notifica. Installato a livello utente, è attivo in **ogni** 
 progetto della macchina, che ne eredita comportamento e memoria.
 
-> Repo unico: `E:\AI\Claude\Trinity` (dal 2026-06-12 include anche gli ex strumenti di laboratorio).
+> Repo unico: `D:\AI\Claude\Trinity` (dal 2026-06-12 include anche gli ex strumenti di laboratorio).
 
 ---
 
 ## 1. Architettura: repo unico
 
 ```
-E:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strumenti di sviluppo
+D:\AI\Claude\Trinity\   ← il core dell'agente: plugin distribuibile + strumenti di sviluppo
 ```
 
 | Parte | Ruolo |
@@ -40,7 +40,7 @@ carica in automatico ovunque apri Claude Code.
 **Meccanismo (dal 2026-06-19):** junction NTFS che punta la directory skills di Claude Code al repo:
 
 ```
-~/.claude/skills/trinity  →  E:\AI\Claude\Trinity
+~/.claude/skills/trinity  →  D:\AI\Claude\Trinity
 ```
 
 Claude Code scopre il plugin al SessionStart scansionando `~/.claude/skills/`. Non servono
@@ -60,7 +60,7 @@ nel namespace `trinity:*`.
 ```bash
 MSYS_NO_PATHCONV=1 cmd /c mklink /J \
   "%USERPROFILE%\.claude\skills\trinity" \
-  "E:\AI\Claude\Trinity"
+  "D:\AI\Claude\Trinity"
 ```
 
 ---
@@ -861,12 +861,12 @@ Le variabili qui sotto vanno quindi nel **blocco env dell'OS** di
 ```text
   "env": {
 {{- if eq .chezmoi.os "windows" }}
-    "OBSIDIAN_VAULT": "e:/obsidian/sinapsi",
+    "OBSIDIAN_VAULT": "d:/obsidian/sinapsi",
     "OBSIDIAN_VAULT_NAME": "sinapsi",
-    "MCP_EXCALIDRAW_DIR": "e:/msys64/home/sphynx/.local/opt/mcp_excalidraw",
-    "MCP_DEBUGGER_DIR": "e:/ai/tools/mcp-debugger",
-    "MCP_NEOVIM_DIR": "e:/ai/tools/mcp-neovim-server",
-    "TRINITY_PLUGIN_DIR": "E:/AI/Claude/Trinity"
+    "MCP_EXCALIDRAW_DIR": "d:/msys64/home/sphynx/.local/opt/mcp_excalidraw",
+    "MCP_DEBUGGER_DIR": "d:/ai/tools/mcp-debugger",
+    "MCP_NEOVIM_DIR": "d:/ai/tools/mcp-neovim-server",
+    "TRINITY_PLUGIN_DIR": "D:/AI/Claude/Trinity"
 {{- else }}
     "OBSIDIAN_VAULT": "/Dati/Obsidian/Sinapsi",
     "OBSIDIAN_VAULT_NAME": "sinapsi",
@@ -929,8 +929,8 @@ gestisce log (una riga JSON per run), alert via Notepad e codici d'uscita standa
 | Job | Cartella | Cadenza | Cosa fa |
 |---|---|---|---|
 | `nb-auth-refresh` | `scheduler/notebooklm/` | ogni 15–20 min | Rinnova i cookie di sessione di `notebooklm-py` (`__Secure-1PSIDTS`) prima che scadano. Dopo 3 fallimenti consecutivi apre un alert con le istruzioni per rigenerare i cookie SID di base |
-| `nb-check` | `scheduler/check_update_notebooklm/` | settimanale | Controlla PyPI: nuova versione di `notebooklm-py` rispetto a quella installata in `E:/AI/tools/notebooklm`. Baseline = versione installata (dal dist-info locale). Nota: la versione corrente viene da GitHub (`main`, exe-free); l'alert si attiverà quando PyPI raggiungerà la stessa versione |
-| `yt-check` | `scheduler/check_update_yt_extract/` | settimanale | Controlla GitHub (`/releases/latest`, fallback `/tags`): nuova versione del plugin `yt-extract` rispetto al clone locale `E:/AI/tools/claude-code-youtube-extract`. Baseline = prima riga `## [X.Y.Z]` del `CHANGELOG.md`. Ricorda: dopo ogni `git pull` va riapplicata la patch `run_ytdlp()` (exe-free) |
+| `nb-check` | `scheduler/check_update_notebooklm/` | settimanale | Controlla PyPI: nuova versione di `notebooklm-py` rispetto a quella installata in `D:/AI/tools/notebooklm`. Baseline = versione installata (dal dist-info locale). Nota: la versione corrente viene da GitHub (`main`, exe-free); l'alert si attiverà quando PyPI raggiungerà la stessa versione |
+| `yt-check` | `scheduler/check_update_yt_extract/` | settimanale | Controlla GitHub (`/releases/latest`, fallback `/tags`): nuova versione del plugin `yt-extract` rispetto al clone locale `D:/AI/tools/claude-code-youtube-extract`. Baseline = prima riga `## [X.Y.Z]` del `CHANGELOG.md`. Ricorda: dopo ogni `git pull` va riapplicata la patch `run_ytdlp()` (exe-free) |
 
 **Alert**: quando un job trova qualcosa da segnalare, scrive `*-ALERT.txt` nella sua cartella
 e lo apre in Notepad. Quando non c'è più nulla, **rimuove** l'alert: la sola presenza del
@@ -944,7 +944,7 @@ test manuali (es. `NB_NO_OPEN=1 bash scheduler/check_update_notebooklm/nb-check-
 | Event Type | `Run Application` |
 | Application | path assoluto al `.cmd` della cartella del job |
 | Parameters | *(vuoto)* |
-| Working Dir | `E:\AI\Claude\Trinity` |
+| Working Dir | `D:\AI\Claude\Trinity` |
 | State | `Minimized` o `Hidden` |
 
 I dettagli di ogni job (campi esatti, note TLS/proxy, variabili override, test manuali) stanno
@@ -970,7 +970,7 @@ gira come processo esterno e non fa parte del plugin.
 |---|---|
 | Cartella | `D:/AI/Claude/Dashboard Context Window` |
 | Stack | Ruby + Roda + Puma (backend) · Mithril + Vite (frontend) · mise |
-| Dati | transcript JSONL in `.claude/projects` (`CLAUDE_DIR`, default `E:/msys64/home/Sphynx/.claude`) |
+| Dati | transcript JSONL in `.claude/projects` (`CLAUDE_DIR`, default `D:/msys64/home/Sphynx/.claude`) |
 | Runtime | Ruby 4.0.7 (mise) · Node lts · Mithril 2.3.6 |
 | Porte | Puma `:9292` (API + build) · Vite dev `:5173` (proxy `/api` → `:9292`) |
 

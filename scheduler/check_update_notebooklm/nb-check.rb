@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 #
 # nb-check.rb — Confronta la versione INSTALLATA di notebooklm-py
-# (flat-extract in E:/AI/tools/notebooklm) con l'ultima pubblicata su PyPI.
+# (flat-extract in D:/AI/tools/notebooklm) con l'ultima pubblicata su PyPI.
 #
 # notebooklm-py non è installato col pip di mise ma estratto manualmente in
 # modalità exe-free, quindi leggiamo la versione direttamente dal dist-info
@@ -21,7 +21,7 @@ require "rubygems" # Gem::Version
 
 PKG      = "notebooklm-py"
 # Sovrascrivibile via env per host diversi (es. Linux dove il tool e' pip-installato).
-INST_DIR = ENV.fetch("NB_INST_DIR", "E:/AI/tools/notebooklm")
+INST_DIR = ENV.fetch("NB_INST_DIR", "D:/AI/tools/notebooklm")
 
 # Legge la versione dal campo "Version:" nel METADATA del dist-info.
 # Il dist-info si chiama notebooklm_py-X.Y.Z.dist-info; facciamo un glob

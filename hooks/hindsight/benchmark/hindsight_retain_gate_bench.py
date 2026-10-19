@@ -73,7 +73,7 @@ from hindsight_config import load_config, recall_bank_urls  # pyright: ignore[re
 from hindsight_retain_gate import claims_content, evaluate_retain, guided_content  # pyright: ignore[reportMissingImports]  # noqa: E402
 from hindsight_secrets import SECRET_PATTERNS  # pyright: ignore[reportMissingImports]  # noqa: E402
 
-DEFAULT_SESSIONS_ROOT = Path("E:/msys64/home/Sphynx/.claude/projects")
+DEFAULT_SESSIONS_ROOT = Path("D:/msys64/home/Sphynx/.claude/projects")
 ARTIFACTS = HERE / "artifacts"
 WINDOWS_FILE = ARTIFACTS / "retain_windows.jsonl"
 LABELS_FILE = ARTIFACTS / "retain_labels.jsonl"

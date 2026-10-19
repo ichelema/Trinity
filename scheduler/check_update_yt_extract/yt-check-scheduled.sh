@@ -5,7 +5,7 @@
 # Viene invocato dal launcher yt-check-scheduled.cmd via login shell, quindi gira
 # già dentro MSYS2 UCRT64. Esegue `mise run yt-check`, registra l'esito in
 # yt-check-scheduled.log e, se è uscita una versione del plugin yt-extract
-# più recente di quella clonata in E:/AI/tools/claude-code-youtube-extract,
+# più recente di quella clonata in D:/AI/tools/claude-code-youtube-extract,
 # lascia un file di alert visibile (e lo apre in Notepad).
 #
 # Exit:  0  = nessuna novità   |   10 = update disponibile   |   altro = errore
@@ -48,17 +48,17 @@ if [[ "$RC" -eq 10 || "${YT_FORCE_ALERT:-0}" == "1" ]]; then
 		echo
 		echo "Per aggiornare il plugin:"
 		echo
-		echo "  git -C E:/AI/tools/claude-code-youtube-extract pull"
+		echo "  git -C D:/AI/tools/claude-code-youtube-extract pull"
 		echo
 		echo "IMPORTANTE: dopo il pull riapplicare la patch exe-free a run_ytdlp():"
 		echo "  in scripts/yt-extract.py, la funzione run_ytdlp() deve invocare"
-		echo "  python -m yt_dlp con PYTHONPATH=E:/AI/tools/yt-dlp invece del"
+		echo "  python -m yt_dlp con PYTHONPATH=D:/AI/tools/yt-dlp invece del"
 		echo "  comando esterno 'yt-dlp'."
 		echo
 		echo "Vedi Hindsight (recall 'yt-extract patch exe-free') per il diff completo."
 		echo
 		echo "PASSO 3 (yt-extract e' un pacchetto nel bazar): risincronizzare la copia:"
-		echo "  SRC=E:/AI/tools/claude-code-youtube-extract; DST=D:/AI/my-bazar/skills/yt-extract"
+		echo "  SRC=D:/AI/tools/claude-code-youtube-extract; DST=D:/AI/my-bazar/skills/yt-extract"
 		echo "  cp -r \$SRC/skills/yt-extract/. \$DST/skills/yt-extract/"
 		echo "  cp \$SRC/agents/extract-worker.md \$DST/agents/extract-worker.md"
 		echo "  cp \$SRC/scripts/yt-extract.py    \$DST/scripts/yt-extract.py"
