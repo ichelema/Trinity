@@ -7,18 +7,18 @@ disable-model-invocation: true
 # Dream
 
 Audita le memorie persistenti (file-based di Claude Code + Hindsight) usando le
-daily note di Obsidian come FONTE DI VERITÀ: individua memorie obsolete, da
+daily note di Obsidian come fonte di verità: individua memorie obsolete, da
 aggiornare, fatti importanti mai salvati e violazioni della policy di MEMORY.md.
-NESSUNA azione viene eseguita senza checkbox flaggato dall'utente nel report:
-il checkbox È la conferma esplicita.
+Nessuna azione viene eseguita senza checkbox flaggato dall'utente nel report:
+il checkbox è la conferma esplicita.
 
-Le daily indicano COSA verificare, ma ogni fatto verificabile va confermato
-sullo stato REALE del sistema (config, file, comandi). Gerarchia delle fonti:
+Le daily indicano cosa verificare, ma ogni fatto verificabile va confermato
+sullo stato reale del sistema (config, file, comandi). Gerarchia delle fonti:
 stato reale > daily note > trascrizioni sessioni > memorie.
 
-L'audit copre TUTTI i progetti: ogni directory memoria in
+L'audit copre tutti i progetti: ogni directory memoria in
 `~/.claude/projects/*/memory/` e ogni bank Hindsight sul server. Tutte le
-operazioni Hindsight usano la REST API (indipendente dal cwd), MAI i tool MCP
+operazioni Hindsight usano la REST API (indipendente dal cwd), mai i tool MCP
 `hindsight/*`: quelli parlano solo col bank risolto dal cwd e colpirebbero il
 bank sbagliato.
 
@@ -77,7 +77,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
    - `## 📚 Cose apprese oggi`
    - `## 🎯 Obiettivi`
 3. **Trascrizioni sessioni (fonte ausiliaria)**: i file
-   `~/.claude/projects/<project>/*.jsonl` modificati nella finestra. NON
+   `~/.claude/projects/<project>/*.jsonl` modificati nella finestra. Non
    leggerle mai integralmente (sono JSONL grandi): usale solo con Grep mirato
    per parole chiave, quando una daily è ambigua o manca contesto — per
    confermare un fatto, recuperare comandi/valori esatti, o coprire lavoro
@@ -93,7 +93,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 5. **Hindsight (audit completo, via REST)**: `GET /banks` per l'elenco dei
    bank; per ogni bank `GET /banks/<bank>/memories/list` e
    `GET /banks/<bank>/documents` paginando fino a esaurimento (percent-encode
-   il nome del bank negli URL). ESCLUDI i bank il cui nome contiene
+   il nome del bank negli URL). Escludi i bank il cui nome contiene
    `obsidian`: sono in sola lettura, li sincronizza il plugin di Obsidian —
    non vanno né auditati né modificati. Se il server non risponde: prosegui in audit
    parziale solo file-based e marca il degrado nell'intestazione del report
@@ -102,7 +102,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
    - memoria contraddetta dai fatti delle daily → **Obsolete** o **Da aggiornare**.
      Per ogni fatto da ritirare controlla il documento sorgente
      (`GET /banks/<bank>/memories/list?document_id=<id>&state=valid`): se
-     TUTTI i suoi fatti world/experience sono superati proponi `hs-delete-doc`
+     tutti i suoi fatti world/experience sono superati proponi `hs-delete-doc`
      (cancella il documento: niente residui), altrimenti `hs-invalidate` del
      singolo fatto (gli altri fatti del documento restano validi).
    - fatto importante nelle daily assente dalla memoria → **Nuove da salvare**;
@@ -111,22 +111,22 @@ altro valore → spiega l'uso (audit / apply) e fermati.
      "mancante"). Cosa cercare, in ordine di priorità: correzioni esplicite
      dell'utente, decisioni architetturali/implementative, modifiche a
      strumenti/comandi/workflow, pattern di debugging ricorrenti con soluzione
-     verificata, preferenze stabili. NON proporre: stato temporaneo di
+     verificata, preferenze stabili. Non proporre: stato temporaneo di
      debugging, conclusioni speculative, errori occasionali, info deducibili
      dal codice
    - prima di proporre `file-create` o un nuovo retain, cerca il file tematico
      o il documento esistente più pertinente da aggiornare: creare è l'ultima
      scelta
-   - file-based che viola la policy di MEMORY.md (chiediti: "serve a OGNI
+   - file-based che viola la policy di MEMORY.md (chiediti: "serve a ogni
      sessione?" — se no, va in Hindsight) → **Violazioni policy**
    - duplicati o sovrapposizioni tra memorie → proponi merge nella categoria
      più adatta
 7. **Verifica sul campo**: per ogni fatto verificabile — config, path,
-   versioni, tool, impostazioni — conferma lo stato ATTUALE prima di proporre
+   versioni, tool, impostazioni — conferma lo stato attuale prima di proporre
    l'azione: leggi il file di configurazione, controlla il path, lancia il
    comando read-only. Esempio: una memoria parla del sistema di reranking →
    leggi `hindsight.config.json` e verifica il reranker davvero configurato.
-   Per capire DOVE verificare (quale file, config o comando) aiutati con un
+   Per capire dove verificare (quale file, config o comando) aiutati con un
    recall mirato (REST) e con le memorie stesse.
    - la verifica conferma la daily → procedi con l'azione
    - la verifica contraddice la daily → vince lo stato reale; segnala la
@@ -142,7 +142,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
    obbligatori per tipo (`Cosa fa`, `Fonte`/`Motivo`, `Verifica`, `Proposta`,
    bank o path) e che solo `mm-refresh` sia pre-flaggata: è il controllo
    finale reso eseguibile, non lo sostituisce.
-9. **Stato**: aggiorna SOLO `last_report` in `state.json`. NON toccare
+9. **Stato**: aggiorna solo `last_report` in `state.json`. Non toccare
    `last_audit`: avanza solo ad apply completato, così un report mai applicato
    non fa perdere la finestra.
 10. **Chiusura**: riassumi in prosa nel messaggio finale cosa hai trovato
@@ -223,11 +223,11 @@ Regole del formato:
 - ID stabili `A1..An`, sequenziali, mai rinumerati.
 - Un solo checkbox per azione, sulla stessa riga dell'ID (parsing in apply:
   `- [x] **A<n>**`).
-- Ogni azione deve essere comprensibile DA SOLA, senza aprire altri file: la
+- Ogni azione deve essere comprensibile da sola, senza aprire altri file: la
   riga `Cosa fa` spiega in una frase di cosa parla la memoria, cosa cambierà
   e perché — linguaggio semplice, niente sigle o ID non spiegati. Chi legge
   deve poter decidere il flag leggendo solo il blocco.
-- Per update/create riporta sempre il contenuto proposto ESATTO: l'utente
+- Per update/create riporta sempre il contenuto proposto esatto: l'utente
   approva ciò che verrà scritto, non un'intenzione vaga.
 - Ogni azione cita la Fonte (daily + sezione) che la giustifica; per fatti
   emersi solo dalle trascrizioni, cita il file `.jsonl` e la parola chiave
@@ -240,7 +240,7 @@ Regole del formato:
   la daily, l'azione lo dichiara e propone lo stato reale.
 - Nelle proposte di testo converti i riferimenti temporali relativi ("ieri",
   "la settimana scorsa") in date assolute.
-- `mm-refresh` è l'UNICA azione pre-flaggata (con nota); tutte le altre nascono `[ ]`.
+- `mm-refresh` è l'unica azione pre-flaggata (con nota); tutte le altre nascono `[ ]`.
 - Zero azioni → report con sola intestazione + "Memoria allineata, nessuna
   azione proposta."
 
@@ -254,10 +254,10 @@ Regole del formato:
    ritira una memoria esistente (`hs-invalidate`, `hs-delete-doc`, `hs-update`, `hs-correct-doc`,
    `file-update`, `file-delete`) con `Verifica: solo ...` non si esegue; va
    verificata sul campo e il report corretto, oppure tolta la spunta.
-   Poi leggi il report. Azioni eseguibili = righe `- [x] **A<n>**` SENZA marcatore
+   Poi leggi il report. Azioni eseguibili = righe `- [x] **A<n>**` senza marcatore
    `→ FATTO`. Le `- [ ]` sono respinte e si saltano; le `→ ERRORE` flaggate si
    ritentano.
-3. Esegui le azioni UNA alla volta secondo la tassonomia sotto. Dopo ciascuna,
+3. Esegui le azioni una alla volta secondo la tassonomia sotto. Dopo ciascuna,
    Edit del report per appendere l'esito in coda alla riga dell'ID:
    `→ FATTO <ISO>` oppure `→ ERRORE: <motivo breve>`. Il report è l'unico
    registro degli esiti.
@@ -273,9 +273,9 @@ Regole del formato:
    cwd della sessione.
 
 5. **Stato**: `last_audit` = il `window_end` letto dall'intestazione del report
-   (NON "adesso": la prossima finestra parte da dove finiva quella auditata).
+   (non "adesso": la prossima finestra parte da dove finiva quella auditata).
    Avanza anche con zero azioni flaggate (lanciare apply = review conclusa, il
-   non flaggato è respinto). NON avanzare se ci sono azioni in `→ ERRORE`:
+   non flaggato è respinto). Non avanzare se ci sono azioni in `→ ERRORE`:
    correggile e rilancia apply.
 6. **Riepilogo** in prosa: eseguite / respinte (non flaggate) / errori, con
    invito a rilanciare apply per i soli errori.
@@ -286,13 +286,13 @@ Regole del formato:
 |---|---|---|
 | `file-update` | `cp <file> <file>.bak` → Edit del corpo → aggiorna `metadata.modified` (ISO) → se cambia il senso, aggiorna la riga indice in MEMORY.md | il file contiene il testo proposto, `metadata.modified` è aggiornato, il `.bak` esiste |
 | `file-delete` | `cp` in `.bak` → `rm` → rimuovi la riga indice da MEMORY.md | il file non esiste, il `.bak` esiste, `grep` del nome file in MEMORY.md non trova nulla |
-| `file-create` | Write con frontmatter conforme (name kebab, description, metadata.type, modified) + riga indice in MEMORY.md. RARO: solo se passa il test policy "serve a OGNI sessione?" | il file esiste con `name`, `description`, `metadata.type`; la riga indice esiste |
+| `file-create` | Write con frontmatter conforme (name kebab, description, metadata.type, modified) + riga indice in MEMORY.md. Raro: solo se passa il test policy "serve a ogni sessione?" | il file esiste con `name`, `description`, `metadata.type`; la riga indice esiste |
 | `hs-invalidate` | Solo fatti `world`/`experience`: `curl -X PATCH <API>/banks/<bank>/memories/<id>` con `{"state": "invalidated", "reason": "dream YYYY-MM-DD"}` | `GET <API>/banks/<bank>/memories/<id>` → `"state": "invalidated"` |
 | `hs-delete-doc` | Solo se nessun fatto world/experience del documento resta valido: `curl -X DELETE <API>/banks/<bank>/documents/<id>` (cancella anche observation e fatti derivati; irreversibile, serve un nuovo retain per ripristinare) | `GET <API>/banks/<bank>/documents/<id>` → 404 |
 | `hs-update` | Solo fatti `world`/`experience`: stesso PATCH con `{"text": "<testo corretto>"}` (ritocco puntuale di un singolo fatto) | `GET` del fatto → `text` uguale al testo proposto |
 | `hs-correct-doc` | `curl -X DELETE <API>/banks/<bank>/documents/<id>` → retain REST (riga sotto) del testo corretto | `GET` del documento vecchio → 404; `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |
-| `hs-retain` | `curl -X POST <API>/banks/<bank>/memories` con `{"items": [{"content": "<testo>", "context": "<dominio>", "tags": [...], "document_id": "dream:<YYYY-MM-DD>:<An>"}], "async": false}` — verifica `"success": true` (sync, fino a ~90s); il `document_id` deterministico fa upsert sui retry invece di duplicare. Tag SOLO universali (`claude-code`, `repo:<nome già nel bank>`; mai tag semantici) | risposta `"success": true` e `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |
-| `policy-migrate` | prima l'`hs-retain` e verifica che sia riuscito, POI il `file-delete` | post-condizione di `hs-retain`, poi quella di `file-delete` |
+| `hs-retain` | `curl -X POST <API>/banks/<bank>/memories` con `{"items": [{"content": "<testo>", "context": "<dominio>", "tags": [...], "document_id": "dream:<YYYY-MM-DD>:<An>"}], "async": false}` — verifica `"success": true` (sync, fino a ~90s); il `document_id` deterministico fa upsert sui retry invece di duplicare. Tag solo universali (`claude-code`, `repo:<nome già nel bank>`; mai tag semantici) | risposta `"success": true` e `GET <API>/banks/<bank>/documents/dream:<YYYY-MM-DD>:<An>` → 200 con `memory_unit_count` ≥ 1 |
+| `policy-migrate` | prima l'`hs-retain` e verifica che sia riuscito, poi il `file-delete` | post-condizione di `hs-retain`, poi quella di `file-delete` |
 | `mm-refresh` | script refresh `--all`, una volta sola a fine apply | exit 0 dello script, nessuna riga di errore nell'output |
 
 `→ FATTO` solo se la post-condizione è verificata con una rilettura dopo
