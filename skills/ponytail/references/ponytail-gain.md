@@ -42,4 +42,3 @@ di inventarne una.
 ## Confini
 
 Display one-shot. Non modifica niente, non cambia alcuna modalità.
-"stop ponytail" o "normal mode": ripristina.
