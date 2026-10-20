@@ -11,9 +11,10 @@ applica i fix dei finding reali in un loop di al massimo 3 round. In uscita, smi
 residui (fix, issue Linear o PR in draft) senza perderne nessuno e scrivi un report sintetico.
 
 Le due review usano lo stesso prompt del reviewer su due modelli diversi: `trinity:reviewer` su
-Fable e `gpt-bridge:reviewer` su GPT 5.6 sol xhigh (via proxy LiteLLM, servito dalla mod
-gpt-bridge). Se `gpt-bridge:reviewer` non compare tra i subagent_type disponibili, la mod non è
-caricata: fermati e dillo all'utente prima di creare i worktree.
+Fable e `gpt-bridge:reviewer` sul modello GPT fissato da `gpt-model` in `agents/reviewer.md` (via
+proxy LiteLLM, servito dalla mod gpt-bridge). Se `gpt-bridge:reviewer` non compare tra i
+subagent_type disponibili, la mod non è caricata: fermati e dillo all'utente prima di creare i
+worktree.
 
 L'ultimo argomento è il modello: identifica il worktree di implementazione creato da
 `/1_create-worktree` (e quindi il branch della PR). Non sceglie il modello di esecuzione.
