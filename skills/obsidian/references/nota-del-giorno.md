@@ -1,7 +1,7 @@
 # Creare e modificare le Note del Giorno in Obsidian
 
 Indice: Workflow · Struttura della nota · Regole operative essenziali · Formattazione con Prettier ·
-Strategia di verifica · Regole negative · Aprire un file nel vault
+Strategia di verifica · Aprire un file nel vault
 
 Reference operativa per Claude Code: creare e aggiornare le Note del Giorno (daily note) nel Vault
 Obsidian, partendo dal Template `templates/Template-Daily.md` della skill obsidian.
@@ -187,6 +187,8 @@ note non ancora esistenti vanno segnalati come proposti.
   sovrascrivere; aggiorna `data_modifica`.
 - Più di 3 modifiche su una nota esistente → usa il tool `edit` (file-edit), non chiamate MCP una
   per una.
+- Crea la nota `.md` senza chiedere conferma, salvo indicazione esplicita dell'utente.
+- Non spostare file nel vault se non è richiesto espressamente.
 
 ---
 
@@ -229,17 +231,6 @@ passano tutti i punti:
   con `:` → passo 4 (Compila);
 - separatore `---` diventato `- ***` o mancante → passo 7 (Prettier), poi correggi i separatori;
 - issue non Done su Linear o dettagli tecnici che non combaciano → passo 1 (Raccogli).
-
----
-
-## Regole negative
-
-Non fare queste operazioni:
-
-- Non chiedere conferma per creare note `.md`, salvo indicazione esplicita dell'utente.
-- Non spostare a mano nel vault file se non espressamente richiesto.
-- Non fare chiamate MCP una per una quando ci sono più di 3 modifiche: usare file-edit.
-- Non inserire Tag nella nota.
 
 ---
 
