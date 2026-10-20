@@ -38,8 +38,8 @@ altro valore → spiega l'uso (audit / apply) e fermati.
 
 ## Esecuzione multi-agente
 
-- Il command gira in modalità multi-agente: Fable (il modello della sessione)
-  fa da ORCHESTRATORE e non delega la supervisione; i task di lavoro vanno
+- Il command gira in modalità multi-agente: il modello della sessione fa da
+  orchestratore e non delega la supervisione; i task di lavoro vanno
   agli agenti Trinity (`subagent_type`), senza override di `model`:
   - `trinity:bulk-worker` (Haiku) per il lavoro meccanico con regola esatta:
     paginazione e dump dei bank Hindsight via REST, inventario della memoria
@@ -58,7 +58,7 @@ altro valore → spiega l'uso (audit / apply) e fermati.
   (stesso tipo, stessa procedura della tassonomia, post-condizione inclusa);
   la marcatura degli esiti nel report e l'aggiornamento dello stato restano
   all'orchestratore.
-- CONTROLLO FINALE (Fable, mai delegato): prima di scrivere il report o il
+- Controllo finale (orchestratore, mai delegato): prima di scrivere il report o il
   riepilogo di apply, verifica il lavoro dei subagent — campiona le azioni
   proposte ricontrollando Fonte e Verifica, controlla ID univoci e contatori
   coerenti, e che nessuna azione violi le Regole. Ciò che non passa si
