@@ -181,6 +181,3 @@ Report sintetico, solo informazioni rilevanti:
 - trade-off introdotti dai fix (se presenti);
 - finding residui e dove sono finiti (fix senza review, issue create con link, PR in draft);
 - verdetto finale: PR pronta per il merge o no.
-
-Se qualcosa non è chiaro, è contraddittorio o hai dubbi, chiedi prima di procedere. Altrimenti
-mettiti al lavoro.
