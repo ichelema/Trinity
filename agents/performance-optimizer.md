@@ -1,9 +1,9 @@
 ---
 name: performance-optimizer
 description: >-
-  Specialista di analisi e ottimizzazione delle prestazioni. Usalo in modo PROATTIVO dopo aver
-  scritto o modificato codice per individuare i colli di bottiglia, aumentare il throughput e
-  ridurre la latenza.
+  Specialista di analisi e ottimizzazione delle prestazioni. Usalo quando l'utente chiede di
+  analizzare o migliorare le prestazioni di codice esistente (latenza, throughput, memoria):
+  profila, individua i colli di bottiglia e applica ottimizzazioni misurate.
 tools: Read, Edit, Bash, Grep, Glob
 model: inherit
 ---
