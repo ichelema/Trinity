@@ -46,6 +46,9 @@ Presenta una tabella e attendi l'OK:
 L'utente può cambiare i raggruppamenti, riscrivere i messaggi o escludere file.
 Non creare nessun commit prima di una risposta esplicita: dopo, disfare
 richiede `git reset` e la fiducia su cosa fosse staged è già persa.
+Fermati anche se `core-behavior` ti autorizza a committare senza conferma:
+quell'autorizzazione copre il task che hai completato e verificato, mentre qui
+raggruppi modifiche pendenti che spesso non vengono dal task in corso.
 
 ## 4. Crea i commit uno alla volta
 
