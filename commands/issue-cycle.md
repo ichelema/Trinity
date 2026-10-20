@@ -112,8 +112,9 @@ fermati.
 branch. L'implementazione la fa questa sessione. Se il modello della sessione non corrisponde a
 `<model>`, prosegui e annotalo.
 
-Se la modalità è `review` e `<model>` è `fable`, annota che la review gira sullo stesso
-modello che ha scritto il codice ed è meno indipendente.
+Se la sessione gira su Fable, annota che la review Fable gira sullo stesso modello che ha scritto
+il codice ed è meno indipendente: conta il modello della sessione, non `<model>`. In `loop` questo
+controllo sostituisce quello su `<model>` di `4_review-fix-loop.md`.
 
 ### Proxy LiteLLM (solo `loop`)
 
