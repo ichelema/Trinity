@@ -108,7 +108,7 @@ fratelli relativamente alla loro posizione, quindi il plugin è rilocabile.
 
 A ogni prompt l'hook `UserPromptSubmit` esegue **`perl hooks/skill-eval/skill-eval.pl`**, un motore 
 Perl con zero dipendenze (regex native + `JSON::PP` core). Il motore analizza il testo del prompt e, se trova corrispondenze 
-sufficienti, inietta nel contesto del modello un blocco `SKILL ACTIVATION REQUIRED` con le skill 
+sufficienti, inietta nel contesto del modello un blocco `Skills matched for this prompt` con le skill 
 più rilevanti — così Claude sa quali skill caricare senza che l'utente debba invocarle a mano.
 
 **Come funziona il punteggio**
@@ -136,13 +136,15 @@ rinominato in `SKILL.md.disabled`), viene ignorata anche se avrebbe raggiunto il
 Se almeno una skill supera la soglia, `skill-eval.pl` scrive su stdout un blocco come:
 
 ```
-SKILL ACTIVATION REQUIRED
+Skills matched for this prompt
 
 Matched skills (ranked by relevance):
 1. hindsight (HIGH confidence)
    Matched: keyword "retain", intent detected
 2. obsidian (LOW confidence)
    Matched: keyword "vault"
+
+If a matched skill applies to this request, invoke it with the Skill tool before you start; skip the ones that don't apply.
 ```
 
 Questo testo arriva al modello come `additionalContext` dell'hook `UserPromptSubmit`, 

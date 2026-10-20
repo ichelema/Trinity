@@ -240,7 +240,7 @@ sub evaluate {
     my @top = @matches[0 .. $last];
     my $related = get_related_skills(\@top, $skills);
 
-    my $context = "SKILL ACTIVATION REQUIRED\n\n";
+    my $context = "Skills matched for this prompt\n\n";
 
     if (@$file_paths) {
         $context .= "Detected file paths: " . join(", ", @$file_paths) . "\n\n";
@@ -265,18 +265,7 @@ sub evaluate {
         $context .= "\nRelated skills to consider: " . join(", ", @$related) . "\n";
     }
 
-    $context .= "\nBefore implementing, you MUST:\n";
-    $context .= "1. EVALUATE: State YES/NO for each skill with brief reasoning\n";
-    $context .= "2. ACTIVATE: Invoke the Skill tool for each YES skill\n";
-    $context .= "3. IMPLEMENT: Only proceed after skill activation\n";
-    $context .= "\nExample evaluation:\n";
-    my $n0 = $top[0]->{name};
-    $context .= "- $n0: YES - [your reasoning]\n";
-    if (@top > 1) {
-        my $n1 = $top[1]->{name};
-        $context .= "- $n1: NO - [your reasoning]\n";
-    }
-    $context .= "\nDO NOT skip this step. Invoke relevant skills NOW.";
+    $context .= "\nIf a matched skill applies to this request, invoke it with the Skill tool before you start; skip the ones that don't apply.";
 
     return $context;
 }
