@@ -33,4 +33,4 @@ Chiudi con `<N> markers, <M> with no trigger.` Niente trovato: `No shortcut debt
 ## Confini
 
 Legge e riporta solo, non cambia niente. Per persistirlo, chiedi e scrive il ledger su un file
-(es. `PONYTAIL-DEBT.md`). One-shot. "stop ponytail-debt" o "normal mode" per ripristinare.
+(es. `PONYTAIL-DEBT.md`). One-shot: non cambia alcuna modalità.
