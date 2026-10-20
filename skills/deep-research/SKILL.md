@@ -8,7 +8,7 @@ description: >-
 
 # Deep Research
 
-Flusso in 5 fasi. Usa TodoWrite per tracciarle. Salva tutto in `research-<slug>/`
+Flusso in 5 fasi. Traccia le fasi con lo strumento dei task. Salva tutto in `research-<slug>/`
 nella directory corrente.
 
 ## 1. Chiarire
