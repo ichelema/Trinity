@@ -26,7 +26,7 @@ bank sbagliato.
 
 - Memoria file-based (tutti i progetti): `~/.claude/projects/*/memory/`
 - Trascrizioni sessioni (fonte ausiliaria, READ-ONLY): `~/.claude/projects/<project>/*.jsonl`
-- API REST Hindsight: `http://127.0.0.1:8888/v1/default`
+- API REST Hindsight: il valore di `bank.api_base` in `${CLAUDE_PLUGIN_ROOT}/hindsight.config.json`
 - Daily note (READ-ONLY, mai modificarle): `d:/obsidian/sinapsi/🌅Daily/YYYY-MM/YYYY-MM-DD.md`
 - Report: `${CLAUDE_PLUGIN_ROOT}/logs/dream/report-YYYY-MM-DD.md`
 - Stato: `${CLAUDE_PLUGIN_ROOT}/logs/dream/state.json`
@@ -304,7 +304,7 @@ Proporre ed eseguire invece la correzione/invalidation dei fatti sorgente
 `world`/`experience` (o la correzione del documento sorgente), lasciando rigenerare
 le observation tramite consolidamento; aggiornare poi i mental model con `mm-refresh`.
 
-`<API>` = `http://127.0.0.1:8888/v1/default`; header `Content-Type: application/json`;
+`<API>` = l'API REST Hindsight di «Percorsi»; header `Content-Type: application/json`;
 nome bank sempre percent-encoded negli URL.
 
 ## Regole
