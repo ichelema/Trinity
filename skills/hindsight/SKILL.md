@@ -11,9 +11,12 @@ description: >-
 Indice: Sicurezza · Quale file caricare · Tool MCP · Retain · Il campo `context` · Regole di Tagging
 · Recall · Reflect
 
-Usa direttamente i tool MCP `hindsight/*`. Non usare comandi shell, `uvx hindsight-embed` o
-`hindsight-embed memory`. Unica eccezione: la lettura completa di un periodo con `curl` in `GET`,
-descritta in `references/consultare-memoria.md`.
+Usa direttamente i tool MCP `hindsight/*`: passano dallo shim che risolve il bank del progetto
+(vedi `references/setup.md`). Non usare comandi shell, `uvx hindsight-embed` o
+`hindsight-embed memory`: se non trova un server su `localhost:8888`, `hindsight-embed` avvia lì un
+daemon locale con un database proprio e occupa la porta del tunnel verso la VPS. Unica eccezione:
+la lettura completa di un periodo con `curl` in `GET`, descritta in
+`references/consultare-memoria.md`.
 
 ## Sicurezza
 
