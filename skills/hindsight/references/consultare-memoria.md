@@ -45,9 +45,12 @@ Il tool MCP `list_memories` non filtra per data. Per leggere tutte le memorie di
 l'API HTTP attraverso il tunnel, solo con richieste `GET`:
 
 ```bash
-curl -s "http://127.0.0.1:8888/v1/default/banks/trinity-project/memories/list?start_date=<ISO>&end_date=<ISO>&time_field=mentioned_at&limit=100&offset=0"
+curl -s "http://127.0.0.1:8888/v1/default/banks/<bank>/memories/list?start_date=<ISO>&end_date=<ISO>&time_field=mentioned_at&limit=100&offset=0"
 ```
 
+- `<bank>` è il `bank_id` che restituisce il tool MCP `get_bank`, cioè il bank del progetto
+  corrente. Fuori da Trinity ripeti la lettura anche sul bank core `trinity-project`, come fa la
+  recall.
 - L'intervallo è `[start_date, end_date)`. `time_field` sceglie la data: `created_at` (predefinita),
   `updated_at`, `mentioned_at`, `occurred_start`, `occurred_end`. Le memorie senza quella data
   restano fuori.
