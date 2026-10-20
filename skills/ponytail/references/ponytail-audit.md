@@ -50,9 +50,8 @@ Questo è un report che l'utente ha chiesto, quindi dallo per intero.
   risultato sbagliato". Niente caso, niente finding.
 - Prima di dire che il codice è inutilizzato, fai grep dell'intero albero, compresi test,
   fixture, config e riferimenti come stringa o dinamici.
-- Una scorciatoia marcata con un commento `ponytail:` (o `shortcut:`, la forma neutra più
-  recente) che nomina il suo limite è una decisione, non un finding, a meno che il carico atteso
-  non lo superi già.
+- Una scorciatoia marcata con un commento `ponytail:` o `shortcut:` che nomina il suo limite è
+  una decisione, non un finding, a meno che il carico atteso non lo superi già.
 - Proponi la correzione più piccola che funziona. Preferisci le correzioni che cancellano codice.
   Non aggiungere mai layer, framework o config di cui il problema non ha bisogno.
 - Niente gusti di stile, niente "valuta", niente preoccupazioni vaghe.

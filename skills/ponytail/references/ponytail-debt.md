@@ -1,5 +1,5 @@
-Ogni scorciatoia ponytail deliberata è marcata con un commento `ponytail:` che nomina il suo
-tetto e il percorso di upgrade (il codice più recente può usare la forma neutra `shortcut:`).
+Ogni scorciatoia ponytail deliberata è marcata con un commento `ponytail:` o `shortcut:` che
+nomina il suo tetto e il percorso di upgrade.
 Questo li raccoglie in un ledger unico così un rinvio non può diventare silenziosamente
 permanente.
 
