@@ -516,48 +516,35 @@
       "relatedSkills": []
     },
     "github-pr-release": {
-      "description": "GitHub PR and release workflow: feature branches, atomic commits, merge-commit PRs, curated CHANGELOG.md, SemVer releases via gh CLI",
+      "description": "Release and versioning: SemVer, curated CHANGELOG.md, atomic commits, annotated tag, GitHub Release via gh CLI",
       "priority": 7,
       "triggers": {
         "keywords": [
-          "pull request",
           "release",
           "rilascio",
           "changelog",
           "semver",
           "github release",
-          "feature branch",
-          "hotfix",
-          "merge commit",
           "tag annotato"
         ],
         "keywordPatterns": [
-          "\\bpull\\s?request\\b",
-          "\\bpr\\b",
           "\\brelease\\b",
           "\\brilascio\\b",
           "\\bchangelog\\b",
           "\\bsemver\\b",
-          "\\bhotfix\\b",
-          "\\bgh\\s+(?:pr|release)\\b",
-          "\\bfeature\\s+branch\\b"
+          "\\bgh\\s+release\\b"
         ],
         "pathPatterns": [
           "**/CHANGELOG.md",
           "**/skills/github-pr-release/**"
         ],
         "intentPatterns": [
-          "(?:crea|apri|prepara|aggiorna|chiudi|mergia|controlla).{0,30}(?:pull request|\\bpr\\b)",
-          "(?:create|open|prepare|update|merge|check).{0,30}(?:pull request|\\bpr\\b|release)",
+          "(?:create|open|prepare|update|merge|check).{0,30}release",
           "(?:fai|facciamo|prepara|pubblica|tagga|crea).{0,30}(?:release|rilascio|versione|tag)",
           "(?:aggiorna|prepara|scrivi|compila).{0,30}changelog",
-          "(?:bump|alza|incrementa).{0,30}(?:version|versione)",
-          "(?:merge|mergia|porta|integra|riporta).{0,40}(?:in|su|into)\\s+main",
-          "(?:apri|crea|parti\\s+con|partiamo\\s+con).{0,30}(?:branch|feature|hotfix)"
+          "(?:bump|alza|incrementa).{0,30}(?:version|versione)"
         ],
         "contentPatterns": [
-          "gh pr create",
-          "gh pr merge",
           "gh release create",
           "git tag -a",
           "--follow-tags",
@@ -565,10 +552,7 @@
         ],
         "contextPatterns": [
           "nuova release",
-          "nuova versione",
-          "sulla pr",
-          "della pr",
-          "la pull request"
+          "nuova versione"
         ]
       },
       "relatedSkills": [
@@ -585,14 +569,20 @@
           "backlog",
           "triage",
           "magic word",
-          "sub-issue"
+          "sub-issue",
+          "pull request",
+          "feature branch"
         ],
         "keywordPatterns": [
           "\\blinear\\b",
           "\\bICH-\\d+\\b",
           "(?:issue|ticket|task)\\s+[A-Z]{2,5}-\\d+",
           "\\bin\\s?progress\\b",
-          "\\bin\\s?review\\b"
+          "\\bin\\s?review\\b",
+          "\\bpull\\s?request\\b",
+          "\\bpr\\b",
+          "\\bgh\\s+pr\\b",
+          "\\bfeature\\s+branch\\b"
         ],
         "pathPatterns": [
           "**/skills/linear/**"
@@ -604,7 +594,11 @@
           "(?:elenca|mostra|lista|riepiloga|cerca|filtra).{0,30}(?:issue|backlog|ticket)",
           "(?:cosa|che\\s+cosa).{0,30}(?:in\\s?progress|in\\s?review|da\\s+fare|aperte)",
           "(?:collega|linka|assegna|sposta|chiudi).{0,30}(?:issue|ICH-\\d+)",
-          "(?:mergia|merge|chiudi).{0,40}(?:pr|pull\\s?request).{0,40}(?:issue|linear|ICH-\\d+)"
+          "(?:mergia|merge|chiudi).{0,40}(?:pr|pull\\s?request).{0,40}(?:issue|linear|ICH-\\d+)",
+          "(?:crea|apri|prepara|aggiorna|chiudi|mergia|controlla).{0,30}(?:pull request|\\bpr\\b)",
+          "(?:create|open|prepare|update|merge|check).{0,30}(?:pull request|\\bpr\\b)",
+          "(?:merge|mergia|porta|integra|riporta).{0,40}(?:in|su|into)\\s+main",
+          "(?:apri|crea|parti\\s+con|partiamo\\s+con).{0,30}(?:branch|feature|hotfix)"
         ],
         "contentPatterns": [
           "scripts/linear.py",
@@ -613,7 +607,9 @@
           "gitBranchName",
           "LINEAR_API_KEY",
           "linear\\.app/",
-          "(?:Fixes|Closes|Resolves|Refs)\\s+[A-Z]{2,5}-\\d+"
+          "(?:Fixes|Closes|Resolves|Refs)\\s+[A-Z]{2,5}-\\d+",
+          "gh pr create",
+          "gh pr merge"
         ],
         "contextPatterns": [
           "su linear",
@@ -621,7 +617,10 @@
           "la issue",
           "le issue",
           "questa issue",
-          "sulla issue"
+          "sulla issue",
+          "sulla pr",
+          "della pr",
+          "la pull request"
         ]
       },
       "relatedSkills": [
