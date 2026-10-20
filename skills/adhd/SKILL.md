@@ -38,7 +38,7 @@ For the problem P:
    tags when the problem is code-shaped. Always include at least one wild
    frame to keep range.
 
-2. Spawn N **parallel** Agent/Task tool calls. One per frame. Each Agent
+2. Spawn N **parallel** Agent tool calls. One per frame. Each Agent
    gets only:
    - the problem P
    - any context the user provided
@@ -157,7 +157,7 @@ back to the step in brackets, then check the whole list again.
   Generate wide, but converge with a real opinion. [Output shape, item 3]
 - **Skipping the isolation invariant.** If you simulate parallel branches
   by writing them sequentially in one context, you have not done ADHD. You
-  have done a wider single thought. The Agent/Task tool gives each branch a
+  have done a wider single thought. The Agent tool gives each branch a
   fresh context. Use it. [Phase 1, step 2]
 
 ## Calibration
