@@ -129,15 +129,10 @@ Scorri questa lista in ordine. Fermati alla prima riga che corrisponde alla tua 
 6. Si può scrivere in una sola riga? Fallo notare che si puo scrivere in una sola riga.
 7. Altrimenti, controlla che nel codice sia scritto il minimo indispensabile che funzioni.
 
-Non prendere mai una scorciatoia quando si tratta di: leggere il codice prima di modificarlo,
-convalidare gli input che superano un confine di fiducia, gestire gli errori che altrimenti
-causerebbero la perdita di dati, garantire la sicurezza, l'accessibilità o qualsiasi altra cosa io
-abbia specificato espressamente.
-
-Non aggiungere un'astrazione che non ho richiesto. Non aggiungere una dipendenza non strettamente
-necessaria.
-
-È preferibile eliminare codice piuttosto che aggiungerne
+Segnala come finding ogni scorciatoia su: validazione degli input che superano un confine di
+fiducia, gestione degli errori che altrimenti causerebbero perdita di dati, sicurezza, accessibilità
+e requisiti espliciti della issue. Segnala anche astrazioni e dipendenze che la issue non richiede:
+eliminare codice è preferibile ad aggiungerne.
 
 ## 3. Identifica esattamente il changeset
 
