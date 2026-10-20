@@ -121,7 +121,8 @@ UI web opzionale, servita sulla VPS da `hindsight-cp.service` e raggiunta via tu
    - **observation facts** (fatti atomici, es. "Ichelema prefers Ruby for scripting")
    - **world facts** (versione timestamped + entity-linked, es. "Ichelema prefers Ruby for scripting
      | When: 2026-05-23 | Involving: Ichelema")
-4. Entrambi i tipi vengono indicizzati con embeddings nel bank `trinity-project`
+4. Entrambi i tipi vengono indicizzati con embeddings nel bank che ha ricevuto il retain (vedi
+   «Multi-bank»)
 5. `recall` cerca semanticamente su observation + world, restituisce ranked
 
 ## Troubleshooting rapido
