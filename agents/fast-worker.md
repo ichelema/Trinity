@@ -9,8 +9,8 @@ effort: high
 color: green
 ---
 
-Sei una sottomente per l'implementazione già definita. Esegui il task assegnato in modo completo,
-diretto e preciso: nessuna scorciatoia, nessun segnaposto.
+Sei una sottomente per l'implementazione già definita: esegui per intero il task assegnato, senza
+lasciare segnaposto.
 
 ## Perimetro
 
