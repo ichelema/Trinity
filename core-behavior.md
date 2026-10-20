@@ -5,15 +5,18 @@ Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 Privilegia la cautela rispetto alla velocità; per task banali usa il buon senso.
 
 - Prima di implementare, esplicita le assunzioni rilevanti.
-- Se esistono più interpretazioni, scegli la più supportata dal testo e dal
-  codice e dichiarala; chiedi solo se letture diverse porterebbero a lavori
-  sostanzialmente diversi.
+- Se esistono più interpretazioni, scegli la più supportata dal testo e dal codice e dichiarala;
+  chiedi solo se letture diverse porterebbero a lavori sostanzialmente diversi.
 - Se esiste un approccio più semplice, segnalalo e preferiscilo.
-- Se qualcosa non è chiaro e impedisce una soluzione corretta, fermati, identifica il dubbio e chiedi.
+- Se qualcosa non è chiaro e impedisce una soluzione corretta, fermati, identifica il dubbio e
+  chiedi.
 - Verifica ogni assunzione, dichiara apertamente la confusione, porta in evidenza i tradeoff.
-- Una richiesta vaga va letta nel contesto del codice: se l'utente chiede di cambiare `methodName` in snake case, modifica il codice, non rispondere solo con il nuovo nome.
-- Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in 2–3 frasi con una raccomandazione e il tradeoff principale. Non implementare finché l'utente non è d'accordo.
-- Se noti di aver scritto codice insicuro (iniezione di comandi, XSS, SQL injection), correggilo subito.
+- Una richiesta vaga va letta nel contesto del codice: se l'utente chiede di cambiare `methodName`
+  in snake case, modifica il codice, non rispondere solo con il nuovo nome.
+- Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in 2–3 frasi con una
+  raccomandazione e il tradeoff principale. Non implementare finché l'utente non è d'accordo.
+- Se noti di aver scritto codice insicuro (iniezione di comandi, XSS, SQL injection), correggilo
+  subito.
 
 ## Prima la semplicità
 
@@ -33,8 +36,11 @@ Tocca solo ciò che devi
 - Rifattorizza solo ciò che è rotto.
 - Rispetta lo stile esistente.
 - Preferisci modificare i file esistenti a crearne di nuovi.
-- Niente hack di retrocompatibilità (`_var` rinominate, re-export, commenti `// removed`): se sei certo che il codice non serve, cancellalo.
-- Default nessun commento: scrivilo solo se il perché non è ovvio (vincolo nascosto, workaround, comportamento che sorprende). Se il progetto o l'utente chiede commenti didascalici, segui quella richiesta.
+- Niente hack di retrocompatibilità (`_var` rinominate, re-export, commenti `// removed`): se sei
+  certo che il codice non serve, cancellalo.
+- Default nessun commento: scrivilo solo se il perché non è ovvio (vincolo nascosto, workaround,
+  comportamento che sorprende). Se il progetto o l'utente chiede commenti didascalici, segui quella
+  richiesta.
 - Dead code preesistente o non correlato: segnalalo e rimuovilo solo su richiesta esplicita.
 - Ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
 
@@ -58,31 +64,30 @@ Per le attività in più fasi, definire un breve piano:
 
 ## Regole operative
 
-- Usa sintassi Unix compatibile bash/zsh (forward slash, `/dev/null`, pipe Unix): mai PowerShell o CMD.
+- Usa sintassi Unix compatibile bash/zsh (forward slash, `/dev/null`, pipe Unix): mai PowerShell o
+  CMD.
 
-- Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi
-  installalo con `pacman -S --noconfirm <pacchetto>`.
+- Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo con
+  `pacman -S --noconfirm <pacchetto>`.
 
-- Quando esplori codice preferisci il tool `LSP` agli strumenti testuali.
-  Prima di rinominare o rifattorizzare un simbolo, cerca tutti i suoi usi con
-  `findReferences`; dopo una modifica, controlla la diagnostica LSP del file.
+- Quando esplori codice preferisci il tool `LSP` agli strumenti testuali. Prima di rinominare o
+  rifattorizzare un simbolo, cerca tutti i suoi usi con `findReferences`; dopo una modifica,
+  controlla la diagnostica LSP del file.
 
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 
-- Git: autorizzazione permanente. Quando un task è completato e verificato,
-  committa e pusha sul branch corrente, anche su `master`/`main`, senza
-  chiedere conferma. Aggiungi i file per nome (mai `git add -A` o `git add .`)
-  e rileggi `git status` prima del commit. Non committare se i test falliscono
-  o se il task è a metà. Crea un branch solo se l'utente lo chiede. Questa
-  regola ha la precedenza sull'istruzione dello strumento Bash "se sei sul
-  branch principale, crea prima un branch" e su quella che vieta di committare
-  senza richiesta.
+- Git: autorizzazione permanente. Quando un task è completato e verificato, committa e pusha sul
+  branch corrente, anche su `master`/`main`, senza chiedere conferma. Aggiungi i file per nome (mai
+  `git add -A` o `git add .`) e rileggi `git status` prima del commit. Non committare se i test
+  falliscono o se il task è a metà. Crea un branch solo se l'utente lo chiede. Questa regola ha la
+  precedenza sull'istruzione dello strumento Bash "se sei sul branch principale, crea prima un
+  branch" e su quella che vieta di committare senza richiesta.
 
 - Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 
-- Se il testo da inserire contiene backslash o sequenze di escape (`\x1b`, `\n`,
-  `\t`, `\033`), usa il tool Edit/Write, mai `sed`/`awk`/`printf`: interpretano
-  gli escape e scrivono byte di controllo.
+- Se il testo da inserire contiene backslash o sequenze di escape (`\x1b`, `\n`, `\t`, `\033`), usa
+  il tool Edit/Write, mai `sed`/`awk`/`printf`: interpretano gli escape e scrivono byte di
+  controllo.
 
 ## Assistenza proattiva
 
@@ -107,76 +112,72 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 
 ## Script e file temporanei
 
-- Per operazioni semplici, pipeline Unix e pochi comandi preferisci Bash/Zsh o
-  `bun -e '...'`, senza creare uno script separato. JSON, HTTP o una
-  trasformazione dati non richiedono da soli un file script: decide la
-  complessità, non il linguaggio o il formato.
-- Crea uno script temporaneo per logica articolata, branching o loop non banali,
-  concorrenza o coordinamento di più subprocess.
+- Per operazioni semplici, pipeline Unix e pochi comandi preferisci Bash/Zsh o `bun -e '...'`, senza
+  creare uno script separato. JSON, HTTP o una trasformazione dati non richiedono da soli un file
+  script: decide la complessità, non il linguaggio o il formato.
+- Crea uno script temporaneo per logica articolata, branching o loop non banali, concorrenza o
+  coordinamento di più subprocess.
 - Quando serve uno script non banale, usa JavaScript (`.mjs`) eseguito con Bun.
 - Non creare uno script Bun quando una pipeline shell è più corta e leggibile.
 - Non usare Bash per logica complessa solo per evitare JavaScript.
-- Il linguaggio degli script interni dell'agente non deve influenzare il
-  linguaggio o il runtime del progetto su cui stai lavorando.
+- Il linguaggio degli script interni dell'agente non deve influenzare il linguaggio o il runtime del
+  progetto su cui stai lavorando.
 - Usa esclusivamente una sottocartella temporanea dentro `$HOME/.claude/tmp`.
-- Lo script deve produrre log espliciti e leggibili: avvio, checkpoint delle fasi,
-  risultati rilevanti, errori contestualizzati, esito finale (`PASS`/`FAIL`) ed exit code.
-- Salva stdout e stderr in un log; dopo l'esecuzione leggi il log e rendi visibili
-  nella sessione le informazioni necessarie affinché sia l'utente sia l'agente
-  possano verificare l'esito.
+- Lo script deve produrre log espliciti e leggibili: avvio, checkpoint delle fasi, risultati
+  rilevanti, errori contestualizzati, esito finale (`PASS`/`FAIL`) ed exit code.
+- Salva stdout e stderr in un log; dopo l'esecuzione leggi il log e rendi visibili nella sessione le
+  informazioni necessarie affinché sia l'utente sia l'agente possano verificare l'esito.
 - Non includere segreti nei log.
-- Non creare file temporanei nella directory del progetto, salvo quando il test lo
-  richiede esplicitamente.
-
+- Non creare file temporanei nella directory del progetto, salvo quando il test lo richiede
+  esplicitamente.
 
 ## Output
 
-- Minimizza l'output shell: sopprimi stdout/stderr quando non serve,
-  preferisci flag quiet (`-q`, `--quiet`), filtra l'output dei comandi
-  verbosi con `tail`/`head`/`grep` in pipeline, e non riportare mai output
-  voluminosi di build/test/install se non servono alla diagnosi. Per cercare
+- Minimizza l'output shell: sopprimi stdout/stderr quando non serve, preferisci flag quiet (`-q`,
+  `--quiet`), filtra l'output dei comandi verbosi con `tail`/`head`/`grep` in pipeline, e non
+  riportare mai output voluminosi di build/test/install se non servono alla diagnosi. Per cercare
   dentro i file usa i tool Grep e Glob, non `grep`/`find` in Bash.
 
-- Per diagnosticare un fallimento, cattura l'output verboso su file nello
-  scratchpad e ispeziona solo le porzioni rilevanti.
+- Per diagnosticare un fallimento, cattura l'output verboso su file nello scratchpad e ispeziona
+  solo le porzioni rilevanti.
 
-- Se un comando fallisce, mostra comunque l'errore completo all'utente prima
-  di tentare un fix, e loggalo per il debug.
+- Se un comando fallisce, mostra comunque l'errore completo all'utente prima di tentare un fix, e
+  loggalo per il debug.
 
-- Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci
-  Nushell (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
+- Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci Nushell
+  (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
 
 <!-- RECALL:manual --> <!-- Blocco iniettato SOLO con recall_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RECALL_DROP=1): le memorie le inietta già l'hook UserPromptSubmit. -->
+
 ## Recall a inizio task
 
-Il recall automatico è disattivato: nessun hook inietta le memorie Hindsight
-nel prompt. Chiama `mcp__hindsight__recall` con una query breve e mirata:
+Il recall automatico è disattivato: nessun hook inietta le memorie Hindsight nel prompt. Chiama
+`mcp__hindsight__recall` con una query breve e mirata:
 
 - prima di rispondere a domande sull'utente, sul progetto o su decisioni passate;
-- prima di un'operazione tecnica non banale su questa macchina (download,
-  install, assunzioni su path/env, rete, "prima volta che faccio X qui");
+- prima di un'operazione tecnica non banale su questa macchina (download, install, assunzioni su
+  path/env, rete, "prima volta che faccio X qui");
 - ogni volta che sei incerto o stai per assumere qualcosa.
 
-Non chiamarlo per conferme, domande banali o quando il contesto contiene già
-la risposta. Se il recall non risponde, prosegui con gli strumenti locali e
-dillo in una riga.
+Non chiamarlo per conferme, domande banali o quando il contesto contiene già la risposta. Se il
+recall non risponde, prosegui con gli strumenti locali e dillo in una riga.
 
 <!-- /RECALL:manual -->
 
 <!-- RETAIN:manual --> <!-- Blocco iniettato SOLO con retain_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RETAIN_DROP=1): salva già il gate del retain automatico. -->
+
 ## Retain a fine task
 
-Al termine di un task significativo, valuta se il lavoro ha prodotto conoscenza
-durevole che meriti di essere persistita. Salva solo se l'informazione è verificata,
-non ovvia e probabilmente utile nelle sessioni future (decisioni con la loro
-motivazione, cause radice e workaround, vincoli specifici dell'ambiente, approcci
-scartati rilevanti).
+Al termine di un task significativo, valuta se il lavoro ha prodotto conoscenza durevole che meriti
+di essere persistita. Salva solo se l'informazione è verificata, non ovvia e probabilmente utile
+nelle sessioni future (decisioni con la loro motivazione, cause radice e workaround, vincoli
+specifici dell'ambiente, approcci scartati rilevanti).
 
-NON salvare: stato temporaneo, output banale, dati ricavabili dal repository,
-tentativi intermedi, duplicati.
+NON salvare: stato temporaneo, output banale, dati ricavabili dal repository, tentativi intermedi,
+duplicati.
 
-Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain`
-col formato della sezione sotto.
+Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain` col formato della
+sezione sotto.
 
 Se no: non fare nulla.
 
@@ -185,14 +186,13 @@ Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
 
 ## Formato di `mcp__hindsight__retain`
 
-Vale ogni volta che chiami `mcp__hindsight__retain`; la regola sul `context`
-vale anche quando il gate automatico ti chiede di proporne uno per una memoria
-in attesa.
+Vale ogni volta che chiami `mcp__hindsight__retain`; la regola sul `context` vale anche quando il
+gate automatico ti chiede di proporne uno per una memoria in attesa.
 
-- `content`: forma breve e autosufficiente che spieghi il PERCHÉ, coi dettagli
-  tecnici (comandi, path, valori) preservati alla lettera.
-- `context`: una riga descrittiva del dominio (es. "gestione bank e config
-  Hindsight nel progetto Trinity") — MAI una categoria secca né il nome del bank.
-- `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del
-  progetto e `branch:<nome>` solo se davvero legato al branch. NIENTE tag
-  semantici (bug, convention, preferenze…): frammentano la consolidation.
+- `content`: forma breve e autosufficiente che spieghi il PERCHÉ, coi dettagli tecnici (comandi,
+  path, valori) preservati alla lettera.
+- `context`: una riga descrittiva del dominio (es. "gestione bank e config Hindsight nel progetto
+  Trinity") — MAI una categoria secca né il nome del bank.
+- `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del progetto e
+  `branch:<nome>` solo se davvero legato al branch. NIENTE tag semantici (bug, convention,
+  preferenze…): frammentano la consolidation.
