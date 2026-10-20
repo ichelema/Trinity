@@ -15,20 +15,20 @@ sono client e lo raggiungono con un tunnel SSH.
 - Entry-point: `hindsight-local-mcp` (sulla VPS, lanciato dal servizio via `mise exec`)
 - Versione verificata: **1.0.0** (2026-10-14, PC Windows; la VPS va verificata a parte);
   query-analyzer del recall ristretto a `it,en` (`HINDSIGHT_API_QUERY_ANALYZER_LANGUAGES`)
-- LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation (A/B
-  2026-08-09, ICH-60/62); **`gpt-4.1-mini`** resta LLM globale per il query-analyzer del recall
+- LLM: **`gpt-5.6-luna`** via provider `openai-responses` per retain/reflect/consolidation;
+  **`gpt-4.1-mini`** è l'LLM globale per il query-analyzer del recall
   (chiavi da `$OPENAI_API_KEY`; vedi commenti in `mise.toml`)
 - Retain automatico: attivo solo se `retain_enabled` è `true` in `hindsight.config.json`; con
   `false` si salva solo con `retain` MCP. Il gate: **`gpt-5.6-luna`** decide, **TypeSafe
   `jev-latest`** (`$TYPESAFE_API_KEY`) conferma come secondo filtro i soli `retain` (F1 ≥
-  `retain_jev_threshold`, ICH-163); errore di Jev = nessun salvataggio
+  `retain_jev_threshold`); errore di Jev = nessun salvataggio
 - Embeddings: **Google `gemini-embedding-001`** (1536d, cloud, multilingue; `$GEMINI_API_KEY`)
 - Reranker: **`voyage/rerank-3`** via `litellm-sdk` (`$VOYAGE_API_KEY`), cap flat 100 candidati
-  (per-budget spento). **Failover chain fail-open** (ICH-65):
+  (per-budget spento). **Failover chain fail-open**:
   `HINDSIGHT_API_RERANKER_1_PROVIDER = "rrf"` — se Voyage non risponde il recall ripiega su RRF
   invece di dare HTTP 500; la degradazione è segnalata da `hindsight-failcheck.sh` (marker scritto
   da `hindsight-recall.sh` quando i risultati arrivano senza `scores.reranker`)
-- Altre feature 0.9.0 attive: recency decay esponenziale (halflife 60 giorni), audit log server-side
+- Altre feature attive: recency decay esponenziale (halflife 60 giorni), audit log server-side
   (retention 30 giorni), `HINDSIGHT_API_FAIL_ON_EXTRACTION_ERRORS=true` (estrazione fallita dopo i
   retry → operation `failed`, intercettata da `hindsight-failcheck.sh`)
 - Storage: embedded PostgreSQL in `~/.pg0/` sulla VPS
@@ -56,7 +56,7 @@ curl -fsS -m 3 http://localhost:8888/ -o /dev/null -w "%{http_code}\n"  # 404 = 
 
 ### Multi-bank: core + bank per progetto
 
-Dal 2026-06-12 la memoria è a due livelli: il bank **CORE** `trinity-project` (informazioni
+La memoria è a due livelli: il bank **CORE** `trinity-project` (informazioni
 trasversali) + un **bank per progetto** isolato, governati dal blocco `bank` di
 `hindsight.config.json`:
 
@@ -68,10 +68,10 @@ trasversali) + un **bank per progetto** isolato, governati dal blocco `bank` di
   Il core entra solo se listato.
 - URL risolti per il cwd corrente: `python hooks/hindsight/lib/hindsight_config.py --banks`
 
-**Tool MCP `hindsight/*` — quale bank vedono** (dal 2026-07-10, MCP per-progetto): il server
+**Tool MCP `hindsight/*` — quale bank vedono** (MCP per-progetto): il server
 "hindsight" è definito SOLO a scope user (`claude mcp add-json hindsight --scope user`) come shim
-stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh`, unico per tutti i progetti (una seconda
-definizione nel `.mcp.json` di Trinity causava il warning "Conflicting scopes" ed è stata rimossa).
+stdio `hooks/hindsight/mcp/hindsight-mcp-shim.sh`, unico per tutti i progetti (non definirlo anche
+nel `.mcp.json` di Trinity: produce il warning "Conflicting scopes").
 Lo shim risolve il bank con la stessa `resolve_bank` degli hook (slug dal remote origin via
 `CLAUDE_PROJECT_DIR`; repo Trinity o fuori-git → core `trinity-project`), attende la readiness del
 server e fa da ponte via `mcp-remote` sul node di mise.
