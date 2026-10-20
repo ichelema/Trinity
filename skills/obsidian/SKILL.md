@@ -335,24 +335,10 @@ Limiti: ...
 
 ## Strategia operativa
 
-Richieste ampie:
-
-1. ricerca semantica;
-2. lettura dei risultati migliori;
-3. graph/backlink a 1-2 hop;
-4. sintesi e link suggeriti.
-
-Richieste precise:
-
-1. cerca titolo/path;
-2. leggi nota;
-3. rispondi solo su fonti verificate.
-
-Richieste progettuali:
-
-1. cerca note progetto;
-2. controlla daily note/log/TODO correlati;
-3. sintetizza stato, blocchi e prossime azioni.
+Per le richieste ampie parti dalla ricerca semantica e allarga a graph e backlink solo se serve. Per
+quelle precise cerca titolo o path, leggi la nota e rispondi solo su ciò che hai letto. Per lo stato
+di un progetto guarda anche daily note, log e TODO collegati, e riporta stato, blocchi e prossime
+azioni.
 
 ---
 
