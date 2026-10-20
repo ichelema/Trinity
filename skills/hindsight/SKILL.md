@@ -1,6 +1,6 @@
 ---
 name: hindsight
-description: Hindsight persistent memory system for AI agents. Use when working with retain/recall/reflect operations, memory banks. In questo progetto Hindsight gira come MCP server sulla VPS, raggiunto via tunnel SSH.
+description: Memoria persistente Hindsight, server MCP sulla VPS raggiunto via tunnel SSH. Usala ogni volta che l'utente chiede di cercare o consultare la memoria, chiede cosa abbiamo fatto, deciso o configurato in passato ("ti ricordi…", "cosa sai di…", "cerca in memoria…") o chiede di salvare qualcosa in memoria. Usala anche per lavorare con retain, recall, reflect, memory bank e tag, e per i problemi del server Hindsight.
 ---
 
 # Hindsight Memory System
@@ -30,6 +30,7 @@ La memoria non è la source of truth. Repository, file, test, lockfile, configur
 | Cosa devi fare | Dove |
 | --- | --- |
 | Usare retain, recall, reflect e gli altri tool MCP nel lavoro di ogni giorno | questo file |
+| Ricostruire cosa abbiamo fatto, deciso o configurato, quando l'utente chiede di consultare la memoria | `references/consultare-memoria.md` |
 | Progettare la memoria di un'applicazione: bank config, tag schema, integrazione | `references/hindsight-architect/SKILL.md` |
 | Consultare la documentazione upstream: API, configurazione, SDK | i file sotto |
 
