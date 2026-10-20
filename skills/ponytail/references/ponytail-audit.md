@@ -69,8 +69,8 @@ Poi i finding in tre gruppi, i più importanti per primi, salta i gruppi vuoti:
   mescola lavori, codice che non dovrebbe esistere.
 - **Bello da avere:** piccoli aumenti di velocità, forme più corte.
 
-Numera i finding attraverso tutti i gruppi, così l'utente può dire "correggi 2 e 5". Al massimo
-20 finding; se ne hai lasciati fuori di più piccoli, di' quanti.
+Numera i finding attraverso tutti i gruppi, così l'utente può dire "correggi 2 e 5". Se ne lasci
+fuori di minori, di' quanti.
 Ogni finding ha tutte e quattro le parti, ciascuna di una o due frasi corte:
 
 2. **Gli ordini finiscono nel giorno sbagliato** (`billing/close_day.py:L40-52`)
