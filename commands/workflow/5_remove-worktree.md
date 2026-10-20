@@ -15,7 +15,7 @@ portabile; i passi solo-Windows sono marcati.
 
 ## Validazione dell'argomento
 
-Se `$worktree_name` manca, fermati e mostra:
+Se il nome del worktree manca, fermati e mostra:
 
 `/trinity:workflow:5_remove-worktree <worktree-name>`
 
