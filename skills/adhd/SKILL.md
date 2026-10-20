@@ -76,9 +76,9 @@ After all branches return:
    plays", "cache-shaped plays", "batched-window plays", "race-multiple-
    backends plays".
 
-3. **Deepen the top 3.** Rank by weighted score (novelty 0.35 + viability
-   0.40 + fit 0.25), exclude traps, take top 3. For each, spawn one Agent
-   call that produces:
+3. **Deepen the top 3.** Rank by judgment across the three scores (viability
+   counts most, then novelty, then fit), exclude traps, take top 3. For each,
+   spawn one Agent call that produces:
    - a 4 to 8 sentence sketch of how the idea works
    - the load-bearing risk
    - the first concrete step a builder would take
