@@ -13,7 +13,7 @@ Hindsight è un sistema di memoria persistente per agenti AI che implementa oper
 
 Hai una memoria persistente attraverso il server MCP Hindsight.
 
-Utilizza direttamente le chiamate agli strumenti MCP. Non utilizzare comandi shell, non eseguire `uvx hindsight-embed` e non chiamare `hindsight-embed memory`.
+Utilizza direttamente le chiamate agli strumenti MCP. Non utilizzare comandi shell, non eseguire `uvx hindsight-embed` e non chiamare `hindsight-embed memory`. Unica eccezione: la lettura completa di un periodo con `curl` in `GET`, descritta in `references/consultare-memoria.md`.
 
 Endpoint:
 

@@ -35,7 +35,21 @@ Parametri: `budget: "mid"`, `prefer_observations: true`, `tags: ["claude-code"]`
 consolidate: danno il quadro con meno risultati.
 
 Per un periodo preciso passa `temporal_window: {"start": "<ISO>", "end": "<ISO>"}`. Il parametro mette prima le memorie del
-periodo, ma non esclude le altre. Per una lettura completa e limitata a un periodo usa `list_memories`.
+periodo, ma non esclude le altre.
+
+### Lettura completa di un periodo
+
+Il tool MCP `list_memories` non filtra per data. Per leggere tutte le memorie di un periodo usa l'API HTTP attraverso il
+tunnel, solo con richieste `GET`:
+
+```bash
+curl -s "http://127.0.0.1:8888/v1/default/banks/trinity-project/memories/list?start_date=<ISO>&end_date=<ISO>&time_field=mentioned_at&limit=100&offset=0"
+```
+
+- L'intervallo è `[start_date, end_date)`. `time_field` sceglie la data: `created_at` (predefinita), `updated_at`,
+  `mentioned_at`, `occurred_start`, `occurred_end`. Le memorie senza quella data restano fuori.
+- La risposta ha `total`: se supera `limit`, leggi le pagine successive con `offset`.
+- Mai `POST`, `PATCH` o `DELETE` via API: aggirano l'allowlist dei tool MCP.
 
 ## 2. Ricerche mirate
 
