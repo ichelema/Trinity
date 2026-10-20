@@ -106,7 +106,7 @@ Non salvare:
 
 ## Il campo `context`: descrittivo, non strutturale
 
-Il `context` del retain entra SOLO nel prompt dell'LLM estrattore come cornice interpretativa: non
+Il `context` del retain entra solo nel prompt dell'LLM estrattore come cornice interpretativa: non
 partecipa al recall filtering, alle relazioni (= entità) né allo scope di consolidation (= tag).
 Verificato sul sorgente di hindsight-api (`entity_processing.py`, `consolidator.py`) il 2026-05-31.
 
@@ -125,19 +125,19 @@ questo testo?_" — max 1 riga, specifica, coi nomi propri.
 
 ## Regole di Tagging
 
-I tag hanno DUE lavori: filtro di recall E recinto di consolidation — le observation si fondono SOLO
+I tag hanno due lavori: filtro di recall e recinto di consolidation — le observation si fondono solo
 tra memorie con lo stesso identico set di tag (`tags_match: all_strict` nel consolidator). Un tag in
 più non arricchisce: **frammenta** (esperimento 2026-05-31: tag semantici liberi → 71 partizioni su
 72 documenti, consolidation morta).
 
-Usa SOLO i tag universali, identici a quelli del retain worker automatico (`build_tags()` in
+Usa solo i tag universali, identici a quelli del retain worker automatico (`build_tags()` in
 `hindsight-retain-worker.py`):
 
 - `claude-code` — sempre (ancora di recall del bank)
 - `repo:<nome>` — scoping di progetto (nome dal remote origin, stabile)
 - `branch:<nome>` — solo se il fatto è davvero specifico del branch
 
-NON aggiungere tag semantici (`project`, `preferences`, `learning`, linguaggi, sottosistemi…): la
+Non aggiungere tag semantici (`project`, `preferences`, `learning`, linguaggi, sottosistemi…): la
 selettività del recall la fa la query semantica; il dominio lo porta il `context`; le connessioni le
 fanno le entità estratte. Per un fatto intenzionalmente globale (valido su tutti i progetti), usa
 solo `claude-code`.
