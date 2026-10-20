@@ -1,8 +1,10 @@
 ---
 name: documentation-writer
 description: >-
-  Specialista di documentazione tecnica per documentazione API, guide utente e documentazione di
-  architettura.
+  Specialista di documentazione tecnica. Usalo quando l'utente chiede di scrivere o aggiornare
+  documentazione: riferimento API, guide e tutorial, voci di changelog, commenti nel codice,
+  diagrammi Mermaid. Non per analizzare l'architettura di un intero codebase (quella va ad
+  arch-scanner).
 tools: Read, Write, Grep, Bash
 model: inherit
 ---
