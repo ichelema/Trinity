@@ -167,10 +167,10 @@ di essere persistita. Salva solo se l'informazione è verificata, non ovvia e pr
 nelle sessioni future (decisioni con la loro motivazione, cause radice e workaround, vincoli
 specifici dell'ambiente, approcci scartati rilevanti).
 
-NON salvare: stato temporaneo, output banale, dati ricavabili dal repository, tentativi intermedi,
+Non salvare: stato temporaneo, output banale, dati ricavabili dal repository, tentativi intermedi,
 duplicati.
 
-Se sì: avvisa con UNA frase breve, poi chiama subito `mcp__hindsight__retain` col formato della
+Se sì: avvisa con una frase breve, poi chiama subito `mcp__hindsight__retain` col formato della
 sezione sotto.
 
 Se no: non fare nulla.
@@ -183,10 +183,10 @@ Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
 Vale ogni volta che chiami `mcp__hindsight__retain`; la regola sul `context` vale anche quando il
 gate automatico ti chiede di proporne uno per una memoria in attesa.
 
-- `content`: forma breve e autosufficiente che spieghi il PERCHÉ, coi dettagli tecnici (comandi,
+- `content`: forma breve e autosufficiente che spieghi il perché, coi dettagli tecnici (comandi,
   path, valori) preservati alla lettera.
 - `context`: una riga descrittiva del dominio (es. "gestione bank e config Hindsight nel progetto
-  Trinity") — MAI una categoria secca né il nome del bank.
-- `tags`: SOLO universali — `claude-code`, più `repo:<nome>` se specifico del progetto e
-  `branch:<nome>` solo se davvero legato al branch. NIENTE tag semantici (bug, convention,
+  Trinity") — mai una categoria secca né il nome del bank.
+- `tags`: solo universali — `claude-code`, più `repo:<nome>` se specifico del progetto e
+  `branch:<nome>` solo se davvero legato al branch. Niente tag semantici (bug, convention,
   preferenze…): frammentano la consolidation.
