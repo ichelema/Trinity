@@ -49,19 +49,16 @@ leggerli solo quando la richiesta lo richiede.
 Regole:
 
 - prima di generare o modificare file Excalidraw, leggere `references/excalidraw-obsidian-format.md`
-  e applicarla come fonte operativa. La skill deve mantenere qui solo il puntatore alla reference,
-  non duplicarne il contenuto.
+  e applicarla come fonte operativa.
 - prima di generare o modificare la nota del giorno, leggere `references/nota-del-giorno.md` e
-  applicarla come fonte operativa. La skill deve mantenere qui solo il puntatore alla reference, non
-  duplicarne il contenuto.
+  applicarla come fonte operativa.
 
 ---
 
 ## Skill operative correlate
 
 Le skill correlate non sono reference passive: vanno usate solo quando la richiesta richiede
-capacità operative specifiche non contenute in questa skill principale. Non duplicare qui il loro
-contenuto operativo.
+capacità operative specifiche non contenute in questa skill principale.
 
 | Skill                       | Quando usarla                                                                                                                                                                                                                                                                                 | Scopo                                                                                          |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
