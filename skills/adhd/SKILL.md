@@ -1,6 +1,6 @@
 ---
 name: adhd
-description: Parallel divergent ideation for coding agents. Spawns N isolated branches under different cognitive frames (regulator, biology, speedrunner, 10-year-old, $0 budget), scores, clusters, prunes traps, and deepens top survivors. Use on /adhd, "ADHD mode", brainstorm/ideate intents, or open-ended design, architecture, naming, API/SDK surface, and fuzzy-debugging decisions. Skip for syntax, lookups, bugs with known root cause, or closed phrasing ("quick", "standard", "canonical", "textbook"). Full pre-flight gate is in the skill body.
+description: Parallel divergent ideation for coding agents. Spawns N isolated branches under different cognitive frames (regulator, biology, speedrunner, 10-year-old, $0 budget), scores, clusters, prunes traps, and deepens top survivors. For open-ended design, architecture, naming, API/SDK surface, and fuzzy-debugging decisions; runs only when the user invokes it.
 license: MIT
 disable-model-invocation: true
 ---
@@ -18,37 +18,12 @@ there.
 
 
 
-## Pre-flight (run before Phase 1)
+## Pre-flight
 
-This skill is expensive. About 10 Agent calls, 30 to 90 seconds wall clock,
-5 to 10x a single answer. Do not pay that cost when a direct answer is
-better. Run this gate before Phase 1.
-
-**Step 1. Explicit invocation check.**
-
-If the user typed `/adhd` or explicitly asked for ADHD mode, "use the
-adhd skill", or "run ADHD on this", **SKIP the rest of this section and go
-straight to Phase 1**. The user opted in. Do not second-guess.
-
-**Step 2. Self-judge (only if Step 1 did not match).**
-
-Ask yourself three questions. If the answer to any is no, ABORT.
-
-1. **Open-ended?** Would a senior engineer give multiple viable answers
-   here, or is there one canonical answer? If canonical, abort.
-2. **High-stakes?** Is the cost of the obvious answer being wrong actually
-   high? Architecture decisions, public API surfaces, naming a real
-   product, fuzzy bugs with no known root cause, schema design = yes.
-   Side project at 11pm = no.
-3. **Open phrasing?** Did the user avoid words like "quick", "standard",
-   "canonical", "textbook", "just", "one-line"? If they used any of those,
-   they want the direct answer. Abort.
-
-If all three checks pass, proceed to Phase 1.
-
-If any fails, ABORT and answer the question directly. Optionally append
-one sentence: *"If you want a wider exploration under parallel cognitive
-frames with explicit trap detection, run `/adhd <your problem>`."*
+This skill is expensive: about 10 Agent calls, 30 to 90 seconds wall clock,
+5 to 10x a single answer. It loads only when the user invokes it
+(`disable-model-invocation: true`), so the user has already opted in: go
+straight to Phase 1.
 
 ## The loop
 
