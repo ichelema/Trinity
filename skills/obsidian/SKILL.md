@@ -369,11 +369,7 @@ Vietato:
 - modificare note senza leggerle prima;
 - cancellare, rinominare o spostare file senza richiesta esplicita.
 
-Se una nota non esiste:
-
-```text
-Non ho trovato una nota esistente con quel nome. Posso proporre un nuovo path coerente.
-```
+Se una nota non esiste, dillo e proponi un path coerente per crearla.
 
 ---
 
