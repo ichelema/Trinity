@@ -5,9 +5,9 @@ disable-model-invocation: true
 
 # Promote
 
-Rivedi i candidati alla promozione dai bank Hindsight di progetto al bank CORE
-condiviso e promuovi SOLO quelli approvati dall'utente. La promozione è curata:
-MAI promuovere senza approvazione esplicita.
+Rivedi i candidati alla promozione dai bank Hindsight di progetto al bank core
+condiviso e promuovi solo quelli approvati dall'utente. La promozione è curata:
+mai promuovere senza approvazione esplicita.
 
 Lo script meccanico è (risolvi l'interprete come gli hook: `hs-python.sh`
 esporta `$HS_PY` — su Windows il python del PATH, su Linux/mac quello di mise —
@@ -29,7 +29,7 @@ e imposta `PYTHONUTF8=1`; ogni blocco sotto assume `$HS_PY` già risolto così):
 2. **Review umana**: mostra all'utente una tabella dei candidati con:
    - bank di provenienza e doc_id
    - motivazione del triage (`reason`)
-   - contenuto COMPLETO del documento: il campo `preview` è troncato a 500
+   - contenuto completo del documento: il campo `preview` è troncato a 500
      caratteri e i documenti superano spesso i 1000, quindi approvare dal
      preview significa non vedere metà del testo. Leggi l'`original_text`
      intero (`GET /documents/<id>` sul bank di provenienza).
@@ -44,15 +44,15 @@ e imposta `PYTHONUTF8=1`; ogni blocco sotto assume `$HS_PY` già risolto così):
 
    Il move fa: retain dell'`original_text` sul core (con strip dei tag
    `repo:`/`branch:`) + `delete_document` dal bank progetto + aggiornamento
-   dello state file. È un MOVE, non una copia: un fatto vive in un solo bank.
+   dello state file. È un move, non una copia: un fatto vive in un solo bank.
 
-   Usa `--move` SOLO per i documenti interamente trasversali: sposta
+   Usa `--move` solo per i documenti interamente trasversali: sposta
    l'`original_text` per intero, senza guardarci dentro.
-4. **Documenti MISTI** (fatti trasversali *e* fatti specifici del progetto nello
+4. **Documenti misti** (fatti trasversali *e* fatti specifici del progetto nello
    stesso documento: normale, un documento contiene 3-6 fatti estratti). Il
    `--move` porterebbe sul core anche la parte specifica. Invece:
    - retain del solo fatto trasversale, **riscritto a mano**, direttamente sul
-     core via REST — NON col tool MCP `mcp__hindsight__retain`: questo comando
+     core via REST — non col tool MCP `mcp__hindsight__retain`: questo comando
      è a scope user e il retain MCP scrive sul bank risolto dal cwd, quindi
      lanciato fuori dal repo Trinity il fatto finirebbe in silenzio nel bank
      del progetto (l'opposto della promozione). La REST è indipendente dal
