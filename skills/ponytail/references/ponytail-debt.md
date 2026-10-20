@@ -5,12 +5,14 @@ permanente.
 
 ## Scansione
 
-Fai grep del repo per i marker di commento, saltando `node_modules`, `.git` e l'output di build:
+Cerca i marker di commento nel repo con il tool Grep, in modalità `content` e con `head_limit: 0`
+(senza limite, così nessun marker resta fuori). Grep salta già `.git` e i file ignorati da git,
+come `node_modules` e l'output di build. Pattern:
 
-`grep -rnE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build '(#|//|/[*]) ?(shortcut|ponytail):' .`  (aggiungi altri prefissi di commento se il tuo stack li usa)
+`(#|//|/[*]) ?(shortcut|ponytail):`  (aggiungi altri prefissi di commento se il tuo stack li usa)
 
-Se l'utente nomina una sua parola marker (`/trinity:ponytail:ponytail-debt TODO`), fai grep di
-quella parola.
+Se l'utente nomina una sua parola marker (`/trinity:ponytail:ponytail-debt TODO`), cerca quella
+parola allo stesso modo.
 
 Ogni hit è una riga del ledger. Il prefisso del commento tiene fuori dal ledger la prosa che
 menziona solo la convenzione. Salta gli hit che non sono un rinvio, come una nota su una
