@@ -206,7 +206,7 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ URL                    │ <url>                                                    │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /1_create-worktree <default-branch> <issue-id...> <model> │
+│ Prossimo passo         │ /trinity:workflow:1_create-worktree <default-branch> <issue-id...> <model> │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
