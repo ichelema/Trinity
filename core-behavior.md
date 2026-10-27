@@ -186,7 +186,10 @@ gate automatico ti chiede di proporne uno per una memoria in attesa.
 - `content`: forma breve e autosufficiente che spieghi il perché, coi dettagli tecnici (comandi,
   path, valori) preservati alla lettera.
 - `context`: una riga descrittiva del dominio (es. "gestione bank e config Hindsight nel progetto
-  Trinity") — mai una categoria secca né il nome del bank.
+  Trinity") — mai una categoria secca né il nome del bank. Nei retain che scrivi tu aprila con
+  `Claude Code riferisce il proprio lavoro:`: senza chi parla Hindsight 1.0 classifica tutto
+  `world` e nessun fatto `experience`. Non nel context proposto al gate: lì il content è la
+  conversazione e i ruoli `[user]`/`[assistant]` ci sono già.
 - `tags`: solo universali — `claude-code`, più `repo:<nome>` se specifico del progetto e
   `branch:<nome>` solo se davvero legato al branch. Niente tag semantici (bug, convention,
   preferenze…): frammentano la consolidation.
