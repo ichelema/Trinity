@@ -184,7 +184,9 @@ Vale ogni volta che chiami `mcp__hindsight__retain`; la regola sul `context` val
 gate automatico ti chiede di proporne uno per una memoria in attesa.
 
 - `content`: forma breve e autosufficiente che spieghi il perché, coi dettagli tecnici (comandi,
-  path, valori) preservati alla lettera.
+  path, valori) preservati alla lettera. Le azioni che hai svolto scrivile in forma attiva con
+  soggetto `Claude Code` ("Claude Code ha corretto X", non "è stato corretto X"): insieme al
+  prefisso del `context` le fanno salvare come `experience`.
 - `context`: una riga descrittiva del dominio (es. "gestione bank e config Hindsight nel progetto
   Trinity") — mai una categoria secca né il nome del bank. Nei retain che scrivi tu aprila con
   `Claude Code riferisce il proprio lavoro:`: senza chi parla Hindsight 1.0 classifica tutto

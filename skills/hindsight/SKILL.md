@@ -123,15 +123,18 @@ automatico (che produce il `context` insieme al verdetto):
 Regola pratica: il context deve rispondere a "_in quale dominio l'estrattore deve interpretare
 questo testo?_" — max 1 riga, specifica, coi nomi propri.
 
-**Chi parla.** Il context decide anche il tipo di fatto: `experience` (azioni dell'assistente) o
-`world`. Hindsight 1.0 non indica più all'estrattore chi è il narratore (`orchestrator.py`, #3962):
+**Chi parla.** Il context, insieme alla forma del content, decide anche il tipo di fatto:
+`experience` (azioni dell'assistente) o `world`. Hindsight 1.0 non indica più all'estrattore chi è il narratore (`orchestrator.py`, #3962):
 in un `retain` scritto in prosa senza chi parla escono solo fatti `world`. Per questo i bank creati
 dopo l'upgrade hanno zero `experience`. Nei retain scritti da te apri il context con
 `Claude Code riferisce il proprio lavoro:`, per esempio
-`Claude Code riferisce il proprio lavoro: compilazione gemme native Ruby su Windows UCRT64 con GCC 16`.
-Le preferenze e le approvazioni dell'utente restano `world`. Non serve nei retain del worker
-automatico: il content è la conversazione con i ruoli `[user]`/`[assistant]` (verificato con
-`memories/dry-run-extract` il 2026-10-27).
+`Claude Code riferisce il proprio lavoro: compilazione gemme native Ruby su Windows UCRT64 con GCC 16`,
+e nel content scrivi le azioni in forma attiva con soggetto `Claude Code` («Claude Code ha
+corretto X», non «è stato corretto X»). Bench del 2026-10-27 con `memories/dry-run-extract` (14
+frasi etichettate, 3 run): azioni salvate come `experience` 0% col passivo senza prefisso, 71% col
+solo prefisso, 82% con la sola forma attiva, 93% con entrambi (6/6 in un retain reale); conoscenza
+e preferenze dell'utente sempre `world`. Non serve nei retain del worker automatico: il content è
+la conversazione con i ruoli `[user]`/`[assistant]`.
 
 ## Regole di Tagging
 
