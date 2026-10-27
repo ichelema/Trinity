@@ -133,8 +133,11 @@ e nel content scrivi le azioni in forma attiva con soggetto `Claude Code` («Cla
 corretto X», non «è stato corretto X»). Bench del 2026-10-27 con `memories/dry-run-extract` (14
 frasi etichettate, 3 run): azioni salvate come `experience` 0% col passivo senza prefisso, 71% col
 solo prefisso, 82% con la sola forma attiva, 93% con entrambi (6/6 in un retain reale); conoscenza
-e preferenze dell'utente sempre `world`. Non serve nei retain del worker automatico: il content è
-la conversazione con i ruoli `[user]`/`[assistant]`.
+e preferenze dell'utente sempre `world`. Nei retain del worker automatico (e nel context proposto
+al gate) il prefisso non va messo: il content è la conversazione con i ruoli `[user]`/`[assistant]`.
+Su 12 retain reali del worker Hindsight 1.0 dà il 20% di `experience`, come la vecchia versione
+(21%); col prefisso si sale al 40%, ma anche vincoli d'ambiente e comportamenti del sistema
+finiscono in `experience`.
 
 ## Regole di Tagging
 
