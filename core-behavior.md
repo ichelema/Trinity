@@ -104,6 +104,26 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 - Preferisci `curl` a `wget` per richieste HTTP.
 - Per Python, Node, Bun e Ruby usa sempre `mise` per installare pacchetti/runtime.
 
+<!-- OS:linux -->
+## Debugger
+
+Usa `mcp-debugger` solo quando leggere il codice e i test non basta:
+
+- un test fallisce o un valore è sbagliato e dopo una lettura del codice la causa non è chiara;
+- crash senza messaggio utile (segfault, panic, eccezione inghiottita), soprattutto in Rust, C/C++,
+  Go;
+- lo stato da osservare è complesso (struct annidate, puntatori, oggetti grandi) o il codice è lento
+  da ricompilare;
+- il flusso attraversa molti livelli (catene di azioni, callback) e non sai dove nasce il valore.
+
+Non usarlo per errori di sintassi o di caricamento (`LoadError`, import mancanti), configurazione,
+codice nuovo da scrivere, o quando il messaggio d'errore indica già la riga.
+
+Prima di usarlo controlla con `list_supported_languages` che il linguaggio sia `available`; chiudi
+sempre la sessione. Se l'utente sta facendo debug in Neovim, usa i tool `dap_*` del server `neovim`
+sulla sua sessione invece di aprirne una nuova.
+<!-- /OS:linux -->
+
 ## Script e file temporanei
 
 - Per operazioni semplici, pipeline Unix e pochi comandi preferisci Bash/Zsh o `bun -e '...'`, senza
