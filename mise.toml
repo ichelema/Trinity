@@ -58,6 +58,15 @@ HINDSIGHT_API_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 # Contro accettato: una OPENAI_API_KEY errata emerge al primo retain, non al boot.
 HINDSIGHT_API_SKIP_LLM_VERIFICATION = "true"
 
+# --- Piano ChatGPT (2026-10-30, hindsight-api 1.1.0) ------------------------
+# Consolidation, retain e reflect girano sul provider "chatgpt" (Sign in with
+# ChatGPT): niente API key, consumo a carico del piano ChatGPT. Credenziali in
+# ~/.hindsight/chatgpt/ (login: `hindsight-admin chatgpt login`, dalla sessione
+# grafica della VPS; stato: `hindsight-admin chatgpt status`). Limite di 5h
+# condiviso con Codex: a limite raggiunto retain/consolidation slittano di 30 min.
+# Il globale sopra resta openai/gpt-4.1-mini: il piano non serve gpt-4.1-mini
+# (HTTP 400 model_not_found) e il recall non deve dipendere dal limite del piano.
+
 # --- LLM dedicato alla CONSOLIDATION (generazione delle observation) ---------
 # A/B 3-vie del 2026-06-02 su seed reale (23 fatti, tag claude-code):
 #   nano       → 0 observation: sul cold-start emette UPDATE su id inesistenti, mai CREATE
@@ -68,9 +77,8 @@ HINDSIGHT_API_SKIP_LLM_VERIFICATION = "true"
 # (mini: 11 sullo stesso corpus), 0 failed, ~61s, campioni corretti. Metà prezzo
 # per-token ($0.20/$1.20 vs $0.40/$1.60). NB: la consolidation è server-level
 # (no override per-bank); cambiarla richiede restart.
-HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER = "openai-responses"
+HINDSIGHT_API_CONSOLIDATION_LLM_PROVIDER = "chatgpt"
 HINDSIGHT_API_CONSOLIDATION_LLM_MODEL = "gpt-5.6-luna"
-HINDSIGHT_API_CONSOLIDATION_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 
 # --- LLM dedicato al RETAIN (estrazione fatti) via Responses API (ICH-62) ----
@@ -81,9 +89,8 @@ HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 #   costo corpus $0.0142 → $0.0074 (metà, qui il per-call segue il per-token)
 # Il globale (riga 44) resta gpt-4.1-mini per il query-analyzer del recall,
 # non coperto da questo bench. Risultati in bench_results/20260809-063429/.
-HINDSIGHT_API_RETAIN_LLM_PROVIDER = "openai-responses"
+HINDSIGHT_API_RETAIN_LLM_PROVIDER = "chatgpt"
 HINDSIGHT_API_RETAIN_LLM_MODEL = "gpt-5.6-luna"
-HINDSIGHT_API_RETAIN_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 
 # --- LLM dedicato a REFLECT via Responses API (ICH-60, adottato 2026-08-09) --
 # openai-responses parla solo con /v1/responses: reasoning + function tools
@@ -97,9 +104,8 @@ HINDSIGHT_API_RETAIN_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}
 # Reflect è invocata deliberatamente (volume basso): la sintesi migliore vale
 # il 2x di latenza. Luna: $0.20/$1.20 per Mtok (metà di gpt-4.1-mini per-token;
 # per-call costa ~1.6x perché lavora di più).
-HINDSIGHT_API_REFLECT_LLM_PROVIDER = "openai-responses"
+HINDSIGHT_API_REFLECT_LLM_PROVIDER = "chatgpt"
 HINDSIGHT_API_REFLECT_LLM_MODEL = "gpt-5.6-luna"
-HINDSIGHT_API_REFLECT_LLM_API_KEY = "{{ env.OPENAI_API_KEY | default(value='') }}"
 HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT = "low"
 
 # PRODUZIONE: gemini-embedding-001 (1536 dim) dal 2026-07-27, di nuovo dopo la parentesi
