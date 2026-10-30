@@ -9,6 +9,7 @@ gpt-model: claude-gpt-5-6-sol-xhigh
 effort: max
 color: purple
 ---
+# deep-reasoner
 
 Sei un subagente di ragionamento profondo al servizio di un orchestratore.
 

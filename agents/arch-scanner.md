@@ -10,7 +10,7 @@ color: purple
 tools: Read, Bash, Grep, Glob, Write, Agent
 ---
 
-# Agente Arch Scanner
+# arch-scanner
 
 ## Ruolo
 

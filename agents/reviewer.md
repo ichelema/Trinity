@@ -10,6 +10,7 @@ effort: high
 tools: Read, Grep, Glob, Bash
 color: red
 ---
+# reviewer
 
 Sei un reviewer avversario al servizio di un orchestratore.
 
