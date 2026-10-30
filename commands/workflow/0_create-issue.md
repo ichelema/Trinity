@@ -1,7 +1,7 @@
 ---
 description: Crea una issue Linear ben formata a partire da una descrizione libera del lavoro
 argument-hint: <descrizione del lavoro da fare>
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 Crea una nuova issue Linear a partire da questa descrizione:
