@@ -64,8 +64,10 @@ HINDSIGHT_API_SKIP_LLM_VERIFICATION = "true"
 # ~/.hindsight/chatgpt/ (login: `hindsight-admin chatgpt login`, dalla sessione
 # grafica della VPS; stato: `hindsight-admin chatgpt status`). Limite di 5h
 # condiviso con Codex: a limite raggiunto retain/consolidation slittano di 30 min.
-# Il globale sopra resta openai/gpt-4.1-mini: il piano non serve gpt-4.1-mini
-# (HTTP 400 model_not_found) e il recall non deve dipendere dal limite del piano.
+# Anche il refresh dei mental model va sul piano: senza override
+# MENTAL_MODEL_REFRESH_LLM_* segue la config di reflect. Il globale sopra resta
+# openai/gpt-4.1-mini (il piano non lo serve, HTTP 400 model_not_found): il recall
+# non usa LLM (DateparserQueryAnalyzer) e nei trace LLM il globale non compare.
 
 # --- LLM dedicato alla CONSOLIDATION (generazione delle observation) ---------
 # A/B 3-vie del 2026-06-02 su seed reale (23 fatti, tag claude-code):
@@ -87,8 +89,7 @@ HINDSIGHT_API_CONSOLIDATION_LLM_TIMEOUT = "180"
 #   retain avg 4.77s → 3.23s, retain max 9.14s → 6.06s
 #   fatti estratti 25 → 34 (stesso corpus), recall hit-rate 100% = 100% (6/6)
 #   costo corpus $0.0142 → $0.0074 (metà, qui il per-call segue il per-token)
-# Il globale (riga 44) resta gpt-4.1-mini per il query-analyzer del recall,
-# non coperto da questo bench. Risultati in bench_results/20260809-063429/.
+# Risultati in bench_results/20260809-063429/.
 HINDSIGHT_API_RETAIN_LLM_PROVIDER = "chatgpt"
 HINDSIGHT_API_RETAIN_LLM_MODEL = "gpt-5.6-luna"
 
