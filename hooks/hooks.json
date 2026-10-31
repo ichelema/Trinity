@@ -9,6 +9,11 @@
         },
         {
           "type": "command",
+          "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/litellm/litellm-ensure-up.sh\"",
+          "timeout": 20
+        },
+        {
+          "type": "command",
           "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh\"",
           "timeout": 5
         },
