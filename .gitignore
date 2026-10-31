@@ -32,3 +32,4 @@ hooks/hindsight/benchmark/artifacts/
 /tmp/
 # bazar managed
 .claude/bazar.state.json
+WATCHDOG.md
