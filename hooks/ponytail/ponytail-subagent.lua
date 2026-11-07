@@ -6,7 +6,8 @@ local json = dofile(script_dir .. "/../lib/dkjson.lua")
 local config = dofile(script_dir .. "/ponytail-config.lua")
 local instructions = dofile(script_dir .. "/ponytail-instructions.lua")
 
-local mode = config.read_mode()
+local input = config.read_input()
+local mode = config.read_mode(input.session_id)
 if not mode or mode == "off" then
   os.exit(0)
 end
@@ -51,16 +52,8 @@ if not matcher_src or matcher_src == "" then
   os.exit(0)
 end
 
--- Matcher settato → leggi agent_type da stdin, salta solo su mismatch certo.
-local input = io.read("*a") or ""
-local agent_type = ""
-do
-  input = input:gsub("^\239\187\191", "") -- strip BOM
-  local ok, data = pcall(json.decode, input)
-  if ok and type(data) == "table" then
-    agent_type = tostring(data.agent_type or ""):gsub("^%s+", ""):gsub("%s+$", "")
-  end
-end
+-- Matcher settato → salta solo su mismatch certo di agent_type.
+local agent_type = tostring(input.agent_type or ""):gsub("^%s+", ""):gsub("%s+$", "")
 
 if agent_type ~= "" and not match_agent(matcher_src, agent_type) then
   os.exit(0)

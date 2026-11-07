@@ -10,14 +10,20 @@ local claude_dir = config.get_claude_dir()
 local settings_path = claude_dir .. "/settings.json"
 local nudge_flag = claude_dir .. "/.ponytail-statusline-nudged"
 
-local mode = config.get_default_mode()
+local input = config.read_input()
+local sid = input.session_id
+if input.source == "startup" then config.prune_states(30) end
+
+-- compact e resume continuano la stessa sessione: tengono il livello scelto, off compreso
+local mode
+if input.source == "compact" or input.source == "resume" then mode = config.read_mode(sid) end
+mode = mode or config.get_default_mode()
+config.set_mode(sid, mode)
 if mode == "off" then
-  config.clear_mode()
   io.stdout:write("OK")
   os.exit(0)
 end
 
-config.set_mode(mode)
 local output = instructions.get_instructions(mode)
 
 -- Nudge statusline mancante, al massimo una volta (flag file).

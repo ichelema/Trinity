@@ -115,24 +115,49 @@ local function write_default_mode(mode)
   return normalized
 end
 
--- --- stato runtime (.ponytail-active) ---
+-- --- input dell'hook (JSON su stdin) ---
 
-local state_file = get_claude_dir() .. "/.ponytail-active"
+local function read_input()
+  local raw = (io.read("*a") or ""):gsub("^\239\187\191", "") -- strip BOM
+  local ok, data = pcall(json.decode, raw)
+  if ok and type(data) == "table" then return data end
+  return {}
+end
 
-local function read_mode()
-  local m = file_read(state_file)
+-- --- stato runtime per sessione (ponytail-state/<session_id>, "off" compreso) ---
+
+local state_dir = get_claude_dir() .. "/ponytail-state"
+
+-- session_id arriva dallo stdin dell'hook: solo caratteri da nome file, altrimenti nessuno stato
+local function state_file(sid)
+  if type(sid) == "string" and sid:match("^[%w%-]+$") then return state_dir .. "/" .. sid end
+  return nil
+end
+
+local function read_mode(sid)
+  local p = state_file(sid)
+  local m = p and file_read(p)
   if m then m = m:gsub("^%s+", ""):gsub("%s+$", "") end
   if m and m ~= "" then return m end
   return nil
 end
 
-local function set_mode(mode)
-  mkdir_p(dirname(state_file))
-  file_write(state_file, mode)
+local function set_mode(sid, mode)
+  local p = state_file(sid)
+  if not p then return end
+  mkdir_p(state_dir)
+  file_write(p, mode)
 end
 
-local function clear_mode()
-  os.remove(state_file)
+-- Un file per sessione: senza pulizia la cartella cresce senza limite.
+-- ponytail: forfiles non provato su Windows, controllare se ponytail-state cresce
+local function prune_states(days)
+  if not is_shell_safe(state_dir) then return end
+  if package.config:sub(1, 1) == "\\" then
+    os.execute('forfiles /p "' .. state_dir:gsub("/", "\\") .. '" /d -' .. days .. ' /c "cmd /c del @path" >NUL 2>NUL')
+  else
+    os.execute('find "' .. state_dir .. '" -type f -mtime +' .. days .. ' -delete 2>/dev/null')
+  end
 end
 
 return {
@@ -152,8 +177,9 @@ return {
   file_read = file_read,
   file_write = file_write,
   file_exists = file_exists,
+  read_input = read_input,
   -- runtime state
   read_mode = read_mode,
   set_mode = set_mode,
-  clear_mode = clear_mode,
+  prune_states = prune_states,
 }

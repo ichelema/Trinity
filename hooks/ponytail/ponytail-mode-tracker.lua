@@ -2,16 +2,10 @@
 -- ponytail — UserPromptSubmit hook: traccia la modalità ponytail attiva. Versione Lua.
 
 local script_dir = (arg[0] or "."):match("^(.*)[/\\]") or "."
-local json = dofile(script_dir .. "/../lib/dkjson.lua")
 local config = dofile(script_dir .. "/ponytail-config.lua")
 
-local input = io.read("*a") or ""
-
-local data = {}
-do
-  local ok, parsed = pcall(json.decode, input)
-  if ok and type(parsed) == "table" then data = parsed end
-end
+local data = config.read_input()
+local sid = data.session_id
 local prompt = tostring(data.prompt or ""):lower()
 prompt = prompt:gsub("^%s+", ""):gsub("%s+$", "")
 
@@ -44,8 +38,8 @@ if prompt:match("^[/@$]ponytail") or prompt:match("^[/@$]trinity:ponytail") then
     elseif arg == "off" then mode = "off"
     elseif arg == "" then
       -- attiva: solo report; spenta: riattiva col default (anche per i subagent)
-      mode = config.read_mode()
-      if mode then is_report = true else mode = config.get_default_mode() end
+      mode = config.read_mode(sid)
+      if mode and mode ~= "off" then is_report = true else mode = config.get_default_mode() end
     else
       mode = config.get_default_mode()
     end
@@ -54,11 +48,11 @@ if prompt:match("^[/@$]ponytail") or prompt:match("^[/@$]trinity:ponytail") then
   if is_report then
     io.stdout:write("PONYTAIL MODE ACTIVE — level: " .. tostring(mode))
   elseif mode and mode ~= "off" then
-    config.set_mode(mode)
+    config.set_mode(sid, mode)
     mode_switched = true
     io.stdout:write("PONYTAIL MODE CHANGED — level: " .. tostring(mode))
   elseif mode == "off" then
-    config.clear_mode()
+    config.set_mode(sid, "off")
     deactivated = true
     io.stdout:write("PONYTAIL MODE OFF")
   end
@@ -66,7 +60,7 @@ end
 
 if not mode_switched and not deactivated then
   if config.is_deactivation_command(prompt) then
-    config.clear_mode()
+    config.set_mode(sid, "off")
     io.stdout:write("PONYTAIL MODE OFF")
   end
 end
