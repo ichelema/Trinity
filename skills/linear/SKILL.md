@@ -1,28 +1,24 @@
 ---
 name: linear
-description: Talk to Linear's GraphQL API directly via a thin Python CLI, with progressive-discovery references for issues, projects, comments, webhooks, cycles, workflow states, and admin. Use this instead of the Linear MCP when you want full coverage (webhooks, cycle/state mutations, audit log, admin) or want to avoid loading ~40 tool schemas into context.
+description: Read and change the user's Linear issue tracker (team Ichelema, key ICH) through Linear's GraphQL API. Use it whenever the request names an issue key such as ICH-273, or asks to check, read, summarize, comment on, create, update, assign, close or move an issue, ticket, project or cycle — also in Italian, e.g. "controlla la issue ICH-273", "leggi la issue", "cosa dice ICH-275", "commenta la issue", "apri un ticket", "sposta ICH-274 in Done", "chiudi la issue". Also covers webhooks, workflow states, relations, templates and the audit log.
 context: fork
 ---
 
 # linear
 
-Indice: When to use · Regole di sicurezza · First-run checklist · Default team · Reference file
-index · CLI · Worked example · Patterns to follow · Lingua · What this skill does NOT do · Where to
-look first
-
-You are talking to **Linear** (linear.app — the issue tracker). This skill is the alternative to the Linear MCP: instead of pre-loaded tool definitions, you compose GraphQL operations and run them through `scripts/linear.py`. You only learn the bits of Linear you need for the task in front of you.
+You are talking to **Linear** (linear.app — the user's issue tracker). You compose GraphQL operations and run them through `scripts/linear.py`, learning only the parts of Linear the task needs.
 
 ## When to use
 
-Use this skill when the user asks to:
+Use this skill when the request:
 
-- read or change Linear data (issues, projects, comments, documents, cycles, etc.)
-- set up or manage **webhooks** (the MCP can't)
-- manage **cycles** or **workflow states** as writes (the MCP is read-only on both)
-- create / update **issue relations**, reactions, notification subscriptions, templates, custom views, favorites
-- query the **audit log** or call admin mutations (user roles, org invites)
+- names a Linear issue key (`ICH-273`, `ICH-274`, any `ABC-123`)
+- asks to check, read or summarize an issue: "controlla la issue ICH-273", "leggi la issue", "cosa dice ICH-275", "stato di ICH-274"
+- asks to change Linear data: create, comment, assign, label, move state, close ("apri un ticket", "sposta in Done", "commenta la issue")
+- touches projects, cycles, documents, workflow states, relations, webhooks, templates, the audit log or admin settings
 
-If the user already has the Linear MCP loaded and the task is plain read or simple writes (`save_issue`, `list_projects`), the MCP is fine — this skill earns its place on the gap surface and on token-cost-sensitive workflows.
+Indice: Regole di sicurezza · First-run checklist · Default team · Reference file index · CLI ·
+Worked example · Patterns to follow · Lingua · What this skill does NOT do · Where to look first
 
 ## Regole di sicurezza
 
