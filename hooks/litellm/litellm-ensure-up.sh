@@ -15,13 +15,19 @@ ready() { curl -sf -m 2 -o /dev/null "$URL"; }
 ready && exit 0
 [ -n "${LITELLM_SSH_TUNNEL:-}" ] || exit 0
 
-# Bind esplicito su 127.0.0.1: con GatewayPorts=yes la porta finirebbe in LAN.
-# setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
-setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
-    -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-    -L 127.0.0.1:4000:127.0.0.1:4000 \
-    "$LITELLM_SSH_TUNNEL" < /dev/null > /dev/null 2>&1 &
-disown 2> /dev/null || true
+# Con la unit systemd utente (Linux) il tunnel riparte da solo dopo ogni caduta:
+# un ssh orfano qui terrebbe la porta fuori dalla supervisione.
+if systemctl --user cat litellm-tunnel.service > /dev/null 2>&1; then
+    systemctl --user start litellm-tunnel.service > /dev/null 2>&1
+else
+    # Bind esplicito su 127.0.0.1: con GatewayPorts=yes la porta finirebbe in LAN.
+    # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
+    setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
+        -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+        -L 127.0.0.1:4000:127.0.0.1:4000 \
+        "$LITELLM_SSH_TUNNEL" < /dev/null > /dev/null 2>&1 &
+    disown 2> /dev/null || true
+fi
 
 while [ "$SECONDS" -lt "$DEADLINE_SECS" ]; do
     sleep 1

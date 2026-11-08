@@ -47,6 +47,7 @@ MOCK = textwrap.dedent('''
 # secondi apre la porta locale del primo -L con il finto server MCP.
 FAKE_SSH = textwrap.dedent('''\
     #!/usr/bin/env bash
+    : > "$SSH_MARK"
     [ "$FAKE_MODE" = fail ] && exit 255
     while [ $# -gt 0 ]; do
         [ "$1" = -L ] && { port="${2#127.0.0.1:}"; port="${port%%:*}"; break; }
@@ -54,6 +55,15 @@ FAKE_SSH = textwrap.dedent('''\
     done
     sleep "$FAKE_DELAY"
     exec "$MOCK_PY" "$MOCK_FILE" "$port" "$MOCK_PIDFILE"
+''')
+
+# systemctl finto: senza FAKE_UNIT la unit non esiste (Windows, PC senza unit) e
+# l'hook ripiega su ssh; con FAKE_UNIT "start" lascia solo un segno, la porta resta chiusa.
+FAKE_SYSTEMCTL = textwrap.dedent('''\
+    #!/usr/bin/env bash
+    [ -n "$FAKE_UNIT" ] || exit 1
+    [ "$2" = start ] && : > "$UNIT_MARK"
+    exit 0
 ''')
 
 
@@ -84,6 +94,11 @@ class EnsureUpTests(unittest.TestCase):
         with open(os.path.join(bindir, "ssh"), "w", encoding="utf-8", newline="\n") as f:
             f.write(FAKE_SSH)
         os.chmod(os.path.join(bindir, "ssh"), 0o755)
+        with open(os.path.join(bindir, "systemctl"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(FAKE_SYSTEMCTL)
+        os.chmod(os.path.join(bindir, "systemctl"), 0o755)
+        self.ssh_mark = os.path.join(self.tmp, "ssh.called")
+        self.unit_mark = os.path.join(self.tmp, "unit.started")
         with open(os.path.join(self.tmp, "mock.py"), "w", encoding="utf-8") as f:
             f.write(MOCK)
         self.pidfile = os.path.join(self.tmp, "mock.pid")
@@ -96,6 +111,9 @@ class EnsureUpTests(unittest.TestCase):
             MOCK_FILE=os.path.join(self.tmp, "mock.py").replace(os.sep, "/"),
             MOCK_PIDFILE=self.pidfile.replace(os.sep, "/"),
             FAKE_DELAY="3",
+            FAKE_UNIT="",
+            SSH_MARK=self.ssh_mark.replace(os.sep, "/"),
+            UNIT_MARK=self.unit_mark.replace(os.sep, "/"),
         )
 
     def tearDown(self):
@@ -107,9 +125,9 @@ class EnsureUpTests(unittest.TestCase):
                 pass
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def run_hook(self, mode):
+    def run_hook(self, mode, **env):
         t = time.monotonic()
-        r = subprocess.run([BASH, self.script.replace(os.sep, "/")], env=dict(self.env, FAKE_MODE=mode),
+        r = subprocess.run([BASH, self.script.replace(os.sep, "/")], env=dict(self.env, FAKE_MODE=mode, **env),
                            capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout, time.monotonic() - t
@@ -123,6 +141,12 @@ class EnsureUpTests(unittest.TestCase):
         out, elapsed = self.run_hook("up")
         self.assertEqual(out, "")
         self.assertLess(elapsed, 15)
+
+    def test_systemd_unit_replaces_ssh(self):
+        out, _ = self.run_hook("up", FAKE_UNIT="1")
+        self.assertTrue(os.path.exists(self.unit_mark), "unit non avviata")
+        self.assertFalse(os.path.exists(self.ssh_mark), "ssh orfano avviato con la unit presente")
+        self.assertIn("non si e' aperto", out)
 
 
 if __name__ == "__main__":

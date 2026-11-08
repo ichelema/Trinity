@@ -41,12 +41,18 @@ if [ -n "${HINDSIGHT_SSH_TUNNEL:-}" ]; then
     # altro processo) ExitOnForwardFailure fa uscire ssh e sotto scatta l'avviso.
     # Bind espliciti su 127.0.0.1: senza, GatewayPorts=yes in ssh_config
     # esporrebbe le porte in LAN (il Control Plane non ha autenticazione).
-    # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
-    setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
-        -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-        -L 127.0.0.1:8888:127.0.0.1:8888 -L 127.0.0.1:9999:localhost:9999 \
-        "$HINDSIGHT_SSH_TUNNEL" < /dev/null > /dev/null 2>&1 &
-    disown 2> /dev/null || true
+    # Con la unit systemd utente (Linux) il tunnel riparte da solo dopo ogni caduta:
+    # un ssh orfano qui terrebbe la porta fuori dalla supervisione.
+    if systemctl --user cat hindsight-tunnel.service > /dev/null 2>&1; then
+        systemctl --user start hindsight-tunnel.service > /dev/null 2>&1
+    else
+        # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
+        setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
+            -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+            -L 127.0.0.1:8888:127.0.0.1:8888 -L 127.0.0.1:9999:localhost:9999 \
+            "$HINDSIGHT_SSH_TUNNEL" < /dev/null > /dev/null 2>&1 &
+        disown 2> /dev/null || true
+    fi
     tunnel_from=$SECONDS
 fi
 
