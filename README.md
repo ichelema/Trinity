@@ -1089,7 +1089,7 @@ modifica il source chezmoi, poi `chezmoi apply`. `master-key.txt` è nel repo ci
 | `~/.local/bin/litellm-kimi.sh` | launcher Claude Code → Kimi |
 
 Gli alias Anthropic in `litellm_config.yaml` puntano agli ultimi modelli: `claude-opus` →
-Opus 5.5, `claude-sonnet` → Sonnet 5.5, `claude-fable` → Fable 5.1, `claude-haiku` → Haiku 5.5;
+Opus 5.5, `claude-sonnet` → Sonnet 5.5, `claude-fable` → Fable 5.2, `claude-haiku` → Haiku 5.5;
 `claude-opus-4-6` resta disponibile come voce separata.
 
 Nel setup Windows descritto qui il DB di LiteLLM (database `litellm`) sta nel cluster Postgres
@@ -1231,7 +1231,7 @@ launcher per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFla
 
 | Launcher | `deep-reasoner` usa |
 |---|---|
-| `litellm-claude.sh` | `claude-fable` (Fable 5.1) |
+| `litellm-claude.sh` | `claude-fable` (Fable 5.2) |
 | `litellm-gpt.sh` | `claude-gpt-6-1-sol-xhigh` |
 | `litellm-deepseek.sh` | `claude-deepseek-flash` |
 | `litellm-kimi.sh` | `claude-kimi-k3-max` |
