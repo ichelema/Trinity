@@ -5,7 +5,7 @@ description: >-
   requisiti mancanti, regressioni e casi limite e restituisce un report con finding verificati. Non
   modifica file.
 model: fable
-gpt-model: claude-gpt-5-6-sol-xhigh
+gpt-model: claude-gpt-6-1-sol-high
 effort: high
 tools: Read, Grep, Glob, Bash
 color: red
