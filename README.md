@@ -195,7 +195,7 @@ esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 
 | Modello | File letto dalla root del progetto |
 | --- | --- |
-| `claude-fable-5-1` | `CLAUDE_FABLE.md` |
+| `claude-fable-5-2` | `CLAUDE_FABLE.md` |
 | `claude-opus-5-5` / `opus[1m]` | `CLAUDE_OPUS.md` |
 | `claude-sonnet-5-5` | `CLAUDE_SONNET.md` |
 | `claude-gpt-6-astra-high` (launcher GPT) | `CLAUDE_GPT.md` |
@@ -203,7 +203,7 @@ esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 
 I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
 `CLAUDE_GPT.md`) sono **locali**: esclusi da git (`.gitignore`), esistono solo su questa
-macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.1 e Sonnet 5.5
+macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.2 e Sonnet 5.5
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
 `trinity:fast-worker` per l'implementazione già definita (tranne Sonnet, che quel lavoro lo fa da
 sé: `fast-worker` è lo stesso modello), `trinity:bulk-worker` per il lavoro ripetitivo in
@@ -214,13 +214,13 @@ come pari per le decisioni ad alto rischio.
 **Modelli degli agenti.** `agents/deep-reasoner.md` usa l'alias `model: fable` e
 `agents/fast-worker.md` l'alias `model: sonnet`, `agents/bulk-worker.md` e `agents/scoper.md`
 l'alias `model: haiku`.
-In una sessione normale gli alias diventano Fable 5.1, Sonnet 5.5 e Haiku 5.5; con i launcher
+In una sessione normale gli alias diventano Fable 5.2, Sonnet 5.5 e Haiku 5.5; con i launcher
 LiteLLM (§ sotto) ogni launcher li rimappa sui propri modelli tramite
 `ANTHROPIC_DEFAULT_FABLE_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` e `ANTHROPIC_DEFAULT_HAIKU_MODEL`. Non usare un
-model id completo (es. `claude-fable-5-1`) nel frontmatter: i launcher non lo rimappano e
+model id completo (es. `claude-fable-5-2`) nel frontmatter: i launcher non lo rimappano e
 LiteLLM non lo conosce.
 
-Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.1 in sessione
+Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.2 in sessione
 diretta, il modello Fable del launcher con LiteLLM (stesso di `deep-reasoner`, tabella sotto).
 
 **Gemelli GPT (`gpt-model`).** `agents/reviewer.md` e `agents/deep-reasoner.md` hanno una seconda
@@ -1232,7 +1232,7 @@ launcher per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFla
 | Launcher | `deep-reasoner` usa |
 |---|---|
 | `litellm-claude.sh` | `claude-fable` (Fable 5.1) |
-| `litellm-gpt.sh` | `claude-gpt-5-6-sol-xhigh` |
+| `litellm-gpt.sh` | `claude-gpt-6-1-sol-xhigh` |
 | `litellm-deepseek.sh` | `claude-deepseek-flash` |
 | `litellm-kimi.sh` | `claude-kimi-k3-max` |
 
