@@ -224,12 +224,12 @@ Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.2 in 
 diretta, il modello Fable del launcher con LiteLLM (stesso di `deep-reasoner`, tabella sotto).
 
 **Gemelli GPT (`gpt-model`).** `agents/reviewer.md` e `agents/deep-reasoner.md` hanno una seconda
-chiave, `gpt-model: claude-gpt-5-6-sol-xhigh`, che Claude Code ignora. La legge la mod
+chiave, `gpt-model: claude-gpt-6-1-sol-xhigh`, che Claude Code ignora. La legge la mod
 `gpt-bridge` (`~/.claude/mods/gpt-bridge`, fuori da questo repo, distribuita via chezmoi): a inizio
 sessione registra `gpt-bridge:<nome>` con lo stesso prompt, descrizione e tool dell'agente, ma con
 quel modello via proxy LiteLLM. Il subagente compare nel pannello agenti ed esegue tool e permessi
 nativi; la sessione principale resta in OAuth Anthropic, senza launcher. Il valore è un alias
-LiteLLM qualsiasi (`claude-gpt-5-6-sol-high`, `-xhigh`, `-max`…): l'effort viene dal suffisso.
+LiteLLM qualsiasi (`claude-gpt-6-1-sol-high`, `-xhigh`, `-max`…): l'effort viene dal suffisso.
 Il parametro `model` del tool Agent accetta solo gli alias Claude, quindi il modello GPT si
 dichiara nel file, non nella chiamata. Se la mod non è caricata, i gemelli non esistono e i
 command che li usano si fermano.
