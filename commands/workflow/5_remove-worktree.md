@@ -165,6 +165,28 @@ ls "<repo-root>/.claude/worktrees/"
 git -C "<repo-root>" status -sb | head -1
 ```
 
+## Chiusura del lavoro nel progetto
+
+Salta questa sezione se il worktree era detached (worktree di review) o se il branch non è stato
+mergiato.
+
+Il workflow finisce qui, ma il progetto può chiedere altro dopo il merge: note di ripresa, log
+delle decisioni, memorie. Nessun command precedente lo fa: è questo il momento. Cerca in
+`<repo-root>`:
+
+- file di passaggio tra sessioni (`RIPRESA.md`, `RICONSEGNA.md`, `HANDOFF.md` o simili) e una
+  cartella `memory/`;
+- una procedura di chiusura scritta in quei file o in `CLAUDE.md` (es. «dopo ogni merge chiudi il
+  lotto»).
+
+Poi:
+
+- se il progetto definisce una procedura di chiusura, eseguila ora, per intero e nell'ordine
+  scritto, senza aspettare che l'utente la chieda;
+- se quei file esistono ma senza una procedura, chiedi all'utente se aggiornarli e se salvare
+  decisioni e cause radice in Hindsight;
+- se non esiste nulla, non creare file.
+
 Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
 
 ```
@@ -182,6 +204,8 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
 │ Default branch       │ <default> = <sha> — fast-forward: eseguito / già allineato / saltato: <motivo> │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Worktree residui     │ <elenco o "nessuno">                                     │
+├──────────────────────┼──────────────────────────────────────────────────────────┤
+│ Chiusura del lavoro  │ eseguita (<commit>) / da fare: <cosa manca> / non prevista / saltata: <motivo> │
 └──────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
