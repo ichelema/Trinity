@@ -21,11 +21,17 @@ if systemctl --user cat litellm-tunnel.service > /dev/null 2>&1; then
     systemctl --user start litellm-tunnel.service > /dev/null 2>&1
 else
     # Bind esplicito su 127.0.0.1: con GatewayPorts=yes la porta finirebbe in LAN.
-    # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
-    setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
-        -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-        -L 127.0.0.1:4000:127.0.0.1:4000 \
-        "$LITELLM_SSH_TUNNEL" < /dev/null > /dev/null 2>&1 &
+    ssh_args=(-N -o BatchMode=yes -o ExitOnForwardFailure=yes
+        -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3
+        -L 127.0.0.1:4000:127.0.0.1:4000
+        "$LITELLM_SSH_TUNNEL")
+    if command -v setsid > /dev/null 2>&1; then
+        # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
+        setsid nohup ssh "${ssh_args[@]}" < /dev/null > /dev/null 2>&1 &
+    else
+        # macOS non ha setsid: ssh -f si stacca da solo (nuova sessione) dopo aver aperto il forward.
+        ssh -f "${ssh_args[@]}" < /dev/null > /dev/null 2>&1 &
+    fi
     disown 2> /dev/null || true
 fi
 

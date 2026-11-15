@@ -46,11 +46,17 @@ if [ -n "${HINDSIGHT_SSH_TUNNEL:-}" ]; then
     if systemctl --user cat hindsight-tunnel.service > /dev/null 2>&1; then
         systemctl --user start hindsight-tunnel.service > /dev/null 2>&1
     else
-        # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
-        setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
-            -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-            -L 127.0.0.1:8888:127.0.0.1:8888 -L 127.0.0.1:9999:localhost:9999 \
-            "$HINDSIGHT_SSH_TUNNEL" < /dev/null > /dev/null 2>&1 &
+        ssh_args=(-N -o BatchMode=yes -o ExitOnForwardFailure=yes
+            -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3
+            -L 127.0.0.1:8888:127.0.0.1:8888 -L 127.0.0.1:9999:localhost:9999
+            "$HINDSIGHT_SSH_TUNNEL")
+        if command -v setsid > /dev/null 2>&1; then
+            # setsid nohup e non ssh -f: su MSYS il figlio verrebbe reaped all'uscita dell'hook.
+            setsid nohup ssh "${ssh_args[@]}" < /dev/null > /dev/null 2>&1 &
+        else
+            # macOS non ha setsid: ssh -f si stacca da solo (nuova sessione) dopo aver aperto i forward.
+            ssh -f "${ssh_args[@]}" < /dev/null > /dev/null 2>&1 &
+        fi
         disown 2> /dev/null || true
     fi
     tunnel_from=$SECONDS
