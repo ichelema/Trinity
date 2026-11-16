@@ -8,7 +8,7 @@ description: >-
 model: haiku
 effort: medium
 tools: Read, Grep, Glob, Bash
-maxTurns: 30
+maxTurns: 60
 color: yellow
 ---
 
