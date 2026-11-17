@@ -12,7 +12,9 @@
         "--browser",
         "${PLAYWRIGHT_MCP_BROWSER:-chrome}",
         "--output-dir",
-        "${TEMP:-/tmp}/playwright-mcp"
+        "${TEMP:-/tmp}/playwright-mcp",
+        "--caps",
+        "devtools"
       ]
     },
     "debugger": {
