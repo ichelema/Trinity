@@ -198,7 +198,7 @@ esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 | `claude-fable-5-2` | `CLAUDE_FABLE.md` |
 | `claude-opus-5-5` / `opus[1m]` | `CLAUDE_OPUS.md` |
 | `claude-sonnet-5-5` | `CLAUDE_SONNET.md` |
-| `claude-gpt-6-astra-high` (launcher GPT) | `CLAUDE_GPT.md` |
+| `claude-gpt-6-2-astra-high` (launcher GPT) | `CLAUDE_GPT.md` |
 | `claude-haiku-5-5` | `CLAUDE_HAIKU.md` |
 
 I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
@@ -224,12 +224,12 @@ Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.2 in 
 diretta, il modello Fable del launcher con LiteLLM (stesso di `deep-reasoner`, tabella sotto).
 
 **Gemelli GPT (`gpt-model`).** `agents/reviewer.md` e `agents/deep-reasoner.md` hanno una seconda
-chiave, `gpt-model: claude-gpt-6-1-sol-xhigh`, che Claude Code ignora. La legge la mod
+chiave, `gpt-model: claude-gpt-6-2-sol-xhigh`, che Claude Code ignora. La legge la mod
 `gpt-bridge` (`~/.claude/mods/gpt-bridge`, fuori da questo repo, distribuita via chezmoi): a inizio
 sessione registra `gpt-bridge:<nome>` con lo stesso prompt, descrizione e tool dell'agente, ma con
 quel modello via proxy LiteLLM. Il subagente compare nel pannello agenti ed esegue tool e permessi
 nativi; la sessione principale resta in OAuth Anthropic, senza launcher. Il valore è un alias
-LiteLLM qualsiasi (`claude-gpt-6-1-sol-high`, `-xhigh`, `-max`…): l'effort viene dal suffisso.
+LiteLLM qualsiasi (`claude-gpt-6-2-sol-high`, `-xhigh`, `-max`…): l'effort viene dal suffisso.
 Il parametro `model` del tool Agent accetta solo gli alias Claude, quindi il modello GPT si
 dichiara nel file, non nella chiamata. Se la mod non è caricata, i gemelli non esistono e i
 command che li usano si fermano.
@@ -1232,7 +1232,7 @@ launcher per mappare i tier di Claude Code ai modelli giusti (`switchModelsOnFla
 | Launcher | `deep-reasoner` usa |
 |---|---|
 | `litellm-claude.sh` | `claude-fable` (Fable 5.2) |
-| `litellm-gpt.sh` | `claude-gpt-6-1-sol-xhigh` |
+| `litellm-gpt.sh` | `claude-gpt-6-2-sol-xhigh` |
 | `litellm-deepseek.sh` | `claude-deepseek-flash` |
 | `litellm-kimi.sh` | `claude-kimi-k3-max` |
 
