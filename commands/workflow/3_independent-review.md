@@ -1,7 +1,7 @@
 ---
 description:
   Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
-argument-hint: <issue-id...> <model> [<review-path>]
+argument-hint: <issue-id...> <model> [hard|soft] [<review-path>]
 disable-model-invocation: true
 model: fable
 effort: high
@@ -22,16 +22,26 @@ che questo command dice di chiedere, chiudi invece il report con verdetto
 ## Validazione degli argomenti
 
 Dividi `$ARGUMENTS` in token separati da spazi. Se l'ultimo token è un path assoluto (inizia con `/`
-o `<LETTERA>:`), è `<review-path>`: toglilo dalla lista. Dei token restanti:
+o `<LETTERA>:`), è `<review-path>`: toglilo dalla lista. Se ora l'ultimo token è `hard` o `soft`
+(maiuscole o minuscole), è `<mode>`: toglilo dalla lista. Senza questo token `<mode>` è `hard`. Dei
+token restanti:
 
 - l'ultimo è il modello di implementazione;
 - i precedenti sono gli issue ID (almeno uno).
 
 Se restano meno di 2 token, fermati e mostra:
 
-`/trinity:workflow:3_independent-review <issue-id...> <model> [<review-path>]`
+`/trinity:workflow:3_independent-review <issue-id...> <model> [hard|soft] [<review-path>]`
 
 Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
+
+## Modo della review
+
+- `hard`: esegui la review tu, come descritto sotto.
+- `soft`: non fare tu la review. Lancia il tool Agent con `subagent_type: trinity:reviewer`,
+  `model: sonnet` ed `effort: xhigh`. Nel prompt digli di leggere
+  `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con gli stessi
+  argomenti senza `soft` al posto di `$ARGUMENTS`. Poi mostra il suo report senza cambiarlo.
 
 ## Localizzazione del codice da recensire
 
