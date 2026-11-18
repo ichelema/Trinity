@@ -279,8 +279,8 @@ collidono con i comandi locali del progetto:
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
 | `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
 | `/trinity:explain [cosa non è chiaro]` | rispiega l'ultima risposta o un punto non chiaro: problema in breve, esempio concreto, diagramma, soluzioni a confronto, domanda finale; sola lettura |
-| `/trinity:issue-cycle` | ciclo senza presidio, una issue dopo l'altra: worktree → PR → review o loop di fix → pulizia → commento Linear; non fa il merge |
-| `/trinity:workflow:0_create-issue` … `5_remove-worktree` | flusso issue → worktree → PR → review → pulizia (vedi sotto) |
+| `/trinity:issue-cycle` | ciclo senza presidio, una issue dopo l'altra: worktree → PR → semplificazione → verifica → review o loop di fix → pulizia → commento Linear; non fa il merge |
+| `/trinity:workflow:0_create-issue` … `5_remove-worktree` | flusso issue → worktree → PR → semplificazione → verifica → review → pulizia (vedi sotto) |
 
 ### Workflow issue → PR
 
@@ -288,11 +288,12 @@ collidono con i comandi locali del progetto:
 |---|---|---|
 | 0 | `0_create-issue <descrizione>` | crea la issue Linear |
 | 1 | `1_create-worktree <source-branch> <issue-id...> <model>` | branch `<prefix>/<base-name>` + worktree in `.claude/worktrees/` |
-| 2 | `2_work-issue <issue-id...> <model>` | piano, implementazione, push e PR (senza merge) |
+| 2 | `2_work-issue <issue-id...> <model> [auto [review\|loop]]` | piano, implementazione, push e PR (senza merge); con `auto`, dopo l'ok al piano prosegue da solo con 2b, 2c, review o loop (default) e pulizia dei worktree di review |
+| 2b | `2_work-simplify <issue-id...> <model>` | facoltativo: semplifica il codice della PR senza cambiarne il comportamento (riuso, semplificazione, efficienza, profondità) |
+| 2c | `2_work-verify <issue-id...> <model>` | facoltativo: esegue l'app e verifica end-to-end che la modifica funzioni, senza test né typecheck; verdetto PASS/FAIL/BLOCKED/SKIP |
 | 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR |
 | 4 | `4_review-fix-loop <issue-id...> <model>` | due review in parallelo su worktree detached (`trinity:reviewer` su Fable, `gpt-bridge:reviewer` su GPT), fix in loop |
 | 5 | `5_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
-
 ### `/trinity:dream` — audit della memoria
 
 Command in due fasi che verifica se le memorie persistenti sono ancora valide,
