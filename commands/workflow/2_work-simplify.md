@@ -1,0 +1,136 @@
+---
+description:
+  Semplifica il codice della PR di una o più issue Linear (riuso, semplificazione, efficienza,
+  profondità) senza cambiarne il comportamento; da usare prima della review
+argument-hint: <issue-id...> <model>
+disable-model-invocation: true
+---
+
+Migliora la qualità del codice della PR delle issue indicate e applica i fix, senza cambiarne il
+comportamento. Non cercare bug di correttezza: è il compito di `/3_independent-review` e
+`/4_review-fix-loop`.
+
+Usalo dopo `/2_work-issue` e prima della review, così la review controlla anche le semplificazioni.
+
+Il modello qui serve solo a identificare il worktree corretto, non a scegliere il modello di
+esecuzione.
+
+## Validazione degli argomenti
+
+Dividi `$ARGUMENTS` in token separati da spazi:
+
+- l'ultimo token è il modello;
+- i token precedenti sono gli issue ID (almeno uno).
+
+Se i token sono meno di 2, fermati e mostra:
+
+`/trinity:workflow:2_work-simplify <issue-id...> <model>`
+
+## Localizzazione del worktree e della PR
+
+Ricava `<wt-path>` e `<branch>` con la regola di `/2_work-issue` («Localizzazione del worktree»):
+`git worktree list --porcelain`, entry il cui branch termina esattamente con `/<base-name>`. Se non
+esiste, fermati. Usa sempre `git -C "<wt-path>"`, `mise -C "<wt-path>"` e path assoluti sotto
+`<wt-path>`.
+
+Verifica prima di iniziare:
+
+```bash
+git -C "<wt-path>" rev-parse --abbrev-ref HEAD       # deve essere <branch>
+git -C "<wt-path>" status --short                    # deve essere vuoto
+git -C "<wt-path>" fetch origin
+git -C "<wt-path>" rev-parse HEAD "origin/<branch>"  # i due SHA devono coincidere
+gh pr view "<branch>" --json url,baseRefName,title,body
+```
+
+Se il working tree non è pulito, fermati ed elenca i file: non decidere da solo e non eseguire mai
+`git checkout .`, `git reset --hard` o `git stash`. Se gli SHA differiscono (commit non pushati o
+push di altri) o la PR non esiste, fermati e mostralo.
+
+Dalla PR ricavi la base `<base>` (`baseRefName`) e il comportamento voluto (titolo e corpo): quel
+comportamento non si tocca. Se `gh` non risponde, usa come base il branch di default, ricavato come
+in `/2_work-issue` («Pull Request»).
+
+Dopo le verifiche entra nel worktree e, quando restituisci il controllo, escine come in
+`/2_work-issue` («Entrata e uscita dal worktree»).
+
+## 0. Perimetro e test di partenza
+
+Il perimetro è il diff della PR:
+
+```bash
+git -C "<wt-path>" diff "origin/<base>"...HEAD
+```
+
+Prima di toccare il codice esegui i test e i controlli rilevanti: `mise -C "<wt-path>" run <task>`
+se il progetto li definisce, altrimenti il comando di test con path assoluti sotto `<wt-path>`. Se
+sono già rossi, fermati e mostrali: senza una base verde non puoi dimostrare che le semplificazioni
+non cambiano il comportamento.
+
+## 1. Analisi: quattro angoli
+
+Percorri questi angoli uno dopo l'altro, nello stesso contesto: non lanciare subagenti. Per ogni
+problema annota `file:riga`, una sintesi in una frase e il costo concreto: cosa è duplicato,
+sprecato o più difficile da mantenere.
+
+- **Riuso.** Codice nuovo che reimplementa qualcosa che esiste già: nel repository (cerca con Grep
+  nei moduli condivisi e di utility e nei file vicini alla modifica), nella libreria standard,
+  nella piattaforma o in una dipendenza già installata. Nomina la funzione da chiamare.
+- **Semplificazione.** Complessità che il diff aggiunge senza bisogno: codice non necessario,
+  stato ridondante o derivabile, copia-incolla con piccole varianti, annidamento profondo, codice
+  morto lasciato indietro, astrazioni o dipendenze che le issue non chiedono. Nomina la forma più
+  semplice che fa lo stesso lavoro, anche una sola riga.
+- **Efficienza.** Lavoro sprecato che il diff introduce: calcoli ridondanti o I/O ripetuto,
+  operazioni indipendenti eseguite in sequenza, lavoro bloccante aggiunto all'avvio o nei percorsi
+  caldi. Segnala anche gli oggetti longevi costruiti da closure: trattengono tutto lo scope che le
+  contiene, una perdita di memoria se lo scope ha valori grandi; preferisci una struttura che
+  copia solo i campi che servono. Nomina l'alternativa più economica.
+- **Profondità.** Controlla che ogni modifica agisca sulla causa alla profondità giusta e non
+  tamponi un sintomo con una pezza fragile. Casi speciali aggiunti su infrastruttura condivisa
+  indicano una modifica poco profonda: nomina la modifica più semplice e generale al meccanismo
+  sottostante.
+
+Togli i duplicati: stesso punto o stesso meccanismo → uno solo.
+
+## 2. Fix
+
+Applica i fix uno per volta. Salta un finding, e annota il motivo in una riga invece di
+discuterne, se il fix:
+
+- cambia il comportamento voluto, quello descritto nella PR o coperto dai test;
+- richiede modifiche ben oltre il diff della PR;
+- toglie una protezione: validazione di input che superano un confine di fiducia, gestione di
+  errori che altrimenti perdono dati, sicurezza, accessibilità;
+- risolve un falso positivo.
+
+Una modifica di profondità che chiede un cambio di architettura non è un fix: annotala come
+saltata, con la modifica che proponi.
+
+Per ogni fix, o gruppo di fix con lo stesso motivo:
+
+1. applica la modifica;
+2. esegui i test mirati;
+3. se passano, crea un commit aggiungendo i file per nome, mai con `git add -A` o `git add .`; il
+   messaggio va nella lingua della PR, che è quella del progetto Linear;
+4. se falliscono, annulla solo quella modifica con `git -C "<wt-path>" restore -- <file>...`,
+   cancella i file nuovi che ha creato e segna il finding come saltato: una semplificazione che
+   rompe un test cambia il comportamento.
+
+Alla fine esegui di nuovo i test e i controlli del punto 0. Se sono verdi, esegui il push con
+`git -C "<wt-path>" push origin "<branch>"`. Se sono rossi, non fare il push: fermati e mostra
+l'output completo.
+
+## Report finale
+
+Report sintetico, solo informazioni rilevanti:
+
+- perimetro: base, intervallo di commit e numero di file del diff;
+- fix applicati: finding → fix, con angolo, `file:riga` e commit;
+- finding saltati, con il motivo in una riga;
+- test: comandi ed esito, prima e dopo;
+- push: sì o no;
+- prossimo passo: `/trinity:workflow:2_work-verify <issue-id...> <model>` (facoltativo), poi
+  `/trinity:workflow:3_independent-review <issue-id...> <model>` oppure
+  `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`.
+
+Se il codice era già pulito, dillo in una riga.
