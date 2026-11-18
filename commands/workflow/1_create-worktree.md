@@ -112,8 +112,16 @@ Verifica inoltre che non esista già un worktree associato allo stesso branch.
 Determina la root del repository dal worktree principale, non da un altro worktree:
 
 ```bash
-repo_root="$(git rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"
-command -v cygpath >/dev/null && repo_root="$(cygpath -m "$repo_root")"   # solo Windows/MSYS2
+set -e
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+case "$(uname -s)" in
+  Linux) ;;  # Git Linux, anche sotto WSL: mantieni il percorso POSIX
+  MINGW*|MSYS*|CYGWIN*)
+    common_dir="$(cygpath -am "$common_dir")"
+    [[ "$common_dir" == [A-Za-z]:/* ]] || exit 1 ;;
+  *) echo "Sistema non supportato" >&2; exit 1 ;;
+esac
+repo_root="${common_dir%/.git}"
 ```
 
 La directory di destinazione è dentro `.claude/worktrees/`:
@@ -133,27 +141,20 @@ Prima della creazione mostra:
 
 ## Creazione
 
-Risolvi il percorso assoluto del worktree in formato Windows dentro `.claude/worktrees/`:
+Crea il branch e il worktree usando il percorso verificato sopra, senza
+ulteriori conversioni: `/...` su Linux, `<LETTERA>:/...` su Windows.
 
-`<repo-root>/.claude/worktrees/<prefix>+<base-name>`
-
-Esempio: se la root è `D:/AI/Claude/Trinity` e il prefisso è `improvments`, il worktree sarà
-`D:/AI/Claude/Trinity/.claude/worktrees/improvments+ICH-97-98-fable`.
-
-Crea il branch e il worktree usando il percorso assoluto Windows:
-
-`git worktree add -b "<branch>" "<percorso-assoluto-Windows>" "<SHA>"`
+`git worktree add -b "<branch>" "<percorso-assoluto>" "<SHA>"`
 
 Non eseguire checkout, reset, stash o modifiche nel working tree originale.
 
 ## Compatibilità SmartGit
 
-SmartGit legge solo il back-pointer `<repo-root>/.git/worktrees/<prefix>+<base-name>/gitdir`. Avendo
-passato a `git worktree add` il percorso Windows, quel file è già in formato `D:/...`: non serve
-altro.
-
-Verifica che il back-pointer inizi con `<LETTERA>:/`; se è in formato POSIX (`/e/...`), fermati e
-segnalalo.
+Leggi il back-pointer `<repo-root>/.git/worktrees/<prefix>+<base-name>/gitdir`.
+Su Linux deve iniziare con `/`: non cercare una lettera di unità e non usare
+`cygpath`. Su Windows deve iniziare con `<LETTERA>:/`: un percorso come
+`/e/...` non è valido per SmartGit. Se il formato non corrisponde al sistema
+rilevato, fermati e segnala il valore letto, senza riscrivere il file.
 
 **Non toccare il file `.git` dentro il worktree.** `git worktree remove` lo valida, e se è in
 formato Windows la rimozione fallisce ("does not point back to '.git/worktrees/<nome>'"). Il formato
@@ -191,9 +192,9 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Branch                 │ <branch>                                                 │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Worktree               │ <percorso-assoluto-Windows>                             │
+│ Worktree               │ <percorso-assoluto>                                     │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ SmartGit               │ back-pointer gitdir in formato Windows                  │
+│ SmartGit               │ back-pointer gitdir in formato <POSIX o Windows>        │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Stato                  │ Pulito — nessun file modificato                         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
