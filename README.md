@@ -264,7 +264,6 @@ rilevanza dall'hook skill-eval o a richiesta:
 | `github-pr-release` | release e versionamento: SemVer, CHANGELOG curato, commit atomici, tag e GitHub Release via `gh`; copre anche il rilascio del plugin Trinity |
 | `chezmoi` | gestione dei dotfile con chezmoi (template, script, cifratura, multi-macchina) |
 | `linear` | API GraphQL di Linear tramite la CLI `scripts/linear.py` |
-| `ponytail` | impone la soluzione più semplice che funziona; attiva di default a ogni sessione |
 
 ---
 
@@ -282,7 +281,6 @@ collidono con i comandi locali del progetto:
 | `/trinity:explain [cosa non è chiaro]` | rispiega l'ultima risposta o un punto non chiaro: problema in breve, esempio concreto, diagramma, soluzioni a confronto, domanda finale; sola lettura |
 | `/trinity:issue-cycle` | ciclo senza presidio, una issue dopo l'altra: worktree → PR → review o loop di fix → pulizia → commento Linear; non fa il merge |
 | `/trinity:workflow:0_create-issue` … `5_remove-worktree` | flusso issue → worktree → PR → review → pulizia (vedi sotto) |
-| `/trinity:ponytail:ponytail` (+ `-review`, `-audit`, `-debt`, `-gain`, `-help`) | modalità «la soluzione più semplice che funziona» e i suoi strumenti |
 
 ### Workflow issue → PR
 

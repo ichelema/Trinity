@@ -31,24 +31,6 @@
           "timeout": 25
         }
       ]
-    }, {
-      "matcher": "startup|resume|clear|compact",
-      "hooks": [{
-          "type": "command",
-          "command": "lua \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-activate.lua\"",
-          "timeout": 5,
-          "statusMessage": "Loading ponytail mode..."
-        }
-      ]
-    }],
-    "SubagentStart": [{
-      "hooks": [{
-          "type": "command",
-          "command": "lua \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-subagent.lua\"",
-          "timeout": 5,
-          "statusMessage": "Loading ponytail mode..."
-        }
-      ]
     }],
     "UserPromptSubmit": [{
       "hooks": [{
@@ -60,14 +42,6 @@
           "type": "command",
           "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/hindsight/hindsight-failcheck.sh\"",
           "timeout": 30
-        }
-      ]
-    }, {
-      "hooks": [{
-          "type": "command",
-          "command": "lua \"${CLAUDE_PLUGIN_ROOT}/hooks/ponytail/ponytail-mode-tracker.lua\"",
-          "timeout": 5,
-          "statusMessage": "Tracking ponytail mode..."
         }
       ]
     }],
