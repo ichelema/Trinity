@@ -279,6 +279,7 @@ collidono con i comandi locali del progetto:
 | `/trinity:promote` | promozione curata dei fatti dai bank di progetto al bank core |
 | `/trinity:nota_del_giorno` | crea/aggiorna la nota del giorno col lavoro della sessione |
 | `/trinity:dream` | audit della memoria (file-based + Hindsight) contro le daily note Obsidian, con report ad approvazione manuale |
+| `/trinity:explain [cosa non è chiaro]` | rispiega l'ultima risposta o un punto non chiaro: problema in breve, esempio concreto, diagramma, soluzioni a confronto, domanda finale; sola lettura |
 | `/trinity:issue-cycle` | ciclo senza presidio, una issue dopo l'altra: worktree → PR → review o loop di fix → pulizia → commento Linear; non fa il merge |
 | `/trinity:workflow:0_create-issue` … `5_remove-worktree` | flusso issue → worktree → PR → review → pulizia (vedi sotto) |
 | `/trinity:ponytail:ponytail` (+ `-review`, `-audit`, `-debt`, `-gain`, `-help`) | modalità «la soluzione più semplice che funziona» e i suoi strumenti |
