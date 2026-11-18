@@ -343,6 +343,15 @@ description = "Ferma il frontend canvas Excalidraw (porta 3000), solo se il serv
 shell = "bash -c"
 run = "ruby scripts/stop-excalidraw.rb"
 
+# --- pi-sync (prompt e agenti di pi) ---------------------------------------
+# Rigenera prompt e agenti di pi dai command workflow, da issue-cycle e dagli agenti di
+# questo repo. Scrive nel sorgente chezmoi (dot_pi/agent): poi serve `chezmoi apply`.
+# Altra destinazione: mise run pi-sync -- --out <dir>. Test: bun test test/pi-sync.test.mjs
+[tasks.pi-sync]
+description = "Genera prompt e agenti di pi dai command e dagli agenti Trinity, nel sorgente chezmoi (dot_pi/agent). Non lancia chezmoi apply. Uso: mise run pi-sync [-- --out <dir>]"
+shell = "bash -c"
+run = "bun scripts/pi-sync/pi-sync.mjs"
+
 # --- Release plugin --------------------------------------------------------
 # Parte meccanica della release: bump version + commit + tag LOCALE.
 # NON fa push (lo gestisce /trinity:release con conferma). Uso: mise run release 0.6.12

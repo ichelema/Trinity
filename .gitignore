@@ -22,6 +22,7 @@ hooks/hindsight/benchmark/artifacts/
 *.state
 
 .claude/worktrees/
+.pi/worktrees/
 
 # File locali generati, non da versionare.
 /CLAUDE_FABLE.md
