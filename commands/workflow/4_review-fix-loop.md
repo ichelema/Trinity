@@ -82,6 +82,12 @@ Per ogni round:
      `fable`. Il subagente gira su GPT via proxy LiteLLM con tool e permessi nativi, e compare nel
      pannello degli agenti come l'altro.
 
+   Dal secondo round aggiungi a entrambi i prompt la lista degli scarti dei round precedenti (vedi
+   «Triage dei finding»), uno per riga con file, simbolo o snippet e motivo, e questa istruzione:
+   «Se un tuo candidato coincide con uno di questi scarti, controlla il motivo nel codice attuale:
+   se regge, metti il candidato in `REFUTED` citando la riga che lo prova; se non regge,
+   riproponilo e spiega perché il motivo non vale più».
+
    Lancia le due Agent nello stesso messaggio, così girano in parallelo. Se `<model>` coincide con
    uno dei due modelli di review (`fable` o `gpt`), segnalalo: quella review gira sullo stesso
    modello che ha scritto il codice ed è meno indipendente.
@@ -95,15 +101,25 @@ Le review sono read-only: nessun reviewer modifica file.
 
 ## Triage dei finding
 
-Fondi i due report e per ogni finding decidi se è reale e merita un fix:
+Fondi i due report. Un finding presente in entrambi (stesso difetto, stesso punto, stesso motivo)
+va tenuto una volta sola, con lo scenario più concreto e l'esito più forte (`CONFIRMED` prevale su
+`PLAUSIBLE`), segnando che l'hanno trovato tutti e due.
 
-- è verificabile nel codice, non un'ipotesi;
+Per ogni finding decidi se è reale e merita un fix:
+
+- il meccanismo è verificabile nel codice, non è un'ipotesi; un innesco incerto (`PLAUSIBLE`) non
+  basta per scartarlo;
 - è un difetto o una violazione di requisito, non una preferenza stilistica;
 - è dentro lo scope delle issue.
 
 L'accordo dei due reviewer è un segnale forte ma non una prova: verifica comunque ogni finding nel
-codice. La discordanza non è un motivo per scartare: controlla il finding singolarmente. Scarta i
-falsi positivi e le preferenze stilistiche, senza riproporli nel round successivo.
+codice, partendo dalla prova del report (`file:riga`, scenario ed esito del verify) invece di rifare
+l'analisi da zero. La discordanza non è un motivo per scartare: se l'altro reviewer ha confutato lo
+stesso candidato (riga `REFUTED` in «Aspetti verificati senza anomalie»), confronta le due prove
+nel codice. Scarta le preferenze stilistiche e, solo con una prova come per `REFUTED`, i falsi
+positivi: la riga che contraddice il finding, la guard che lo gestisce o l'invariante che lo rende
+impossibile. Tieni la lista degli scarti, ognuno con file, simbolo o snippet e il motivo in una
+riga. Nel loop la passi ai reviewer dal secondo round e la riporti nel commento sulla PR.
 
 ## Fix minimi e chirurgici
 
@@ -154,7 +170,8 @@ Crea le issue senza chiedere conferma, con `issueCreate` via
 
 - team e progetto della issue di origine (quella nel cui scope cade il finding);
 - titolo operativo e corpo con `Problem` e `Acceptance criteria` come in `/0_create-issue`, più file
-  e righe del finding;
+  e righe del finding e il suo esito: `CONFIRMED`, oppure `PLAUSIBLE` con cosa rende incerto
+  l'innesco;
 - tipo `bug`; priorità `3` per `MEDIUM`, `4` per `LOW`;
 - lingua del progetto Linear.
 
@@ -172,6 +189,8 @@ Scrivi un solo commento, nella lingua del progetto Linear, con
 - i `BLOCKER` e `HIGH` aperti, con file e righe;
 - le issue create, con link;
 - i finding scartati come falsi positivi, con il motivo in una riga.
+
+Accanto a ogni finding fixato o aperto scrivi l'esito del verify, `CONFIRMED` o `PLAUSIBLE`.
 
 ## Report finale
 
