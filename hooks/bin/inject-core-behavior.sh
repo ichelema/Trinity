@@ -21,7 +21,7 @@ FILE="$ROOT/core-behavior.md"
 # (HS_CONFIG_FILE forza un solo file). Scarta il blocco solo il valore `true`,
 # come il vecchio confronto con l'output "True" di --get. La parita' con Python
 # la controlla hooks/hindsight/test_inject_core_behavior.py.
-# ponytail: parser per riga, non JSON: chiave e valore sulla stessa riga, un file JSON rotto non viene ignorato in blocco come fa Python, env senza trim degli spazi. Se servono altre chiavi, tornare a hindsight_config.py.
+# parser per riga, non JSON: chiave e valore sulla stessa riga, un file JSON rotto non viene ignorato in blocco come fa Python, env senza trim degli spazi. Se servono altre chiavi, tornare a hindsight_config.py.
 RETAIN_ON=true
 RECALL_ON=true
 RE_RETAIN='"retain_enabled"[[:space:]]*:[[:space:]]*([^,}[:space:]]+)'
