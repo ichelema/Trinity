@@ -1,8 +1,8 @@
 ---
 description:
   Prende in carico una o più issue Linear e le implementa nel worktree creato allo step 1, fino alla
-  PR (senza merge)
-argument-hint: <issue-id...> <model>
+  PR (senza merge); con auto, dopo l'ok al piano prosegue da solo fino alla review
+argument-hint: <issue-id...> <model> [auto [review|loop]]
 disable-model-invocation: true
 ---
 
@@ -17,14 +17,18 @@ esecuzione.
 
 ## Validazione degli argomenti
 
-Dividi `$ARGUMENTS` in token separati da spazi:
+Dividi `$ARGUMENTS` in token separati da spazi (maiuscole o minuscole non contano per le parole
+chiave):
 
-- l'ultimo token è il modello;
-- i token precedenti sono gli issue ID (almeno uno).
+- se gli ultimi due token sono `auto` e poi `review` o `loop`, toglili: `<mode>` è `auto` e
+  `<review-mode>` è l'ultimo dei due;
+- altrimenti, se l'ultimo token è `auto`, toglilo: `<mode>` è `auto` e `<review-mode>` è `loop`;
+- senza queste parole chiave `<mode>` è manuale.
 
-Se i token sono meno di 2, fermati e mostra:
+Dei token restanti l'ultimo è il modello e i precedenti sono gli issue ID (almeno uno). Se restano
+meno di 2 token, fermati e mostra:
 
-`/trinity:workflow:2_work-issue <issue-id...> <model>`
+`/trinity:workflow:2_work-issue <issue-id...> <model> [auto [review|loop]]`
 
 ## Localizzazione del worktree
 
@@ -169,6 +173,9 @@ e sottosessioni e tabelle.
 
 Attendi l'ok dell'utente sul piano prima di scrivere codice.
 
+In modo `auto` aggiungi al piano la catena che seguirà dopo la PR (sezione «Modo auto») e la
+modalità di review: dopo l'ok non farai altre domande.
+
 ## Implementazione
 
 Obiettivo: implementare tutte le issue indicate.
@@ -282,6 +289,9 @@ Fermati qui. Il passo successivo è la review, in una sessione nuova, a scelta d
 `/trinity:workflow:4_review-fix-loop <issue-id...> <model>` (due review in parallelo e fix in
 loop). Il merge resta all'utente.
 
+In modo `auto` non ti fermi qui e non serve una sessione nuova: dopo la «Verifica finale» prosegui
+con «Modo auto». Il merge resta comunque all'utente.
+
 ## Verifica finale
 
 ```bash
@@ -291,8 +301,9 @@ git -C "<wt-path>" log --oneline "<default>".."<branch>"
 
 Poi esci dal worktree come indicato in «Entrata e uscita dal worktree».
 
-Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i valori effettivi;
-`<model>` è l'ultimo argomento ricevuto:
+In modo `auto` la tabella si stampa solo alla fine di «Modo auto». Alla fine stampa
+esclusivamente questa tabella, sostituendo i segnaposto con i valori effettivi; `<model>` è il
+modello ricavato in «Validazione degli argomenti»:
 
 ```
 ┌────────────────────────┬──────────────────────────────────────────────────────────┐
@@ -314,7 +325,7 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Pull Request           │ <url> (magic words: <Fixes/Refs> per ogni issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /trinity:workflow:3_independent-review <issue-id...> <model> oppure /trinity:workflow:4_review-fix-loop <issue-id...> <model> │
+│ Prossimo passo         │ /trinity:workflow:2_work-simplify e /trinity:workflow:2_work-verify <issue-id...> <model> (facoltativi), poi /trinity:workflow:3_independent-review <issue-id...> <model> oppure /trinity:workflow:4_review-fix-loop <issue-id...> <model> │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
@@ -322,3 +333,23 @@ Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`),
 di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un
 paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine. Con più issue, le celle
 «Issue Linear» e «Stato Linear» diventano una riga della tabella per ogni issue.
+
+## Modo auto
+
+Solo con `<mode>` = `auto`. Dopo l'ok al piano l'utente non è più davanti al PC: non fare altre
+domande. Da lì in poi segui `${CLAUDE_PLUGIN_ROOT}/commands/issue-cycle.md`:
+
+- le regole di «Esecuzione senza presidio» e del «Registro»: crea il registro subito dopo l'ok al
+  piano, con intestazione `# 2_work-issue auto <review-mode> <model>`; «il ciclo della issue
+  corrente» è questa catena;
+- prima della review, «Proxy LiteLLM (solo `loop`)» e l'ultimo paragrafo di «Modello di
+  implementazione»;
+- dopo la «Verifica finale», nell'ordine, gli step 2b, 2c, 3 o 4 e 5 di «Ciclo per issue», con
+  `<review-mode>` come modalità di review e tutti gli issue ID di questo command al posto di
+  `<issue-id>`.
+
+Non pubblicare il commento su Linear di `issue-cycle` e non fare mai il merge.
+
+Alla fine esci dal worktree, poi stampa la tabella di «Verifica finale» senza la riga «Prossimo
+passo», seguita dalle sezioni «Decisioni prese in autonomia», «Questioni aperte» e «Prossimi passi»
+del «Report finale» di `issue-cycle`, costruite rileggendo il registro.

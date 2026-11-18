@@ -1,8 +1,8 @@
 ---
 description:
   Ciclo completo e senza presidio di una o più issue Linear, una dopo l'altra; per ogni issue
-  worktree, implementazione fino alla PR, review singola o loop di review e fix, pulizia dei
-  worktree di review e commento su Linear; alla fine report. Non fa il merge.
+  worktree, implementazione fino alla PR, semplificazione, verifica, review singola o loop di review
+  e fix, pulizia dei worktree di review e commento su Linear; alla fine report. Non fa il merge.
 argument-hint: <review|loop> <source-branch> <issue-id...> [<model>]
 disable-model-invocation: true
 ---
@@ -49,7 +49,8 @@ Interrompi il ciclo della issue corrente solo in questi casi gravi:
    modifiche non committate, `--force`, `-D`, `reset --hard`, cancellazione di branch remoti;
 3. la sicurezza è a rischio: segreti nel codice o nei log, permessi, credenziali;
 4. lo stato Git non è quello atteso e proseguire può danneggiare lavoro altrui (worktree o branch
-   già esistenti, working tree sporco, SHA della PR diverso).
+   già esistenti, working tree sporco, SHA della PR diverso);
+5. la verifica dello step 2c dà `FAIL`: recensire codice che non funziona spreca la review.
 
 Dopo un'interruzione non toccare più il worktree di quella issue: annota lo step raggiunto, il
 motivo e il comando del singolo step che permette di riprendere, poi passa alla issue seguente.
@@ -87,7 +88,8 @@ issue corrente:
 - [decisione] step <N>: <scelta> — <motivo>
 - [questione] step <N>: <problema> (<file>:<riga> se disponibile)
 - [interruzione] step <N>: <motivo> — riprendi con <comando>
-- [esito] PR <url>, review <round> round, <n> fix, residui <elenco>
+- [esito] PR <url>, semplificazione <n> fix, verifica <verdetto>, review <round> round, <n> fix,
+  residui <elenco>
 ```
 
 Aggiungi sempre in append (`cat >> "$log" <<'EOF' … EOF`), mai riscrivendo il file. Dopo una
@@ -163,8 +165,21 @@ Con le regole senza presidio:
 - se i test falliscono e non riesci a correggerli dentro lo scope, apri comunque la PR, dichiaralo
   nella descrizione e annotalo.
 
-Della sezione «Non fare il merge» vale tutto tranne «in una sessione nuova»: la review parte da qui,
-in un contesto separato. Mostra la tabella finale senza la riga «Prossimo passo».
+Della sezione «Non fare il merge» vale tutto tranne «in una sessione nuova»: si prosegue da qui
+con gli step 2b e 2c, poi con la review in un contesto separato. Mostra la tabella finale senza la
+riga «Prossimo passo».
+
+### Step 2b — semplificazione
+
+Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/2_work-simplify.md` con
+`<issue-id> <model>`. Se i test sono rossi già prima di iniziare, salta lo step e annotalo: non è
+un'interruzione.
+
+### Step 2c — verifica
+
+Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/2_work-verify.md` con `<issue-id> <model>`.
+Non salvare la ricetta: lasciala nel report e annotala. Con `BLOCKED` o `SKIP` annota il verdetto e
+prosegui; con `FAIL` interrompi il ciclo della issue (caso grave 5).
 
 ### Step 3 o 4 — review
 
@@ -200,9 +215,9 @@ rimuovere nulla e annotalo; mai `--force`.
 A fine ciclo, anche dopo un'interruzione, pubblica sulla issue un commento breve, nella lingua del
 progetto Linear, con
 `linear.py`, costruito dalle righe del registro sotto `## <issue-id>`: link della PR (se esiste),
-esito della review, decisioni prese in autonomia, questioni aperte e, se il ciclo è interrotto, lo
-step raggiunto e il motivo. Chiudi con `Non mergiato: il merge resta all'utente.` oppure
-`Not merged: merge is left to the user.`
+esito di semplificazione, verifica e review, decisioni prese in autonomia, questioni aperte e, se
+il ciclo è interrotto, lo step raggiunto e il motivo. Chiudi con
+`Non mergiato: il merge resta all'utente.` oppure `Not merged: merge is left to the user.`
 
 Regole Linear valide per tutto il ciclo:
 
@@ -216,7 +231,8 @@ Stampalo dopo l'ultima issue. Costruiscilo rileggendo il registro, non dalla mem
 conversazione, e indica in testa il path del registro. Sezioni, in quest'ordine:
 
 1. **Riepilogo**: tabella markdown con una riga per issue e le colonne issue, esito del ciclo
-   (completo / interrotto allo step N), branch, PR, review (round, finding fixati), worktree di
+   (completo / interrotto allo step N), branch, PR, semplificazione (fix), verifica (verdetto),
+   review (round, finding fixati), worktree di
    review (rimossi / residui), commento Linear (pubblicato / fallito); sotto, le issue escluse
    dallo scope con il motivo;
 2. **Decisioni prese in autonomia**: raggruppate per issue, con la scelta e il motivo;
