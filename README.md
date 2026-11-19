@@ -230,8 +230,10 @@ sessione registra `gpt-bridge:<nome>` con lo stesso prompt, descrizione e tool d
 quel modello via proxy LiteLLM. Il subagente compare nel pannello agenti ed esegue tool e permessi
 nativi; la sessione principale resta in OAuth Anthropic, senza launcher. Il valore è un alias
 LiteLLM qualsiasi (`claude-gpt-6-2-sol-high`, `-xhigh`, `-max`…): l'effort viene dal suffisso.
-Il parametro `model` del tool Agent accetta solo gli alias Claude, quindi il modello GPT si
-dichiara nel file, non nella chiamata. Se la mod non è caricata, i gemelli non esistono e i
+Il parametro `model` del tool Agent accetta solo gli alias Claude: il file fissa il modello
+predefinito e la riga `[gpt-model: <alias>]` nel prompt del subagente lo cambia per quella sola
+chiamata (es. `[gpt-model: claude-gpt-6-2-astra-max]`, anche solo per cambiare effort). La mod
+accetta solo alias `claude-gpt-*`; un alias assente dal proxy dà un errore LiteLLM visibile. Se la mod non è caricata, i gemelli non esistono e i
 command che li usano si fermano.
 
 Il nome è **derivato dall'id** del modello, non confrontato con una lista: per aggiungere un
