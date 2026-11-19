@@ -155,7 +155,7 @@ const TEMPLATE_TOKENS = {
   "prompts/2_work-verify.md": ["$ARGUMENTS"],
   "prompts/3_independent-review.md": ["$ARGUMENTS"],
   "prompts/4_review-fix-loop.md": ["$ARGUMENTS"],
-  "prompts/5_remove-worktree.md": ["$1"],
+  "prompts/5_remove-worktree.md": ["$1", "$ARGUMENTS"],
   "prompts/issue-cycle.md": ["$ARGUMENTS"],
 };
 
@@ -239,7 +239,9 @@ export function generate(patches = PATCHES) {
   for (const source of PROMPTS) {
     const { data, body } = parseFrontmatter(translate(source, read(source)));
     const head = frontmatter({ description: quote(data.description), "argument-hint": quote(data["argument-hint"]) });
-    files.set(`prompts/${basename(source)}`, finish(head, body));
+    // Marcatore per l'estensione collapse-command: mostra `▸ /comando args` al posto del prompt.
+    const marker = `<!-- pi:cmd /${basename(source, ".md")} $ARGUMENTS -->`;
+    files.set(`prompts/${basename(source)}`, finish(head, `${marker}\n\n${body.trim()}`));
   }
   for (const agent of AGENTS) {
     const source = `agents/${agent.source}.md`;

@@ -174,6 +174,15 @@ describe("integrazione sui sorgenti Trinity reali", () => {
     }
   });
 
+  test("ogni prompt inizia con il marcatore del comando per collapse-command", () => {
+    const { files } = generate();
+    for (const [file, text] of files) {
+      if (!file.startsWith("prompts/")) continue;
+      const name = file.slice("prompts/".length, -".md".length);
+      expect(parseFrontmatter(text).body.trimStart().startsWith(`<!-- pi:cmd /${name} $ARGUMENTS -->\n\n`), file).toBe(true);
+    }
+  });
+
   test("sync: scrive solo i propri file, lascia gli altri, ed è idempotente", () => {
     const out = join(tmp, "out");
     const others = { "agents/Explore.md": "non mio\n", "prompts/linear.md": "non mio\n", "AGENTS_Sol.md": "usa Implementer\n" };
