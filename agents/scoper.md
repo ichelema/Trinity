@@ -7,7 +7,7 @@ description: >-
   meno che non ha già letto.
 model: haiku
 effort: medium
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs
 maxTurns: 60
 color: yellow
 ---
