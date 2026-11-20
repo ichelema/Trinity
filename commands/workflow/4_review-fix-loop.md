@@ -13,7 +13,7 @@ residui (fix, issue Linear o PR in draft) senza perderne nessuno e scrivi un rep
 Le due review usano lo stesso prompt del reviewer su due modelli diversi: `trinity:reviewer` su
 Fable e `gpt-bridge:reviewer` sul modello GPT fissato da `gpt-model` in `agents/reviewer.md` (via
 proxy LiteLLM, servito dalla mod gpt-bridge). Se `gpt-bridge:reviewer` non compare tra i
-subagent_type disponibili, la mod non è caricata: fermati e dillo all'utente prima di creare i
+subagent_type disponibili e GPT è previsto per questa issue, fermati prima di creare i
 worktree.
 
 L'ultimo argomento è il modello: identifica il worktree di implementazione creato da
@@ -54,6 +54,24 @@ gh pr view "<branch>" --json url,state,title -q '.url'
 Se non esiste, fermati e chiedi all'utente di aprirla o di passarti l'URL: la review parte dalla PR,
 non da un branch orfano.
 
+## Entrata e permanenza nel worktree di implementazione
+
+Dopo le verifiche iniziali, usa `EnterWorktree` con `path: "<wt-path>"` per entrare nel worktree
+**già esistente**, senza crearne un altro. Se la sessione è già nel worktree esatto (ad esempio
+perché questo step è stato avviato dalla catena `auto`), non richiamare `EnterWorktree`.
+Verifica che la directory di lavoro della sessione sia `<wt-path>` e che il branch sia `<branch>`.
+Se lo strumento non è disponibile o l'ingresso fallisce, fermati e segnala il problema: non
+sostituirlo silenziosamente con `cd`, che non garantisce di cambiare la directory degli altri tool.
+
+Rimani nel worktree di implementazione durante tutti i round, il triage, gli eventuali fix, il
+push, la gestione dei finding residui e il commento sulla PR. Un report intermedio o una domanda
+non costituiscono la fine del lavoro e non richiedono l'uscita.
+
+I due worktree detached dei reviewer sono **separati**: non usare `EnterWorktree` per entrarvi
+nella sessione principale. Ogni subagente lavora esclusivamente nel proprio `<review-wt-path>`.
+Prima di rimuoverli assicurati che i reviewer abbiano terminato e che nessun processo abbia
+come directory corrente uno dei due worktree temporanei.
+
 ## Round di review parallela
 
 Per ogni round:
@@ -61,12 +79,12 @@ Per ogni round:
 1. Crea due worktree di review isolati e detached (senza branch: il reviewer non committa), uno per
    reviewer, con path assoluti in formato Windows (`D:/...`) su Windows/MSYS2:
    ```bash
-   git fetch origin
-   repo_root="$(git rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"
+   git -C "<wt-path>" fetch origin
+   repo_root="$(git -C "<wt-path>" rev-parse --path-format=absolute --git-common-dir)"; repo_root="${repo_root%/.git}"
    command -v cygpath >/dev/null && repo_root="$(cygpath -m "$repo_root")"   # solo Windows/MSYS2
-   sha="$(git rev-parse --verify "origin/<branch>^{commit}")"
-   git worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>-gpt" "$sha"
-   git worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>-fable" "$sha"
+   sha="$(git -C "<wt-path>" rev-parse --verify "origin/<branch>^{commit}")"
+   git -C "<wt-path>" worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>-gpt" "$sha"
+   git -C "<wt-path>" worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>-fable" "$sha"
    ```
    Se una delle directory esiste già (round precedente non ripulito), fermati. Non toccare il file
    `.git` dentro i worktree.
@@ -96,7 +114,9 @@ Per ogni round:
    modello che ha scritto il codice ed è meno indipendente.
 
 3. Raccogli i due report. I reviewer girano come subagenti, quindi scrivono il formato completo
-   di `3_independent-review.md`, con le prove che servono al triage.
+   di `3_independent-review.md`, con le prove che servono al triage. Se manca un report
+   atteso o è `BLOCCATO`, il round è incompleto: pulisci i worktree creati, conserva
+   i finding validi e segnala la review da ripetere. Non dichiarare la PR pronta.
 4. Rimuovi i due worktree leggendo e seguendo
    `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` (per lo stesso motivo non puoi
    invocarlo come slash command), con `$worktree_name` = `<review-wt-path>`.
@@ -106,8 +126,8 @@ Le review sono read-only: nessun reviewer modifica file.
 ## Triage dei finding
 
 Fondi i due report. Un finding presente in entrambi (stesso difetto, stesso punto, stesso motivo)
-va tenuto una volta sola, con lo scenario più concreto e l'esito più forte (`CONFIRMED` prevale su
-`PLAUSIBLE`), segnando che l'hanno trovato tutti e due.
+va tenuto una volta sola, con lo scenario più concreto, l'esito più forte (`CONFIRMED` prevale su
+`PLAUSIBLE`) e la severità più alta, segnando che l'hanno trovato tutti e due.
 
 Per ogni finding decidi se è reale e merita un fix:
 
@@ -125,20 +145,30 @@ positivi: la riga che contraddice il finding, la guard che lo gestisce o l'invar
 impossibile. Tieni la lista degli scarti, ognuno con file, simbolo o snippet e il motivo in una
 riga. Nel loop la passi ai reviewer dal secondo round e la riporti nel commento sulla PR.
 
+Per ogni finding reale controlla anche la severità: confronta l'impatto dimostrato dallo scenario
+con le definizioni della sezione «Findings» di
+`${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md`. Se non corrispondono, correggi
+la severità e annota quella originale e il motivo in una riga; nel commento sulla PR scrivila
+accanto al finding.
+
 ## Fix minimi e chirurgici
 
 Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 
-- prima del primo fix entra con un comando a sé, `cd "<wt-path>"`; dopo il push, o se ti fermi
-  prima, esci con `cd "<repo-root>"`: lo step 5 non può cancellare la cwd della sessione;
-- esegui una sola volta per round la suite completa e i controlli rilevanti, prima di applicare
-  i fix: se sono rossi non fixare, non pushare e segnala il blocco;
+- prima della serie di fix verifica branch attivo, `status --short` vuoto e,
+  dopo il fetch, HEAD locale e `origin/<branch>` uguali allo SHA recensito;
+  se un controllo fallisce non modificare né pushare;
+- esegui una sola volta per round la suite completa e i controlli rilevanti, allo SHA recensito
+  e prima di applicare fix: se sono rossi non fixare, non pushare e segnala il blocco;
+- resta nel worktree di implementazione già attivo dall'inizio del comando; non effettuare
+  ulteriori `cd`, né entrare nei worktree detached dei reviewer con la sessione principale;
 - comandi sempre con `git -C "<wt-path>"`, `mise -C "<wt-path>"` e path assoluti;
 - la minima modifica che risolve il difetto;
 - nessun refactoring, nessuna riscrittura, nessun cambio di architettura;
 - ogni riga modificata è riconducibile a un finding verificato;
 - commit nella lingua del progetto Linear, uno per fix logico;
-- push per aggiornare la PR.
+- prima del push rilancia test e controlli pertinenti; se falliscono non pushare
+  né avviare un round sul vecchio SHA, e segnala il blocco. Se passano, pusha i fix.
 
 Se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia: trattalo
 come finding residuo (sezione "Finding residui").
@@ -146,7 +176,8 @@ come finding residuo (sezione "Finding residui").
 ## Loop
 
 Ripeti round → triage → fix finché un round completo non produce alcun finding da fixare, con un
-massimo di 3 round di review. In ogni round fixa tutti i finding reali, `LOW` compresi.
+massimo di 3 round di review. Nei round che proseguono fixa tutti i finding reali
+con fix minimo, `LOW` compresi; nelle condizioni di uscita applica «Finding residui».
 
 Esci dal loop e passa ai finding residui se:
 
@@ -224,3 +255,24 @@ Solo con la PR pronta, suggerisci `gh pr merge "<branch>" --merge` e, dopo il
 merge, `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`.
 Chiudi con il link al commento sulla PR se pubblicato: lì restano i dettagli
 e i falsi positivi. Non elencare round o worktree rimossi.
+
+## Uscita dal worktree di implementazione
+
+Prima dell'uscita assicurati che entrambi i worktree temporanei dei reviewer siano stati
+rimossi, che nessun processo avviato da questo comando sia ancora attivo e che tutte le
+operazioni previste (compresi push e commento sulla PR) siano terminate.
+
+- **Comando autonomo:** quando tutto il comando è concluso, usa `ExitWorktree` con
+  `action: "keep"` per tornare alla directory originale, preservando il worktree di
+  implementazione, il branch e le modifiche. Se la sessione non è entrata tramite
+  `EnterWorktree`, non chiamare `ExitWorktree` alla cieca.
+- **Catena `auto`:** se il comando è eseguito come step interno di `issue-cycle.md`, non uscire
+  al termine di questo step: lascia il worktree di implementazione attivo per gli eventuali
+  step successivi. Il coordinatore deve eseguire `ExitWorktree(action: "keep")` **una sola
+  volta**, al termine effettivo della catena e prima di qualunque rimozione del worktree.
+- **Arresto anticipato:** ferma i processi avviati, rimuovi in sicurezza i worktree temporanei
+  dei reviewer, se possibile, e segnala cosa resta da pulire. Fuori dalla catena `auto`, esci
+  con `ExitWorktree(action: "keep")` soltanto se eri entrato tramite `EnterWorktree`.
+
+Non eliminare automaticamente il worktree di implementazione: il merge e la sua rimozione
+restano operazioni distinte e spettano al workflow previsto.

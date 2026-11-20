@@ -55,8 +55,30 @@ verificheresti codice diverso da quello della PR. Dalla PR ricavi la base `<base
 e la dichiarazione, cioè cosa la PR dice di fare (titolo e corpo). Se `gh` non risponde, usa come
 base il branch di default, ricavato come in `/2_work-issue` («Pull Request»).
 
-Dopo le verifiche entra nel worktree e, quando restituisci il controllo, escine come in
-`/2_work-issue` («Entrata e uscita dal worktree»).
+### Entrata e permanenza nel worktree
+
+Dopo le verifiche iniziali, se non sei già nel worktree, usa `EnterWorktree` con `path: "<wt-path>"`
+per entrare nel worktree **già esistente**. Non creare altri worktree e non cambiare branch.
+Verifica che la directory di lavoro attiva sia `<wt-path>` e che il branch corrisponda a `<branch>`.
+Se `EnterWorktree` non è disponibile o fallisce, non considerare un semplice `cd` equivalente:
+fermati e segnala il problema.
+
+Rimani nel worktree durante l'intera verifica, comprese catture, pulizia e l'eventuale domanda
+all'utente sul salvataggio della ricetta. Una domanda o un errore recuperabile non sono di per sé
+un motivo per uscire. Prima di lasciare un'esecuzione definitivamente interrotta, arresta i
+processi avviati e pulisci le risorse temporanee che puoi rimuovere in sicurezza.
+
+### Uscita dal worktree
+
+Usa `ExitWorktree` con `action: "keep"` solo quando il lavoro di questo comando è davvero
+concluso, **dopo** l'eventuale salvataggio della ricetta e il relativo commit/push:
+
+- **Esecuzione autonoma:** esci prima di consegnare il report conclusivo.
+- **Catena `auto` coordinata da `issue-cycle.md`:** non uscire al termine di questo singolo step;
+  lascia la sessione nel worktree per gli step successivi. L'uscita è responsabilità del
+  coordinatore della catena, prima di eventuali operazioni di rimozione del worktree.
+
+Non eliminare il worktree: `keep` ne conserva branch, file e directory.
 
 Non modificare, creare o cancellare file nel worktree e non fare commit, salvo il salvataggio della
 ricetta descritto nel report. File di appoggio, log e catture vanno in una cartella temporanea fuori
@@ -147,7 +169,9 @@ memoria. Un comportamento inatteso non si aggira: catturalo e decidi se dipende 
 dall'ambiente. Un guasto non collegato alla modifica è comunque un'osservazione.
 
 Alla fine ferma i processi che hai avviato (server, sessioni tmux), cancella le cartelle temporanee
-e controlla che `git -C "<wt-path>" status --short` sia vuoto. Poi esci dal worktree.
+e controlla che `git -C "<wt-path>" status --short` sia vuoto. Non uscire ancora: potrebbe essere
+necessario salvare la ricetta descritta nel report. Segui la sezione «Uscita dal worktree» dopo
+aver concluso anche quell'eventuale operazione.
 
 ## Report finale
 
@@ -192,6 +216,10 @@ Se hai scritto una ricetta, chiedi all'utente se salvarla: con un sì, scrivila 
 `<wt-path>/.claude/skills/verify/SKILL.md`, poi fai un commit separato e il push sul branch della
 PR, così le prossime verifiche partono da lì. Senza risposta (sessione headless o subagente) non
 salvarla.
+
+Dopo la decisione sulla ricetta e ogni eventuale commit/push, verifica di nuovo lo stato Git e
+applica la sezione «Uscita dal worktree»: in esecuzione autonoma esci con `ExitWorktree` e
+`action: "keep"`; in una catena `auto` rimani nel worktree per lo step successivo.
 
 Prossimo passo: con `PASS` o `SKIP`, `/trinity:workflow:3_independent-review <issue-id...> <model>`
 oppure `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`; con `FAIL`, correggi prima della

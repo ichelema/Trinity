@@ -14,6 +14,44 @@ file e seguilo con gli argomenti indicati qui al posto di `$ARGUMENTS`.
 
 Il merge resta all'utente: questo command non lo fa mai.
 
+## Gestione della sessione e del worktree
+
+Questo command è il **coordinatore**: i comandi degli step vengono letti e seguiti nella
+stessa sessione, non invocati come nuove sessioni Claude Code. Le istruzioni di uscita
+standalone presenti nei singoli step non si applicano mentre questo coordinatore è attivo.
+
+- Per ogni issue, individua il worktree esistente con `git worktree list --porcelain` e la
+  regola di localizzazione di `2_work-issue.md`. Non crearne un secondo per entrarci.
+- Prima dello step 2, una volta concluse le verifiche preliminari, usa
+  `EnterWorktree` con `path: "<wt-path>"` **solo se la sessione non è già entrata** in
+  quel worktree. Se il ciclo è stato avviato da `2_work-issue auto`, riutilizza
+  l'ingresso attivo. Non usare `cd` come sostituto dell'ingresso di sessione.
+- Rimani nel worktree di implementazione per gli step 2, 2b, 2c e 3/4, compresi
+  i fix e i passaggi tra step. I reviewer lavorano nei propri worktree detached
+  attraverso path assoluti; **la sessione principale non vi entra**.
+- Le operazioni di pulizia dei worktree detached dello step 5 non devono
+  rimuovere né far abbandonare il worktree di implementazione.
+- Alla fine di **ogni issue**, anche se interrotta, termina i processi avviati
+  per quell'issue e usa `ExitWorktree` con `action: "keep"` **se la sessione ha
+  un ingresso `EnterWorktree` attivo**. Conserva worktree, branch e modifiche.
+  Verifica che la sessione sia tornata alla directory di partenza prima di
+  iniziare l'issue successiva. Non usare `pwd` o `cd` come surrogato di
+  `ExitWorktree`.
+- Quando la sessione non è stata aperta con `EnterWorktree` (per esempio sessione
+  già avviata dal terminale direttamente nel worktree), `ExitWorktree` non
+  garantisce un cambio di directory. In questo caso non considerare l'uscita
+  riuscita: segnala il limite, interrompi l'esecuzione multi-issue se non puoi
+  ripristinare in modo verificabile il contesto corretto e non eliminare il
+  worktree attivo.
+- Se `EnterWorktree` o `ExitWorktree` non sono disponibili, non fingere che `cd`
+  ne riproduca il comportamento. Annota `[interruzione]` e non passare a un'altra
+  issue senza aver ripristinato un contesto sicuro.
+
+Questa uscita è **solo una disattivazione del contesto di sessione**, non lo step
+`5_remove-worktree`: il worktree di implementazione sarà rimosso soltanto dopo
+il merge, su richiesta dell'utente.
+
+
 ## Uso
 
 ```
@@ -37,11 +75,12 @@ leggere la lista.
 
 - Non usare `AskUserQuestion` e non chiudere il turno per aspettare una risposta.
 - Quando uno step dice di chiedere, scegli l'opzione più prudente e dentro lo scope della issue,
-  annotala come `[decisione]` con il motivo e prosegui.
+  annotala come `[decisione]` con il motivo e prosegui. Non sostituire mai un consenso
+  esplicito a scartare lavoro o cancellare branch: senza quel consenso non procedere.
 - Dubbi, specifiche ambigue, problemi non risolti e finding non fixati non fermano il ciclo:
   annotali come `[questione]`.
 
-Interrompi il ciclo della issue corrente solo in questi casi gravi:
+Oltre agli stop espliciti degli step, interrompi la issue in questi casi gravi:
 
 1. il lavoro richiede modifiche fuori dal perimetro della issue (altri moduli, architettura,
    dipendenze nuove, dati esterni diversi dalla issue);
@@ -52,8 +91,10 @@ Interrompi il ciclo della issue corrente solo in questi casi gravi:
    già esistenti, working tree sporco, SHA della PR diverso);
 5. la verifica dello step 2c dà `FAIL`: recensire codice che non funziona spreca la review.
 
-Dopo un'interruzione non toccare più il worktree di quella issue: annota lo step raggiunto, il
-motivo e il comando del singolo step che permette di riprendere, poi passa alla issue seguente.
+Dopo un'interruzione non modificare più i file né lo stato Git del worktree di quella issue:
+annota lo step raggiunto, il motivo e il comando del singolo step che permette di riprendere.
+Esegui comunque la pulizia dei processi e l'uscita di sessione prevista in «Gestione della sessione
+e del worktree». Passa alla issue seguente solo se l'uscita è riuscita e il contesto è sicuro.
 
 ## Validazione degli argomenti
 
@@ -76,7 +117,7 @@ compatta la conversazione. Crealo subito dopo la validazione degli argomenti:
 
 ```bash
 log_dir="$HOME/.claude/tmp/issue-cycle"; mkdir -p "$log_dir"
-log="$log_dir/$(date +%Y%m%d-%H%M)-<issue-id...>.md"   # ID uniti da '-', es. ICH-97-ICH-98
+log="$(mktemp "$log_dir/$(date +%Y%m%d-%H%M)-<issue-id...>-XXXXXX.md")" || exit 1
 printf '# issue-cycle %s %s %s\n' "<review|loop>" "<source-branch>" "<model>" > "$log"
 ```
 
@@ -135,8 +176,9 @@ La review GPT dello step 4 usa il proxy LiteLLM:
 curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/health/liveliness   # deve essere 200
 ```
 
-Se la risposta non è `200`, prosegui con la sola review Fable: in ogni round dello step 4 crea solo
-il worktree `review+<base-name>-fable`. Annotalo come `[decisione]`. Ripeti il controllo
+Se la risposta non è `200`, prosegui con la sola review Fable: per quella issue crea e rimuovi
+solo il suo worktree, lancia solo quell'agente e usa solo il suo report, senza attendere GPT.
+Annotalo come `[decisione]`. Ripeti il controllo
 all'inizio della review di ogni issue: il proxy può partire o fermarsi durante il ciclo.
 
 ## Ciclo per issue
@@ -152,9 +194,11 @@ suo codice non è nel branch (nessun merge): applica la regola dello step 2 sull
 All'inizio di ogni issue aggiungi al registro l'intestazione `## <issue-id>`. Alla fine del ciclo,
 anche dopo un'interruzione, aggiungi la riga `[esito]`.
 
-Alla fine del ciclo, anche dopo un'interruzione, controlla con `pwd` che la sessione sia nella root
-del repository; se non lo è, esegui `cd "<repo-root>"` come comando a sé. La issue seguente parte
-dalla root.
+Alla fine del ciclo, anche dopo un'interruzione, applica la procedura di uscita di
+«Gestione della sessione e del worktree» usando `ExitWorktree(action: "keep")` quando
+l'ingresso è attivo. Prima della issue seguente verifica il ritorno al contesto di
+partenza e la disponibilità del repository corretto; non usare `cd` o il solo
+output di `pwd` come prova dell'uscita di sessione.
 
 ### Step 1 — worktree
 
@@ -162,6 +206,11 @@ Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/1_create-worktree.md` con
 `<source-branch> <issue-id> <model>`. Se il prefisso è ambiguo, usa `improvments` e annotalo come
 `[decisione]`.
 Mostra la tabella finale senza la riga «Prossimo passo».
+
+Dopo la creazione verifica che il nuovo worktree sia registrato da Git; poi, dopo le
+verifiche richieste dallo step 2, entra con `EnterWorktree(path: "<wt-path>")` come
+indicato nella sezione di gestione della sessione. Non entrare durante la creazione
+con un semplice `cd`.
 
 ### Step 2 — implementazione e PR
 
@@ -176,15 +225,17 @@ Con le regole senza presidio:
 - se i test falliscono e non riesci a correggerli dentro lo scope, apri comunque la PR, dichiaralo
   nella descrizione e annotalo come `[questione]`.
 
-Della sezione «Non fare il merge» vale tutto tranne «in una sessione nuova»: si prosegue da qui
-con gli step 2b e 2c, poi con la review in un contesto separato. Mostra la tabella finale senza la
-riga «Prossimo passo».
+Della sezione «Non fare il merge» resta il divieto di merge, non lo stop standalone: si prosegue da qui
+con gli step 2b e 2c, poi con la review eseguita da reviewer in contesti separati.
+**Non eseguire l'uscita standalone di `2_work-issue`** alla fine di questo step.
+Mostra la tabella finale senza la riga «Prossimo passo».
 
 ### Step 2b — semplificazione
 
 Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/2_work-simplify.md` con
 `<issue-id> <model>`. Se i test sono rossi già prima di iniziare, salta lo step e annotalo come
-`[questione]`: non è un'interruzione.
+`[questione]`: non è un'interruzione. Non uscire dal worktree al termine dello
+step, anche se il file dello step prevede un'uscita standalone.
 
 ### Step 2c — verifica
 
@@ -192,6 +243,8 @@ Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/2_work-verify.md` con `<i
 Non salvare la ricetta: lasciala nel report e annotala come `[decisione]`. Con `BLOCKED` annota il
 verdetto come `[questione]` e prosegui: l'app non è stata provata. Con `SKIP` il verdetto va solo
 nella riga `[esito]`. Con `FAIL` interrompi il ciclo della issue (caso grave 5).
+Non eseguire l'uscita standalone di `2_work-verify`: la sessione resta nel worktree
+fino alla conclusione del ciclo della issue.
 
 ### Step 3 o 4 — review
 
@@ -203,25 +256,37 @@ Non fare tu la review: hai scritto il codice, e il reviewer deve partire da un c
   crea e rimuove da sé il worktree di
   review. Sui finding del report applica le sezioni «Triage dei finding» e «Fix minimi e
   chirurgici» di `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md`. Un solo round:
-  dopo i fix non lanciare una nuova review.
+  dopo i fix non lanciare una nuova review. I fix si applicano nel worktree di
+  implementazione già attivo, senza un nuovo `EnterWorktree` né un'uscita intermedia.
 - `loop`: leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md` con
   `<issue-id> <model>`. Un finding che non si risolve con un fix minimo va annotato come
-  `[questione]`, non in una domanda.
+  `[questione]`, non in una domanda. Il coordinatore mantiene attivo il worktree
+  di implementazione fino al completamento della pulizia dello step 5.
 
 Se un reviewer restituisce il verdetto `BLOCCATO: INFORMAZIONI INSUFFICIENTI`, quella review non
 è avvenuta: non applicare fix sul suo report e annota come `[questione]` cosa manca.
+Lo stesso vale se un agente atteso non consegna il report: la review resta incompleta.
 
 ### Step 5 — pulizia dei worktree di review
 
 Non fare il merge e non rimuovere il worktree di implementazione: lo step 5 rifiuta un branch non
 mergiato, e il merge resta all'utente.
 
-Controlla con `git worktree list --porcelain` che non resti nessun worktree
-`review+<base-name>*` della issue corrente. Se ne resta uno, leggi e segui
+Controlla con `git worktree list --porcelain` i path esatti dei worktree detached creati per
+questa review. Non rimuovere residui preesistenti o di provenienza incerta: segnalali.
+Per ciascun worktree residuo di questa esecuzione, leggi e segui
 `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` con `$worktree_name` = quel nome.
-La cartella `<review-path>/.review-tmp/` è materiale di appoggio del reviewer: cancellala prima
-della rimozione, come fa lo step 3. Se lo step 5 trova altri file non tracciati o modifiche, non
+Cancella `<review-path>/.review-tmp/` solo se creata da questa review. Se restano file
+di provenienza incerta, ignorati, non tracciati o modificati, non
 rimuovere nulla e annotalo come `[fallito]`; mai `--force`.
+
+Non chiamare `ExitWorktree` per cancellare un worktree di review: non è stato
+attivato dalla sessione principale. Usa la rimozione Git prevista dallo step 5,
+passando il path esatto. Terminata la pulizia dei review worktree, completa il
+commento Linear e il registro. L'uscita dal worktree di implementazione
+avviene **una sola volta**, nella chiusura del ciclo per issue descritta sopra,
+con `ExitWorktree(action: "keep")`. Non rimuovere mai il worktree di
+implementazione in questo ciclo.
 
 ### Commento su Linear
 
@@ -250,13 +315,14 @@ solo esiti e azioni, il resto resta nel registro. In quest'ordine:
    - `⚠ ICH-326 da guardare prima del merge — PR #13 — <la questione in una frase>`
    - `✗ ICH-327 interrotta allo step 2c — <motivo in una frase>`
 
-   `✓` vale quando la issue non ha righe `[questione]`. `⚠` vale quando ne ha almeno una. `✗`
-   vale quando il ciclo è interrotto. Le issue escluse dallo scope vanno in una sola riga:
+   `✗` ha precedenza se il ciclo è interrotto; altrimenti usa `⚠` se ci sono `[questione]`
+   e `✓` se non ce ne sono. Le issue escluse dallo scope vanno in una sola riga:
    `Escluse: <issue-id> (<motivo>)`.
 2. **Cosa fai ora**: le azioni numerate, nell'ordine in cui farle:
    - per ogni issue `⚠`, prima le sue righe `[questione]`, come decisione o azione, con
      `file:riga` quando disponibili;
-   - per ogni PR senza `BLOCKER` o `HIGH` aperti (riga `[esito]`), sia `✓` sia `⚠`, i comandi in
+   - solo a review completata e senza `BLOCKER` o `HIGH` aperti (riga `[esito]`),
+     per le PR `✓` o `⚠` (per queste ultime, dopo aver risolto le questioni), i comandi in
      un blocco:
      ```bash
      gh pr merge "<branch>" --merge

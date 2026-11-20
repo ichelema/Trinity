@@ -22,60 +22,83 @@ Se il nome del worktree manca, fermati e mostra:
 Accetta anche un path assoluto: in quel caso usalo com'è. Altrimenti il worktree è
 `<repo-root>/.claude/worktrees/$worktree_name`.
 
-## Da dove lanciare i comandi (obbligatorio)
+## Contesto della sessione e directory di esecuzione (obbligatorio)
 
-Lavora dal **worktree principale** del repository, MAI dall'interno del worktree da rimuovere.
-Determina la root con:
+**Non usare `cd` come meccanismo per uscire da un worktree gestito da Claude Code.**
+`cd` in Bash non garantisce di modificare la directory di lavoro degli altri tool della sessione.
+
+Ricava il repository principale senza assumere che la directory corrente sia già la root:
 
 ```bash
-git rev-parse --path-format=absolute --git-common-dir   # <repo-root>/.git
+git rev-parse --path-format=absolute --git-common-dir   # normalmente <repo-root>/.git
 ```
 
-`<repo-root>` è quel valore senza il suffisso `/.git`. Se la cwd corrente è dentro il worktree da
-rimuovere (`git rev-parse --show-toplevel` = path del worktree, confronta i due path dopo
-`cygpath -m`), esci con un comando a sé, `cd "<repo-root>"`, e verifica con `pwd`: su Windows git
-non cancella una directory che fa da cwd alla shell (`Device or resource busy`, vedi più sotto).
+`<repo-root>` è il percorso restituito senza il suffisso `/.git`. Se il comando non restituisce
+il percorso atteso, fermati e identifica correttamente il repository: non ricostruire path a caso.
 
-**Windows/MSYS2, drive `subst`.** Se `git worktree list` mostra il worktree con una lettera di drive
-diversa da quella della tua cwd (es. entry `E:/AI/...` ma cwd `/d/AI/...`, con `E:` alias `subst` di
-`D:`), spostati sulla root vista con la **stessa lettera dell'entry** (`cd /e/AI/Claude/Trinity`):
-git confronta i path testualmente e non risolve i `subst`.
+**Prima di eliminare qualsiasi worktree**, identifica `<wt-path>` usando l'entry esatta di
+`git -C "<repo-root>" worktree list --porcelain` (vedi sezione seguente). Se la sessione Claude Code è entrata
+in **quel** worktree con `EnterWorktree`, esci usando `ExitWorktree` con `action: "keep"`:
+questo conserva i file e restituisce la sessione alla directory precedente. Verifica quindi che
+la directory di lavoro effettiva della sessione e la cwd della shell non siano dentro `<wt-path>`.
+Se la sessione è già fuori, non chiamare `ExitWorktree` per un altro worktree. Se il tool non è
+presente, l'uscita fallisce o non puoi verificarla, **non tentare di cancellare il worktree attivo**:
+fermati e chiedi di uscire dalla sessione o riaprire Claude dal repository principale.
+
+Il tool `ExitWorktree` non garantisce di chiudere terminali, editor, server o altri processi che
+abbiano ancora quel worktree come cwd: controlla e termina **solo i processi avviati da questo
+workflow** prima di rimuoverlo. Non terminare processi altrui automaticamente.
+
+Esegui tutti i comandi Git successivi sul repository principale con `git -C "<repo-root>" ...`,
+indipendentemente dalla cwd corrente. Usa il path `<wt-path>` esatto per le operazioni sul worktree.
+Su Windows/MSYS2 conserva la stessa forma di path e lettera di drive mostrata dall'entry Git
+(anche in presenza di drive `subst`); non forzare conversioni o `cd` su drive diversi.
 
 ## Ispezione prima di toccare qualcosa
 
 ```bash
-git fetch --prune origin
-git worktree list --porcelain
+git -C "<repo-root>" fetch --prune origin
+git -C "<repo-root>" worktree list --porcelain
 ```
 
+Non procedere se il bersaglio è il worktree principale o se il path non coincide con il nome/path richiesto.
 Dalla entry del worktree ricava `<wt-path>` (riga `worktree ...`, usalo poi ESATTAMENTE così com'è
 stampato) e `<branch>` (riga `branch refs/heads/...`). Se la entry ha `detached` al posto di
 `branch` (worktree di review di `/3_independent-review` o `/4_review-fix-loop`), non c'è branch:
-salta i controlli sul branch e il passo 4; resta obbligatorio `status --short` vuoto. Se non c'è
+salta i controlli sul branch, il default branch e i passi 3 e 4; resta obbligatorio
+`status --short` vuoto. Se non c'è
 nessuna entry per `$worktree_name` ma la directory esiste, vedi "Directory orfana" più sotto.
 
-Default branch senza `gh` (che nella shell di Claude può non essere loggato):
+Solo per un worktree con branch, determina il default branch senza `gh` (che nella shell di Claude può non essere loggato):
 
 ```bash
-git symbolic-ref -q --short refs/remotes/origin/HEAD || git remote show origin | sed -n 's/.*HEAD branch: /origin\//p'
+git -C "<repo-root>" symbolic-ref -q --short refs/remotes/origin/HEAD || git -C "<repo-root>" remote show origin | sed -n 's/.*HEAD branch: /origin\//p'
 ```
 
-Poi, sul worktree e sul branch:
+Controlla sempre lo stato del worktree:
 
 ```bash
 git -C "<wt-path>" status --short              # deve essere vuoto
-git log --oneline <default>..<branch>            # commit NON ancora sul default (deve essere vuoto)
-git merge-base --is-ancestor <branch> <default> && echo MERGED || echo UNMERGED
-git ls-remote --heads origin "refs/heads/<branch>"
+git -C "<wt-path>" ls-files --others --ignored --exclude-standard --directory
 ```
 
-Fermati e chiedi conferma esplicita se: `status` non è vuoto, ci sono commit unici, il branch è
+**Solo se non è detached**, esegui i controlli sul branch:
+
+```bash
+git -C "<repo-root>" log --oneline <default>..<branch>            # commit NON ancora sul default (deve essere vuoto)
+git -C "<repo-root>" merge-base --is-ancestor <branch> <default> && echo MERGED || echo UNMERGED
+git -C "<repo-root>" ls-remote --heads origin "refs/heads/<branch>"
+```
+
+Fermati e chiedi conferma esplicita se: ci sono file ignorati da salvare o scartare,
+`status` non è vuoto, ci sono commit unici, il branch è
 UNMERGED. La sola presenza del remoto non richiede conferma. Conserva lo SHA
 remoto esatto letto sopra per il passo 4 (output vuoto con successo = assente).
 Non usare `--force`/`-D` senza conferma.
 
-Prima di procedere mostra i bersagli esatti: `<wt-path>`, `<branch>` con ultimo commit, stato
-merged/unmerged, presenza del branch remoto.
+Prima di procedere mostra i bersagli esatti: `<wt-path>` e, per un worktree non detached,
+`<branch>` con ultimo commit, stato merged/unmerged e presenza del branch remoto. Per un worktree
+detached indica il commit HEAD e che nessun branch verrà eliminato.
 
 ## Rimozione
 
@@ -105,24 +128,30 @@ al primo colpo.
 
 ### 2. Rimuovi il worktree
 
+Prima di chiamare Git, ripeti il controllo: Claude Code, Bash e i processi avviati dal workflow
+non devono avere `<wt-path>` come directory corrente. La conferma all'eliminazione di modifiche
+non autorizza a cancellare un worktree ancora attivo.
+
 ```bash
-git worktree remove "<wt-path>"
+git -C "<repo-root>" worktree remove "<wt-path>"
 ```
 
 Solo se `status` non era vuoto E l'utente ha confermato di scartare le modifiche:
-`git worktree remove --force "<wt-path>"`.
+`git -C "<repo-root>" worktree remove --force "<wt-path>"`.
 
-**Non usare `git worktree prune`** né come scorciatoia né come passo di routine: su Windows/MSYS2
+**Non usare `git -C "<repo-root>" worktree prune`** né come scorciatoia né come passo di routine: su Windows/MSYS2
 con path `D:/...` nelle entry ha già cancellato worktree e branch estranei (li considera
-"mancanti"). `git worktree remove` toglie già la sua entry. Per sola diagnosi è ammesso
-`git worktree prune --dry-run`.
+"mancanti"). `git -C "<repo-root>" worktree remove` toglie già la sua entry. Per sola diagnosi è ammesso
+`git -C "<repo-root>" worktree prune --dry-run`.
 
 **Windows: `error: failed to delete '...': Device or resource busy`.** Git ha già deregistrato il
-worktree (verifica: sparisce da `git worktree list`) ma la directory è ancora aperta da un processo
-(sessione Claude Code, terminale, editor). Non ripetere il comando: chiudi chi la tiene e poi
-cancella la sola directory con `rm -rf "<wt-path>"`.
+worktree (verifica: sparisce da `git -C "<repo-root>" worktree list`) ma la directory è ancora aperta da un processo
+(sessione Claude Code, terminale, editor). Non ripetere il comando: chiudi chi la tiene, verifica che Git non registri più quel worktree,
+controlla che il path sia esattamente quello atteso sotto `.claude/worktrees/` e soltanto dopo
+cancella la directory residua con `rm -rf "<wt-path>"`. Se non puoi confermare queste condizioni,
+fermati senza usare `rm -rf`.
 
-### 3. Allinea il default branch locale
+### 3. Allinea il default branch locale (solo worktree con branch)
 
 Il merge è avvenuto su GitHub, quindi il default branch locale è indietro rispetto a `<default>`,
 appena aggiornato dal `fetch`. Portalo avanti, solo in fast-forward:
@@ -140,10 +169,10 @@ branch, non fare checkout: salta il passo e segnalalo nella tabella finale. Se `
 fallisce (storia divergente o modifiche locali che verrebbero sovrascritte), non forzare: mostra
 l'errore e prosegui.
 
-### 4. Elimina il branch
+### 4. Elimina il branch (solo worktree con branch)
 
 ```bash
-git branch -d <branch>
+git -C "<repo-root>" branch -d <branch>
 ```
 
 `-d` rifiuta un branch non mergiato: è la rete di sicurezza voluta. `-D` solo dopo conferma
@@ -169,18 +198,20 @@ git push --force-with-lease="refs/heads/<branch>:<sha-remoto>" \
 
 Se il lease o il server rifiuta il push, segnala il motivo e non ritentare.
 
-## Directory orfana (nessuna entry in `git worktree list`)
+## Directory orfana (nessuna entry in `git -C "<repo-root>" worktree list`)
 
 Succede dopo un `remove` andato a metà (vedi "resource busy"). La cartella non è più un worktree:
-`rm -rf "<repo-root>/.claude/worktrees/$worktree_name"`. Prima controlla che dentro non ci siano
+`rm -rf "<wt-path>"` **solo dopo aver verificato che `<wt-path>` sia sotto
+`<repo-root>/.claude/worktrees/`, non sia il repository principale e non sia la cwd di alcuna
+sessione o processo noto**. Prima controlla che dentro non ci siano
 file da salvare (`ls -la`; con il file `.git` presente puoi provare `git -C <dir> status --short`,
 ma se punta a un gitdir già rimosso fallirà: in quel caso confronta a mano). Niente `prune`.
 
 ## Verifica finale
 
 ```bash
-git worktree list
-git branch --list
+git -C "<repo-root>" worktree list
+git -C "<repo-root>" branch --list
 ls "<repo-root>/.claude/worktrees/"
 git -C "<repo-root>" status -sb | head -1
 ```

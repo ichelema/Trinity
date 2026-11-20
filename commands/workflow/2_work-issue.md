@@ -57,27 +57,9 @@ Se non esiste nessuna entry corrispondente, fermati e mostra:
 Non cercare worktree simili, non riutilizzare un worktree di review, non lavorare nel repository
 principale.
 
-### Tutti i comandi vanno eseguiti sul worktree
+### Entrata persistente nel worktree esistente
 
-Usa `git -C "<wt-path>"` per ogni comando Git e path assoluti sotto `<wt-path>` per ogni lettura o
-modifica di file.
-
-### Entrata e uscita dal worktree
-
-Dopo le verifiche qui sotto entra nel worktree con un comando a sé: `cd "<wt-path>"`. Così la
-statusline mostra il worktree; i comandi restano comunque con `git -C` e path assoluti.
-
-Ogni volta che restituisci il controllo (fine lavoro, domanda all'utente, errore che ti ferma),
-ferma i processi in background avviati nel worktree, poi esci con un comando a sé:
-
-```bash
-repo_root="$(git -C "<wt-path>" rev-parse --path-format=absolute --git-common-dir)"; cd "${repo_root%/.git}" && pwd
-```
-
-Su Windows git non cancella una directory che fa da cwd alla shell (`Device or resource busy` allo
-step 5).
-
-Verifica prima di iniziare:
+Verifica **prima di entrare** nel worktree:
 
 ```bash
 git -C "<wt-path>" rev-parse --abbrev-ref HEAD   # deve essere <branch>
@@ -88,6 +70,56 @@ Se il working tree non è pulito, fermati ed elenca i file modificati. Le opzion
 mettere da parte con `git stash`, oppure annullare. Non decidere da solo e non eseguire mai
 `git checkout .`, `git reset --hard` o `git stash` senza risposta: quel lavoro non versionato può
 essere l'unica copia esistente.
+
+Solo dopo questi controlli, usa lo strumento **nativo** `EnterWorktree` con
+`path: "<wt-path>"` (percorso esatto ricavato da `git worktree list --porcelain`). Passa `path`,
+**mai `name`**: devi entrare nel worktree esistente, senza crearne uno nuovo e senza cambiare branch.
+Se il percorso è fuori da `.claude/worktrees/`, Claude Code può chiedere l'autorizzazione a
+entrare: richiedila prima di presentare il piano, anche in modo `auto`.
+
+`EnterWorktree` sposta la directory di lavoro **della sessione Claude Code**, non soltanto quella di
+una singola chiamata Bash: gli strumenti di lettura/modifica e la configurazione del progetto
+seguono il worktree. Non sostituirlo con un semplice `cd`: fuori dalle directory autorizzate il
+cambio di directory Bash può essere annullato, e non garantisce lo stesso isolamento.
+
+Dopo l'ingresso, verifica con una chiamata Bash separata che `pwd -P` e
+`git rev-parse --show-toplevel` identifichino il worktree previsto, non il checkout principale.
+Se non coincidono, non modificare file: segnala l'errore.
+
+Se `EnterWorktree`/`ExitWorktree` non sono disponibili (per esempio per
+`permissions.blockWritesOutsideWorkingDirectories`) o l'ingresso viene negato, **fermati**:
+non proseguire fingendo di essere nel worktree e non crearne un altro. Indica come alternativa
+l'avvio di una nuova sessione Claude Code direttamente dalla directory `<wt-path>`; in quel caso
+l'uscita automatica con `ExitWorktree` non è disponibile, perché la sessione non è entrata con
+`EnterWorktree`.
+
+### Permanenza e uscita
+
+**Rimani nel worktree per tutta la lavorazione.** In particolare, NON eseguire `ExitWorktree` quando:
+
+- mostri il piano e attendi l'ok, anche in modo `auto`;
+- poni una domanda o attendi una decisione su specifiche o dipendenze;
+- deleghi esplorazione, implementazione, test o review.
+
+I subagent devono ricevere esplicitamente `<wt-path>` e operare sui file di quel worktree, senza
+creare worktree alternativi per l'implementazione di queste issue. Per ogni comando Git usa
+`git -C "<wt-path>"`; per letture e modifiche mantieni i path nel worktree. Il controllo del
+percorso è una difesa aggiuntiva, non un sostituto di `EnterWorktree`.
+
+**Esci una sola volta** quando la fase è davvero conclusa (o quando il lavoro viene
+interrotto definitivamente), dopo aver fermato i processi in background avviati nel worktree e
+completato i controlli previsti. Usa `ExitWorktree` con `action: "keep"`: torna alla directory
+originaria conservando `<wt-path>`, branch e commit. **Mai `action: "remove"`**: l'eventuale
+rimozione del worktree spetta solo allo step dedicato del workflow.
+
+In modalità manuale esci dopo la verifica finale della PR. In modalità `auto` non uscire dopo
+la sola PR: resta nel worktree durante gli step successivi che vi lavorano, poi esci al termine
+della catena, **prima** di un eventuale step che rimuova fisicamente il worktree. Se uno step
+successivo prevede già l'uscita, non ripeterla.
+
+Non tentare di ripristinare la directory principale con `cd` o con operazioni Git: l'uscita
+dalla sessione-worktree è responsabilità di `ExitWorktree`. Questo evita anche di lasciare il
+worktree come cwd di una shell su Windows, che può impedirne la rimozione.
 
 ## Recupero delle issue
 
@@ -238,14 +270,16 @@ Determina il branch di default senza dipendere da `gh`, che nella shell di Claud
 loggato:
 
 ```bash
-git symbolic-ref -q --short refs/remotes/origin/HEAD || git remote show origin | sed -n 's/.*HEAD branch: /origin\//p'
+git -C "<wt-path>" symbolic-ref -q --short refs/remotes/origin/HEAD || git -C "<wt-path>" remote show origin | sed -n 's/.*HEAD branch: /origin\//p'
 ```
 
-Crea una sola PR verso il branch di default:
+Crea una sola PR verso il branch di default. Se parti da un altro branch,
+controlla il diff verso `<default>`: fermati se include lavoro fuori scope.
+Per `gh pr create --base` usa il nome senza `origin/` (es. `master`):
 
 ```bash
 gh repo view --json nameWithOwner -q .nameWithOwner
-gh pr create -R "<owner/repo>" --base "<default>" --head "<branch>" --title "..." --body "..."
+gh pr create -R "<owner/repo>" --base "<default senza origin/>" --head "<branch>" --title "..." --body "..."
 ```
 
 ### Magic words
@@ -299,7 +333,10 @@ git -C "<wt-path>" status --short          # deve essere vuoto
 git -C "<wt-path>" log --oneline "<default>".."<branch>"
 ```
 
-Poi esci dal worktree come indicato in «Entrata e uscita dal worktree».
+In modo manuale, ferma gli eventuali processi in background ed esci con
+`ExitWorktree(action: "keep")` come indicato in «Permanenza e uscita». In modo `auto` **non uscire
+qui**: prosegui nella catena e uscirai alla sua conclusione, prima di qualsiasi rimozione fisica
+del worktree.
 
 In modo `auto` la tabella si stampa solo alla fine di «Modo auto». Alla fine stampa
 esclusivamente questa tabella, sostituendo i segnaposto con i valori effettivi; `<model>` è il
@@ -350,6 +387,10 @@ domande. Da lì in poi segui `${CLAUDE_PLUGIN_ROOT}/commands/issue-cycle.md`:
 
 Non pubblicare il commento su Linear di `issue-cycle` e non fare mai il merge.
 
-Alla fine esci dal worktree, poi stampa la tabella di «Verifica finale» senza la riga «Prossimo
-passo», seguita dalle sezioni «Cosa fai ora» e «Da sapere» e dalla riga «Dettagli» del «Report
-finale» di `issue-cycle`, costruite rileggendo il registro.
+Al termine della catena, anche se interrotta, ferma i processi avviati per il lavoro ed esci
+con `ExitWorktree(action: "keep")` se l'ingresso è attivo. Qui lo step 5 rimuove solo i
+worktree detached della review, mai quello di implementazione.
+
+Poi stampa la tabella di «Verifica finale» senza la riga «Prossimo passo», seguita dalle sezioni
+«Cosa fai ora» e «Da sapere» e dalla riga «Dettagli» del «Report finale» di `issue-cycle`,
+costruite rileggendo il registro.

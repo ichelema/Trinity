@@ -51,8 +51,30 @@ Dalla PR ricavi la base `<base>` (`baseRefName`) e il comportamento voluto (tito
 comportamento non si tocca. Se `gh` non risponde, usa come base il branch di default, ricavato come
 in `/2_work-issue` («Pull Request»).
 
-Dopo le verifiche entra nel worktree e, quando restituisci il controllo, escine come in
-`/2_work-issue` («Entrata e uscita dal worktree»).
+### Entrata e permanenza nel worktree
+
+Dopo le verifiche iniziali, se non sei già nel worktree di implementazione, usa `EnterWorktree` passando
+`<wt-path>` come `path`: entra nel worktree **già esistente**, senza crearne uno nuovo.
+Controlla che la directory di lavoro della sessione sia `<wt-path>` prima di modificare file.
+Se lo strumento non è disponibile, fermati e segnala il problema: non sostituirlo con un
+semplice `cd`, che non garantisce il cambio della directory di lavoro dell'intera sessione.
+
+**Rimani nel worktree durante tutta la semplificazione**: analisi, fix, test, commit e push.
+Non eseguire `ExitWorktree` per un messaggio intermedio o un errore recuperabile mentre
+attendi una decisione dell'utente per proseguire il lavoro.
+
+### Uscita dal worktree
+
+- **Comando eseguito autonomamente:** dopo aver completato le verifiche e il report finale,
+  usa `ExitWorktree` con `action: "keep"`. Il worktree e il branch devono rimanere intatti.
+- **Comando richiamato dalla catena `auto` di `2_work-issue`:** non uscire al termine di
+  questo singolo step; lascia che il workflow coordinatore gestisca l'uscita alla fine della
+  catena o prima di un eventuale step che rimuove il worktree.
+- **Errore bloccante senza possibilità di proseguire:** se l'esecuzione termina davvero,
+  usa `ExitWorktree(action: "keep")` prima del report d'errore, se sei entrato con
+  `EnterWorktree`.
+
+Non eliminare mai il worktree in questo comando.
 
 ## 0. Perimetro
 
@@ -115,9 +137,9 @@ Per ogni fix, o gruppo di fix con lo stesso motivo:
    cancella i file nuovi che ha creato e segna il finding come saltato: una semplificazione che
    rompe un test cambia il comportamento.
 
-Alla fine esegui la suite completa e i controlli rilevanti del progetto. Se sono verdi, esegui
-il push con `git -C "<wt-path>" push origin "<branch>"`. Se sono rossi, non fare il push:
-fermati e mostra l'output completo.
+Alla fine esegui la suite completa e i controlli rilevanti del progetto. Se sono verdi, esegui il
+push con `git -C "<wt-path>" push origin "<branch>"`. Se sono rossi, non fare il push: fermati e
+mostra l'output completo.
 
 ## Report finale
 

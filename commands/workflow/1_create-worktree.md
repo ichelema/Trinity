@@ -35,13 +35,13 @@ Determina il prefisso usando queste regole:
 - se la issue è esplicitamente un bug, usa `bug`;
 - se la issue è esplicitamente un miglioramento o un refactoring (es. label `Refactor`), usa
   `improvments`;
-- se il tipo è assente, diverso o ambiguo, fermati e chiedi quale prefisso utilizzare.
+- se manca il tipo, usa una label solo se indica senza ambiguità uno dei due prefissi;
+  altrimenti chiedi. Chiedi anche se il tipo esplicito è diverso o ambiguo.
 
 Con più issue, tutte devono risolvere allo stesso prefisso. Se i prefissi differiscono, fermati e
 chiedi quale usare.
 
-Dai priorità all'issue type strutturato di Linear. Usa label, titolo e descrizione solo come
-conferma, non per sovrascrivere un tipo esplicito.
+Non usare label, titolo o descrizione per sovrascrivere un tipo esplicito.
 
 Non modificare la issue, i commenti, lo stato o altri dati Linear.
 

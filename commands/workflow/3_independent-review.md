@@ -68,18 +68,29 @@ git worktree add --detach "$repo_root/.claude/worktrees/review+<base-name>" "$sh
 Se la directory esiste già (review precedente non ripulita), fermati. Non toccare il file `.git`
 dentro il worktree. Non recensire mai il worktree di implementazione direttamente.
 
-Usa `git -C "<rev-path>"` e path assoluti sotto `<rev-path>`; non fare `cd`.
+### Directory di lavoro durante la review
+
+La review è **read-only** e usa un worktree detached temporaneo: **non** entrarci con
+`EnterWorktree` né con `cd`. Leggi ed esegui tutto con `git -C "<rev-path>"`,
+`mise -C "<rev-path>"` e path assoluti sotto `<rev-path>`. In questo modo il worktree
+di review può essere rimosso senza che sia la directory attiva della sessione.
+
+Se questo comando è lanciato da `/4_review-fix-loop` o da `issue-cycle` mentre la
+sessione principale è già nel worktree di implementazione, **non** chiamare
+`ExitWorktree`: quella sessione e la sua uscita appartengono al coordinatore.
+Il worktree di review resta comunque isolato tramite `<rev-path>`.
 
 Prima di iniziare verifica di recensire esattamente la PR (`git fetch` aggiorna solo i ref remoti;
 insieme alla creazione e rimozione del tuo worktree di review è l'unica scrittura Git ammessa):
 
 ```bash
 git fetch origin
-git -C "<rev-path>" status --short -- . ':!.review-tmp'    # deve essere vuoto
+git -C "<rev-path>" status --short    # deve essere vuoto
 git -C "<rev-path>" rev-parse HEAD    # deve coincidere con:
 git rev-parse "origin/<branch>"
 ```
 
+Se `.review-tmp` esiste già (anche ignorata o symlink), non toccarla: fermati.
 Se lo stato non è pulito o gli SHA differiscono (commit non pushati, push di altri), fermati e
 mostralo: non recensire codice diverso da quello della PR.
 
@@ -381,11 +392,12 @@ presentare preferenze stilistiche come bug.
 
 ## Pulizia
 
-Come ultima azione prima di restituire il report cancella `<rev-path>/.review-tmp/`, sempre:
+Come ultima azione prima di restituire il report cancella `<rev-path>/.review-tmp/` solo se creata da questa review:
 `git worktree remove` rifiuta un worktree con file non tracciati e `--force` è vietato.
 
 Se il worktree di review lo hai creato tu (nessun `<review-path>` passato), rimuovilo prima di
-restituire il report: leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md`
+restituire il report: non essendoci mai entrato, non serve `ExitWorktree`. Leggi e segui
+`${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md`
 (ha `disable-model-invocation: true`, non puoi invocarlo come slash command) con
 `$worktree_name` = `review+<base-name>`. Se lo ha creato `/4_review-fix-loop`, lascialo: lo
 rimuove il loop.
@@ -549,14 +561,32 @@ dei finding da fixare. Se rifiuta, fermati.
 
 Se accetta:
 
+- verifica prima `git -C "<wt-path>" rev-parse --abbrev-ref HEAD` e
+  `git -C "<wt-path>" status --short`. Se il branch non è `<branch>` o esistono
+  modifiche non previste, fermati e segnala senza sovrascriverle;
+- se la sessione **non** si trova già nel worktree di implementazione, usa
+  `EnterWorktree` con `path: "<wt-path>"` (worktree esistente: non crearne uno nuovo).
+  Se vi si trova già perché un coordinatore l'ha fatto entrare, non entrare di nuovo.
+  Verifica la directory effettiva prima di modificare file; se lo strumento non è
+  disponibile o rifiuta il passaggio, fermati e segnala il problema, senza sostituirlo
+  silenziosamente con `cd`;
 - applica sul worktree di implementazione `<wt-path>` solo i finding scelti, leggendo e seguendo la
-  sezione «Fix minimi e chirurgici» di `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md`
-  (`cd` dentro e fuori `<wt-path>`, commit, push), parti dal `file:riga` e dalla direzione di fix
+  sezione «Fix minimi e chirurgici» di `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md`,
+  **esclusivamente per le regole sui fix, test, commit e push**: non riprenderne le istruzioni
+  legacy di `cd` o la gestione autonoma dell'uscita. Parti dal `file:riga` e dalla direzione di fix
   del finding, senza rifare la review;
 - prima del push rilancia i test e i linter della riga «Prove»; se falliscono, non pushare e
   mostra l'errore;
 - se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia:
   lascialo aperto e scrivi il motivo in una riga.
+
+Prima di chiudere i fix, ferma gli eventuali processi avviati. Se **questo comando**
+ha usato `EnterWorktree`, esci con `ExitWorktree` e `action: "keep"` soltanto a
+lavoro completato o se un errore blocca definitivamente l'esecuzione; conserva
+worktree, branch e modifiche. Se sei già entrato tramite un coordinatore (`auto`,
+`issue-cycle` o `/4_review-fix-loop`), **non uscire**: decide il coordinatore.
+Durante le richieste di approvazione o le pause recuperabili resta nel worktree.
+Non cancellare mai il worktree di implementazione.
 
 Chiudi con il numero di finding corretti e pubblicati sulla PR, l'esito di
 test e lint e il numero di finding aperti. Se i controlli falliscono, apri con
