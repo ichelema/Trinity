@@ -202,9 +202,9 @@ delle decisioni, memorie. Nessun command precedente lo fa: è questo il momento.
 Poi:
 
 - se il progetto definisce una procedura di chiusura, eseguila ora, per intero e nell'ordine
-  scritto, senza aspettare che l'utente la chieda;
+  scritto, senza aspettare che l'utente la chieda; annota i file che aggiorni e i commit creati;
 - se quei file esistono ma senza una procedura, chiedi all'utente se aggiornarli e se salvare
-  decisioni e cause radice in Hindsight;
+  decisioni e cause radice in Hindsight; annota i file aggiornati dopo la risposta;
 - se non esiste nulla, non creare file.
 
 ## Report finale
@@ -227,8 +227,10 @@ Aggiungi queste righe solo quando pertinenti:
 - `Default branch`: fast-forward saltato o fallito, con il motivo;
 - `Worktree residui`: solo quelli di review della stessa operazione che
   avrebbero dovuto essere rimossi, identificati dal percorso esatto;
-- `Chiusura del lavoro`: solo per un worktree di implementazione rimosso;
-  eseguita (con commit, se creato), da fare, non prevista o saltata, con motivo;
+- `Chiusura del lavoro`: solo per un worktree di implementazione rimosso. Indica
+  eseguita, da fare, non prevista o saltata, con il motivo, e in ogni caso elenca i
+  file aggiornati con il percorso relativo, oppure scrivi `nessun file aggiornato`.
+  Con `eseguita` aggiungi il commit creato, se c'è.
 - `Cosa fai ora`: solo se serve un intervento. Indica il prossimo passo sicuro:
   per modifiche locali, ispezionarle e salvarle; per una directory residua,
   verificare cosa la tiene aperta e se contiene file da conservare.
