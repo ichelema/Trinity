@@ -187,28 +187,31 @@ Poi:
   decisioni e cause radice in Hindsight;
 - se non esiste nulla, non creare file.
 
-Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
+## Report finale
 
-```
-┌──────────────────────┬──────────────────────────────────────────────────────────┐
-│        Campo         │                          Valore                          │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Worktree             │ ✓ <wt-path> rimosso / ⚠ directory residua da cancellare  │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Chiusura del lavoro  │ eseguita (<commit>) / da fare: <cosa manca> / non prevista / saltata: <motivo> │
-└──────────────────────┴──────────────────────────────────────────────────────────┘
-```
+Anche se il comando termina senza rimuovere nulla, stampa una tabella Markdown:
 
-Aggiungi una riga, tra le due, solo per queste anomalie:
+| Campo | Valore |
+| --- | --- |
+| Worktree | Esito verificato e percorso del bersaglio |
+
+Distingui **Rimosso** (entry Git e directory assenti), **Non rimosso** (con il
+motivo) e **Rimosso da Git, directory ancora presente**. Se non puoi verificare
+lo stato, indica cosa non hai potuto controllare, senza dichiarare il successo.
+Per un worktree detached rimosso senza anomalie basta la riga `Worktree`.
+
+Aggiungi queste righe solo quando pertinenti:
 
 - `Branch locale`: `<branch>` mantenuto, con il motivo;
 - `Branch remoto`: ancora presente e mantenuto;
 - `Default branch`: fast-forward saltato o fallito, con il motivo;
-- `Worktree residui`: restano worktree `review+*`, con l'elenco.
+- `Worktree residui`: solo quelli di review della stessa operazione che
+  avrebbero dovuto essere rimossi, identificati dal percorso esatto;
+- `Chiusura del lavoro`: solo per un worktree di implementazione rimosso;
+  eseguita (con commit, se creato), da fare, non prevista o saltata, con motivo;
+- `Cosa fai ora`: solo se serve un intervento. Indica il prossimo passo sicuro:
+  per modifiche locali, ispezionarle e salvarle; per una directory residua,
+  verificare cosa la tiene aperta e se contiene file da conservare.
 
-Non mettere in tabella il branch eliminato, il branch remoto già assente o eliminato, il ripristino
-del `gitdir` POSIX, il default branch allineato e i worktree di implementazione di altre issue.
-
-Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri
-di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un
-paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine.
+Ometti i branch eliminati, il remoto già assente, il ripristino del `gitdir`
+POSIX, il default branch allineato e i worktree di altre issue.
