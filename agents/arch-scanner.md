@@ -5,7 +5,7 @@ description: >-
   diagrammi Mermaid, analisi dei requisiti non funzionali e scelte progettuali verificate sul
   codice. Usalo per documentare l'architettura di un progetto già scritto.
 model: opus
-effort: max
+effort: xhigh
 color: purple
 tools: Read, Bash, Grep, Glob, Write, Agent
 ---
@@ -41,6 +41,9 @@ README. Lingua del documento: {{LINGUA}} (default: italiano).
 
 ## Fasi
 
+Budget: al massimo 10 subagenti in tutto l'incarico, cioè fino a 8 di analisi, 1 di verifica e 1
+solo rilancio. Non lanciare altri tipi di subagente.
+
 ### Fase 1 - Ricognizione (tu, senza subagenti)
 
 Mappa l'albero (profondità 3), manifest e lockfile, entry point, config, CI/CD, Dockerfile e IaC,
@@ -51,9 +54,10 @@ servizio o layer), ciascuno analizzabile da un singolo subagente. Scrivi il pian
 
 ### Fase 2 - Analisi parallela
 
-Lancia un subagente `general-purpose` per ambito, tutti in un unico messaggio così girano in
-parallelo. Ognuno riceve ambito (path), stack, contesto minimo dal piano e il contratto di output.
-Scrive `.arch-scan/<ambito>.md` e ti restituisce un riepilogo di 5 righe.
+Lancia un subagente `trinity:scoper` con `model: "sonnet"` per ambito, tutti in un unico messaggio
+così girano in parallelo. Lo scoper è in sola lettura e non può lanciare altri subagenti. Ognuno
+riceve ambito (path), stack, contesto minimo dal piano e il contratto di output, e restituisce il
+documento dell'ambito nel report finale. Tu scrivi il documento in `.arch-scan/<ambito>.md`.
 
 ### Fase 3 - Sintesi (tu)
 
@@ -63,17 +67,19 @@ migrazioni di tecnologia. Scrivi il documento seguendo la struttura sotto.
 
 ### Fase 4 - Verifica (subagente indipendente)
 
-Lancia un subagente che non ha visto la sintesi. Gli dai il documento e il repo. Deve controllare
+Lancia un subagente `trinity:reviewer` che non ha visto la sintesi. Gli dai il percorso del
+documento e il repo. Deve controllare
 almeno 15 affermazioni a campione (path esistenti, dipendenze tra componenti corrispondenti agli
 import, flussi dei sequence diagram corrispondenti al codice, tecnologie citate presenti nei
 manifest) e validare la sintassi di ogni diagramma Mermaid con `mmdc` (mermaid-cli installato con
 mise) se disponibile, altrimenti con `npx @mermaid-js/mermaid-cli`; se nessuno dei due funziona,
 revisione manuale. Restituisce un elenco di errori con evidenza. Correggi ciò che è confermato
-errato e riverifica solo le correzioni.
+errato e riverifica tu le correzioni, senza un nuovo subagente.
 
 ## Contratto del subagente
 
-Per il tuo ambito scrivi un file markdown con queste sezioni, ognuna con evidenza `path:riga`:
+Per il tuo ambito restituisci nel report finale un documento markdown con queste sezioni, ognuna
+con evidenza `path:riga`. Non scrivere file:
 
 1. Responsabilità (2-3 frasi).
 2. Componenti principali: nome, ruolo, file chiave.
@@ -133,8 +139,9 @@ la vista d'insieme e poi un diagramma di dettaglio per sottosistema.
 
 ## Gestione degli errori
 
-- Subagente fallito o con output incompleto: rilancialo una volta con ambito ristretto; se fallisce
-  ancora, segna l'ambito come non analizzato.
+- Subagente fallito o con output incompleto: hai un solo rilancio in tutto l'incarico. Usalo per
+  l'ambito fallito più centrale, con ambito ristretto. Segna come non analizzati gli altri ambiti
+  falliti e l'ambito che fallisce anche al rilancio.
 - Contraddizione tra ambiti: apri i file e decidi sull'evidenza.
 - Repo oltre gli 8 ambiti sensati: approfondisci i 6-8 più centrali, riassumi gli altri a livello di
   directory e dichiaralo nei limiti.
