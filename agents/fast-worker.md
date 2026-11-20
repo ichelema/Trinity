@@ -6,6 +6,7 @@ description: >-
   Non per design o decisioni architetturali (quelli vanno a deep-reasoner).
 model: sonnet
 effort: high
+disallowedTools: mcp__hindsight__retain, mcp__hindsight__sync_retain, mcp__hindsight__update_memory, mcp__hindsight__invalidate_memory, mcp__hindsight__delete_document
 color: green
 ---
 
