@@ -193,21 +193,21 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto:
 ┌──────────────────────┬──────────────────────────────────────────────────────────┐
 │        Campo         │                          Valore                          │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Worktree             │ <wt-path> — rimosso / directory residua da cancellare    │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch locale        │ <branch> — eliminato (era <sha>) / mantenuto: <motivo> / nessuno (detached) │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch remoto        │ già assente / eliminato / mantenuto                      │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ gitdir POSIX         │ ripristinato (backup in ~/.claude/tmp) / non necessario  │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Default branch       │ <default> = <sha> — fast-forward: eseguito / già allineato / saltato: <motivo> │
-├──────────────────────┼──────────────────────────────────────────────────────────┤
-│ Worktree residui     │ <elenco o "nessuno">                                     │
+│ Worktree             │ ✓ <wt-path> rimosso / ⚠ directory residua da cancellare  │
 ├──────────────────────┼──────────────────────────────────────────────────────────┤
 │ Chiusura del lavoro  │ eseguita (<commit>) / da fare: <cosa manca> / non prevista / saltata: <motivo> │
 └──────────────────────┴──────────────────────────────────────────────────────────┘
 ```
+
+Aggiungi una riga, tra le due, solo per queste anomalie:
+
+- `Branch locale`: `<branch>` mantenuto, con il motivo;
+- `Branch remoto`: ancora presente e mantenuto;
+- `Default branch`: fast-forward saltato o fallito, con il motivo;
+- `Worktree residui`: restano worktree `review+*`, con l'elenco.
+
+Non mettere in tabella il branch eliminato, il branch remoto già assente o eliminato, il ripristino
+del `gitdir` POSIX, il default branch allineato e i worktree di implementazione di altre issue.
 
 Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri
 di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un

@@ -180,27 +180,15 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Issue Linear           │ <issue-id> — <titolo-issue> (una riga per issue)        │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Tipo rilevato          │ <tipo> (<sorgente: label/type>)                         │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prefisso               │ <prefisso>                                              │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch sorgente remoto │ origin/<source-branch>                                  │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ SHA sorgente           │ <sha-completo>                                          │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Commit                 │ <messaggio-commit>                                      │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch                 │ <branch>                                                 │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Worktree               │ <percorso-assoluto>                                     │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ SmartGit               │ back-pointer gitdir in formato <POSIX o Windows>        │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Stato                  │ Pulito — nessun file modificato                         │
+│ Branch                 │ <branch> (da origin/<source-branch>)                     │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Prossimo passo         │ /trinity:workflow:2_work-issue <issue-id...> <model>    │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
+
+Non mettere in tabella tipo, prefisso, SHA, commit, path del worktree, SmartGit e stato: se uno di
+questi controlli fallisce, il command si ferma prima della tabella. Il prefisso è già nel nome del
+branch.
 
 Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri
 di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un

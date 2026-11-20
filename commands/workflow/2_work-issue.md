@@ -312,28 +312,28 @@ modello ricavato in «Validazione degli argomenti»:
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Issue Linear           │ <issue-id> — <titolo-issue> (una riga per issue)         │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Stato Linear           │ <stato-precedente> → <stato-attuale> / invariato: <motivo>│
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Worktree               │ <wt-path>                                                │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Branch                 │ <branch> (pushato: sì/no)                                │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Commit                 │ <n> commit — <elenco sintetico>                          │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Requisiti coperti      │ <n>/<tot> — <eventuali scoperti>                         │
+│ Pull Request           │ <url>                                                    │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Test                   │ <comando> — <esito>                                      │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Pull Request           │ <url> (magic words: <Fixes/Refs> per ogni issue)         │
-├────────────────────────┼──────────────────────────────────────────────────────────┤
-│ Prossimo passo         │ /trinity:workflow:2_work-simplify e /trinity:workflow:2_work-verify <issue-id...> <model> (facoltativi), poi /trinity:workflow:3_independent-review <issue-id...> <model> [hard|soft] oppure /trinity:workflow:4_review-fix-loop <issue-id...> <model> │
+│ Prossimo passo         │ /trinity:workflow:2_work-simplify <issue-id...> <model>  │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
 
+Aggiungi una riga, prima di «Prossimo passo», solo per queste anomalie:
+
+- `Stato Linear`: lo stato è rimasto invariato, con il motivo;
+- `Requisiti coperti`: non tutti, con `<n>/<tot>` e i requisiti scoperti;
+- `Branch`: il push non è avvenuto, con il motivo.
+
+Non mettere in tabella worktree, branch pushato, elenco dei commit e magic words. Il prossimo passo
+è uno solo: ogni command della catena stampa il proprio passo successivo.
+
 Nell'output scrivila come tabella markdown a due colonne (`| Campo | Valore |`), non con i caratteri
 di disegno del riquadro: fuori da un blocco di codice il renderer unisce le righe `│` in un
-paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine. Con più issue, le celle
-«Issue Linear» e «Stato Linear» diventano una riga della tabella per ogni issue.
+paragrafo e le manda a capo. Il riquadro sopra indica solo campi e ordine. Con più issue, la cella
+«Issue Linear» diventa una riga della tabella per ogni issue, e così la riga «Stato Linear» quando
+c'è.
 
 ## Modo auto
 
