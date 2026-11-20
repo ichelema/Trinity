@@ -2,18 +2,14 @@ Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 
 ## Principi generali
 
-Privilegia la cautela rispetto alla velocità; per task banali usa il buon senso.
-
 - Prima di implementare, esplicita le assunzioni rilevanti.
 - Se esistono più interpretazioni, scegli la più supportata dal testo e dal codice e dichiarala;
   chiedi solo se letture diverse porterebbero a lavori sostanzialmente diversi.
 - Se esiste un approccio più semplice, segnalalo e preferiscilo.
-- Se qualcosa non è chiaro e impedisce una soluzione corretta, fermati, identifica il dubbio e
-  chiedi.
-- Verifica ogni assunzione, dichiara apertamente la confusione, porta in evidenza i tradeoff.
+- Porta in evidenza i tradeoff.
 - Una richiesta vaga va letta nel contesto del codice: se l'utente chiede di cambiare `methodName`
   in snake case, modifica il codice, non rispondere solo con il nuovo nome.
-- Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in 2–3 frasi con una
+- Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in breve con una
   raccomandazione e il tradeoff principale. Non implementare finché l'utente non è d'accordo.
 - Se noti di aver scritto codice insicuro (iniezione di comandi, XSS, SQL injection), correggilo
   subito.
@@ -52,13 +48,7 @@ Trasformare le attività in obiettivi verificabili:
 - “Correggere il bug” → “Scrivere un test che lo riproduca, quindi farlo superare”
 - “Rifattorizzare X” → “Assicurarsi che i test passino sia prima che dopo”
 
-Per le attività in più fasi, definire un breve piano:
-
-```
-1. [Fase] → verificare: [controllo]
-2. [Fase] → verificare: [controllo]
-3. [Fase] → verificare: [controllo]
-```
+Per le attività in più fasi, associare a ogni fase un controllo di verifica.
 
 ## Regole operative
 
@@ -87,14 +77,6 @@ Per le attività in più fasi, definire un breve piano:
   il tool Edit/Write, mai `sed`/`awk`/`printf`/`echo`: interpretano gli escape (in zsh anche `echo`)
   e scrivono byte di controllo.
 
-## Assistenza proattiva
-
-Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni precedenti per:
-
-- Individuare informazioni mancanti che potrebbero aiutarti ad assistermi meglio.
-
-- Farmi domande mirate solo quando possono migliorare concretamente il risultato.
-
 ## Linguaggi e strumenti
 
 - Per script Bash usa sempre shebang `#!/usr/bin/env bash`.
@@ -120,7 +102,6 @@ Se il server `mcp-debugger` è attivo, carica la skill `trinity:mcp-debugger` pr
 - Crea uno script temporaneo per logica articolata, branching o loop non banali, concorrenza o
   coordinamento di più subprocess.
 - Quando serve uno script non banale, usa JavaScript (`.mjs`) eseguito con Bun.
-- Non usare Bash per logica complessa solo per evitare JavaScript.
 - Il linguaggio degli script interni dell'agente non deve influenzare il linguaggio o il runtime del
   progetto su cui stai lavorando.
 - Usa solo `$HOME/.claude/tmp`: per i file della sessione lo scratchpad indicato dal prompt di
@@ -148,7 +129,7 @@ Se il server `mcp-debugger` è attivo, carica la skill `trinity:mcp-debugger` pr
   loggalo per il debug.
 
 - Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci Nushell
-  (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `nushell`.
+  (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `trinity:nushell`.
 
 <!-- RECALL:manual --> <!-- Blocco iniettato SOLO con recall_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RECALL_DROP=1): le memorie le inietta già l'hook UserPromptSubmit. -->
 
@@ -159,8 +140,7 @@ Il recall automatico è disattivato: nessun hook inietta le memorie Hindsight ne
 
 - prima di rispondere a domande sull'utente, sul progetto o su decisioni passate;
 - prima di un'operazione tecnica non banale su questa macchina (download, install, assunzioni su
-  path/env, rete, "prima volta che faccio X qui");
-- ogni volta che sei incerto o stai per assumere qualcosa.
+  path/env, rete, "prima volta che faccio X qui").
 
 Non chiamarlo per conferme, domande banali o quando il contesto contiene già la risposta. Se il
 recall non risponde, prosegui con gli strumenti locali e dillo in una riga.

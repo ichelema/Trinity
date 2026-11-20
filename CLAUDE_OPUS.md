@@ -21,7 +21,7 @@ Negli altri casi procedi.
 ## Orchestrazione e delega
 
 Mantieni il tuo contesto snello: tieni per te sintesi e decisioni.
-- Analisi lunghe o ad alto ragionamento → `trinity:deep-reasoner` (Fable 5.2, con
+- Analisi lunghe o ad alto ragionamento → `trinity:deep-reasoner` (Fable, con
   contesto isolato).
 - Implementazione già definita (edit puntuali, rinomine, fix, ricerche mirate,
   anche modifiche su più file quando la soluzione è già decisa) →
