@@ -426,9 +426,9 @@ quest'ordine:
 1. Il verdetto in grassetto e una frase con il motivo principale.
 2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo. Metti
    ogni comando da lanciare in un blocco di codice con il tag del linguaggio. Con `APPROVABILE` e
-   nessun'altra azione, scrivi solo «Fai il merge della PR». Con finding da correggere, scrivi
-   «Scegli se fixare i finding»: la domanda arriva subito dopo il report (vedi «Fix dei
-   finding»). Con `BLOCCATO`, scrivi cosa deve fornire l'utente.
+   nessun'altra azione, scrivi solo «Fai il merge della PR». Non anticipare
+   la domanda sui fix: se è l'unica azione, ometti «Cosa fai ora».
+   Con `BLOCCATO`, scrivi cosa deve fornire l'utente.
 3. **Finding**, solo se ce ne sono: una tabella markdown con una riga per finding, ordinata per
    severità. Colonne: `#`, severità, esito (`CONFIRMED` o `PLAUSIBLE`), `file:riga`, problema →
    effetto in una frase, fix in una frase.
@@ -557,6 +557,20 @@ Se accetta:
 - se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia:
   lascialo aperto e scrivi il motivo in una riga.
 
-Chiudi con un report breve: una riga per fix, `file:riga` → cosa cambia; una riga per finding
-lasciato aperto, con il motivo; l'esito dei test. Non proporre il passo successivo: se fare il
-merge o lanciare `/trinity:workflow:4_review-fix-loop` lo decide l'utente.
+Chiudi con il numero di finding corretti e pubblicati sulla PR, l'esito di
+test e lint e il numero di finding aperti. Se i controlli falliscono, apri con
+**Push non eseguito** e mostra l'errore. Se il push fallisce, segnalalo:
+un commit locale non è un fix pubblicato.
+
+Se ci sono fix, usa una riga per finding corretto, con il numero originale:
+
+| Finding | Cosa è cambiato | Commit |
+| --- | --- | --- |
+| #1 | Descrizione della correzione | SHA breve |
+
+Per la colonna Commit segui solo la regola dei link del «Report finale» di
+`2_work-simplify.md`: SHA breve collegato al diff su Linear per i fix
+pubblicati; senza URL della review o senza push, SHA breve in testo semplice.
+Elenca ogni finding aperto con numero originale e motivo, inclusi quelli non
+selezionati. Non proporre il passo successivo: merge o altra review restano
+una scelta dell'utente.
