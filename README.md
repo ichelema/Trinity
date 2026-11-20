@@ -294,7 +294,7 @@ collidono con i comandi locali del progetto:
 | 2 | `2_work-issue <issue-id...> <model> [auto [review\|loop]]` | piano, implementazione, push e PR (senza merge); con `auto`, dopo l'ok al piano prosegue da solo con 2b, 2c, review o loop (default) e pulizia dei worktree di review |
 | 2b | `2_work-simplify <issue-id...> <model>` | facoltativo: semplifica il codice della PR senza cambiarne il comportamento (riuso, semplificazione, efficienza, profondità) |
 | 2c | `2_work-verify <issue-id...> <model>` | facoltativo: esegue l'app e verifica end-to-end che la modifica funzioni, senza test né typecheck; verdetto PASS/FAIL/BLOCKED/SKIP |
-| 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR |
+| 3 | `3_independent-review <issue-id...> <model>` | review avversaria in sola lettura del codice della PR, poi chiede se fixare i finding |
 | 4 | `4_review-fix-loop <issue-id...> <model>` | due review in parallelo su worktree detached (`trinity:reviewer` su Fable, `gpt-bridge:reviewer` su GPT), fix in loop |
 | 5 | `5_remove-worktree <worktree-name>` | rimuove worktree e branch dopo il merge |
 ### `/trinity:dream` — audit della memoria

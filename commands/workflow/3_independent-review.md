@@ -1,6 +1,7 @@
 ---
 description:
-  Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear
+  Review avversaria indipendente e read-only dell'implementazione di una o più issue Linear, poi
+  chiede se fixare i finding
 argument-hint: <issue-id...> <model> [hard|soft] [<review-path>]
 disable-model-invocation: true
 model: fable
@@ -50,7 +51,7 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 
 Ricava il worktree di implementazione con la stessa regola di `/2_work-issue`
 (`git worktree list --porcelain`, branch che termina esattamente con `/<base-name>`): ne ottieni
-`<branch>`. Se non esiste, fermati.
+`<wt-path>` e `<branch>`. Se non esiste, fermati.
 
 La directory da recensire `<rev-path>` è `<review-path>` se è stato passato (worktree detached
 creato da `/4_review-fix-loop`). Altrimenti creala tu: un worktree detached (senza branch: non
@@ -84,7 +85,8 @@ mostralo: non recensire codice diverso da quello della PR.
 
 ## Vincolo assoluto: modalità read-only
 
-Non modificare nulla.
+Non modificare nulla. Il vincolo vale fino alla consegna del report; l'unica eccezione è la
+sezione «Fix dei finding», solo se l'utente accetta.
 
 In particolare:
 
@@ -424,9 +426,9 @@ quest'ordine:
 1. Il verdetto in grassetto e una frase con il motivo principale.
 2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo. Metti
    ogni comando da lanciare in un blocco di codice con il tag del linguaggio. Con `APPROVABILE` e
-   nessun'altra azione, scrivi solo «Fai il merge della PR». Con finding da correggere, proponi
-   `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`. Con `BLOCCATO`, scrivi cosa deve
-   fornire l'utente.
+   nessun'altra azione, scrivi solo «Fai il merge della PR». Con finding da correggere, scrivi
+   «Scegli se fixare i finding»: la domanda arriva subito dopo il report (vedi «Fix dei
+   finding»). Con `BLOCCATO`, scrivi cosa deve fornire l'utente.
 3. **Finding**, solo se ce ne sono: una tabella markdown con una riga per finding, ordinata per
    severità. Colonne: `#`, severità, esito (`CONFIRMED` o `PLAUSIBLE`), `file:riga`, problema →
    effetto in una frase, fix in una frase.
@@ -531,4 +533,30 @@ Indica:
   riga «Prove».
 - Non proporre modifiche fuori dallo scope delle issue, salvo che evidenzino una regressione causata
   dal changeset.
-- Non modificare il codice in nessuna circostanza.
+- Non modificare il codice durante la review: solo dopo il report e se l'utente accetta (vedi «Fix
+  dei finding»).
+
+## Fix dei finding
+
+Vale solo nel formato breve, cioè quando giri nella sessione dell'utente, con almeno un finding e
+un verdetto diverso da `BLOCCATO`. Da subagente o headless non chiedere e non modificare nulla:
+il triage e i fix li fa chi ti ha lanciato.
+
+Dopo il report chiedi all'utente, con il tool AskUserQuestion, se fixare i finding. Le opzioni sono
+«Fixa tutti i finding» (raccomandata) e «Non fixare». Con «Other» l'utente può indicare i numeri
+dei finding da fixare. Se rifiuta, fermati.
+
+Se accetta:
+
+- applica sul worktree di implementazione `<wt-path>` solo i finding scelti, leggendo e seguendo la
+  sezione «Fix minimi e chirurgici» di `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md`
+  (`cd` dentro e fuori `<wt-path>`, commit, push), parti dal `file:riga` e dalla direzione di fix
+  del finding, senza rifare la review;
+- prima del push rilancia i test e i linter della riga «Prove»; se falliscono, non pushare e
+  mostra l'errore;
+- se un finding non si risolve con un fix minimo, non improvvisare una soluzione più ampia:
+  lascialo aperto e scrivi il motivo in una riga.
+
+Chiudi con un report breve: una riga per fix, `file:riga` → cosa cambia; una riga per finding
+lasciato aperto, con il motivo; l'esito dei test. Non proporre il passo successivo: se fare il
+merge o lanciare `/trinity:workflow:4_review-fix-loop` lo decide l'utente.
