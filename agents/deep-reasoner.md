@@ -7,7 +7,7 @@ description: >-
 model: fable
 gpt-model: claude-gpt-6-2-sol-xhigh
 effort: xhigh
-disallowedTools: mcp__hindsight__retain, mcp__hindsight__sync_retain, mcp__hindsight__update_memory, mcp__hindsight__invalidate_memory, mcp__hindsight__delete_document
+disallowedTools: mcp__hindsight__*
 color: purple
 ---
 # deep-reasoner
