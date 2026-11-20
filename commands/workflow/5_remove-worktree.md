@@ -66,11 +66,13 @@ Poi, sul worktree e sul branch:
 git -C "<wt-path>" status --short              # deve essere vuoto
 git log --oneline <default>..<branch>            # commit NON ancora sul default (deve essere vuoto)
 git merge-base --is-ancestor <branch> <default> && echo MERGED || echo UNMERGED
-git ls-remote --heads origin <branch>            # vuoto = GitHub ha già cancellato il branch remoto
+git ls-remote --heads origin "refs/heads/<branch>"
 ```
 
 Fermati e chiedi conferma esplicita se: `status` non è vuoto, ci sono commit unici, il branch è
-UNMERGED, oppure il branch remoto esiste ancora. Non usare mai `--force`/`-D` senza quel sì.
+UNMERGED. La sola presenza del remoto non richiede conferma. Conserva lo SHA
+remoto esatto letto sopra per il passo 4 (output vuoto con successo = assente).
+Non usare `--force`/`-D` senza conferma.
 
 Prima di procedere mostra i bersagli esatti: `<wt-path>`, `<branch>` con ultimo commit, stato
 merged/unmerged, presenza del branch remoto.
@@ -145,9 +147,27 @@ git branch -d <branch>
 ```
 
 `-d` rifiuta un branch non mergiato: è la rete di sicurezza voluta. `-D` solo dopo conferma
-esplicita dell'utente. Il branch remoto, se esiste ancora ed è mergiato
-(`git merge-base --is-ancestor <branch> <default>`), si elimina solo su richiesta esplicita con
-`git push origin --delete <branch>`.
+esplicita dell'utente.
+
+Il lancio manuale dello step autorizza, senza seconda domanda, a eliminare da
+`origin` solo il branch di implementazione del worktree richiesto. Non vale
+per chiamate interne, worktree detached o directory orfane. Non eliminare mai
+il default branch. Se il branch locale non risultava mergiato, conserva il remoto.
+
+Usa lo SHA remoto rilevato nell'ispezione iniziale, senza ricalcolarlo.
+Se era assente, non fare nulla. Prima del push verifica il default corrente
+con `git ls-remote --symref origin HEAD`: deve identificare un branch diverso
+dal bersaglio e il suo SHA deve coincidere con il default aggiornato dal fetch.
+Verifica che `git merge-base --is-ancestor "<sha-remoto>" "<sha-default>"`
+riesca. Se un controllo fallisce o un dato manca, mantieni il remoto.
+Altrimenti esegui dalla root del repository:
+
+```bash
+git push --force-with-lease="refs/heads/<branch>:<sha-remoto>" \
+  origin ":refs/heads/<branch>"
+```
+
+Se il lease o il server rifiuta il push, segnala il motivo e non ritentare.
 
 ## Directory orfana (nessuna entry in `git worktree list`)
 
