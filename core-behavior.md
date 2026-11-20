@@ -26,7 +26,6 @@ Scrivi il minimo codice che risolve il problema. Niente di speculativo.
 - Nessuna astrazione per codice usato una sola volta.
 - Nessuna flessibilità o configurabilità non richiesta.
 - Nessuna gestione degli errori per scenari impossibili.
-- Scrivi codice minimale e segui un approcio pragmatico.
 
 ## Modifiche chirurgiche
 
@@ -42,7 +41,6 @@ Tocca solo ciò che devi
   comportamento che sorprende). Se il progetto o l'utente chiede commenti didascalici, segui quella
   richiesta.
 - Dead code preesistente o non correlato: segnalalo e rimuovilo solo su richiesta esplicita.
-- Ogni riga modificata deve essere riconducibile direttamente alla richiesta dell'utente.
 
 ## Esecuzione guidata dagli obiettivi
 
@@ -99,7 +97,6 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 
 ## Linguaggi e strumenti
 
-- Usa JavaScript (Bun, file `.mjs`) come default per script; vedi "Script e file temporanei".
 - Per script Bash usa sempre shebang `#!/usr/bin/env bash`.
 - Preferisci `curl` a `wget` per richieste HTTP.
 - Per Python, Node, Bun e Ruby usa sempre `mise` per installare pacchetti/runtime.
@@ -123,7 +120,6 @@ Se il server `mcp-debugger` è attivo, carica la skill `trinity:mcp-debugger` pr
 - Crea uno script temporaneo per logica articolata, branching o loop non banali, concorrenza o
   coordinamento di più subprocess.
 - Quando serve uno script non banale, usa JavaScript (`.mjs`) eseguito con Bun.
-- Non creare uno script Bun quando una pipeline shell è più corta e leggibile.
 - Non usare Bash per logica complessa solo per evitare JavaScript.
 - Il linguaggio degli script interni dell'agente non deve influenzare il linguaggio o il runtime del
   progetto su cui stai lavorando.
