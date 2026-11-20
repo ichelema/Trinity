@@ -153,5 +153,8 @@ in una riga il file, il simbolo se presente e il motivo; se non ce ne sono,
 ometti la sezione.
 
 In modalità manuale, a lavoro concluso senza errori, chiudi con
-**Prossimo passo facoltativo:** `/trinity:workflow:2_work-verify <issue-id...> <model>`,
-sostituendo gli argomenti con quelli effettivi.
+**Prossimo passo:** `/trinity:workflow:2_work-verify <issue-id...> <model>`
+(facoltativo, se vuoi provare l'app in esecuzione), poi la review:
+`/trinity:workflow:3_independent-review <issue-id...> <model>` per una review
+singola oppure `/trinity:workflow:4_review-fix-loop <issue-id...> <model>` per
+il loop. Sostituisci gli argomenti con quelli effettivi.
