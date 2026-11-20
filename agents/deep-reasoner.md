@@ -6,7 +6,7 @@ description: >-
   se il task lo chiede esplicitamente.
 model: fable
 gpt-model: claude-gpt-6-2-sol-xhigh
-effort: max
+effort: xhigh
 color: purple
 ---
 # deep-reasoner
