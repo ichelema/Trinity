@@ -130,9 +130,23 @@ completo e non suggerire il passo successivo.
 Per i fix applicati usa questa tabella Markdown, una riga per fix, senza
 numeri di riga. Se più fix condividono il commit, ripeti lo stesso SHA breve.
 
+Per i fix pushati ricava una sola volta l'URL della review Linear dal commento
+di `linear-code[bot]` sulla PR corrente:
+
+```bash
+gh api --paginate "repos/<owner>/<repo>/issues/<numero-PR>/comments" \
+  --jq '.[] | select(.user.login == "linear-code[bot]") | .body' |
+  grep -oE 'https://linear\.app/[[:alnum:]_-]+/review/[[:alnum:]_-]+' | head -1
+```
+
+Nella colonna Commit mostra lo SHA breve come link Markdown al commit su Linear:
+`[SHA-breve](URL-review/changes?commit=SHA-completo)`. Usa lo SHA completo del
+singolo fix, non l'HEAD per tutte le righe. Se manca l'URL o il fix non è stato
+pushato, mostra solo lo SHA breve senza link.
+
 | Cosa è cambiato | Commit |
 | --- | --- |
-| Descrizione della modifica | `<sha>` |
+| Descrizione della modifica | SHA breve |
 
 Ometti la tabella se non hai applicato fix. Se il codice era già pulito,
 scrivi «Nessuna semplificazione necessaria». Per ogni proposta saltata indica
