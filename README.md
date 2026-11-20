@@ -204,8 +204,7 @@ vanno nel suo `CLAUDE.md`.
 | `claude-haiku-5-5` | `CLAUDE_HAIKU.md` |
 
 I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
-`CLAUDE_GPT.md`) sono **locali**: esclusi da git (`.gitignore`), esistono solo su questa
-macchina. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.2 e Sonnet 5.5
+`CLAUDE_GPT.md`) sono versionati nel repository e valgono per tutti i progetti. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.2 e Sonnet 5.5
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
 `trinity:fast-worker` per l'implementazione già definita (tranne Sonnet, che quel lavoro lo fa da
 sé: `fast-worker` è lo stesso modello), `trinity:bulk-worker` per il lavoro ripetitivo in
