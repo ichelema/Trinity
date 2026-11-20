@@ -41,9 +41,10 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 - `soft`: non fare tu la review. Lancia il tool Agent con `subagent_type: trinity:reviewer`,
   `model: sonnet` ed `effort: xhigh`. Nel prompt digli di leggere
   `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con gli stessi
-  argomenti senza `soft` al posto di `$ARGUMENTS`. Il subagente scrive il formato completo: tu
-  riscrivilo nel formato breve (vedi «Formato del report»), senza cambiare verdetto, finding ed
-  esiti.
+  argomenti senza `soft` al posto di `$ARGUMENTS` e di usare il formato completo del report. Se
+  giri nella sessione dell'utente, riscrivi il suo report nel formato breve (vedi «Formato del
+  report»), senza cambiare verdetto, finding ed esiti; se giri headless, mostralo senza
+  cambiarlo.
 
 ## Localizzazione del codice da recensire
 
@@ -158,7 +159,7 @@ Determina quali commit e modifiche appartengono alle issue usando, nell'ordine:
 Non assumere automaticamente che `main`, `master`, `HEAD~1` o l'intero working tree rappresentino il
 confronto corretto.
 
-Nel report indica:
+Nel formato completo del report indica:
 
 - branch e commit esaminati;
 - baseline utilizzata;
@@ -297,7 +298,8 @@ Controlla:
 
 Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevante, sempre senza
 `cd`: `mise -C "<rev-path>" run <task>` o comandi con path assoluti sotto `<rev-path>`. Non
-modificare snapshot o fixture. Riporta esattamente i comandi eseguiti e il relativo esito.
+modificare snapshot o fixture. Nel formato completo riporta esattamente i comandi eseguiti e il
+relativo esito; nel formato breve basta la riga «Prove».
 
 Per ogni test mancante importante, descrivi il caso da aggiungere e il risultato atteso, ma non
 scrivere né modificare il test.
@@ -398,8 +400,8 @@ Il formato dipende da chi legge il report:
 - **breve**: giri nella sessione dell'utente. Il report lo legge una persona, che deve capire in
   pochi secondi cosa fare.
 
-In modo `soft` il subagente scrive il formato completo e la sessione principale lo riscrive nel
-formato breve.
+In modo `soft` il subagente scrive il formato completo. La sessione principale lo riscrive nel
+formato breve solo se è la sessione dell'utente.
 
 ### Verdetto
 
@@ -416,7 +418,8 @@ Aggiungi una motivazione sintetica e concreta.
 
 ### Formato breve
 
-Al massimo 15 righe, più la tabella dei finding. In quest'ordine:
+Resta entro circa 15 righe di testo: la tabella dei finding e i blocchi di codice non contano. In
+quest'ordine:
 
 1. Il verdetto in grassetto e una frase con il motivo principale.
 2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo. Metti

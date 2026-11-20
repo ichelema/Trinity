@@ -284,11 +284,10 @@ tutti gli effetti.
 
 ## Non fare il merge
 
-Fermati qui. Il passo successivo è la review, a scelta dell'utente:
-`/trinity:workflow:3_independent-review <issue-id...> <model> [hard|soft]`
-(una review: `hard` è il default, `soft` la delega a un modello più leggero),
-oppure `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`
-(due review in parallelo e fix in loop). Il merge resta all'utente.
+Fermati qui. Il passo successivo è `/trinity:workflow:2_work-simplify <issue-id...> <model>`: ogni
+command della catena indica il proprio passo successivo, fino alla review
+(`/trinity:workflow:3_independent-review` oppure `/trinity:workflow:4_review-fix-loop`). Il merge
+resta all'utente.
 
 In modo `auto` non ti fermi qui: dopo la «Verifica finale» prosegui con «Modo auto».
 Il merge resta comunque all'utente.

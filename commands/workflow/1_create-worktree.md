@@ -170,7 +170,8 @@ Nel nuovo worktree verifica che:
 - `HEAD` corrisponda allo SHA del branch sorgente;
 - `git status --short` non produca output.
 
-Se un comando fallisce, fermati. Non eseguire cleanup o operazioni distruttive automaticamente.
+Se un comando fallisce o un controllo non dà il risultato atteso, fermati e mostra il valore letto.
+Non eseguire cleanup o operazioni distruttive automaticamente.
 
 Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i valori effettivi:
 

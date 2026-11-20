@@ -76,8 +76,8 @@ Per ogni round:
    `/...` nel prompt di un subagente non viene espanso. Ogni reviewer scrive i file di appoggio solo
    in `<review-wt-path>/.review-tmp/`, mai altrove.
    - review `fable`: tool Agent con `subagent_type: trinity:reviewer`; nel prompt digli di leggere
-     `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con quegli
-     argomenti al posto di `$ARGUMENTS`;
+     `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md`, di seguirlo con quegli
+     argomenti al posto di `$ARGUMENTS` e di usare il formato completo del report;
    - review `gpt`: tool Agent con `subagent_type: gpt-bridge:reviewer`, stesso prompt della review
      `fable`. Il subagente gira su GPT via proxy LiteLLM con tool e permessi nativi, e compare nel
      pannello degli agenti come l'altro.
@@ -195,8 +195,8 @@ Accanto a ogni finding fixato o aperto scrivi l'esito del verify, `CONFIRMED` o 
 
 ## Report finale
 
-Il report lo legge una persona, che deve capire in pochi secondi cosa fare. Al massimo 15 righe,
-in quest'ordine:
+Il report lo legge una persona, che deve capire in pochi secondi cosa fare. Resta entro circa 15
+righe di testo, blocchi di codice esclusi. In quest'ordine:
 
 1. Il verdetto in grassetto, `PRONTA PER IL MERGE` oppure `NON PRONTA`, e una frase con il
    motivo.

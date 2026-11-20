@@ -37,9 +37,9 @@ leggere la lista.
 
 - Non usare `AskUserQuestion` e non chiudere il turno per aspettare una risposta.
 - Quando uno step dice di chiedere, scegli l'opzione più prudente e dentro lo scope della issue,
-  annotala in «Decisioni prese in autonomia» con il motivo e prosegui.
-- Dubbi, specifiche ambigue, problemi non risolti e finding non fixati non fermano il ciclo: vanno
-  in «Questioni aperte» nel report finale.
+  annotala come `[decisione]` con il motivo e prosegui.
+- Dubbi, specifiche ambigue, problemi non risolti e finding non fixati non fermano il ciclo:
+  annotali come `[questione]`.
 
 Interrompi il ciclo della issue corrente solo in questi casi gravi:
 
@@ -88,9 +88,18 @@ issue corrente:
 - [decisione] step <N>: <scelta> — <motivo>
 - [questione] step <N>: <problema> (<file>:<riga> se disponibile)
 - [interruzione] step <N>: <motivo> — riprendi con <comando>
+- [fallito] step <N>: <operazione> — completa con <comando>
 - [esito] PR <url>, semplificazione <n> fix, verifica <verdetto>, review <round> round, <n> fix,
-  residui <elenco>
+  residui <severità e destinazione di ognuno>
 ```
+
+Il tag decide dove la voce finisce nel report finale:
+
+- `[decisione]`: una scelta presa al posto dell'utente che non blocca il merge. Finisce in «Da
+  sapere», solo se l'utente può volerla cambiare.
+- `[questione]`: un problema che l'utente deve guardare prima del merge. Rende la issue ⚠ e
+  finisce in «Cosa fai ora».
+- `[interruzione]` e `[fallito]`: finiscono in «Cosa fai ora» con il loro comando.
 
 Aggiungi sempre in append (`cat >> "$log" <<'EOF' … EOF`), mai riscrivendo il file. Dopo una
 compattazione della conversazione, rileggi il registro per sapere a quale issue e a quale step sei
@@ -112,9 +121,9 @@ fermati.
 
 `<model>` non sceglie il modello di esecuzione: come negli step, è l'etichetta del worktree e del
 branch. L'implementazione la fa questa sessione. Se il modello della sessione non corrisponde a
-`<model>`, prosegui e annotalo.
+`<model>`, prosegui e annotalo come `[decisione]`.
 
-Se la sessione gira su Fable, annota che la review Fable gira sullo stesso modello che ha scritto
+Se la sessione gira su Fable, annota come `[decisione]` che la review Fable gira sullo stesso modello che ha scritto
 il codice ed è meno indipendente: conta il modello della sessione, non `<model>`. In `loop` questo
 controllo sostituisce quello su `<model>` di `4_review-fix-loop.md`.
 
@@ -127,7 +136,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/health/liveliness  
 ```
 
 Se la risposta non è `200`, prosegui con la sola review Fable: in ogni round dello step 4 crea solo
-il worktree `review+<base-name>-fable`. Annotalo in «Questioni aperte». Ripeti il controllo
+il worktree `review+<base-name>-fable`. Annotalo come `[decisione]`. Ripeti il controllo
 all'inizio della review di ogni issue: il proxy può partire o fermarsi durante il ciclo.
 
 ## Ciclo per issue
@@ -150,7 +159,8 @@ dalla root.
 ### Step 1 — worktree
 
 Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/1_create-worktree.md` con
-`<source-branch> <issue-id> <model>`. Se il prefisso è ambiguo, usa `improvments` e annotalo.
+`<source-branch> <issue-id> <model>`. Se il prefisso è ambiguo, usa `improvments` e annotalo come
+`[decisione]`.
 Mostra la tabella finale senza la riga «Prossimo passo».
 
 ### Step 2 — implementazione e PR
@@ -160,10 +170,11 @@ Con le regole senza presidio:
 
 - mostra il piano e prosegui senza attendere l'ok;
 - se la issue è bloccata da issue non completate, implementa solo la parte che non dipende dal
-  blocco e annota il resto;
-- se le specifiche sono contrastanti, scegli l'interpretazione più conservativa e annotala;
+  blocco e annota il resto come `[questione]`;
+- se le specifiche sono contrastanti, scegli l'interpretazione più conservativa e annotala come
+  `[decisione]`;
 - se i test falliscono e non riesci a correggerli dentro lo scope, apri comunque la PR, dichiaralo
-  nella descrizione e annotalo.
+  nella descrizione e annotalo come `[questione]`.
 
 Della sezione «Non fare il merge» vale tutto tranne «in una sessione nuova»: si prosegue da qui
 con gli step 2b e 2c, poi con la review in un contesto separato. Mostra la tabella finale senza la
@@ -172,14 +183,15 @@ riga «Prossimo passo».
 ### Step 2b — semplificazione
 
 Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/2_work-simplify.md` con
-`<issue-id> <model>`. Se i test sono rossi già prima di iniziare, salta lo step e annotalo: non è
-un'interruzione.
+`<issue-id> <model>`. Se i test sono rossi già prima di iniziare, salta lo step e annotalo come
+`[questione]`: non è un'interruzione.
 
 ### Step 2c — verifica
 
 Leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/2_work-verify.md` con `<issue-id> <model>`.
-Non salvare la ricetta: lasciala nel report e annotala. Con `BLOCKED` o `SKIP` annota il verdetto e
-prosegui; con `FAIL` interrompi il ciclo della issue (caso grave 5).
+Non salvare la ricetta: lasciala nel report e annotala come `[decisione]`. Con `BLOCKED` annota il
+verdetto come `[questione]` e prosegui: l'app non è stata provata. Con `SKIP` il verdetto va solo
+nella riga `[esito]`. Con `FAIL` interrompi il ciclo della issue (caso grave 5).
 
 ### Step 3 o 4 — review
 
@@ -187,16 +199,17 @@ Non fare tu la review: hai scritto il codice, e il reviewer deve partire da un c
 
 - `review`: tool Agent con `subagent_type: trinity:reviewer`. Nel prompt digli di leggere
   `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con
-  `<issue-id> <model>` al posto di `$ARGUMENTS`. Il subagente crea e rimuove da sé il worktree di
+  `<issue-id> <model>` al posto di `$ARGUMENTS`, con il formato completo del report. Il subagente
+  crea e rimuove da sé il worktree di
   review. Sui finding del report applica le sezioni «Triage dei finding» e «Fix minimi e
   chirurgici» di `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md`. Un solo round:
   dopo i fix non lanciare una nuova review.
 - `loop`: leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md` con
-  `<issue-id> <model>`. Un finding che non si risolve con un fix minimo va in «Questioni aperte»,
-  non in una domanda.
+  `<issue-id> <model>`. Un finding che non si risolve con un fix minimo va annotato come
+  `[questione]`, non in una domanda.
 
 Se un reviewer restituisce il verdetto `BLOCCATO: INFORMAZIONI INSUFFICIENTI`, quella review non
-è avvenuta: non applicare fix sul suo report e annota in «Questioni aperte» cosa manca.
+è avvenuta: non applicare fix sul suo report e annota come `[questione]` cosa manca.
 
 ### Step 5 — pulizia dei worktree di review
 
@@ -208,7 +221,7 @@ Controlla con `git worktree list --porcelain` che non resti nessun worktree
 `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` con `$worktree_name` = quel nome.
 La cartella `<review-path>/.review-tmp/` è materiale di appoggio del reviewer: cancellala prima
 della rimozione, come fa lo step 3. Se lo step 5 trova altri file non tracciati o modifiche, non
-rimuovere nulla e annotalo; mai `--force`.
+rimuovere nulla e annotalo come `[fallito]`; mai `--force`.
 
 ### Commento su Linear
 
@@ -217,7 +230,8 @@ progetto Linear, con
 `linear.py`, costruito dalle righe del registro sotto `## <issue-id>`: link della PR (se esiste),
 esito di semplificazione, verifica e review, decisioni prese in autonomia, questioni aperte e, se
 il ciclo è interrotto, lo step raggiunto e il motivo. Chiudi con
-`Non mergiato: il merge resta all'utente.` oppure `Not merged: merge is left to the user.`
+`Non mergiato: il merge resta all'utente.` oppure `Not merged: merge is left to the user.` Se la
+pubblicazione fallisce, annotala come `[fallito]` con il comando che la ripete.
 
 Regole Linear valide per tutto il ciclo:
 
@@ -233,26 +247,26 @@ solo esiti e azioni, il resto resta nel registro. In quest'ordine:
 
 1. **Una riga per issue**, con simbolo, issue, esito e PR:
    - `✓ ICH-325 pronta per il merge — PR #12 (2 fix dalla review)`
-   - `⚠ ICH-326 serve una tua decisione — <la domanda in una frase>`
+   - `⚠ ICH-326 da guardare prima del merge — PR #13 — <la questione in una frase>`
    - `✗ ICH-327 interrotta allo step 2c — <motivo in una frase>`
 
-   `✓` vale quando la issue non ha questioni aperte. `⚠` vale quando ha almeno una questione
-   aperta o un finding residuo. `✗` vale quando il ciclo è interrotto. Le issue escluse dallo
-   scope vanno in una sola riga: `Escluse: <issue-id> (<motivo>)`.
+   `✓` vale quando la issue non ha righe `[questione]`. `⚠` vale quando ne ha almeno una. `✗`
+   vale quando il ciclo è interrotto. Le issue escluse dallo scope vanno in una sola riga:
+   `Escluse: <issue-id> (<motivo>)`.
 2. **Cosa fai ora**: le azioni numerate, nell'ordine in cui farle:
-   - per ogni issue `✓`, i comandi in un blocco:
+   - per ogni issue `⚠`, prima le sue righe `[questione]`, come decisione o azione, con
+     `file:riga` quando disponibili;
+   - per ogni PR senza `BLOCKER` o `HIGH` aperti (riga `[esito]`), sia `✓` sia `⚠`, i comandi in
+     un blocco:
      ```bash
      gh pr merge "<branch>" --merge
      ```
      poi `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`;
-   - per ogni issue `⚠`, ogni questione aperta del registro come decisione o azione, con
-     `file:riga` quando disponibili;
-   - per ogni issue `✗`, il comando per riprendere;
-   - ogni operazione fallita (worktree di review residuo, commento Linear non pubblicato), con il
-     comando che la completa.
-3. **Da sapere**: solo le decisioni prese in autonomia che l'utente può voler cambiare (per
-   esempio un'interpretazione della specifica, una parte non implementata, la review su un solo
-   modello). Una riga ciascuna. Ometti la sezione se è vuota.
+   - per ogni issue `✗`, il comando della riga `[interruzione]`;
+   - per ogni riga `[fallito]`, il comando che completa l'operazione.
+3. **Da sapere**: solo le righe `[decisione]` che l'utente può voler cambiare (per esempio
+   un'interpretazione della specifica o la review su un solo modello). Una riga ciascuna. Ometti
+   la sezione se è vuota.
 4. In fondo, una riga con il path del registro: `Dettagli: <path>`.
 
 Non scrivere branch, numero di round, worktree rimossi, esito della semplificazione o commenti
