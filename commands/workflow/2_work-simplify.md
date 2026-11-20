@@ -122,15 +122,23 @@ l'output completo.
 
 ## Report finale
 
-Report sintetico, solo informazioni rilevanti:
+Apri con gli ID delle issue, il numero di fix e l'esito effettivo del push.
+Indica i comandi di test e il loro esito prima e dopo. Se i test finali
+falliscono, apri con **Push non eseguito: test falliti**, mostra l'output
+completo e non suggerire il passo successivo.
 
-- perimetro: base, intervallo di commit e numero di file del diff;
-- fix applicati: finding → fix, con angolo, `file:riga` e commit;
-- finding saltati, con il motivo in una riga;
-- test: comandi ed esito, prima e dopo;
-- push: sì o no;
-- prossimo passo: `/trinity:workflow:2_work-verify <issue-id...> <model>` (facoltativo), poi
-  `/trinity:workflow:3_independent-review <issue-id...> <model>` oppure
-  `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`.
+Per i fix applicati usa questa tabella Markdown, una riga per fix, senza
+numeri di riga. Se più fix condividono il commit, ripeti lo stesso SHA breve.
 
-Se il codice era già pulito, dillo in una riga.
+| Cosa è cambiato | Commit |
+| --- | --- |
+| Descrizione della modifica | `<sha>` |
+
+Ometti la tabella se non hai applicato fix. Se il codice era già pulito,
+scrivi «Nessuna semplificazione necessaria». Per ogni proposta saltata indica
+in una riga il file, il simbolo se presente e il motivo; se non ce ne sono,
+ometti la sezione.
+
+In modalità manuale, a lavoro concluso senza errori, chiudi con
+**Prossimo passo facoltativo:** `/trinity:workflow:2_work-verify <issue-id...> <model>`,
+sostituendo gli argomenti con quelli effettivi.
