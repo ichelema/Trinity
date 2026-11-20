@@ -164,7 +164,8 @@ sulla sua sessione invece di aprirne una nuova.
 - Minimizza l'output shell: sopprimi stdout/stderr quando non serve, preferisci flag quiet (`-q`,
   `--quiet`), filtra l'output dei comandi verbosi con `tail`/`head`/`grep` in pipeline, e non
   riportare mai output voluminosi di build/test/install se non servono alla diagnosi. Per cercare
-  dentro i file usa i tool Grep e Glob, non `grep`/`find` in Bash.
+  nei file usa `grep` e `find` in Bash: in questa build sostituiscono i tool Grep e Glob (sono
+  `ugrep` e `bfs` integrati in Claude Code).
 
 - Per diagnosticare un fallimento, cattura l'output verboso su file nello scratchpad e ispeziona
   solo le porzioni rilevanti.
