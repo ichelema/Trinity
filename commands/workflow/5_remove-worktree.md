@@ -90,8 +90,21 @@ git -C "<repo-root>" merge-base --is-ancestor <branch> <default> && echo MERGED 
 git -C "<repo-root>" ls-remote --heads origin "refs/heads/<branch>"
 ```
 
-Fermati e chiedi conferma esplicita se: ci sono file ignorati da salvare o scartare,
-`status` non è vuoto, ci sono commit unici, il branch è
+`git worktree remove` cancella i file ignorati anche senza `--force`. Scarta senza chiedere quelli
+rigenerabili:
+
+- cache di editor e tool (`.ruby-lsp/`, `.idea/`, `.vscode/`, `__pycache__/`, `.pytest_cache/`);
+- dipendenze (`node_modules/`, `vendor/bundle/`, `.venv/`);
+- output di build (`dist/`, `build/`, `target/`, `coverage/`);
+- lockfile ignorati di proposito (`Gemfile.lock`, `package-lock.json`, `bun.lock` e simili);
+- log e file temporanei (`*.log`, `tmp/`).
+
+Elencali nel report finale. Ogni altro file ignorato può essere dell'utente e non rigenerarsi (es.
+`.env*`, chiavi o credenziali, `.claude/settings.local.json`, `*.db`, `*.sqlite`, note): nel dubbio
+trattalo così.
+
+Fermati e chiedi conferma esplicita se: ci sono file ignorati non rigenerabili da salvare o
+scartare, `status` non è vuoto, ci sono commit unici, il branch è
 UNMERGED. La sola presenza del remoto non richiede conferma. Conserva lo SHA
 remoto esatto letto sopra per il passo 4 (output vuoto con successo = assente).
 Non usare `--force`/`-D` senza conferma.
@@ -256,6 +269,7 @@ Aggiungi queste righe solo quando pertinenti:
 - `Branch locale`: `<branch>` mantenuto, con il motivo;
 - `Branch remoto`: ancora presente e mantenuto;
 - `Default branch`: fast-forward saltato o fallito, con il motivo;
+- `File ignorati scartati`: i file rigenerabili rimossi senza conferma;
 - `Worktree residui`: solo quelli di review della stessa operazione che
   avrebbero dovuto essere rimossi, identificati dal percorso esatto;
 - `Chiusura del lavoro`: solo per un worktree di implementazione rimosso. Indica
