@@ -150,7 +150,8 @@ sulla sua sessione invece di aprirne una nuova.
 - Non usare Bash per logica complessa solo per evitare JavaScript.
 - Il linguaggio degli script interni dell'agente non deve influenzare il linguaggio o il runtime del
   progetto su cui stai lavorando.
-- Usa esclusivamente una sottocartella temporanea dentro `$HOME/.claude/tmp`.
+- Usa solo `$HOME/.claude/tmp`: per i file della sessione lo scratchpad indicato dal prompt di
+  sistema, che sta lì dentro; per backup e file da conservare una sottocartella.
 - Lo script deve produrre log espliciti e leggibili: avvio, checkpoint delle fasi, risultati
   rilevanti, errori contestualizzati, esito finale (`PASS`/`FAIL`) ed exit code.
 - Salva stdout e stderr in un log; dopo l'esecuzione leggi il log e rendi visibili nella sessione le
