@@ -137,7 +137,8 @@ modifica, scegliendo quelli che la modifica suggerisce:
 - stato e persistenza: due volte di seguito, con stato vecchio sotto, in due sessioni insieme;
 - dintorni: cosa c'è vicino, cosa ti è sembrato strano mentre confermavi.
 
-Fai almeno una prova. Anche una prova che regge è un passo da riportare.
+Se la superficie è raggiungibile, fai almeno una prova ai bordi.
+Riportala anche se il comportamento osservato è corretto.
 
 ## 6. Cattura e pulizia
 
@@ -150,29 +151,28 @@ e controlla che `git -C "<wt-path>" status --short` sia vuoto. Poi esci dal work
 
 ## Report finale
 
-```
-## Verifica: <in una riga, cosa cambia>
+Apri con il verdetto in grassetto e una frase:
 
-**Verdetto:** PASS | FAIL | BLOCKED | SKIP
-**Dichiarazione:** <cosa deve fare la modifica, dal diff e dalla PR; eventuali discrepanze>
-**Metodo:** <skill usata o avvio da zero; cosa hai avviato>
+- `PASS` — quale comportamento hai verificato sull'app in esecuzione.
+- `FAIL` — cosa ti aspettavi e cosa è successo invece.
+- `BLOCKED` — dove ti sei fermato e cosa serve per riprovare.
+- `SKIP` — perché non c'è una superficie da eseguire. Basta questa riga.
 
-### Passi
-1. ✅/❌/⚠️/🔍 <cosa hai fatto all'app in esecuzione> → <cosa hai osservato>
-   <prova: output dell'app, risposta, contenuto del pannello, screenshot>
+Se hai provato l'app, indica brevemente il metodo (skill o avvio da zero).
+Usa la tabella solo per prove realmente eseguite, una riga per prova:
 
-### Osservazioni
-<attriti, sorprese, errori poco chiari, discrepanze tra PR e diff, guasti preesistenti; in testa,
-con ⚠️, quelle per cui vale la pena interrompere chi legge; una riga per ogni prova 🔍, anche se
-ha retto>
+| Prova | Risultato osservato |
+| --- | --- |
+| Azione o input concreto | Output, risposta o comportamento osservato |
 
-### Ricetta
-<solo se hai avviato l'app senza skill di progetto: comandi di build e avvio, flussi, trappole>
-```
+Includi i casi limite nella tabella, senza ripeterli nelle osservazioni.
+Build, installazione, checkout, test e typecheck non sono prove dell'app.
+Riporta le evidenze utili; se una cattura non entra in cella, mostrala sotto
+la tabella anziché dare solo un path locale.
 
-Build, installazione e checkout sono preparazione, non passi; test e typecheck non stanno nei
-passi. 🔍 segna una prova ai bordi: almeno una. Metti nel report le prove che contano (pannelli
-catturati, risposte): un path da solo serve solo se chi legge vede il tuo filesystem.
+Aggiungi **Osservazioni** solo per informazioni nuove e rilevanti. Includi
+la **Ricetta** solo se hai avviato l'app senza skill di progetto: comandi di
+build e avvio, flussi provati e trappole da evitare.
 
 Verdetti:
 
