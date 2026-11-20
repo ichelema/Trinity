@@ -56,6 +56,19 @@ query { teams(filter: { name: { eq: "Ichelema" } }) { nodes { id key name } } }
 
 Cache the returned `id` for the rest of the session. Only override when the user explicitly names a different team.
 
+## Skill mattpocock e triage
+
+Se una skill mattpocock (`to-spec`, `to-tickets`, `triage`, `wayfinder`, `implement-spec`,
+`code-review`) chiede il tracker, usa questa skill. Ignora il suggerimento di lanciare
+`/setup-matt-pocock-skills`: la skill non esiste.
+
+- «Pubblica sul tracker» = crea una issue Linear.
+- Un blocco tra ticket è una relazione `blocks` (`issueRelationCreate`). Un ticket è sbloccato
+  quando ogni bloccante è in stato Done.
+- `ready-for-agent` esiste già nel team `ICH`. Le altre label di triage (`needs-triage`,
+  `needs-info`, `ready-for-human`, `wontfix`) non esistono: creale con `issueLabelCreate` solo se
+  usi `/triage`, dopo conferma.
+
 ## Reference file index — load only what you need
 
 | File | Load when the task is about… |

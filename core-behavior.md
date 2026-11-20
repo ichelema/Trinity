@@ -106,17 +106,8 @@ Usa ciò che sai su di me, i miei obiettivi, progetti, vincoli e decisioni prece
 
 ## Issue tracker
 
-Se il repo è tracciato con Linear e una skill mattpocock (`to-spec`, `to-tickets`, `triage`,
-`wayfinder`, `implement-spec`, `code-review`) chiede il tracker, usa la skill `linear` (team
-predefinito `ICH`). Ignora il suggerimento di lanciare `/setup-matt-pocock-skills`: la skill non
-esiste.
-
-- «Pubblica sul tracker» = crea una issue Linear.
-- Un blocco tra ticket è una relazione `blocks` (`issueRelationCreate`). Un ticket è sbloccato
-  quando ogni bloccante è in stato Done.
-- `ready-for-agent` esiste già nel team `ICH`. Le altre label di triage (`needs-triage`,
-  `needs-info`, `ready-for-human`, `wontfix`) non esistono: creale con `issueLabelCreate` solo se
-  usi `/triage`, dopo conferma.
+Il tracker è Linear, team `ICH`: per issue, ticket e skill che chiedono il tracker carica la skill
+`trinity:linear`.
 
 <!-- OS:linux -->
 ## Debugger
