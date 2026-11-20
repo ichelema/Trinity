@@ -92,7 +92,8 @@ Per ogni round:
    uno dei due modelli di review (`fable` o `gpt`), segnalalo: quella review gira sullo stesso
    modello che ha scritto il codice ed è meno indipendente.
 
-3. Raccogli i due report.
+3. Raccogli i due report. I reviewer girano come subagenti, quindi scrivono il formato completo
+   di `3_independent-review.md`, con le prove che servono al triage.
 4. Rimuovi i due worktree leggendo e seguendo
    `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_remove-worktree.md` (per lo stesso motivo non puoi
    invocarlo come slash command), con `$worktree_name` = `<review-wt-path>`.
@@ -194,9 +195,22 @@ Accanto a ogni finding fixato o aperto scrivi l'esito del verify, `CONFIRMED` o 
 
 ## Report finale
 
-Report sintetico, solo informazioni rilevanti:
+Il report lo legge una persona, che deve capire in pochi secondi cosa fare. Al massimo 15 righe,
+in quest'ordine:
 
-- cosa è stato fixato (finding → fix, con file e righe);
-- trade-off introdotti dai fix (se presenti);
-- finding residui e dove sono finiti (fix senza review, issue create con link, PR in draft);
-- verdetto finale: PR pronta per il merge o no.
+1. Il verdetto in grassetto, `PRONTA PER IL MERGE` oppure `NON PRONTA`, e una frase con il
+   motivo.
+2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo, con i
+   comandi in un blocco di codice con il tag del linguaggio. Con la PR pronta:
+   ```bash
+   gh pr merge "<branch>" --merge
+   ```
+   poi `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`. Con la PR non pronta: il
+   finding `BLOCKER` o `HIGH` da risolvere, con `file:riga`.
+3. **Fix**: una riga per fix, `file:riga` → cosa cambia. Ometti la sezione se non ci sono fix.
+4. **Aperti**: una riga per finding residuo, con la sua destinazione: issue creata (con link), PR
+   in draft o `LOW` fixato senza review. Ometti la sezione se non ci sono residui.
+5. **Trade-off**: solo se un fix ne introduce uno, una riga ciascuno.
+
+In fondo metti il link al commento sulla PR: contiene i dettagli, compresi i finding scartati.
+Non elencare round, worktree rimossi, comandi di test o finding scartati.

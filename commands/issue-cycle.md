@@ -228,17 +228,32 @@ Regole Linear valide per tutto il ciclo:
 ## Report finale
 
 Stampalo dopo l'ultima issue. Costruiscilo rileggendo il registro, non dalla memoria della
-conversazione, e indica in testa il path del registro. Sezioni, in quest'ordine:
+conversazione. Il report lo legge una persona, che deve capire in pochi secondi cosa fare: mostra
+solo esiti e azioni, il resto resta nel registro. In quest'ordine:
 
-1. **Riepilogo**: tabella markdown con una riga per issue e le colonne issue, esito del ciclo
-   (completo / interrotto allo step N), branch, PR, semplificazione (fix), verifica (verdetto),
-   review (round, finding fixati), worktree di
-   review (rimossi / residui), commento Linear (pubblicato / fallito); sotto, le issue escluse
-   dallo scope con il motivo;
-2. **Decisioni prese in autonomia**: raggruppate per issue, con la scelta e il motivo;
-3. **Questioni aperte**: raggruppate per issue, con file e righe quando disponibili;
-4. **Prossimi passi**: per ogni PR, i comandi esatti nell'ordine:
-   ```bash
-   gh pr merge "<branch>" --merge
-   ```
-   poi `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`.
+1. **Una riga per issue**, con simbolo, issue, esito e PR:
+   - `✓ ICH-325 pronta per il merge — PR #12 (2 fix dalla review)`
+   - `⚠ ICH-326 serve una tua decisione — <la domanda in una frase>`
+   - `✗ ICH-327 interrotta allo step 2c — <motivo in una frase>`
+
+   `✓` vale quando la issue non ha questioni aperte. `⚠` vale quando ha almeno una questione
+   aperta o un finding residuo. `✗` vale quando il ciclo è interrotto. Le issue escluse dallo
+   scope vanno in una sola riga: `Escluse: <issue-id> (<motivo>)`.
+2. **Cosa fai ora**: le azioni numerate, nell'ordine in cui farle:
+   - per ogni issue `✓`, i comandi in un blocco:
+     ```bash
+     gh pr merge "<branch>" --merge
+     ```
+     poi `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`;
+   - per ogni issue `⚠`, ogni questione aperta del registro come decisione o azione, con
+     `file:riga` quando disponibili;
+   - per ogni issue `✗`, il comando per riprendere;
+   - ogni operazione fallita (worktree di review residuo, commento Linear non pubblicato), con il
+     comando che la completa.
+3. **Da sapere**: solo le decisioni prese in autonomia che l'utente può voler cambiare (per
+   esempio un'interpretazione della specifica, una parte non implementata, la review su un solo
+   modello). Una riga ciascuna. Ometti la sezione se è vuota.
+4. In fondo, una riga con il path del registro: `Dettagli: <path>`.
+
+Non scrivere branch, numero di round, worktree rimossi, esito della semplificazione o commenti
+Linear pubblicati: sono nel registro e nel commento sulla issue.

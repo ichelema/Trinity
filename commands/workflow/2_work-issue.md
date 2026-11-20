@@ -352,5 +352,5 @@ domande. Da lì in poi segui `${CLAUDE_PLUGIN_ROOT}/commands/issue-cycle.md`:
 Non pubblicare il commento su Linear di `issue-cycle` e non fare mai il merge.
 
 Alla fine esci dal worktree, poi stampa la tabella di «Verifica finale» senza la riga «Prossimo
-passo», seguita dalle sezioni «Decisioni prese in autonomia», «Questioni aperte» e «Prossimi passi»
-del «Report finale» di `issue-cycle`, costruite rileggendo il registro.
+passo», seguita dalle sezioni «Cosa fai ora» e «Da sapere» e dalla riga «Dettagli» del «Report
+finale» di `issue-cycle`, costruite rileggendo il registro.

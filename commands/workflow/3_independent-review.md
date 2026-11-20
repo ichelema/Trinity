@@ -41,7 +41,9 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 - `soft`: non fare tu la review. Lancia il tool Agent con `subagent_type: trinity:reviewer`,
   `model: sonnet` ed `effort: xhigh`. Nel prompt digli di leggere
   `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con gli stessi
-  argomenti senza `soft` al posto di `$ARGUMENTS`. Poi mostra il suo report senza cambiarlo.
+  argomenti senza `soft` al posto di `$ARGUMENTS`. Il subagente scrive il formato completo: tu
+  riscrivilo nel formato breve (vedi «Formato del report»), senza cambiare verdetto, finding ed
+  esiti.
 
 ## Localizzazione del codice da recensire
 
@@ -383,9 +385,25 @@ restituire il report: leggi e segui `${CLAUDE_PLUGIN_ROOT}/commands/workflow/5_r
 `$worktree_name` = `review+<base-name>`. Se lo ha creato `/4_review-fix-loop`, lascialo: lo
 rimuove il loop.
 
+Se la pulizia fallisce o resta in attesa di un'approvazione, non raccontare cosa è successo. Nel
+formato breve metti i comandi che la completano in «Cosa fai ora»; nel formato completo scrivi una
+riga in «Perimetro analizzato» con quei comandi.
+
 ## Formato del report
 
+Il formato dipende da chi legge il report:
+
+- **completo**: giri come subagente o in una sessione headless (`claude -p`). Il report lo legge
+  un orchestratore, che fa il triage dei finding e ha bisogno della prova di ogni esito;
+- **breve**: giri nella sessione dell'utente. Il report lo legge una persona, che deve capire in
+  pochi secondi cosa fare.
+
+In modo `soft` il subagente scrive il formato completo e la sessione principale lo riscrive nel
+formato breve.
+
 ### Verdetto
+
+Vale per tutti e due i formati.
 
 Uno tra:
 
@@ -396,7 +414,39 @@ Uno tra:
 
 Aggiungi una motivazione sintetica e concreta.
 
-### Perimetro analizzato
+### Formato breve
+
+Al massimo 15 righe, più la tabella dei finding. In quest'ordine:
+
+1. Il verdetto in grassetto e una frase con il motivo principale.
+2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo. Metti
+   ogni comando da lanciare in un blocco di codice con il tag del linguaggio. Con `APPROVABILE` e
+   nessun'altra azione, scrivi solo «Fai il merge della PR». Con finding da correggere, proponi
+   `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`. Con `BLOCCATO`, scrivi cosa deve
+   fornire l'utente.
+3. **Finding**, solo se ce ne sono: una tabella markdown con una riga per finding, ordinata per
+   severità. Colonne: `#`, severità, esito (`CONFIRMED` o `PLAUSIBLE`), `file:riga`, problema →
+   effetto in una frase, fix in una frase.
+4. **Prove**: una riga con i test e i linter eseguiti e il loro esito (es. `rspec 1057/0`,
+   `standardrb pulito`), i requisiti soddisfatti `<n>/<tot>` e il numero di candidati confutati.
+   Sotto, un requisito per riga, solo quelli non soddisfatti o non verificabili.
+5. **Non verificato**: una riga, solo con i limiti che possono cambiare la decisione. Senza
+   limiti di questo tipo, ometti la riga.
+
+Non scrivere nel formato breve:
+
+- perimetro, branch, SHA, baseline, elenco dei comandi e dei file letti;
+- i candidati `REFUTED` uno per uno e le aree senza anomalie;
+- spiegazioni sul perché qualcosa non è un difetto;
+- i passi che un altro command fa già: la chiusura del lavoro dopo il merge (note di ripresa, SHA
+  nei file di memoria), la rimozione dei worktree, la rigenerazione di file ignorati da Git;
+- la conclusione operativa: il verdetto e «Cosa fai ora» la sostituiscono.
+
+### Formato completo
+
+Usa le sezioni seguenti, in quest'ordine.
+
+#### Perimetro analizzato
 
 - issue e requisiti consultati;
 - branch, baseline e commit;
@@ -406,7 +456,7 @@ Aggiungi una motivazione sintetica e concreta.
   (subagente o tu, inline);
 - limiti dell'analisi.
 
-### Copertura dei requisiti
+#### Copertura dei requisiti
 
 Per ogni requisito di ogni issue, indica:
 
@@ -417,7 +467,7 @@ Per ogni requisito di ogni issue, indica:
 
 Associa sempre l'evidenza pertinente.
 
-### Findings
+#### Findings
 
 Ordina i problemi per severità:
 
@@ -443,21 +493,21 @@ Per ogni finding usa questa struttura:
 
 Non usare una severità se non riesci a descrivere un impatto concreto.
 
-### Test mancanti o insufficienti
+#### Test mancanti o insufficienti
 
 Elenca esclusivamente i casi che migliorerebbero materialmente la capacità di rilevare regressioni.
 
-### Rischi residui e punti da verificare
+#### Rischi residui e punti da verificare
 
 Separa chiaramente i rischi dimostrati dalle ipotesi ancora non verificabili. I sospetti senza uno
 scenario vanno qui, non tra i finding.
 
-### Aspetti verificati senza anomalie
+#### Aspetti verificati senza anomalie
 
 Elenca brevemente le aree effettivamente controllate nelle quali non hai trovato problemi. Non usare
 formule generiche. Per ogni candidato `REFUTED` basta una riga con la prova che lo confuta.
 
-### Conclusione operativa
+#### Conclusione operativa
 
 Indica:
 
@@ -473,8 +523,9 @@ Indica:
 - Non fidarti delle conclusioni, dei commenti o dei test prodotti dall'agente precedente.
 - Verifica il comportamento partendo dal codice e dai requisiti.
 - Cita sempre percorsi e numeri di riga quando disponibili.
-- Se non trovi problemi, non inventarne: spiega quali tentativi di falsificazione hai effettuato e
-  perché non hanno prodotto finding.
+- Se non trovi problemi, non inventarne. Nel formato completo spiega quali tentativi di
+  falsificazione hai effettuato e perché non hanno prodotto finding; nel formato breve basta la
+  riga «Prove».
 - Non proporre modifiche fuori dallo scope delle issue, salvo che evidenzino una regressione causata
   dal changeset.
 - Non modificare il codice in nessuna circostanza.
