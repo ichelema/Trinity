@@ -14,8 +14,13 @@ mcp-debugger exposes real language debuggers as MCP tools. Prefer it over print-
 - State mutates somewhere between two known-good points and you need to bisect.
 - The bug lives in code you can't easily edit (third-party package, compiled artifact).
 - You need ground truth about runtime types/values instead of inferring them from source.
+- A crash gives no useful message (segfault, panic, swallowed exception), above all in Rust, C/C++ and Go.
+- The state to observe is complex (nested structs, pointers, large objects) or the code is slow to rebuild.
+- The flow crosses many layers (action chains, callbacks) and you don't know where a value comes from.
 
-Do NOT reach for it when a single glance at the code or one log line would answer the question — session setup costs a few seconds and the target must be runnable.
+Do NOT reach for it when a single glance at the code or one log line would answer the question — session setup costs a few seconds and the target must be runnable. Nor for syntax or load errors (`LoadError`, missing imports), configuration, new code to write, or an error message that already names the line.
+
+If the user is debugging in Neovim and the `neovim` server is available, use its `dap_*` tools on their session instead of opening a new one.
 
 ## The golden path (launch)
 
