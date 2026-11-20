@@ -195,22 +195,27 @@ Accanto a ogni finding fixato o aperto scrivi l'esito del verify, `CONFIRMED` o 
 
 ## Report finale
 
-Il report lo legge una persona, che deve capire in pochi secondi cosa fare. Resta entro circa 15
-righe di testo, blocchi di codice esclusi. In quest'ordine:
+Apri con **PRONTA PER IL MERGE** oppure **NON PRONTA** e il motivo in una frase.
+Indica «PR in draft» solo se lo è davvero. Ometti le sezioni vuote.
 
-1. Il verdetto in grassetto, `PRONTA PER IL MERGE` oppure `NON PRONTA`, e una frase con il
-   motivo.
-2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo, con i
-   comandi in un blocco di codice con il tag del linguaggio. Con la PR pronta:
-   ```bash
-   gh pr merge "<branch>" --merge
-   ```
-   poi `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`. Con la PR non pronta: il
-   finding `BLOCKER` o `HIGH` da risolvere, con `file:riga`.
-3. **Fix**: una riga per fix, `file:riga` → cosa cambia. Ometti la sezione se non ci sono fix.
-4. **Aperti**: una riga per finding residuo, con la sua destinazione: issue creata (con link), PR
-   in draft o `LOW` fixato senza review. Ometti la sezione se non ci sono residui.
-5. **Trade-off**: solo se un fix ne introduce uno, una riga ciascuno.
+- **Da risolvere prima del merge:** per ogni `BLOCKER` o `HIGH` aperto indica
+  `file:riga`, effetto e correzione necessaria. Se manca un report atteso,
+  i controlli falliscono o un push non riesce, la PR è **NON PRONTA**:
+  indica il blocco reale e come riprendere, senza inventare un finding.
+- **Fix pubblicati:** riporta l'esito dei controlli eseguiti e usa la tabella
+  seguente solo per fix arrivati sulla PR. Per lo SHA breve usa la regola
+  dei link Linear del «Report finale» di `2_work-simplify.md`. Segna un `LOW`
+  corretto senza nuova review in questa tabella, non tra i finding aperti.
 
-In fondo metti il link al commento sulla PR: contiene i dettagli, compresi i finding scartati.
-Non elencare round, worktree rimossi, comandi di test o finding scartati.
+  | Cosa è cambiato | Commit |
+  | --- | --- |
+  | Descrizione della correzione | SHA breve |
+
+- **Rinviati:** una riga per finding rinviato, con severità, problema e link
+  alla issue Linear creata.
+- **Trade-off:** solo se introdotti da un fix.
+
+Solo con la PR pronta, suggerisci `gh pr merge "<branch>" --merge` e, dopo il
+merge, `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`.
+Chiudi con il link al commento sulla PR se pubblicato: lì restano i dettagli
+e i falsi positivi. Non elencare round o worktree rimossi.
