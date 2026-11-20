@@ -45,7 +45,9 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
   argomenti senza `soft` al posto di `$ARGUMENTS` e di usare il formato completo del report. Se
   giri nella sessione dell'utente, riscrivi il suo report nel formato breve (vedi «Formato del
   report»), senza cambiare verdetto, finding ed esiti; se giri headless, mostralo senza
-  cambiarlo.
+  cambiarlo. Prima del lancio non creare il worktree di review e non eseguire le verifiche di
+  «Localizzazione del codice da recensire»: le fa il subagente, che rimuove anche il suo worktree.
+  Ricavi `<wt-path>` e `<branch>` solo se servono per «Fix dei finding».
 
 ## Localizzazione del codice da recensire
 
@@ -141,19 +143,17 @@ issue, annota per ogni requisito l'issue di provenienza. Distingui chiaramente:
 - compatibilità attesa;
 - casi limite;
 - requisiti non sufficientemente definiti.
-- semplificazione del codice
 
 ## 2. Prima di controllare il codice
 
 Scorri questa lista in ordine. Fermati alla prima riga che corrisponde alla tua situazione.
 
 1. È davvero necessario? Se no, segnalalo.
-2. Questo repository lo contiene già? Segnala che di utilizzare la funzione di supporto.
+2. Questo repository lo contiene già? Segnala di utilizzare la funzione di supporto.
 3. La libreria standard lo fa? Segnala di usarla.
 4. La piattaforma lo fa nativamente? Segnala di usarla.
 5. Una dipendenza installata lo fa? Segnala di usarla.
-6. Si può scrivere in una sola riga? Fallo notare che si puo scrivere in una sola riga.
-7. Altrimenti, controlla che nel codice sia scritto il minimo indispensabile che funzioni.
+6. Altrimenti, controlla che nel codice sia scritto il minimo indispensabile che funzioni.
 
 Segnala come finding ogni scorciatoia su: validazione degli input che superano un confine di
 fiducia, gestione degli errori che altrimenti causerebbero perdita di dati, sicurezza, accessibilità
@@ -315,6 +315,11 @@ dentro `/4_review-fix-loop` salta la suite completa: la esegue il loop una volta
 modificare snapshot o fixture. Nel formato completo riporta esattamente i comandi eseguiti e il
 relativo esito; nel formato breve basta la riga «Prove».
 
+Il worktree di review è nuovo e può non avere le dipendenze installate (`node_modules`, `.venv`,
+gem). Non installarle: se un test non parte per una dipendenza mancante, non trattare il
+fallimento come un finding e non dedurne nulla sul codice. Scrivi quali test non hai potuto
+eseguire e perché, nei limiti del «Perimetro analizzato» o nella riga «Non verificato».
+
 Per ogni test mancante importante, descrivi il caso da aggiungere e il risultato atteso, ma non
 scrivere né modificare il test.
 
@@ -381,7 +386,9 @@ tutti i candidati insieme. Nel prompt metti:
 - il formato della risposta: una riga per candidato, `<n> | <esito> | <prova con file:riga>`.
 
 La risposta è valida se ha una riga per ogni candidato e ogni `REFUTED` cita `file:riga`. Se manca
-la riga di un candidato, o un `REFUTED` non ha la prova, fai tu il verify di quel candidato. Se
+la riga di un candidato, o un `REFUTED` non ha la prova, fai tu il verify di quel candidato. Fai
+tu il verify anche di ogni `REFUTED` di un candidato che, se reale, sarebbe `HIGH` o `BLOCKER`:
+controlla nel codice che la riga citata dica davvero ciò che la prova afferma. Se
 manca il tool Agent (per esempio quando giri come `trinity:reviewer` nel modo `soft`, in
 `/4_review-fix-loop` o in `/issue-cycle`) o il subagente fallisce, fai tu il verify di tutti i
 candidati. In entrambi i casi usa le stesse regole e riprendi ogni candidato da zero, come se
@@ -495,6 +502,10 @@ Ordina i problemi per severità:
 - `MEDIUM`: problema reale con impatto circoscritto;
 - `LOW`: problema minore ma tecnicamente fondato.
 
+I finding senza innesco (riuso e semplificazione della sezione 2, convenzioni, profondità del fix)
+sono `LOW`; l'impatto concreto è il costo dichiarato. Diventano `MEDIUM` solo se violano una regola
+citata con il path del suo `CLAUDE.md` o un requisito della issue.
+
 Per ogni finding usa questa struttura:
 
 1. titolo breve;
@@ -572,8 +583,8 @@ Se accetta:
   silenziosamente con `cd`;
 - applica sul worktree di implementazione `<wt-path>` solo i finding scelti, leggendo e seguendo la
   sezione «Fix minimi e chirurgici» di `${CLAUDE_PLUGIN_ROOT}/commands/workflow/4_review-fix-loop.md`,
-  **esclusivamente per le regole sui fix, test, commit e push**: non riprenderne le istruzioni
-  legacy di `cd` o la gestione autonoma dell'uscita. Parti dal `file:riga` e dalla direzione di fix
+  **esclusivamente per le regole sui fix, test, commit e push**: non riprenderne la gestione
+  autonoma dell'uscita dal worktree. Parti dal `file:riga` e dalla direzione di fix
   del finding, senza rifare la review;
 - prima del push rilancia i test e i linter della riga «Prove»; se falliscono, non pushare e
   mostra l'errore;
