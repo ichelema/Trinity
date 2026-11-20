@@ -30,6 +30,8 @@ Esamina:
 - titolo;
 - descrizione.
 
+Leggi anche commenti, stima e priorità: servono solo per la stima dell'effort.
+
 Determina il prefisso usando queste regole:
 
 - se la issue è esplicitamente un bug, usa `bug`;
@@ -173,6 +175,38 @@ Nel nuovo worktree verifica che:
 Se un comando fallisce o un controllo non dà il risultato atteso, fermati e mostra il valore letto.
 Non eseguire cleanup o operazioni distruttive automaticamente.
 
+## Stima dell'effort
+
+Dopo la verifica finale stima l'effort da impostare allo step 2: `Low`, `Medium` o `High`.
+
+Lancia `trinity:scoper` sul nuovo worktree. Nel prompt passagli titolo, descrizione, criteri di
+accettazione e commenti rilevanti delle issue, e il percorso assoluto del worktree. Chiedigli solo:
+
+- file e componenti da toccare;
+- aree critiche coinvolte (sicurezza, autenticazione, dati persistenti o migrazioni, concorrenza,
+  operazioni distruttive, API pubbliche);
+- test esistenti che coprono quel codice.
+
+Non chiedergli un piano: lo fa lo step 2.
+
+Il report è un input: decidi tu il livello valutando insieme report e issue su:
+
+- difficoltà: quanti file e componenti, quanta logica nuova;
+- impatto architetturale: interfacce, protocolli, schemi dati o comunicazione tra componenti;
+- punti critici toccati;
+- incertezza: descrizione vaga, criteri di accettazione assenti, decisioni aperte;
+- verificabilità: test mancanti o comportamento difficile da riprodurre;
+- stima e priorità già presenti su Linear, se ci sono.
+
+Regole:
+
+- un solo criterio forte (es. una migrazione di dati) basta per `High`;
+- nel dubbio tra due livelli scegli il più alto;
+- con più issue dai un solo valore, quello della issue più impegnativa.
+
+Se lo scoper fallisce non fermarti: il worktree è già pronto. Stima dal solo testo della issue e
+scrivi `(solo dalla issue)` nel motivo.
+
 Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i valori effettivi:
 
 ```
@@ -182,6 +216,8 @@ Alla fine stampa esclusivamente questa tabella, sostituendo i segnaposto con i v
 │ Issue Linear           │ <issue-id> — <titolo-issue> (una riga per issue)        │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Branch                 │ <branch> (da origin/<source-branch>)                     │
+├────────────────────────┼──────────────────────────────────────────────────────────┤
+│ Effort                 │ <Low|Medium|High> — <motivo in poche parole>             │
 ├────────────────────────┼──────────────────────────────────────────────────────────┤
 │ Prossimo passo         │ /trinity:workflow:2_work-issue <issue-id...> <model>    │
 └────────────────────────┴──────────────────────────────────────────────────────────┘
