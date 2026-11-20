@@ -7,7 +7,7 @@ description: >-
 model: fable
 gpt-model: claude-gpt-6-2-sol-high
 effort: high
-tools: Read, Grep, Glob, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs
+tools: Read, Grep, Glob, Bash, Skill, mcp__context7__resolve-library-id, mcp__context7__query-docs
 color: red
 ---
 # reviewer
