@@ -190,10 +190,12 @@ Claude Code carica i `CLAUDE.md` senza guardare quale modello sta girando: nativ
 esiste un modo per dire "queste istruzioni solo con Fable". L'hook
 `hooks/bin/inject-model-behavior.sh` colma quella lacuna.
 
-**Ogni progetto può avere il suo file per modello**: basta creare nella root del progetto un
-`CLAUDE_<FAMIGLIA>.md`, e viene iniettato solo quando la sessione gira con quel modello.
+**Un solo file per modello per tutti i progetti**: l'hook legge `CLAUDE_<FAMIGLIA>.md` dalla
+root di Trinity e lo inietta solo quando la sessione gira con quel modello, in ogni progetto e
+worktree. Le copie nella root dei progetti sono ignorate; le istruzioni di un singolo progetto
+vanno nel suo `CLAUDE.md`.
 
-| Modello | File letto dalla root del progetto |
+| Modello | File letto dalla root di Trinity |
 | --- | --- |
 | `claude-fable-5-2` | `CLAUDE_FABLE.md` |
 | `claude-opus-5-5` / `opus[1m]` | `CLAUDE_OPUS.md` |

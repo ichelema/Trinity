@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# SessionStart: inietta il file di istruzioni del modello in uso, cercandolo
-# nella root del progetto corrente (CLAUDE_FABLE.md con Fable, CLAUDE_OPUS.md
-# con Opus, ecc.). Il nome è derivato dall'id del modello, non da una lista:
-# per aggiungere un modello basta creare il file.
+# SessionStart: inietta il file di istruzioni del modello in uso, preso dalla
+# root di Trinity (CLAUDE_FABLE.md con Fable, CLAUDE_OPUS.md con Opus, ecc.):
+# una sola copia per tutti i progetti e i worktree; le copie nei progetti sono
+# ignorate. Il nome è derivato dall'id del modello, non da una lista: per
+# aggiungere un modello basta creare il file.
 #
 # Il campo `model` arriva nello stdin JSON di SessionStart SOLO in sessione
 # interattiva (verificato su claude 2.1.227: i call site headless `-p` lo
@@ -26,9 +27,10 @@ FAMILY="${MODEL%%\[*}"
 FAMILY="${FAMILY#claude-}"
 FAMILY="${FAMILY%%-*}"
 
-# $PWD dell'hook è la root del progetto (verificato: coincide col campo `cwd`
-# del payload, ma già in forma POSIX anziché Windows con backslash).
-FILE="$PWD/CLAUDE_${FAMILY^^}.md"
+# Root di Trinity ricavata dal percorso dello script, come inject-core-behavior.sh.
+ROOT="${BASH_SOURCE[0]%/*}"
+[ "$ROOT" = "${BASH_SOURCE[0]}" ] && ROOT="."
+FILE="$ROOT/../../CLAUDE_${FAMILY^^}.md"
 
 [ -f "$FILE" ] || exit 0
 cat "$FILE"
