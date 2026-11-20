@@ -54,7 +54,7 @@ in `/2_work-issue` («Pull Request»).
 Dopo le verifiche entra nel worktree e, quando restituisci il controllo, escine come in
 `/2_work-issue` («Entrata e uscita dal worktree»).
 
-## 0. Perimetro e test di partenza
+## 0. Perimetro
 
 Il perimetro è il diff della PR:
 
@@ -62,10 +62,9 @@ Il perimetro è il diff della PR:
 git -C "<wt-path>" diff "origin/<base>"...HEAD
 ```
 
-Prima di toccare il codice esegui i test e i controlli rilevanti: `mise -C "<wt-path>" run <task>`
-se il progetto li definisce, altrimenti il comando di test con path assoluti sotto `<wt-path>`. Se
-sono già rossi, fermati e mostrali: senza una base verde non puoi dimostrare che le semplificazioni
-non cambiano il comportamento.
+Non rieseguire qui la suite: il punto di partenza è il giro verde di `2_work-issue`, e il
+controllo degli SHA qui sopra garantisce che HEAD coincide con la PR. La esegui una sola volta
+alla fine, prima del push. Fermati e mostralo solo se quel giro non esiste o era rosso.
 
 ## 1. Analisi: quattro angoli
 
@@ -116,14 +115,14 @@ Per ogni fix, o gruppo di fix con lo stesso motivo:
    cancella i file nuovi che ha creato e segna il finding come saltato: una semplificazione che
    rompe un test cambia il comportamento.
 
-Alla fine esegui di nuovo i test e i controlli del punto 0. Se sono verdi, esegui il push con
-`git -C "<wt-path>" push origin "<branch>"`. Se sono rossi, non fare il push: fermati e mostra
-l'output completo.
+Alla fine esegui la suite completa e i controlli rilevanti del progetto. Se sono verdi, esegui
+il push con `git -C "<wt-path>" push origin "<branch>"`. Se sono rossi, non fare il push:
+fermati e mostra l'output completo.
 
 ## Report finale
 
 Apri con gli ID delle issue, il numero di fix e l'esito effettivo del push.
-Indica i comandi di test e il loro esito prima e dopo. Se i test finali
+Indica i comandi di test e il loro esito finale. Se i test finali
 falliscono, apri con **Push non eseguito: test falliti**, mostra l'output
 completo e non suggerire il passo successivo.
 

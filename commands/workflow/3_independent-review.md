@@ -299,7 +299,8 @@ Controlla:
 - se esistono percorsi produttivi non coperti.
 
 Esegui prima i test mirati e poi, solo se ragionevole e sicuro, la suite rilevante, sempre senza
-`cd`: `mise -C "<rev-path>" run <task>` o comandi con path assoluti sotto `<rev-path>`. Non
+`cd`: `mise -C "<rev-path>" run <task>` o comandi con path assoluti sotto `<rev-path>`. Se giri
+dentro `/4_review-fix-loop` salta la suite completa: la esegue il loop una volta per round. Non
 modificare snapshot o fixture. Nel formato completo riporta esattamente i comandi eseguiti e il
 relativo esito; nel formato breve basta la riga «Prove».
 

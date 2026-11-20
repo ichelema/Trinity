@@ -82,6 +82,9 @@ Per ogni round:
      `fable`. Il subagente gira su GPT via proxy LiteLLM con tool e permessi nativi, e compare nel
      pannello degli agenti come l'altro.
 
+   Nei prompt chiedi solo i test mirati a riprodurre i candidati, non la suite completa:
+   quella la esegue il coordinatore, una volta per round, prima dei fix.
+
    Dal secondo round aggiungi a entrambi i prompt la lista degli scarti dei round precedenti (vedi
    «Triage dei finding»), uno per riga con file, simbolo o snippet e motivo, e questa istruzione:
    «Se un tuo candidato coincide con uno di questi scarti, controlla il motivo nel codice attuale:
@@ -128,6 +131,8 @@ Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 
 - prima del primo fix entra con un comando a sé, `cd "<wt-path>"`; dopo il push, o se ti fermi
   prima, esci con `cd "<repo-root>"`: lo step 5 non può cancellare la cwd della sessione;
+- esegui una sola volta per round la suite completa e i controlli rilevanti, prima di applicare
+  i fix: se sono rossi non fixare, non pushare e segnala il blocco;
 - comandi sempre con `git -C "<wt-path>"`, `mise -C "<wt-path>"` e path assoluti;
 - la minima modifica che risolve il difetto;
 - nessun refactoring, nessuna riscrittura, nessun cambio di architettura;
