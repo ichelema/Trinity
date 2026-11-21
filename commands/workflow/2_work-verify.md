@@ -92,8 +92,9 @@ git -C "<wt-path>" log --oneline "origin/<base>"..HEAD
 git -C "<wt-path>" diff "origin/<base>"...HEAD --stat
 ```
 
-Indica quanti commit contiene la PR. Il diff è la verità; la descrizione della PR è una
-dichiarazione sul diff. Leggili entrambi: se non coincidono, è un'osservazione da riportare.
+Guarda quanti commit contiene la PR. Il diff è la verità; la descrizione della PR è una
+dichiarazione sul diff. Leggili entrambi: se non coincidono in modo sostanziale, è un problema da
+riportare nella tabella.
 
 ## 2. Superficie
 
@@ -160,13 +161,13 @@ modifica, scegliendo quelli che la modifica suggerisce:
 - dintorni: cosa c'è vicino, cosa ti è sembrato strano mentre confermavi.
 
 Se la superficie è raggiungibile, fai almeno una prova ai bordi.
-Riportala anche se il comportamento osservato è corretto.
+Contala nel report anche se il comportamento osservato è corretto.
 
 ## 6. Cattura e pulizia
 
 Cattura output, risposte, screenshot e contenuto del pannello: la prova è la cattura, non la
 memoria. Un comportamento inatteso non si aggira: catturalo e decidi se dipende dalla modifica o
-dall'ambiente. Un guasto non collegato alla modifica è comunque un'osservazione.
+dall'ambiente. Un guasto non collegato alla modifica entra nei Problemi solo se è `CRITICO`.
 
 Alla fine ferma i processi che hai avviato (server, sessioni tmux), cancella le cartelle temporanee
 e controlla che `git -C "<wt-path>" status --short` sia vuoto. Non uscire ancora: potrebbe essere
@@ -175,28 +176,49 @@ aver concluso anche quell'eventuale operazione.
 
 ## Report finale
 
-Apri con il verdetto in grassetto e una frase:
+Il report lo legge una persona che deve capire in pochi secondi se la modifica funziona e cosa
+fare. Mostra solo ciò che non va: le prove riuscite si contano, non si elencano.
+
+**Prima riga**: il verdetto in grassetto e una frase. Niente prima del verdetto, né il metodo né
+la skill usata.
 
 - `PASS` — quale comportamento hai verificato sull'app in esecuzione.
-- `FAIL` — cosa ti aspettavi e cosa è successo invece.
+- `FAIL` — il problema più grave: cosa ti aspettavi e cosa è successo invece.
 - `BLOCKED` — dove ti sei fermato e cosa serve per riprovare.
 - `SKIP` — perché non c'è una superficie da eseguire. Basta questa riga.
 
-Se hai provato l'app, indica brevemente il metodo (skill o avvio da zero).
-Usa la tabella solo per prove realmente eseguite, una riga per prova:
+**Seconda riga**, se hai provato l'app: `<n> prove, <k> ok, <m> con problemi` e il metodo in poche
+parole (skill di progetto o avvio da zero). Build, installazione, checkout, test e typecheck non
+sono prove dell'app e non entrano nel conteggio.
 
-| Prova | Risultato osservato |
-| --- | --- |
-| Azione o input concreto | Output, risposta o comportamento osservato |
+**Problemi**, solo con `FAIL`: una riga per prova con un problema, prima i `CRITICO`.
 
-Includi i casi limite nella tabella, senza ripeterli nelle osservazioni.
-Build, installazione, checkout, test e typecheck non sono prove dell'app.
-Riporta le evidenze utili; se una cattura non entra in cella, mostrala sotto
-la tabella anziché dare solo un path locale.
+| # | Gravità | Problema | Prova |
+| --- | --- | --- | --- |
+| 1 | `CRITICO` | Cosa non va, in una frase | Azione → risultato osservato, in breve |
 
-Aggiungi **Osservazioni** solo per informazioni nuove e rilevanti. Includi
-la **Ricetta** solo se hai avviato l'app senza skill di progetto: comandi di
-build e avvio, flussi provati e trappole da evitare.
+- `CRITICO`: la dichiarazione principale della issue non è rispettata, oppure la modifica rompe
+  qualcosa che prima funzionava, causa un crash, una perdita di dati o un problema di sicurezza.
+- `FALLITO`: comportamento diverso dall'atteso senza quelle conseguenze. Un difetto che c'era già
+  prima della modifica entra solo se la modifica lo tocca o lo rende più visibile: scrivi «già sul
+  branch base» nel Problema.
+
+Ogni cella sta su una riga: niente confronti lunghi, né byte, conteggi o valori che non servono a
+capire il problema. Se un problema ha bisogno della cattura grezza (per esempio un output
+ambiguo), mettila sotto la tabella in un blocco di codice, al massimo una decina di righe per
+problema, invece di dare solo un path locale.
+
+Le prove riuscite e i casi limite corretti non vanno né nella tabella né altrove: bastano nel
+conteggio della seconda riga.
+
+**Non verificato**: una riga con ciò che non hai potuto provare e il motivo (per esempio nessun
+display), solo se c'è.
+
+**Ricetta**: solo se hai avviato l'app senza skill di progetto: comandi di build e avvio, flussi
+provati e trappole da evitare.
+
+Nient'altro: niente osservazioni generiche e niente proposte di correzione con alternative tra
+cui scegliere. Questo comando osserva, non corregge.
 
 Verdetti:
 
@@ -221,6 +243,8 @@ Dopo la decisione sulla ricetta e ogni eventuale commit/push, verifica di nuovo 
 applica la sezione «Uscita dal worktree»: in esecuzione autonoma esci con `ExitWorktree` e
 `action: "keep"`; in una catena `auto` rimani nel worktree per lo step successivo.
 
-Prossimo passo: con `PASS` o `SKIP`, `/trinity:workflow:3_independent-review <issue-id...> <model>`
-oppure `/trinity:workflow:4_review-fix-loop <issue-id...> <model>`; con `FAIL`, correggi prima della
-review; con `BLOCKED`, sistema l'ambiente o la ricetta e rilancia.
+Chiudi il report con la riga **Prossimo passo**: con `PASS` o `SKIP`,
+`/trinity:workflow:3_independent-review <issue-id...> <model>` oppure
+`/trinity:workflow:4_review-fix-loop <issue-id...> <model>`; con `FAIL`, correggi prima della
+review, partendo dal problema #1; con `BLOCKED`, sistema l'ambiente o la ricetta e rilancia. Se
+devi chiedere se salvare la ricetta, la domanda è l'ultima riga, dopo il prossimo passo.
