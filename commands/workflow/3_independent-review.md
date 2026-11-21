@@ -4,8 +4,6 @@ description:
   chiede se fixare i finding
 argument-hint: <issue-id...> <model> [hard|soft] [<review-path>]
 disable-model-invocation: true
-model: fable
-effort: high
 ---
 
 Agisci come un Principal Software Engineer incaricato di eseguire una review avversaria indipendente
@@ -38,19 +36,28 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 
 ## Modo della review
 
-- `hard`: esegui la review tu, come descritto sotto.
-- `soft`: non fare tu la review. Lancia il tool Agent con `subagent_type: trinity:reviewer`,
-  `model: sonnet` ed `effort: high`. Nel prompt digli di leggere
-  `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con gli stessi
-  argomenti senza `soft` al posto di `$ARGUMENTS` e di usare il formato completo del report. Se
-  giri nella sessione dell'utente, riscrivi il suo report nel formato breve (vedi «Formato del
-  report»), senza cambiare verdetto, finding ed esiti; se giri headless, mostralo senza
-  cambiarlo. Prima del lancio non creare il worktree di review e non eseguire le verifiche di
-  «Localizzazione del codice da recensire»: le fa il subagente. La pulizia invece è tua: nel
-  prompt digli di saltare la sezione «Pulizia», perché cancellare `.review-tmp` può richiedere
-  un'approvazione che un subagente non può ottenere. Ricevuto il report, cerca il worktree
-  `review+<base-name>` con `git worktree list --porcelain` e, se esiste, applica tu la sezione
-  «Pulizia». Ricavi `<wt-path>` e `<branch>` solo se servono per «Fix dei finding».
+Se giri come subagente, la delega è già avvenuta: salta questa sezione e fai tu la review, come
+descritto sotto, qualunque sia `<mode>`. Non lanciare un altro reviewer per la review: l'unico
+subagente che puoi lanciare è quello di «Chi fa il verify». Fai tu la review anche se non hai il
+tool Agent.
+
+Nella sessione principale, anche headless, non fare tu la review: la fa un subagente che parte da
+un contesto pulito, senza la conversazione che lo ha lanciato. Il modo sceglie il suo modello:
+
+- `hard`: lancia il tool Agent con `subagent_type: trinity:reviewer`, senza `model` né `effort`:
+  valgono quelli dell'agente (Fable, effort `high`);
+- `soft`: come `hard`, ma con `model: sonnet` ed `effort: high`.
+
+Nel prompt digli di leggere `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di
+seguirlo con gli stessi argomenti senza `<mode>` al posto di `$ARGUMENTS` e di usare il formato
+completo del report. Se giri nella sessione dell'utente, riscrivi il suo report nel formato breve
+(vedi «Formato del report»), senza cambiare verdetto, finding ed esiti; se giri headless,
+mostralo senza cambiarlo. Prima del lancio non creare il worktree di review e non eseguire le
+verifiche di «Localizzazione del codice da recensire»: le fa il subagente. La pulizia invece è
+tua: nel prompt digli di saltare la sezione «Pulizia», perché cancellare `.review-tmp` può
+richiedere un'approvazione che un subagente non può ottenere. Ricevuto il report, cerca il
+worktree `review+<base-name>` con `git worktree list --porcelain` e, se esiste, applica tu la
+sezione «Pulizia». Ricavi `<wt-path>` e `<branch>` solo se servono per «Fix dei finding».
 
 ## Localizzazione del codice da recensire
 
@@ -374,10 +381,11 @@ Per decidere l'esito di ogni candidato:
 6. indica le prove disponibili nel codice o nell'output dei test.
 
 **Chi fa il verify.** Chi ha trovato un candidato tende a confermarlo. Se hai il tool Agent,
-lancialo **una sola volta**, con `subagent_type: trinity:reviewer` e `model: sonnet`, e passagli
-tutti i candidati insieme. Nel prompt metti:
+lancialo **una sola volta**, con `subagent_type: trinity:reviewer`, `model: sonnet` ed
+`effort: high`, e passagli tutti i candidati insieme. Nel prompt metti:
 
-- che il compito è solo il verify: niente nuovi problemi, niente review completa;
+- che il compito è solo il verify: niente nuovi problemi, niente review completa, nessun
+  subagente da lanciare;
 - `<rev-path>`, la baseline della sezione 3 e il comando del diff,
   `git -C "<rev-path>" diff <baseline>...HEAD`;
 - i requisiti a cui si riferiscono i candidati;
@@ -392,9 +400,8 @@ La risposta è valida se ha una riga per ogni candidato e ogni `REFUTED` cita `f
 la riga di un candidato, o un `REFUTED` non ha la prova, fai tu il verify di quel candidato. Fai
 tu il verify anche di ogni `REFUTED` di un candidato che, se reale, sarebbe `HIGH` o `BLOCKER`:
 controlla nel codice che la riga citata dica davvero ciò che la prova afferma. Se
-manca il tool Agent (per esempio quando giri come `trinity:reviewer` nel modo `soft`, in
-`/4_review-fix-loop` o in `/issue-cycle`) o il subagente fallisce, fai tu il verify di tutti i
-candidati. In entrambi i casi usa le stesse regole e riprendi ogni candidato da zero, come se
+manca il tool Agent o il subagente fallisce (per esempio perché il limite di profondità dei
+subagenti non permette un altro livello), fai tu il verify di tutti i candidati. In entrambi i casi usa le stesse regole e riprendi ogni candidato da zero, come se
 l'avesse scritto un altro.
 
 I candidati `CONFIRMED` e `PLAUSIBLE` diventano i finding del report; scarta i `REFUTED`. Non
@@ -402,9 +409,9 @@ presentare preferenze stilistiche come bug.
 
 ## Pulizia
 
-Se chi ti ha lanciato ha tenuto per sé la pulizia (modo `soft`), salta questa sezione. Se hai
-lanciato tu il subagente nel modo `soft`, applicala al suo worktree `review+<base-name>` come se
-lo avessi creato tu.
+Se chi ti ha lanciato ha tenuto per sé la pulizia (vedi «Modo della review»), salta questa
+sezione. Se hai lanciato tu il reviewer da «Modo della review», applicala al suo worktree
+`review+<base-name>` come se lo avessi creato tu.
 
 Come ultima azione prima di restituire il report cancella `<rev-path>/.review-tmp/` solo se creata da questa review:
 `git worktree remove` rifiuta un worktree con file non tracciati e `--force` è vietato.
@@ -429,7 +436,7 @@ Il formato dipende da chi legge il report:
 - **breve**: giri nella sessione dell'utente. Il report lo legge una persona, che deve capire in
   pochi secondi cosa fare.
 
-In modo `soft` il subagente scrive il formato completo. La sessione principale lo riscrive nel
+Il reviewer lanciato da «Modo della review» scrive il formato completo. La sessione principale lo riscrive nel
 formato breve solo se è la sessione dell'utente.
 
 ### Verdetto
