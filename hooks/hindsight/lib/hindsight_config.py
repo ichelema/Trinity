@@ -385,6 +385,11 @@ _REPO_CACHE: dict[str, tuple[str, str, str]] = {}
 # recall e' un processo nuovo, quindi senza questa cache il git si ripaga a OGNI
 # prompt. TTL lungo: il remote origin (da cui deriva lo slug) cambia praticamente mai.
 _REPO_CACHE_TTL = 86400
+# Un esito SENZA remote (fuori da git, o repo senza origin) invece cambia appena
+# un progetto nuovo fa `git init` e `git remote add`: tenuto 24 ore, mandava sul
+# core le memorie di quel progetto per un giorno (agentmux, 2026-11-20). Vale
+# poco, cosi' il git si rifa' al massimo una volta al minuto.
+_REPO_CACHE_TTL_NO_REMOTE = 60
 
 
 def _repo_cache_file(cwd: str) -> str:
@@ -422,21 +427,25 @@ def _git_root_and_slug(cwd: str) -> tuple[str, str, str]:
     letto qui — deriva da quella lettura, quindi non costa un git in piu' e viaggia
     sulla stessa cache (su MSYS un git subprocess costa ~1.4s: rifarlo a ogni hook
     sarebbe una regressione visibile a ogni prompt).
-    ("", "", "") fuori da un repo git (esito noto: cachato) oppure se git non
-    risponde — timeout, git assente (esito ignoto: NON cachato, si ritenta)."""
+    ("", "", "") fuori da un repo git (esito noto: cachato per
+    _REPO_CACHE_TTL_NO_REMOTE) oppure se git non risponde — timeout, git assente
+    (esito ignoto: NON cachato, si ritenta)."""
     if cwd in _REPO_CACHE:
         return _REPO_CACHE[cwd]
 
     # Cache su file persistente tra invocazioni. Vale anche il risultato "vuoto"
-    # (cwd fuori da git): evita di ri-tentare il git ogni volta. Le entry nel vecchio
-    # formato a 2 campi sollevano ValueError qui sotto -> cache miss -> riscritte.
+    # (cwd fuori da git), ma solo per _REPO_CACHE_TTL_NO_REMOTE come ogni esito senza
+    # remote. Le entry nel vecchio formato a 2 campi sollevano ValueError qui sotto
+    # -> cache miss -> riscritte.
     cache_f = _repo_cache_file(cwd)
     try:
-        if time.time() - os.path.getmtime(cache_f) < _REPO_CACHE_TTL:
+        age = time.time() - os.path.getmtime(cache_f)
+        if age < _REPO_CACHE_TTL:
             with open(cache_f, encoding="utf-8") as f:
                 root, slug, ident = json.load(f)
-            _REPO_CACHE[cwd] = (root, slug, ident)
-            return root, slug, ident
+            if ident or age < _REPO_CACHE_TTL_NO_REMOTE:
+                _REPO_CACHE[cwd] = (root, slug, ident)
+                return root, slug, ident
     except Exception:
         pass
 

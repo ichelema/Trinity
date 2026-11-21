@@ -411,6 +411,49 @@ class MultiBankConfigTests(unittest.TestCase):
         self.assertEqual(got, plug_slug)
         self.assertNotEqual(got, core)
 
+    def test_repo_cache_entry_without_remote_expires_after_short_ttl(self):
+        # Un esito senza remote (fuori da git, o repo senza origin) cambia con
+        # git init e git remote add: tenuto 24 ore, un progetto nuovo scriveva
+        # sul core per un giorno (agentmux, 2026-11-20). Un esito con remote
+        # resta in cache 24 ore. Cache seminata e git simulato: niente repo veri.
+        root = "Z:/fake-new-project"
+        remote = "https://github.com/example/newproj.git"
+        calls = []
+
+        def fake_git(args, **kwargs):
+            calls.append(args[1:])
+            if args[1:] == ["rev-parse", "--show-toplevel"]:
+                return root + "\n"
+            if args[1:] == ["config", "--get", "remote.origin.url"]:
+                return remote + "\n"
+            raise AssertionError(args)
+
+        def resolve_with_cached(entry, age):
+            hc._REPO_CACHE.pop(root, None)
+            cache_f = hc._repo_cache_file(root)
+            os.makedirs(os.path.dirname(cache_f), exist_ok=True)
+            with open(cache_f, "w", encoding="utf-8") as handle:
+                json.dump(entry, handle)
+            past = time.time() - age
+            os.utime(cache_f, (past, past))
+            calls.clear()
+            with mock.patch.object(hc.subprocess, "check_output", side_effect=fake_git):
+                got = hc._git_root_and_slug(root)
+            hc._REPO_CACHE.pop(root, None)
+            return got, len(calls)
+
+        outside = ("", "", "")
+        identity = (root, "newproj", "github.com/example/newproj")
+        # fuori da git, appena scritto: servito dalla cache, nessun git
+        self.assertEqual(resolve_with_cached(["", "", ""], 5), (outside, 0))
+        # fuori da git da due minuti: si rifa' il git e si trova il repo nuovo
+        self.assertEqual(resolve_with_cached(["", "", ""], 120), (identity, 2))
+        # repo senza origin da due minuti: si rifa' il git e si trova il remote
+        self.assertEqual(resolve_with_cached([root, "fake-new-project", ""], 120), (identity, 2))
+        # repo con origin da un'ora: servito dalla cache per 24 ore
+        cached = [root, "cached", "github.com/example/cached"]
+        self.assertEqual(resolve_with_cached(cached, 3600), (tuple(cached), 0))
+
     def test_bank_url_percent_encodes_name(self):
         cfg = hc.load_config()
         # I bank esistenti non devono cambiare URL: quote() li lascia identici,
