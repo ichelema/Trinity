@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SessionStart hook: inietta le "knowledge page" (mental model) come additionalContext
-# all'inizio della sessione, cosi' l'agente parte con il profilo utente e le convenzioni
-# di progetto gia' in contesto.
+# SessionStart hook: inietta le "knowledge page" (mental model) del bank del progetto
+# come additionalContext all'inizio della sessione, cosi' l'agente parte con il profilo
+# utente e le convenzioni di progetto gia' in contesto.
 #
 # GATED: attivo solo se mental_models_inject_on_start=true in hindsight.config.json
 # (default false). BEST-EFFORT: se il server e' giu' o le pagine non hanno ancora
@@ -42,16 +42,15 @@ if not cfg.get("mental_models_inject_on_start"):
 if cfg.get("_api_url_explicit"):
     targets = [(cfg["api_url"], cfg.get("mental_models_inject_ids") or [])]
 else:
-    core = (cfg.get("bank") or {}).get("core_bank", "trinity-project")
-    names = cfg.get("mental_model_inject_banks") or ["auto", "core"]
-
-    # Solo il core definisce mental model (ICH-104): inietta gli id CORE se uno
-    # dei bank configurati risolve al core, altrimenti niente.
+    # Bank del progetto ("auto"), che ricade sul core solo in Trinity e fuori da
+    # git: un progetto non riceve le pagine del core. Dedup per nome del bank.
+    _banks = []
+    for n in cfg.get("mental_model_inject_banks") or ["auto"]:
+        b = resolve_bank(n, cfg)
+        if b and b not in _banks:
+            _banks.append(b)
     _ids = cfg.get("mental_models_inject_ids") or []
-    if _ids and any(resolve_bank(n, cfg) == core for n in names):
-        targets = [(bank_url(cfg, core), _ids)]
-    else:
-        targets = []
+    targets = [(bank_url(cfg, b), _ids) for b in _banks]
 
 # Coppie (url, id) da iniettare.
 pairs = []
@@ -102,14 +101,14 @@ blocks = []
 _seen_ids = set()
 for url, mid in pairs:
     if mid in _seen_ids:
-        continue  # dedup per id: un id di progetto non deve riusare gli id core
-    _seen_ids.add(mid)
+        continue  # dedup per id: gia' iniettato da un bank prima nella lista
     m = first if (url, mid) == pairs[0] else fetch(url, mid)[1]
     if not isinstance(m, dict):
-        continue  # server giu' o pagina assente: best-effort, salta
+        continue  # server giu' o pagina assente: best-effort, prova il bank dopo
     content = (m.get("content") or "").strip()
     if not content:
         continue
+    _seen_ids.add(mid)
     blocks.append(f"### {m.get('name', mid)}\n\n{content}")
 
 if not blocks:

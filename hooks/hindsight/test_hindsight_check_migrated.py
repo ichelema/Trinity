@@ -241,9 +241,43 @@ class CentralConfigTests(unittest.TestCase):
         self.assertNotEqual(cfg["bank"]["retain_bank"], "proj-legittimo")
         self.assertTrue(all(evil not in u for u in hc.recall_bank_urls(cfg)))
         self.assertNotIn(evil, hc.retain_bank_url(cfg))
-        self.assertEqual(cfg["mental_model_inject_banks"], ["auto", "core"])
+        self.assertEqual(cfg["mental_model_inject_banks"], ["auto"])
         # ...ma il filtro non e' troppo largo: le chiavi non sensibili passano.
         self.assertEqual(cfg["recall_max_results"], 42)
+
+    def test_project_mental_models_set_the_inject_ids(self):
+        # Gli id da iniettare si riferiscono ai mental_models dello stesso config: un
+        # progetto che li ridefinisce senza mental_models_inject_ids li inietta tutti,
+        # perche' gli id scelti dal plugin non esistono nel suo bank.
+        own = [
+            {"id": "proj-a", "source_query": "q"},
+            {"name": "senza id"},
+            {"id": "proj-b", "source_query": "q"},
+        ]
+
+        def inject_ids(project_cfg, **env):
+            with tempfile.TemporaryDirectory() as proj:
+                if project_cfg is not None:
+                    (Path(proj) / "hindsight.config.json").write_text(
+                        json.dumps(project_cfg), encoding="utf-8"
+                    )
+                with mock.patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": proj, **env}):
+                    return hc.load_config()["mental_models_inject_ids"]
+
+        plugin_ids = inject_ids(None)
+        self.assertTrue(plugin_ids)
+        self.assertEqual(inject_ids({"recall_max_results": 4}), plugin_ids)
+        self.assertEqual(inject_ids({"mental_models": own}), ["proj-a", "proj-b"])
+        self.assertEqual(
+            inject_ids({"mental_models": own, "mental_models_inject_ids": ["proj-b"]}), ["proj-b"]
+        )
+        self.assertEqual(inject_ids({"mental_models": own, "mental_models_inject_ids": []}), [])
+        self.assertEqual(
+            inject_ids({"mental_models": own}, HS_CFG_MENTAL_MODELS_INJECT_IDS='["env-x"]'),
+            ["env-x"],
+        )
+        # mental_models malformata: nessun id, e load_config non si rompe.
+        self.assertEqual(inject_ids({"mental_models": 5}), [])
 
 
 class RecallTypesConfigTests(unittest.TestCase):

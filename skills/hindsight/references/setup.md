@@ -93,6 +93,11 @@ Tre mental model sono definiti nel blocco `mental_models` di `hindsight.config.j
 (gated da `mental_models_inject_on_start: true`, ids in `mental_models_inject_ids`);
 `recurring-learnings` resta nel bank ma non viene iniettato.
 
+- L'hook legge i mental model dal bank del progetto della sessione (`mental_model_inject_banks`,
+  default `["auto"]`): il core solo dentro Trinity e fuori da git, mai negli altri progetti.
+- Un progetto con un blocco `mental_models` nel proprio `hindsight.config.json` li crea nel suo
+  bank con `seed`, lanciato dalla sua directory. Senza una sua `mental_models_inject_ids`, l'hook
+  li inietta tutti.
 - **refresh** rigenera il contenuto dal bank; **inject** mostra solo il contenuto già esistente.
 - Refresh manuale immediato (necessario dopo aver cancellato/corretto un fatto):
   `bash hooks/hindsight/ops/hindsight-mental-models.sh refresh --all`

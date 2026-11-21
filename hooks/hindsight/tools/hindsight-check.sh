@@ -349,7 +349,10 @@ else
 	ko "inject hook produce output con flag OFF (dovrebbe essere gated)"
 fi
 
-INJ_ON=$(echo '{"hook_event_name":"SessionStart"}' | HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 bash "$HOOKS_DIR/hindsight-mm-inject.sh" 2>/dev/null | python -c "
+# L'hook legge le pagine del bank del progetto: come per seed e show, gira dal root
+# del plugin e senza CLAUDE_PROJECT_DIR, cosi' "auto" risolve al core anche se il
+# check parte dalla directory di un progetto.
+INJ_ON=$(cd "$HOOKS_DIR/../.." && echo '{"hook_event_name":"SessionStart"}' | env -u CLAUDE_PROJECT_DIR HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 bash "$HOOKS_DIR/hindsight-mm-inject.sh" 2>/dev/null | python -c "
 import json,sys
 d=json.load(sys.stdin)['hookSpecificOutput']
 c=d['additionalContext']
@@ -366,8 +369,8 @@ fi
 # mental_models_inject_max_chars SENZA mai tagliare il trailer anti-feedback-loop
 # (e' l'ancora con cui strip_memory_block scarta il blocco nel retain). Budget
 # forzato basso via env cosi' il taglio scatta a prescindere dai contenuti reali.
-INJ_CAP=$(echo '{"hook_event_name":"SessionStart"}' |
-	HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 HS_CFG_MENTAL_MODELS_INJECT_MAX_CHARS=3000 \
+INJ_CAP=$(cd "$HOOKS_DIR/../.." && echo '{"hook_event_name":"SessionStart"}' |
+	env -u CLAUDE_PROJECT_DIR HS_CFG_MENTAL_MODELS_INJECT_ON_START=1 HS_CFG_MENTAL_MODELS_INJECT_MAX_CHARS=3000 \
 		bash "$HOOKS_DIR/hindsight-mm-inject.sh" 2>/dev/null | python -c "
 import json,sys
 c=json.load(sys.stdin)['hookSpecificOutput']['additionalContext']

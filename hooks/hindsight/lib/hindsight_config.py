@@ -216,11 +216,12 @@ DEFAULTS = {
     # di hindsight-mm-inject.sh (a fine riga, con marcatore) non scatta piu'.
     "mental_models_inject_max_chars": 9500,
     "mental_models": [],
-    # Multi-bank mental model: sorgente delle "knowledge page" iniettate a
-    # SessionStart e gestite da ops/hindsight-mental-models.sh. Speculare a
-    # recall_banks: "auto" = bank del progetto, "core" = core condiviso. Dedup
-    # per nome: in Trinity "auto" collassa sul core -> resta il solo core.
-    "mental_model_inject_banks": ["auto", "core"],
+    # Bank da cui hindsight-mm-inject.sh legge i mental model a SessionStart, in
+    # ordine: ogni id arriva dal primo bank che lo ha. Solo "auto", cioe' il bank
+    # del progetto: le pagine del core descrivono Trinity e non vanno iniettate
+    # negli altri progetti (con ["auto", "core"] ci finivano sempre). In Trinity
+    # e fuori da git "auto" ricade gia' sul core (resolve_bank).
+    "mental_model_inject_banks": ["auto"],
     "knowledge_pages": [],
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
@@ -599,7 +600,17 @@ def load_config() -> dict:
         applied |= _merge_json(cfg, _plugin_config_path())
         project_cfg = _project_config_path()
         if project_cfg:
-            applied |= _merge_json(cfg, project_cfg, trusted=False)
+            project_keys = _merge_json(cfg, project_cfg, trusted=False)
+            applied |= project_keys
+            # mental_models_inject_ids sceglie tra i mental_models dello stesso config.
+            # Un progetto che ridefinisce mental_models senza sceglierli li inietta
+            # tutti: gli id del plugin (user-profile, project-conventions) non
+            # esistono nel suo bank, e l'hook non inietterebbe niente.
+            if "mental_models" in project_keys and "mental_models_inject_ids" not in project_keys:
+                models = cfg["mental_models"] if isinstance(cfg["mental_models"], list) else []
+                cfg["mental_models_inject_ids"] = [
+                    m["id"] for m in models if isinstance(m, dict) and isinstance(m.get("id"), str) and m["id"]
+                ]
 
     # 4. override env (nomi legacy + generico HS_CFG_<CHIAVE>), validati come
     # quelli da file: un valore non convertibile o non valido viene ignorato e

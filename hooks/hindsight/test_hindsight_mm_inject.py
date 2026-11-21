@@ -3,7 +3,9 @@ primo id, attesa del server che parte, gate spento, una sola GET per pagina.
 
 L'hook gira come vero subprocess bash; HINDSIGHT_API_URL lo punta al backend
 finto (api_url esplicito -> single-bank, gli id sono quelli di
-HS_CFG_MENTAL_MODELS_INJECT_IDS).
+HS_CFG_MENTAL_MODELS_INJECT_IDS). I test del blocco bank tolgono
+HINDSIGHT_API_URL e puntano api_base al backend: lì l'hook sceglie il bank dal
+repo git del progetto.
 """
 
 from __future__ import annotations
@@ -30,14 +32,16 @@ PAGES = {
 class Backend(BaseHTTPRequestHandler):
     unavailable = 0  # richieste che rispondono 503 prima di servire (server che parte)
     paths: list[str] = []
+    missing: set[str] = set()  # path (senza query) che rispondono 404 anche se l'id e' in PAGES
 
     def do_GET(self):
         Backend.paths.append(self.path)
         if Backend.unavailable > 0:
             Backend.unavailable -= 1
             return self._send(503, {"detail": "starting"})
-        mid = self.path.split("?")[0].rsplit("/", 1)[-1]
-        if mid in PAGES:
+        path = self.path.split("?")[0]
+        mid = path.rsplit("/", 1)[-1]
+        if mid in PAGES and path not in Backend.missing:
             self._send(200, PAGES[mid])
         else:
             self._send(404, {"detail": "nope"})
@@ -69,6 +73,7 @@ class MmInjectTests(unittest.TestCase):
     def setUp(self):
         Backend.unavailable = 0
         Backend.paths = []
+        Backend.missing = set()
         self.tmp = tempfile.TemporaryDirectory()
         # Niente override HS_*/HINDSIGHT_* o config di progetto della shell di chi
         # lancia i test; cache e debug log in tmp.
@@ -89,13 +94,85 @@ class MmInjectTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_hook(self, ids, **extra):
+        return self.run_env(dict(self.env, HS_CFG_MENTAL_MODELS_INJECT_IDS=json.dumps(ids), **extra))
+
+    def run_env(self, env):
         """additionalContext iniettato, o "" se l'hook non stampa niente."""
-        env = dict(self.env, HS_CFG_MENTAL_MODELS_INJECT_IDS=json.dumps(ids), **extra)
         r = subprocess.run([BASH, HOOK], env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
         if not r.stdout.strip():
             return ""
         return json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    def bank_env(self, project_dir, **extra):
+        """Env senza api_url esplicito: l'hook risolve i bank dal blocco bank,
+        con api_base sul backend finto e core "core-x"."""
+        env = dict(
+            self.env,
+            CLAUDE_PROJECT_DIR=project_dir,
+            HS_CFG_BANK=json.dumps({"api_base": f"{self.url}/v1/default", "core_bank": "core-x"}),
+            # Il tmp di sistema potrebbe stare dentro un repo: git non deve risalire.
+            GIT_CEILING_DIRECTORIES=self.tmp.name,
+            **extra,
+        )
+        del env["HINDSIGHT_API_URL"]
+        return env
+
+    def git_repo(self, config=None):
+        """Repo git con origin .../probe-proj.git: "auto" risolve al bank probe-proj."""
+        repo = os.path.join(self.tmp.name, "repo")
+        os.makedirs(repo)
+        for args in (["init", "-q"], ["remote", "add", "origin", "https://github.com/someone/probe-proj.git"]):
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+        if config is not None:
+            with open(os.path.join(repo, "hindsight.config.json"), "w", encoding="utf-8") as f:
+                json.dump(config, f)
+        return repo
+
+    def test_injects_pages_of_the_project_bank_not_core(self):
+        ctx = self.run_env(self.bank_env(self.git_repo(), HS_CFG_MENTAL_MODELS_INJECT_IDS='["a"]'))
+        self.assertIn("### Pagina A", ctx)
+        self.assertEqual(Backend.paths, ["/v1/default/banks/probe-proj/mental-models/a?detail=content"])
+
+    def test_page_missing_in_project_is_not_taken_from_core(self):
+        Backend.missing = {"/v1/default/banks/probe-proj/mental-models/a"}
+        ctx = self.run_env(self.bank_env(self.git_repo(), HS_CFG_MENTAL_MODELS_INJECT_IDS='["a"]'))
+        self.assertEqual(ctx, "")
+        self.assertEqual(Backend.paths, ["/v1/default/banks/probe-proj/mental-models/a?detail=content"])
+
+    def test_outside_git_injects_core_pages(self):
+        plain = os.path.join(self.tmp.name, "plain")
+        os.makedirs(plain)
+        ctx = self.run_env(self.bank_env(plain, HS_CFG_MENTAL_MODELS_INJECT_IDS='["a"]'))
+        self.assertIn("### Pagina A", ctx)
+        self.assertEqual(Backend.paths, ["/v1/default/banks/core-x/mental-models/a?detail=content"])
+
+    def test_project_models_are_injected_without_inject_ids(self):
+        # Il progetto ridefinisce mental_models e non dice quali iniettare: gli id
+        # del plugin (user-profile, project-conventions) non esistono nel suo bank.
+        repo = self.git_repo({"mental_models": [{"id": "b", "name": "B", "source_query": "q"}]})
+        ctx = self.run_env(self.bank_env(repo))
+        self.assertIn("### Pagina B", ctx)
+        self.assertEqual(Backend.paths, ["/v1/default/banks/probe-proj/mental-models/b?detail=content"])
+
+    def test_page_missing_in_project_comes_from_next_bank(self):
+        Backend.missing = {"/v1/default/banks/probe-proj/mental-models/b"}
+        env = self.bank_env(
+            self.git_repo(),
+            HS_CFG_MENTAL_MODELS_INJECT_IDS='["a", "b"]',
+            HS_CFG_MENTAL_MODEL_INJECT_BANKS='["auto", "core"]',
+        )
+        ctx = self.run_env(env)
+        self.assertEqual(ctx.count("### Pagina A"), 1)
+        self.assertIn("### Pagina B", ctx)
+        self.assertEqual(
+            Backend.paths,
+            [
+                "/v1/default/banks/probe-proj/mental-models/a?detail=content",
+                "/v1/default/banks/probe-proj/mental-models/b?detail=content",
+                "/v1/default/banks/core-x/mental-models/b?detail=content",
+            ],
+        )
 
     def test_injects_pages_in_order(self):
         ctx = self.run_hook(["a", "b"])

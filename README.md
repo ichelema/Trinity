@@ -812,7 +812,7 @@ refresh_mental_model — si auto-recuperano al ciclo successivo). L'avviso arriv
 default `true`, indipendente da `recall_enabled`/`retain_enabled`).
 
 **Mental model — iniezione a SessionStart.** Oltre al recall real-time per prompt, Hindsight
-inietta all'avvio di una sessione nuova (`startup`) due **mental model** sintetici via `hindsight-mm-inject.sh`:
+inietta all'avvio di una sessione nuova (`startup`) i **mental model** del bank del progetto via `hindsight-mm-inject.sh`:
 riassunti tematici generati interrogando il bank con query predefinite, che danno al modello
 un profilo costante dell'utente e del progetto senza aspettare che il recall lo ricostruisca
 dal flusso dei prompt. Il plugin ne definisce tre in `hindsight.config.json` → `mental_models`:
@@ -828,9 +828,15 @@ controllano quali vengono caricati: `recurring-learnings` resta nel bank ma non 
 Il token budget è `mental_model_max_tokens` (plugin: 1024): vale solo alla creazione (`seed`),
 un mental model esistente tiene il valore impostato sul server.
 
-I mental model sono definiti dal plugin e vivono nel bank core condiviso. La sorgente dei
-bank è `mental_model_inject_banks` (default `["auto", "core"]`, speculare a `recall_banks`);
-è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto).
+Ogni sessione inietta i mental model del bank del **proprio** progetto, mai quelli del core: la
+sorgente è `mental_model_inject_banks` (default `["auto"]`), e `auto` ricade sul core solo dentro
+Trinity e fuori da git. Con più bank nella lista, ogni id arriva dal primo bank che lo ha. La
+chiave è regolabile solo da config plugin/utente/env (trust boundary, non dal config di progetto).
+
+Un progetto definisce i suoi mental model nel blocco `mental_models` del proprio
+`hindsight.config.json` e li crea nel suo bank con `seed`, lanciato dalla directory del progetto.
+Se il progetto non imposta anche `mental_models_inject_ids`, l'hook li inietta tutti: gli id
+scelti dal plugin si riferiscono ai modelli del plugin e nel bank del progetto possono mancare.
 
 Verifica: `bash hooks/hindsight/tools/hindsight-check.sh` (sezione 16), lanciato **dal repo del
 plugin** — valida forma di `mental_model_inject_banks` e seed/show sul bank core. Il check è la
