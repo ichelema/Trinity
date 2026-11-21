@@ -248,12 +248,12 @@ Indica «PR in draft» solo se lo è davvero. Ometti le sezioni vuote.
   | Descrizione della correzione | SHA breve |
 
 - **Rinviati:** una riga per finding rinviato, con severità, problema e link
-  alla issue Linear creata.
+  alla issue Linear creata come `[<issue-id>](<url>)`.
 - **Trade-off:** solo se introdotti da un fix.
 
 Solo con la PR pronta, suggerisci `gh pr merge "<branch>" --merge` e, dopo il
 merge, `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`.
-Chiudi con il link al commento sulla PR se pubblicato: lì restano i dettagli
+Chiudi con il link al commento sulla PR, se pubblicato, come `[commento sulla PR](<url>)`: lì restano i dettagli
 e i falsi positivi. Non elencare round o worktree rimossi.
 
 ## Uscita dal worktree di implementazione
