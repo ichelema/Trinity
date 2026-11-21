@@ -24,8 +24,10 @@ Accetta anche un path assoluto: in quel caso usalo com'è. Altrimenti il worktre
 
 ## Contesto della sessione e directory di esecuzione (obbligatorio)
 
-**Non usare `cd` come meccanismo per uscire da un worktree gestito da Claude Code.**
-`cd` in Bash non garantisce di modificare la directory di lavoro degli altri tool della sessione.
+**Non usare `cd` come meccanismo per uscire da un worktree in cui la sessione è entrata con
+`EnterWorktree`.** In quel caso `cd` in Bash non garantisce di modificare la directory di lavoro
+degli altri tool della sessione: esci con `ExitWorktree`. L'unica eccezione, descritta più sotto,
+è la sessione arrivata nel worktree senza un ingresso `EnterWorktree`.
 
 Ricava il repository principale senza assumere che la directory corrente sia già la root:
 
@@ -41,7 +43,11 @@ il percorso atteso, fermati e identifica correttamente il repository: non ricost
 in **quel** worktree con `EnterWorktree`, esci usando `ExitWorktree` con `action: "keep"`:
 questo conserva i file e restituisce la sessione alla directory precedente. Verifica quindi che
 la directory di lavoro effettiva della sessione e la cwd della shell non siano dentro `<wt-path>`.
-Se la sessione è già fuori, non chiamare `ExitWorktree` per un altro worktree. Se il tool non è
+Se la sessione è già fuori, non chiamare `ExitWorktree` per un altro worktree. Se la sessione è
+dentro `<wt-path>` senza un ingresso `EnterWorktree` (ci è arrivata con un `cd` di una chiamata
+Bash), `ExitWorktree` non fa nulla: riportala alla radice con una chiamata Bash a sé,
+`cd "<repo-root>"`, e verifica con `pwd -P` nella chiamata successiva. Se `pwd -P` mostra ancora
+`<wt-path>`, la sessione è stata avviata lì: vale il caso seguente. Se il tool non è
 presente, l'uscita fallisce o non puoi verificarla, **non tentare di cancellare il worktree attivo**:
 fermati e chiedi di uscire dalla sessione o riaprire Claude dal repository principale.
 

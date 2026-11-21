@@ -166,11 +166,17 @@ worktree e branch estranei.
 
 ## Verifica finale
 
-Nel nuovo worktree verifica che:
+Verifica il nuovo worktree senza entrarci, con `git -C`:
 
-- il branch attivo sia `<branch>`;
-- `HEAD` corrisponda allo SHA del branch sorgente;
-- `git status --short` non produca output.
+```bash
+git -C "<percorso-assoluto>" rev-parse --abbrev-ref HEAD   # deve essere <branch>
+git -C "<percorso-assoluto>" rev-parse HEAD                # deve essere lo SHA del branch sorgente
+git -C "<percorso-assoluto>" status --short                # deve essere vuoto
+```
+
+Non usare `cd` verso il worktree: dentro la directory del progetto il `cd` di una chiamata Bash
+resta attivo nelle chiamate successive, e allo step 2 `EnterWorktree` rifiuta la directory in cui
+la sessione si trova già («is the current working directory»).
 
 Se un comando fallisce o un controllo non dà il risultato atteso, fermati e mostra il valore letto.
 Non eseguire cleanup o operazioni distruttive automaticamente.
@@ -179,17 +185,19 @@ Non eseguire cleanup o operazioni distruttive automaticamente.
 
 Dopo la verifica finale stima l'effort da impostare allo step 2: `Low`, `Medium` o `High`.
 
-Lancia `trinity:scoper` sul nuovo worktree. Nel prompt passagli titolo, descrizione, criteri di
-accettazione e commenti rilevanti delle issue, e il percorso assoluto del worktree. Chiedigli solo:
+Per stimare servono tre informazioni sul codice:
 
 - file e componenti da toccare;
 - aree critiche coinvolte (sicurezza, autenticazione, dati persistenti o migrazioni, concorrenza,
   operazioni distruttive, API pubbliche);
 - test esistenti che coprono quel codice.
 
-Non chiedergli un piano: lo fa lo step 2.
+Se le hai già perché in questa sessione hai letto il codice coinvolto, usa quelle e non lanciare
+subagenti. Altrimenti lancia `trinity:scoper` sul nuovo worktree: nel prompt passagli titolo,
+descrizione, criteri di accettazione e commenti rilevanti delle issue e il percorso assoluto del
+worktree, e chiedigli solo queste tre informazioni. Non chiedergli un piano: lo fa lo step 2.
 
-Il report è un input: decidi tu il livello valutando insieme report e issue su:
+Il report, quando c'è, è un input: decidi tu il livello valutando insieme report e issue su:
 
 - difficoltà: quanti file e componenti, quanta logica nuova;
 - impatto architetturale: interfacce, protocolli, schemi dati o comunicazione tra componenti;

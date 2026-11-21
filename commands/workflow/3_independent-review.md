@@ -40,14 +40,17 @@ Non tentare di dedurre la issue dal branch corrente o dalla cronologia Git.
 
 - `hard`: esegui la review tu, come descritto sotto.
 - `soft`: non fare tu la review. Lancia il tool Agent con `subagent_type: trinity:reviewer`,
-  `model: sonnet` ed `effort: xhigh`. Nel prompt digli di leggere
+  `model: sonnet` ed `effort: high`. Nel prompt digli di leggere
   `${CLAUDE_PLUGIN_ROOT}/commands/workflow/3_independent-review.md` e di seguirlo con gli stessi
   argomenti senza `soft` al posto di `$ARGUMENTS` e di usare il formato completo del report. Se
   giri nella sessione dell'utente, riscrivi il suo report nel formato breve (vedi «Formato del
   report»), senza cambiare verdetto, finding ed esiti; se giri headless, mostralo senza
   cambiarlo. Prima del lancio non creare il worktree di review e non eseguire le verifiche di
-  «Localizzazione del codice da recensire»: le fa il subagente, che rimuove anche il suo worktree.
-  Ricavi `<wt-path>` e `<branch>` solo se servono per «Fix dei finding».
+  «Localizzazione del codice da recensire»: le fa il subagente. La pulizia invece è tua: nel
+  prompt digli di saltare la sezione «Pulizia», perché cancellare `.review-tmp` può richiedere
+  un'approvazione che un subagente non può ottenere. Ricevuto il report, cerca il worktree
+  `review+<base-name>` con `git worktree list --porcelain` e, se esiste, applica tu la sezione
+  «Pulizia». Ricavi `<wt-path>` e `<branch>` solo se servono per «Fix dei finding».
 
 ## Localizzazione del codice da recensire
 
@@ -398,6 +401,10 @@ I candidati `CONFIRMED` e `PLAUSIBLE` diventano i finding del report; scarta i `
 presentare preferenze stilistiche come bug.
 
 ## Pulizia
+
+Se chi ti ha lanciato ha tenuto per sé la pulizia (modo `soft`), salta questa sezione. Se hai
+lanciato tu il subagente nel modo `soft`, applicala al suo worktree `review+<base-name>` come se
+lo avessi creato tu.
 
 Come ultima azione prima di restituire il report cancella `<rev-path>/.review-tmp/` solo se creata da questa review:
 `git worktree remove` rifiuta un worktree con file non tracciati e `--force` è vietato.
