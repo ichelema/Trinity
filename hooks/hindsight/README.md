@@ -100,7 +100,7 @@ Script non-hook, eseguiti a mano o richiamati da altri (hook/mise/scheduler).
 | File                         | Chi lo chiama                                                     | Cosa fa                                                      |
 | ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
 | `hindsight-mental-models.sh` | manuale, `tools/hindsight-check.sh`                               | seed/list/show/refresh delle knowledge page                  |
-| `hindsight-set-mission.sh`   | manuale                                                           | imposta retain/reflect mission sul bank                      |
+| `hindsight-set-mission.sh`   | manuale                                                           | imposta le mission sul bank della directory da cui lo lanci  |
 | `hindsight-reflect.sh`       | slash-command `/reflect` (fallback)                               | sintesi strategica via `reflect`                             |
 | `hindsight-promote.py`       | slash-command `/trinity:promote`                                  | promozione curata dei fatti dai bank di progetto al core: scan → triage LLM → review umana → move |
 

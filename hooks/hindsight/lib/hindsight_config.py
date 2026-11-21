@@ -223,6 +223,11 @@ DEFAULTS = {
     # e fuori da git "auto" ricade gia' sul core (resolve_bank).
     "mental_model_inject_banks": ["auto"],
     "knowledge_pages": [],
+    # Mission del bank, applicate da ops/hindsight-set-mission.sh: un progetto le
+    # ridefinisce nella sua config per il proprio bank. Vuote = mancanti.
+    "retain_mission": "",
+    "reflect_mission": "",
+    "observations_mission": "",
     # Debug: se attivo, recall/retain scrivono un evento JSONL per ispezione.
     # debug_log_file vuoto => <project_root>/logs/hindsight-debug.log (vedi hindsight_debug.py)
     "debug_log_enabled": False,

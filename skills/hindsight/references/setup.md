@@ -97,7 +97,11 @@ Tre mental model sono definiti nel blocco `mental_models` di `hindsight.config.j
   default `["auto"]`): il core solo dentro Trinity e fuori da git, mai negli altri progetti.
 - Un progetto con un blocco `mental_models` nel proprio `hindsight.config.json` li crea nel suo
   bank con `seed`, lanciato dalla sua directory. Senza una sua `mental_models_inject_ids`, l'hook
-  li inietta tutti.
+  li inietta tutti. `seed` non aggiorna una pagina esistente: per cambiarne la `source_query`,
+  `PATCH /mental-models/<id>` e poi `refresh <id>`.
+- I bank di progetto creati in automatico nascono senza mission. Le mission del
+  `hindsight.config.json` del progetto le applica `bash hooks/hindsight/ops/hindsight-set-mission.sh`,
+  lanciato dalla sua directory.
 - **refresh** rigenera il contenuto dal bank; **inject** mostra solo il contenuto già esistente.
 - Refresh manuale immediato (necessario dopo aver cancellato/corretto un fatto):
   `bash hooks/hindsight/ops/hindsight-mental-models.sh refresh --all`
