@@ -166,7 +166,7 @@ Sul worktree di implementazione `<wt-path>`, applica solo i finding reali:
 - la minima modifica che risolve il difetto;
 - nessun refactoring, nessuna riscrittura, nessun cambio di architettura;
 - ogni riga modificata è riconducibile a un finding verificato;
-- commit nella lingua del progetto Linear, uno per fix logico;
+- commit nella lingua di Git del progetto Linear, uno per fix logico;
 - prima del push rilancia test e controlli pertinenti; se falliscono non pushare
   né avviare un round sul vecchio SHA, e segnala il blocco. Se passano, pusha i fix.
 
@@ -210,7 +210,7 @@ Crea le issue senza chiedere conferma, con `issueCreate` via
   e righe del finding e il suo esito: `CONFIRMED`, oppure `PLAUSIBLE` con cosa rende incerto
   l'innesco;
 - tipo `bug`; priorità `3` per `MEDIUM`, `4` per `LOW`;
-- lingua del progetto Linear.
+- lingua delle issue del progetto Linear.
 
 Collega ogni issue alla issue di origine con `issueRelationCreate` di tipo `related`, non con
 `parentId`: una sub-issue può chiudersi in automatico con la issue padre al merge della PR. Rileggi
@@ -218,7 +218,7 @@ ogni issue creata e controlla che team, progetto e relazione siano salvati.
 
 ### Commento sulla PR
 
-Scrivi un solo commento, nella lingua del progetto Linear, con
+Scrivi un solo commento, nella lingua di Git del progetto Linear, con
 `gh pr comment "<branch>" --body-file -` (corpo da stdin). Il commento elenca:
 
 - i finding fixati, in breve;

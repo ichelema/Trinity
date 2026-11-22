@@ -151,28 +151,37 @@ That's the pattern: introspect or query for an id you don't have, run the mutati
 
 ## Lingua
 
-La lingua la decide il **progetto Linear**, non la conversazione:
+La lingua la decidono le label del **progetto Linear**, non la conversazione. Le
+lingue sono due e si scelgono in modo indipendente:
 
-- default **italiano**;
-- **inglese** se il progetto ha la label di progetto `lang:en`
-  (librerie pubbliche, progetti da rilasciare).
+- **lingua delle issue**, dalla label `lang:<xx>`: titolo, `description` e
+  commenti delle issue. `lang:it` → italiano, `lang:en` → inglese; senza label
+  `lang:` → **italiano**;
+- **lingua di Git**, dalla label `git:<xx>`: messaggi di commit, titolo e
+  descrizione della PR, commenti sulla PR, CHANGELOG. `git:en` → inglese,
+  `git:it` → italiano; senza label `git:` → la lingua delle issue.
+
+Con `lang:en` e senza `git:` tutto è in inglese (librerie pubbliche, progetti da
+rilasciare). Con `lang:it` e `git:en` le issue sono in italiano e Git in inglese.
 
 Leggi le label con la stessa query che usi per risolvere l'id
 (`projects { nodes { id name labels { nodes { name } } } }`); per una issue
 esistente usa `issue(id: $id) { project { labels { nodes { name } } } }`.
-Issue senza progetto: italiano. Repository non tracciato con Linear: inglese
-(regola completa in `github-pr-release`, `references/changelog.md`, sezione "Lingua").
+Issue senza progetto: italiano, anche per Git. Repository non tracciato con
+Linear: Git in inglese (regola completa in `github-pr-release`,
+`references/changelog.md`, sezione "Lingua").
 
 Esempi:
 
-- progetto senza label `lang:en` → commit `fix(hooks): quota il path`, titolo PR in italiano;
-- progetto con label `lang:en` → commit `fix(hooks): quote the path`, titolo PR in inglese.
+- progetto senza label → issue in italiano, commit `fix(hooks): quota il path`, titolo PR in italiano;
+- progetto con label `lang:en` → issue in inglese, commit `fix(hooks): quote the path`, titolo PR in inglese;
+- progetto con label `lang:it` e `git:en` → issue in italiano, commit `fix(hooks): quote the path`,
+  titolo PR in inglese.
 
-La lingua del progetto vale per tutto ciò che resta nel tempo: titolo,
-`description` e commenti delle issue, **messaggi di commit**, **titolo e
-descrizione della PR** (Linear usa il titolo della PR come attachment della
-issue). Termini tecnici, nomi di file e stringhe di codice restano nella forma
-originale.
+Le due lingue valgono per tutto ciò che resta nel tempo. Linear usa il titolo
+della PR come attachment della issue: quando le due lingue sono diverse,
+l'attachment resta nella lingua di Git. Termini tecnici, nomi di file e stringhe
+di codice restano nella forma originale.
 
 La conversazione con l'utente resta in italiano: riepiloghi, domande e output a
 schermo non seguono questa regola.

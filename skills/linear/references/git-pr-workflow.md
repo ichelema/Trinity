@@ -12,7 +12,7 @@ Copia questa lista nella risposta e spunta ogni passo. I dettagli sono nelle sez
 4. [ ] Branch creato con il `gitBranchName` di Linear.
 5. [ ] Issue portata a In Progress (una volta sola, solo da `backlog`/`unstarted`).
 6. [ ] PR aperta con riepilogo, dettagli, test eseguiti e riferimento alla issue.
-7. [ ] Controllo PR: titolo e descrizione nella lingua del progetto, magic word giusta
+7. [ ] Controllo PR: titolo e descrizione nella lingua di Git del progetto, magic word giusta
    (closing o non-closing). Se un punto fallisce, correggi la PR e torna al passo 7.
 8. [ ] Stop: merge solo su richiesta esplicita dell'utente.
 9. [ ] Dopo il merge: branch di default, `git pull`, branch locale e remoto eliminati,
@@ -60,8 +60,9 @@ Prima di consegnare, rileggi i passi 7 e 10: finisci solo quando passano entramb
     la magic word sbagliata chiude lavoro ancora aperto.
 - La PR contiene: riepilogo conciso, dettagli implementativi, test eseguiti,
   riferimenti alle issue Linear.
-- Titolo e descrizione della PR nella lingua del progetto Linear (il titolo
-  finisce come attachment della issue; vedi "Lingua" in `SKILL.md`).
+- Titolo e descrizione della PR nella lingua di Git del progetto Linear (label
+  `git:<xx>`; il titolo finisce come attachment della issue; vedi "Lingua" in
+  `SKILL.md`).
 - **Non fare il merge**: fermati e attendi l'approvazione esplicita dell'utente.
 
 ## Merge (solo su richiesta esplicita)

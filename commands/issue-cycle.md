@@ -290,8 +290,8 @@ implementazione in questo ciclo.
 
 ### Commento su Linear
 
-A fine ciclo, anche dopo un'interruzione, pubblica sulla issue un commento breve, nella lingua del
-progetto Linear, con
+A fine ciclo, anche dopo un'interruzione, pubblica sulla issue un commento breve, nella lingua delle
+issue del progetto Linear, con
 `linear.py`, costruito dalle righe del registro sotto `## <issue-id>`: link della PR (se esiste),
 esito di semplificazione, verifica e review, decisioni prese in autonomia, questioni aperte e, se
 il ciclo è interrotto, lo step raggiunto e il motivo. Chiudi con

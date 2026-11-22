@@ -132,7 +132,7 @@ Per ogni fix, o gruppo di fix con lo stesso motivo:
 1. applica la modifica;
 2. esegui i test mirati;
 3. se passano, crea un commit aggiungendo i file per nome, mai con `git add -A` o `git add .`; il
-   messaggio va nella lingua della PR, che è quella del progetto Linear;
+   messaggio va nella lingua di Git del progetto Linear, la stessa della PR;
 4. se falliscono, annulla solo quella modifica con `git -C "<wt-path>" restore -- <file>...`,
    cancella i file nuovi che ha creato e segna il finding come saltato: una semplificazione che
    rompe un test cambia il comportamento.

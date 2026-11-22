@@ -208,8 +208,8 @@ Prima di modificare qualsiasi file mostra:
 
 Mostra il piano **in italiano**, anche quando la issue è scritta in inglese: il piano è output a
 schermo per l'utente, non contenuto destinato a Linear o al repository. Messaggi di commit, titolo
-e descrizione della PR seguono la lingua del progetto Linear (sezione "Lingua" della skill
-`linear`). Cita pure i termini tecnici e le stringhe della issue nella loro forma originale.
+e descrizione della PR seguono la lingua di Git del progetto Linear (label `git:<xx>`, sezione
+"Lingua" della skill `linear`). Cita pure i termini tecnici e le stringhe della issue nella loro forma originale.
 
 Se trovi specifiche contrastanti o hai dei dubbi che potrebbero compromettere la implementazione
 fermati e chiedi maggiori dettagli all'utente, solo quando le specifiche sono completamente chiare
@@ -241,7 +241,7 @@ incluse in silenzio.
 
 Sono consentiti più commit quando rappresentano modifiche logiche distinte.
 
-I messaggi di commit vanno scritti nella lingua del progetto Linear.
+I messaggi di commit vanno scritti nella lingua di Git del progetto Linear.
 
 Quando l'implementazione è terminata:
 
@@ -327,9 +327,9 @@ La PR deve contenere:
 - test eseguiti;
 - riferimento a ogni issue.
 
-Titolo e descrizione della PR vanno scritti nella lingua del progetto Linear: Linear usa il titolo
-della PR come titolo dell'attachment agganciato alla issue, quindi diventa testo del workspace a
-tutti gli effetti.
+Titolo e descrizione della PR vanno scritti nella lingua di Git del progetto Linear. Linear usa il
+titolo della PR come titolo dell'attachment agganciato alla issue: quando la lingua delle issue è
+diversa, l'attachment resta nella lingua di Git.
 
 ## Non fare il merge
 

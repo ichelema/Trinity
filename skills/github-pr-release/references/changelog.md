@@ -13,9 +13,10 @@ Una sola regola vale per CHANGELOG, messaggi di commit (vedi
 [commit-triage.md](commit-triage.md)) e titolo e descrizione delle Pull Request:
 
 - **progetto tracciato con Linear** (esiste un progetto Linear per il repository;
-  cercalo per nome con la skill `linear`): lingua del progetto Linear, cioè italiano
-  di default e inglese con la label di progetto `lang:en` (sezione "Lingua" della
-  skill `linear`);
+  cercalo per nome con la skill `linear`): lingua di Git del progetto Linear, cioè
+  la label di progetto `git:<xx>`; senza `git:` vale la lingua delle issue
+  (`lang:<xx>`, italiano di default). Regola completa nella sezione "Lingua" della
+  skill `linear`;
 - **progetto non tracciato con Linear**: inglese.
 
 Nel CHANGELOG la regola vale per le voci e per le note di migrazione; i titoli di

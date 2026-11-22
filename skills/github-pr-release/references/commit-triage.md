@@ -26,9 +26,9 @@ Un singolo intervento logico per commit. Per ogni gruppo prepara un messaggio
 `git log --oneline -20` invece di assumere una convenzione.
 
 La lingua dei messaggi segue la regola "Lingua" di [changelog.md](changelog.md):
-lingua del progetto Linear se il progetto è tracciato con Linear (italiano di
-default, inglese con `lang:en`), inglese se non lo è. La conversazione con
-l'utente resta nella sua lingua.
+lingua di Git del progetto Linear se il progetto è tracciato con Linear (label
+`git:<xx>`; senza `git:` la lingua delle issue, italiano di default), inglese se
+non lo è. La conversazione con l'utente resta nella sua lingua.
 
 Dallo storico prendi la convenzione dei prefissi e degli scope. Se lo storico usa
 una lingua diversa da quella della regola, segui la regola e non tornare indietro
