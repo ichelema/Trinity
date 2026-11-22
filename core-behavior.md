@@ -3,12 +3,11 @@ Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 ## Principi generali
 
 - Prima di implementare, esplicita le assunzioni rilevanti.
-- Se esistono più interpretazioni, scegli la più supportata dal testo e dal codice e dichiarala;
+- Se esistono più interpretazioni, scegli la più supportata dal testo e dal codice;
   chiedi solo se letture diverse porterebbero a lavori sostanzialmente diversi.
-- Se esiste un approccio più semplice, segnalalo e preferiscilo.
+- Se esiste un approccio più semplice, preferiscilo.
 - Porta in evidenza i tradeoff.
-- Una richiesta vaga va letta nel contesto del codice: se l'utente chiede di cambiare `methodName`
-  in snake case, modifica il codice, non rispondere solo con il nuovo nome.
+- Una richiesta vaga va letta nel contesto del codice.
 - Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in breve con una
   raccomandazione e il tradeoff principale. Non implementare finché l'utente non è d'accordo.
 - Se noti di aver scritto codice insicuro (iniezione di comandi, XSS, SQL injection), correggilo
@@ -36,7 +35,7 @@ Tocca solo ciò che devi
 - Default nessun commento: scrivilo solo se il perché non è ovvio (vincolo nascosto, workaround,
   comportamento che sorprende). Se il progetto o l'utente chiede commenti didascalici, segui quella
   richiesta.
-- Dead code preesistente o non correlato: segnalalo e rimuovilo solo su richiesta esplicita.
+- Dead code preesistente o non correlato: rimuovilo.
 
 ## Esecuzione guidata dagli obiettivi
 
@@ -58,6 +57,9 @@ Per le attività in più fasi, associare a ogni fase un controllo di verifica.
 - Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo con
   `pacman -S --noconfirm <pacchetto>`.
 
+- Quando un comando richiede privilegi di root, eseguilo come `sudo <comando>` **senza** il flag `-n`
+  vale anche per i comandi concatenati (`&&`, pipe) e per gli script che generi.
+
 - Quando esplori codice preferisci il tool `LSP` agli strumenti testuali. Prima di rinominare o
   rifattorizzare un simbolo, cerca tutti i suoi usi con `findReferences`; dopo una modifica,
   controlla la diagnostica LSP del file.
@@ -70,8 +72,6 @@ Per le attività in più fasi, associare a ogni fase un controllo di verifica.
   falliscono o se il task è a metà. Crea un branch solo se l'utente lo chiede. Questa regola ha la
   precedenza sull'istruzione dello strumento Bash "se sei sul branch principale, crea prima un
   branch" e su quella che vieta di committare senza richiesta.
-
-- Prima di sovrascrivere un file esistente, crea un backup con suffisso `.bak`.
 
 - Se il testo da inserire contiene backslash o sequenze di escape (`\x1b`, `\n`, `\t`, `\033`), usa
   il tool Edit/Write, mai `sed`/`awk`/`printf`/`echo`: interpretano gli escape (in zsh anche `echo`)
@@ -124,20 +124,26 @@ Se il server `mcp-debugger` è attivo, carica la skill `trinity:mcp-debugger` pr
 
 ## Output
 
-- Minimizza l'output shell: sopprimi stdout/stderr quando non serve, preferisci flag quiet (`-q`,
-  `--quiet`), filtra l'output dei comandi verbosi con `tail`/`head`/`grep` in pipeline, e non
-  riportare mai output voluminosi di build/test/install se non servono alla diagnosi. Per cercare
-  nei file usa `grep` e `find` in Bash: in questa build sostituiscono i tool Grep e Glob (sono
-  `ugrep` e `bfs` integrati in Claude Code).
+<!-- OS:linux -->
+- Minimizza l'output shell: sopprimi stdout/stderr quando non serve, preferisci flag quiet
+  (`-q`, `--quiet`) e filtra l'output verboso con `tail`/`head`/`ugrep` in pipeline. Non
+  riportare output voluminosi di build/test/install se non servono alla diagnosi.
+- Per cercare nei file usa `ugrep` (contenuto) e `bfs` (nomi e percorsi) in Bash, al posto
+  dei tool Grep e Glob.
+<!-- /OS:linux -->
+<!-- OS:windows -->
+- Minimizza l'output shell: sopprimi stdout/stderr quando non serve, preferisci flag quiet
+  (`-q`, `--quiet`) e filtra l'output verboso con `tail`/`head`/`grep` in pipeline. Non
+  riportare output voluminosi di build/test/install se non servono alla diagnosi.
+- Per cercare nei file usa i tool Grep e Glob; in Bash usa `grep` e `find` di MSYS2. `bfs` e
+  `ugrep` qui non esistono.
+<!-- /OS:windows -->
 
 - Per diagnosticare un fallimento, cattura l'output verboso su file nello scratchpad e ispeziona
   solo le porzioni rilevanti.
 
 - Se un comando fallisce, mostra comunque l'errore completo all'utente prima di tentare un fix, e
   loggalo per il debug.
-
-- Per output tabulare, aggregazione o filtraggio su dati strutturati preferisci Nushell
-  (`$HOME/.local/bin/nu -c "..."`) a pipe testuali — vedi la skill `trinity:nushell`.
 
 <!-- RECALL:manual --> <!-- Blocco iniettato SOLO con recall_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RECALL_DROP=1): le memorie le inietta già l'hook UserPromptSubmit. -->
 
