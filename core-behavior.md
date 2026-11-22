@@ -77,6 +77,14 @@ Per le attività in più fasi, associare a ogni fase un controllo di verifica.
   il tool Edit/Write, mai `sed`/`awk`/`printf`/`echo`: interpretano gli escape (in zsh anche `echo`)
   e scrivono byte di controllo.
 
+- Crea i file con il tool Write, non con un heredoc (`cat > file <<'EOF'`): in una sessione entrata
+  in un worktree il comando viene rifiutato perché il controllo non lo verifica. Un heredoc verso
+  un programma (`git commit -F - <<'EOF'`) va bene.
+
+- Non usare `cd` dentro un comando Bash: un `cd` che finisce nelle cartelle di lavoro resta valido
+  nelle chiamate dopo e sposta la directory della sessione. Usa path dalla radice, `git -C`,
+  `mise -C`, oppure una subshell `( cd dir && comando )`, che non sposta la sessione.
+
 ## Linguaggi e strumenti
 
 - Per script Bash usa sempre shebang `#!/usr/bin/env bash`.
