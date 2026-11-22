@@ -81,8 +81,8 @@ l'estrazione finisce (`get_operation`).
 
 ```json
 {
-  "content": "L'errore di idratazione di React è stato risolto spostando l'accesso a localStorage all'interno di useEffect",
-  "context": "debugging dell'idratazione React lato client nel progetto frontend",
+  "content": "Claude Code ha risolto l'errore di idratazione di React spostando l'accesso a localStorage all'interno di useEffect",
+  "context": "Claude Code riferisce il proprio lavoro: debugging dell'idratazione React lato client nel progetto frontend",
   "tags": ["claude-code", "repo:<nome-repo>"]
 }
 ```

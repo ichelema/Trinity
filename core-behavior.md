@@ -173,28 +173,10 @@ specifici dell'ambiente, approcci scartati rilevanti).
 Non salvare: stato temporaneo, output banale, dati ricavabili dal repository, tentativi intermedi,
 duplicati.
 
-Se sì: avvisa con una frase breve, poi chiama subito `mcp__hindsight__retain` col formato della
-sezione sotto.
+Se sì: avvisa con una frase breve, poi carica la skill `trinity:hindsight` e chiama
+subito `mcp__hindsight__retain` col formato che indica per `content`, `context` e `tags`.
 
 Se no: non fare nulla.
 
 Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
 <!-- /RETAIN:manual -->
-
-## Formato di `mcp__hindsight__retain`
-
-Vale ogni volta che chiami `mcp__hindsight__retain`; la regola sul `context` vale anche quando il
-gate automatico ti chiede di proporne uno per una memoria in attesa.
-
-- `content`: forma breve e autosufficiente che spieghi il perché, coi dettagli tecnici (comandi,
-  path, valori) preservati alla lettera. Le azioni che hai svolto scrivile in forma attiva con
-  soggetto `Claude Code` ("Claude Code ha corretto X", non "è stato corretto X"): insieme al
-  prefisso del `context` le fanno salvare come `experience`.
-- `context`: una riga descrittiva del dominio (es. "gestione bank e config Hindsight nel progetto
-  Trinity") — mai una categoria secca né il nome del bank. Nei retain che scrivi tu aprila con
-  `Claude Code riferisce il proprio lavoro:`: senza chi parla Hindsight 1.0 classifica tutto
-  `world` e nessun fatto `experience`. Non nel context proposto al gate: lì il content è la
-  conversazione e i ruoli `[user]`/`[assistant]` ci sono già.
-- `tags`: solo universali — `claude-code`, più `repo:<nome>` se specifico del progetto e
-  `branch:<nome>` solo se davvero legato al branch. Niente tag semantici (bug, convention,
-  preferenze…): frammentano la consolidation.
