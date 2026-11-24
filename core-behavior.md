@@ -56,12 +56,14 @@ Per le attività in più fasi, associare a ogni fase un controllo di verifica.
 - Usa sintassi Unix compatibile bash/zsh (forward slash, `/dev/null`, pipe Unix): mai PowerShell o
   CMD.
 
+<!-- MAIN:only --> <!-- Solo sessione principale: i subagenti non installano programmi di sistema e non usano sudo. -->
 - Se manca un programma di sistema, verifica prima con `command -v <bin>`, poi installalo con
   `pacman -S --noconfirm <pacchetto>`.
 
 - Quando un comando richiede privilegi di root, eseguilo come `sudo <comando>` **senza** il flag `-n`
   vale anche per i comandi concatenati (`&&`, pipe) e per gli script che generi.
 
+<!-- /MAIN:only -->
 - Quando esplori codice preferisci il tool `LSP` agli strumenti testuali. Prima di rinominare o
   rifattorizzare un simbolo, cerca tutti i suoi usi con `findReferences`; dopo una modifica,
   controlla la diagnostica LSP del file.

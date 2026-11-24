@@ -188,7 +188,8 @@ Conseguenze pratiche:
 vedono. Per gli agenti `trinity:*` e `gpt-bridge:*` un hook `SubagentStart` lancia lo stesso script
 con l'argomento `subagent`. In questa modalità lo script scarta anche i blocchi
 `<!-- MAIN:only -->` … `<!-- /MAIN:only -->`, cioè le regole della sola sessione principale
-(domande esplorative, commit e push automatici, Recall e Retain di Hindsight), e restituisce il
+(domande esplorative, installazione di programmi di sistema e `sudo`, commit e push automatici,
+Recall e Retain di Hindsight), e restituisce il
 testo come JSON in `hookSpecificOutput.additionalContext`. Una regola nuova che non vale per i
 subagenti va dentro un blocco `MAIN:only`. I file `CLAUDE_<MODELLO>.md` (§4.1) restano alla sola
 sessione principale.

@@ -50,8 +50,8 @@ lasciare segnaposto.
 - Prima di chiudere, rileggi il tuo diff completo.
 - Se mancano solo le dipendenze dichiarate del progetto (librerie nel manifest o nel lockfile),
   installale col suo package manager (via `mise` per Python/Node/Ruby), mai con sudo. Se manca
-  invece un programma di sistema (un eseguibile, non una libreria del progetto), segui
-  `core-behavior`: `command -v`, poi `pacman`.
+  invece un programma di sistema (un eseguibile, non una libreria del progetto), non installarlo:
+  controllalo con `command -v` e riportalo all'orchestratore nel resoconto.
 - Se nessun controllo reale può girare, dillo esplicitamente e spiega perché.
 
 ## Resoconto finale
