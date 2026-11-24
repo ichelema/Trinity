@@ -5,8 +5,7 @@ description: >-
   trade-off. Restituisce una conclusione concisa su cui l'orchestratore può agire; implementa solo
   se il task lo chiede esplicitamente.
 model: fable
-# Gemello della mod gpt-bridge. Per usare Gemini al posto di GPT metti qui claude-gemini-4-neon
-# (vale dalla sessione dopo); per una sola chiamata: riga [gpt-model: claude-gemini-4-neon] nel prompt.
+# gpt-model: claude-gemini-4-neon
 gpt-model: claude-gpt-6-2-sol-xhigh
 effort: xhigh
 disallowedTools: mcp__hindsight__*
