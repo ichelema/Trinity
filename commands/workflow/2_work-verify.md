@@ -1,5 +1,5 @@
 ---
-description:
+description: >-
   Facoltativo: verifica end-to-end che il codice della PR di una o più issue Linear funzioni,
   eseguendo l'app e osservandone il comportamento; da usare prima della review
 argument-hint: <issue-id...> <model>
