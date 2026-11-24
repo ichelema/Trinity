@@ -98,6 +98,9 @@ Mantieni il tuo contesto snello.
 
 - Tieni su di te analisi, design e decisioni complesse.
 - Fasi ad alto ragionamento  -> delega a `trinity:deep-reasoner` (claude-gpt-6-2-sol-xhigh)
+- Implementazione di un piano già approvato che lascia aperte scelte locali
+  (logica non banale su più file, struttura interna, casi limite)
+                             -> delega a `trinity:implementer` (modello della sessione)
 - Implementazione già definita (edit puntuali, rinomine, fix, ricerche mirate,
   anche modifiche su più file quando la soluzione è già decisa)
                              -> delega a `trinity:fast-worker` (claude-gpt-6-2-sol-high)

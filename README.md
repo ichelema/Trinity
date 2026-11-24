@@ -206,9 +206,10 @@ vanno nel suo `CLAUDE.md`.
 I file nella root di Trinity (`CLAUDE_OPUS.md`, `CLAUDE_FABLE.md`, `CLAUDE_SONNET.md`,
 `CLAUDE_GPT.md`) sono versionati nel repository e valgono per tutti i progetti. Seguono le guide di prompting Anthropic per Opus 5.5, Fable 5.2 e Sonnet 5.5
 e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto ragionamento,
+`trinity:implementer` per un piano approvato che lascia aperte scelte locali,
 `trinity:fast-worker` per l'implementazione già definita (tranne Sonnet, che quel lavoro lo fa da
-sé: `fast-worker` è lo stesso modello), `trinity:bulk-worker` per il lavoro ripetitivo in
-volume con una regola esatta, `trinity:scoper` per l'esplorazione iniziale di codice non
+sé: `fast-worker` è lo stesso modello e `implementer` eredita il suo), `trinity:bulk-worker`
+per il lavoro ripetitivo in volume con una regola esatta, `trinity:scoper` per l'esplorazione iniziale di codice non
 familiare, DeepSeek (`claude-deepseek-flash` via LiteLLM)
 come pari per le decisioni ad alto rischio.
 
@@ -223,6 +224,11 @@ LiteLLM non lo conosce.
 
 Anche `agents/reviewer.md` usa `model: fable`, con `effort: high`: Fable 5.2 in sessione
 diretta, il modello Fable del launcher con LiteLLM (stesso di `deep-reasoner`, tabella sotto).
+
+`agents/implementer.md` usa invece `model: inherit`: gira sul modello della sessione, anche con i
+launcher LiteLLM, così il codice che gli viene delegato lo scrive lo stesso modello che orchestra.
+Su questo conta il controllo di `issue-cycle` sull'indipendenza della review Fable; per questo
+`2_work-issue` lo lancia senza il parametro `model` del tool Agent, che avrebbe la precedenza.
 
 **Gemelli GPT (`gpt-model`).** `agents/reviewer.md` e `agents/deep-reasoner.md` hanno una seconda
 chiave, `gpt-model: claude-gpt-6-2-sol-xhigh`, che Claude Code ignora. La legge la mod

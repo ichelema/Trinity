@@ -3,8 +3,8 @@ name: bulk-worker
 description: >-
   Usalo per lavoro ripetitivo in volume con una regola esatta già data — lo stesso edit su molti
   file, sostituzioni di pattern, estrazione di dati, riassunti di molti file in sola lettura. Non
-  per task che richiedono di capire il codice o di scegliere (quelli vanno a fast-worker o
-  deep-reasoner).
+  per task che richiedono di capire il codice o di scegliere (quelli vanno a fast-worker,
+  implementer o deep-reasoner).
 model: haiku
 effort: high
 disallowedTools: mcp__hindsight__*

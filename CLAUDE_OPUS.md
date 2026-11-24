@@ -23,6 +23,9 @@ Negli altri casi procedi.
 Mantieni il tuo contesto snello: tieni per te sintesi e decisioni.
 - Analisi lunghe o ad alto ragionamento → `trinity:deep-reasoner` (Fable, con
   contesto isolato).
+- Implementazione di un piano già approvato che lascia aperte scelte locali
+  (logica non banale su più file, struttura interna, casi limite) →
+  `trinity:implementer` (stesso modello della sessione, con contesto isolato).
 - Implementazione già definita (edit puntuali, rinomine, fix, ricerche mirate,
   anche modifiche su più file quando la soluzione è già decisa) →
   `trinity:fast-worker` (Sonnet).

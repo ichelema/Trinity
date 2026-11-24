@@ -229,8 +229,12 @@ Obiettivo: implementare tutte le issue indicate.
 
 Sei il lead.
 
-Delega il ragionamento a trinity:deep-reasoner, l'implementazione già definita a trinity:fast-worker (se la
-sessione è già Sonnet, fallo tu: fast-worker è lo stesso modello).
+Delega il ragionamento a trinity:deep-reasoner. L'implementazione del piano che lascia aperte scelte
+locali va a trinity:implementer, lanciato senza il parametro `model`: deve ereditare il modello della
+sessione. Quella già decisa, senza scelte aperte, va a trinity:fast-worker. Se la sessione è già
+Sonnet, fallo tu: fast-worker è lo stesso modello, e implementer eredita il suo. Non delegare ciò
+che le istruzioni del tuo modello dicono di fare da te (concorrenza, sicurezza, migrazioni di dati,
+macchine a stati, API pubbliche).
 Il lavoro ripetitivo in volume con una regola esatta va a trinity:bulk-worker.
 Per una decisione di design con trade-off reali, chiedi lo stesso quesito anche a gpt-bridge:deep-reasoner
 (GPT via LiteLLM, se disponibile) e confronta le due conclusioni prima di scegliere.

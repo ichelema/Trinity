@@ -3,7 +3,8 @@ name: fast-worker
 description: >-
   Usalo per lavoro di implementazione già definito — edit puntuali, rinomine, fix, boilerplate,
   formattazione, ricerche mirate, e anche modifiche su più file quando la soluzione è già decisa.
-  Non per design o decisioni architetturali (quelli vanno a deep-reasoner).
+  Non per un piano che lascia aperte scelte locali (quello va a implementer) né per design o
+  decisioni architetturali (quelli vanno a deep-reasoner).
 model: sonnet
 effort: high
 disallowedTools: mcp__hindsight__*

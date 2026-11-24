@@ -161,7 +161,8 @@ fermati.
 ### Modello di implementazione
 
 `<model>` non sceglie il modello di esecuzione: come negli step, è l'etichetta del worktree e del
-branch. L'implementazione la fa questa sessione. Se il modello della sessione non corrisponde a
+branch. L'implementazione la fa questa sessione, anche quando la delega a `trinity:implementer`:
+l'agente eredita il modello della sessione. Se il modello della sessione non corrisponde a
 `<model>`, prosegui e annotalo come `[decisione]`.
 
 Se la sessione gira su Fable, annota come `[decisione]` che la review Fable gira sullo stesso modello che ha scritto
@@ -223,7 +224,11 @@ Con le regole senza presidio:
 - se le specifiche sono contrastanti, scegli l'interpretazione più conservativa e annotala come
   `[decisione]`;
 - se i test falliscono e non riesci a correggerli dentro lo scope, apri comunque la PR, dichiaralo
-  nella descrizione e annotalo come `[questione]`.
+  nella descrizione e annotalo come `[questione]`;
+- se un subagente riporta una scelta aperta, interrompi la issue quando la scelta rientra in un
+  caso grave; altrimenti scegli l'opzione più prudente dentro lo scope, annotala come
+  `[decisione]` e fai completare il lavoro. Annota come `[decisione]` anche le deviazioni dal piano
+  che l'utente può voler cambiare.
 
 Della sezione «Non fare il merge» resta il divieto di merge, non lo stop standalone: si prosegue da qui
 con gli step 2b e 2c, poi con la review eseguita da reviewer in contesti separati.
