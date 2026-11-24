@@ -33,6 +33,9 @@ Mantieni il tuo contesto snello: tieni per te sintesi e decisioni.
   file, estrazioni, riassunti di molti file) → `trinity:bulk-worker` (Haiku).
 - Esplorazione iniziale di codice non familiare (più di 3 file da leggere) →
   `trinity:scoper` (Haiku); verifica a campione il suo report.
+- Analisi o ottimizzazione delle prestazioni chiesta dall'utente (latenza,
+  throughput, memoria, con misure prima e dopo) →
+  `trinity:performance-optimizer` (stesso modello della sessione).
 - Gli agenti `gpt-bridge:*` sono gemelli su GPT degli agenti Trinity (stesso
   prompt, modello via LiteLLM): usali solo quando il command o l'utente chiede
   un modello non-Claude (review indipendente, secondo parere). Mai in automatico.

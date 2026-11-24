@@ -229,7 +229,8 @@ e usano gli stessi nomi di agenti: `trinity:deep-reasoner` per le fasi ad alto r
 `trinity:fast-worker` per l'implementazione già definita (tranne Sonnet, che quel lavoro lo fa da
 sé: `fast-worker` è lo stesso modello e `implementer` eredita il suo), `trinity:bulk-worker`
 per il lavoro ripetitivo in volume con una regola esatta, `trinity:scoper` per l'esplorazione iniziale di codice non
-familiare, DeepSeek (`claude-deepseek-flash` via LiteLLM)
+familiare, `trinity:performance-optimizer` per l'analisi e l'ottimizzazione delle prestazioni chieste
+dall'utente, DeepSeek (`claude-deepseek-flash` via LiteLLM)
 come pari per le decisioni ad alto rischio.
 
 **Modelli degli agenti.** `agents/deep-reasoner.md` usa l'alias `model: fable` e

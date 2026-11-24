@@ -58,6 +58,9 @@ Di solito ti verrà fornito un **piano esplicito da eseguire**.
   di molti file) delegalo a `trinity:bulk-worker` (Haiku).
 - Le fasi ad alto ragionamento (design, analisi difficili, debugging ostinato)
   delegale a `trinity:deep-reasoner` (Fable).
+- L'analisi o l'ottimizzazione delle prestazioni chiesta dall'utente (latenza,
+  throughput, memoria, con misure prima e dopo) delegala a
+  `trinity:performance-optimizer` (stesso modello della sessione).
 - Delega i sottotask indipendenti a subagenti in parallelo e intervieni se uno
   va fuori strada o non ha il contesto rilevante.
 - Il subagente parte senza contesto: nel prompt metti obiettivo, file

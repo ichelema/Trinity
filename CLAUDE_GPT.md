@@ -108,6 +108,9 @@ Mantieni il tuo contesto snello.
   estrazioni, riassunti)     -> delega a `trinity:bulk-worker` (claude-gpt-6-luna-high)
 - Esplorazione iniziale di codice non familiare (più di 3 file da leggere)
                              -> delega a `trinity:scoper` (claude-gpt-6-luna-high)
+- Analisi o ottimizzazione delle prestazioni chiesta dall'utente (latenza,
+  throughput, memoria, con misure prima e dopo)
+                             -> delega a `trinity:performance-optimizer` (modello della sessione)
 - Se un task delegato si rivela più complesso del previsto, riprendilo tu.
 - Delega quando la modifica tocca più file o richiede più cicli di modifica e
   test. Se è piccola e già nota, falla tu: scrivere l'handoff e controllarlo
