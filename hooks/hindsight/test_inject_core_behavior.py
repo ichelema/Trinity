@@ -5,6 +5,10 @@ Per ogni caso costruisce un plugin finto in una tempdir (lo script sotto test,
 una copia di lib/ e i JSON di config), poi confronta i blocchi RETAIN/RECALL
 iniettati dallo script con quello che avrebbe deciso il vecchio hook: blocco
 scartato solo se `hindsight_config.py --get <chiave>` stampa "True".
+
+In modalita' `subagent` (hook SubagentStart) controlla anche che i blocchi
+MAIN:only spariscano, compresi i RECALL/RETAIN annidati, e che l'output sia
+JSON valido.
 """
 
 from __future__ import annotations
@@ -22,19 +26,28 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "hooks" / "bin" / "inject-core-behavior.sh"
 BASH = shutil.which("bash") or "bash"  # su Windows "bash" nudo sarebbe WSL
 
-CORE = """intro
+SPECIALI = 'speciali: \\x1b "virgolette"\ttab'
+
+CORE = f"""intro
+<!-- MAIN:only --> <!-- commento -->
+solo-main
+<!-- /MAIN:only -->
+{SPECIALI}
 <!-- OS:windows -->
 solo-windows
 <!-- /OS:windows -->
 <!-- OS:linux -->
 solo-linux
 <!-- /OS:linux -->
+<!-- MAIN:only --> <!-- commento -->
 <!-- RECALL:manual --> <!-- commento -->
 corpo-recall
 <!-- /RECALL:manual -->
+tra-recall-retain
 <!-- RETAIN:manual --> <!-- commento -->
 corpo-retain
 <!-- /RETAIN:manual -->
+<!-- /MAIN:only -->
 fine
 """
 
@@ -73,8 +86,8 @@ class InjectCoreBehaviorParity(unittest.TestCase):
             out[key] = r.stdout.strip() == "True"
         return out
 
-    def _bash(self, env: dict) -> str:
-        r = subprocess.run([BASH, (self.root / "hooks" / "bin" / "inject-core-behavior.sh").as_posix()],
+    def _bash(self, env: dict, *args: str) -> str:
+        r = subprocess.run([BASH, (self.root / "hooks" / "bin" / "inject-core-behavior.sh").as_posix(), *args],
                            env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
@@ -92,6 +105,10 @@ class InjectCoreBehaviorParity(unittest.TestCase):
         self.assertEqual("corpo-recall" not in out, expected["recall_enabled"], out)
         self.assertNotIn("RETAIN:manual", out)
         self.assertNotIn("RECALL:manual", out)
+        self.assertNotIn("MAIN:only", out)
+        self.assertIn("solo-main", out)
+        self.assertIn("tra-recall-retain", out)
+        self.assertIn(SPECIALI, out)
         self.assertTrue(out.startswith("intro\n") and out.endswith("fine\n"), out)
         return expected
 
@@ -142,6 +159,22 @@ class InjectCoreBehaviorParity(unittest.TestCase):
         self.assertIn(keep, out)
         self.assertNotIn(drop, out)
         self.assertNotIn("<!-- OS:", out)
+
+    def test_subagent_drops_main_only(self):
+        # Con i flag a true la chiusura di RECALL azzera `drop`: senza un flag
+        # separato per MAIN:only, tra-recall-retain passerebbe.
+        keep_os = "solo-windows" if sys.platform == "win32" else "solo-linux"
+        for flag in (False, True):
+            with self.subTest(flag=flag):
+                self._write(self.root / "hindsight.config.json",
+                            {"recall_enabled": flag, "retain_enabled": flag})
+                out = self._bash(self._env({"CLAUDE_PROJECT_DIR": str(self.project)}), "subagent")
+                hso = json.loads(out)["hookSpecificOutput"]
+                self.assertEqual(hso["hookEventName"], "SubagentStart")
+                ctx = hso["additionalContext"]
+                for gone in ("solo-main", "corpo-recall", "tra-recall-retain", "corpo-retain", "<!--"):
+                    self.assertNotIn(gone, ctx)
+                self.assertEqual(ctx, f"intro\n{SPECIALI}\n{keep_os}\nfine\n")
 
 
 if __name__ == "__main__":

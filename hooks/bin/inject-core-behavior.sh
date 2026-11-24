@@ -3,11 +3,18 @@
 # dell'OS corrente e scartando i blocchi manuali RECALL/RETAIN dove l'hook
 # automatico li rende superflui. Il resto del file resta letterale.
 #
+# Con l'argomento `subagent` (hook SubagentStart) scarta anche i blocchi
+# MAIN:only, le regole della sola sessione principale, e stampa il testo come
+# JSON in hookSpecificOutput.additionalContext, il campo che SubagentStart
+# passa al contesto del subagente.
+#
 # Zero fork: su MSYS ogni processo costa 200-450ms e l'hook ha 5s di timeout,
 # condivisi all'avvio con gli altri SessionStart. Con due python, cygpath, uname
 # e dirname girava in ~1,8s (fino a 6s all'avvio) ed e' andato in timeout 5 volte
 # a ottobre 2026: sessioni partite senza le regole base.
 set -uo pipefail
+
+MODE="${1:-session}"
 
 # Root del plugin (bin/ -> hooks/ -> plugin) per parameter expansion, come in
 # lib/hs-python.sh: niente subshell ne' dirname.
@@ -64,10 +71,16 @@ msys* | cygwin*) OS_DROP=linux ;;
 esac
 # Filtro in puro bash (niente sed: col sed nativo ucrt64 la path conversion
 # MSYS2 mangia le espressioni che contengono slash).
+# MAIN:only ha un flag suo perche' contiene blocchi RECALL/RETAIN: con un solo
+# flag la loro chiusura riaprirebbe l'output dentro il blocco MAIN:only.
+# Accumula in OUT invece di usare $(...), che su MSYS costa un fork.
+OUT=
 filter_os() {
-    local drop=0 line
+    local drop=0 main_drop=0 line
     while IFS= read -r line; do
         case "$line" in
+        *"<!-- MAIN:only -->"*) [ "$MODE" = subagent ] && main_drop=1; continue ;;
+        *"<!-- /MAIN:only -->"*) main_drop=0; continue ;;
         *"<!-- OS:$OS_DROP -->"*) drop=1; continue ;;
         *"<!-- /OS:$OS_DROP -->"*) drop=0; continue ;;
         *"<!-- OS:"* | *"<!-- /OS:"*) continue ;;
@@ -76,9 +89,21 @@ filter_os() {
         *"<!-- RECALL:manual -->"*) [ "$RECALL_DROP" -eq 1 ] && drop=1; continue ;;
         *"<!-- /RECALL:manual -->"*) [ "$RECALL_DROP" -eq 1 ] && drop=0; continue ;;
         esac
-        [ "$drop" -eq 1 ] && continue
-        printf '%s\n' "$line"
+        (( drop || main_drop )) && continue
+        OUT+="$line"$'\n'
     done < "$FILE"
 }
 
 filter_os
+if [ "$MODE" != subagent ]; then
+    printf '%s' "$OUT"
+    exit 0
+fi
+# Escape JSON: prima il backslash, poi virgolette e controlli. Il file non ha
+# altri caratteri di controllo.
+OUT="${OUT//\\/\\\\}"
+OUT="${OUT//\"/\\\"}"
+OUT="${OUT//$'\t'/\\t}"
+OUT="${OUT//$'\r'/}"
+OUT="${OUT//$'\n'/\\n}"
+printf '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"%s"}}\n' "$OUT"

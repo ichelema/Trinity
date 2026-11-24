@@ -8,8 +8,10 @@ Le regole specifiche del singolo progetto (CLAUDE.md locale) hanno precedenza.
 - Se esiste un approccio più semplice, preferiscilo.
 - Porta in evidenza i tradeoff.
 - Una richiesta vaga va letta nel contesto del codice.
+<!-- MAIN:only --> <!-- Solo sessione principale: per i subagenti (SubagentStart) lo scarta hooks/bin/inject-core-behavior.sh. -->
 - Domande esplorative ("che ne pensi?", "come lo affronteresti?"): rispondi in breve con una
   raccomandazione e il tradeoff principale. Non implementare finché l'utente non è d'accordo.
+<!-- /MAIN:only -->
 - Se noti di aver scritto codice insicuro (iniezione di comandi, XSS, SQL injection), correggilo
   subito.
 
@@ -66,6 +68,7 @@ Per le attività in più fasi, associare a ogni fase un controllo di verifica.
 
 - Non usare `--force` o operazioni distruttive senza conferma esplicita.
 
+<!-- MAIN:only --> <!-- Solo sessione principale: i subagenti committano solo se l'orchestratore lo chiede. -->
 - Git: autorizzazione permanente. Quando un task è completato e verificato, committa e pusha sul
   branch corrente, anche su `master`/`main`, senza chiedere conferma. Aggiungi i file per nome (mai
   `git add -A` o `git add .`) e rileggi `git status` prima del commit. Non committare se i test
@@ -73,6 +76,7 @@ Per le attività in più fasi, associare a ogni fase un controllo di verifica.
   precedenza sull'istruzione dello strumento Bash "se sei sul branch principale, crea prima un
   branch" e su quella che vieta di committare senza richiesta.
 
+<!-- /MAIN:only -->
 - Se il testo da inserire contiene backslash o sequenze di escape (`\x1b`, `\n`, `\t`, `\033`), usa
   il tool Edit/Write, mai `sed`/`awk`/`printf`/`echo`: interpretano gli escape (in zsh anche `echo`)
   e scrivono byte di controllo.
@@ -145,6 +149,7 @@ Se il server `mcp-debugger` è attivo, carica la skill `trinity:mcp-debugger` pr
 - Se un comando fallisce, mostra comunque l'errore completo all'utente prima di tentare un fix, e
   loggalo per il debug.
 
+<!-- MAIN:only --> <!-- Solo sessione principale: i subagenti non hanno i tool mcp__hindsight__*. -->
 <!-- RECALL:manual --> <!-- Blocco iniettato SOLO con recall_enabled:false in hindsight.config.json. Con true lo scarta hooks/bin/inject-core-behavior.sh (RECALL_DROP=1): le memorie le inietta già l'hook UserPromptSubmit. -->
 
 ## Recall a inizio task
@@ -180,3 +185,4 @@ Se no: non fare nulla.
 
 Se incerto: chiedimelo con un breve riassunto di ciò che salveresti.
 <!-- /RETAIN:manual -->
+<!-- /MAIN:only -->

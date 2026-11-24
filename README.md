@@ -184,6 +184,24 @@ Conseguenze pratiche:
 - Per modificare il comportamento dell'agente si edita **questo file**, non i singoli progetti.
 - I path che cambiano per macchina **non** sono nel file: vengono da variabili d'ambiente (vedi §10).
 
+**Subagenti.** L'output di `SessionStart` entra solo nella sessione principale: i subagenti non lo
+vedono. Per gli agenti `trinity:*` e `gpt-bridge:*` un hook `SubagentStart` lancia lo stesso script
+con l'argomento `subagent`. In questa modalità lo script scarta anche i blocchi
+`<!-- MAIN:only -->` … `<!-- /MAIN:only -->`, cioè le regole della sola sessione principale
+(domande esplorative, commit e push automatici, Recall e Retain di Hindsight), e restituisce il
+testo come JSON in `hookSpecificOutput.additionalContext`. Una regola nuova che non vale per i
+subagenti va dentro un blocco `MAIN:only`. I file `CLAUDE_<MODELLO>.md` (§4.1) restano alla sola
+sessione principale.
+
+```json
+// hooks/hooks.json → SubagentStart
+{
+  "matcher": "^(trinity|gpt-bridge):",
+  "hooks": [{ "type": "command",
+    "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/bin/inject-core-behavior.sh\" subagent", "timeout": 5 }]
+}
+```
+
 ### 4.1 Istruzioni per singolo modello (`CLAUDE_<MODELLO>.md`)
 
 Claude Code carica i `CLAUDE.md` senza guardare quale modello sta girando: nativamente non
