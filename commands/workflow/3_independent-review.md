@@ -460,7 +460,9 @@ quest'ordine:
 1. Il verdetto in grassetto e una frase con il motivo principale.
 2. **Cosa fai ora**: da 1 a 3 azioni numerate, ognuna aperta da un verbo all'imperativo. Metti
    ogni comando da lanciare in un blocco di codice con il tag del linguaggio. Con `APPROVABILE` e
-   nessun'altra azione, scrivi solo «Fai il merge della PR». Non anticipare
+   nessun'altra azione, scrivi due azioni: «Fai il merge della PR» con
+   `gh pr merge "<branch>" --merge`, poi, dopo il merge,
+   `/trinity:workflow:5_remove-worktree <prefix>+<base-name>`. Non anticipare
    la domanda sui fix: se è l'unica azione, ometti «Cosa fai ora».
    Con `BLOCCATO`, scrivi cosa deve fornire l'utente.
 3. **Finding**, solo se ce ne sono: una tabella markdown con una riga per finding, ordinata per
@@ -478,7 +480,8 @@ Non scrivere nel formato breve:
 - i candidati `REFUTED` uno per uno e le aree senza anomalie;
 - spiegazioni sul perché qualcosa non è un difetto;
 - i passi che un altro command fa già: la chiusura del lavoro dopo il merge (note di ripresa, SHA
-  nei file di memoria), la rimozione dei worktree, la rigenerazione di file ignorati da Git;
+  nei file di memoria) e la rimozione dei worktree, che `5_remove-worktree` di «Cosa fai ora»
+  esegue da solo, e la rigenerazione di file ignorati da Git;
 - la conclusione operativa: il verdetto e «Cosa fai ora» la sostituiscono.
 
 ### Formato completo
