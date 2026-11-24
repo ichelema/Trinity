@@ -5,6 +5,8 @@ description: >-
   requisiti mancanti, regressioni e casi limite e restituisce un report con finding verificati. Non
   modifica file.
 model: fable
+# Gemello della mod gpt-bridge. Per usare Gemini al posto di GPT metti qui claude-gemini-4-neon
+# (vale dalla sessione dopo); per una sola chiamata: riga [gpt-model: claude-gemini-4-neon] nel prompt.
 gpt-model: claude-gpt-6-2-sol-high
 effort: high
 tools: Read, Grep, Glob, LSP, Bash, Skill, Agent, mcp__context7__resolve-library-id, mcp__context7__query-docs
