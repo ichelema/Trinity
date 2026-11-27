@@ -5,8 +5,8 @@ description: >-
   requisiti mancanti, regressioni e casi limite e restituisce un report con finding verificati. Non
   modifica file.
 model: fable
-# gpt-model: claude-gemini-4-neon
-gpt-model: claude-gpt-6-2-sol-high
+gpt-model: claude-gemini-4-neon
+# gpt-model: claude-gpt-6-2-sol-high
 effort: high
 tools: Read, Grep, Glob, LSP, Bash, Skill, Agent, mcp__context7__resolve-library-id, mcp__context7__query-docs
 color: red
