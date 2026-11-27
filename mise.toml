@@ -133,6 +133,12 @@ HINDSIGHT_API_EMBEDDINGS_GEMINI_API_KEY = "{{ env.GEMINI_API_KEY | default(value
 HINDSIGHT_API_EMBEDDINGS_GEMINI_MODEL = "gemini-embedding-001"
 HINDSIGHT_API_EMBEDDINGS_GEMINI_OUTPUT_DIMENSIONALITY = 1536
 
+# Knowledge bank (1.3.0): embedder separato da quello delle memory bank. Il default "local"
+# richiede torch, che qui non e' installato. Modello di default gemini-embedding-2
+# (multimodale: testo, pagine PDF, immagini); reranker KB non impostato = nessun rerank.
+HINDSIGHT_API_KB_EMBEDDINGS_PROVIDER = "gemini"
+HINDSIGHT_API_KB_EMBEDDINGS_API_KEY = "{{ env.GEMINI_API_KEY | default(value='') }}"
+
 # Modelli locali multilingua (contenuti in italiano), usati solo se provider = local.
 HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL = "BAAI/bge-m3"
 HINDSIGHT_API_RERANKER_LOCAL_MODEL = "BAAI/bge-reranker-v2-m3"
