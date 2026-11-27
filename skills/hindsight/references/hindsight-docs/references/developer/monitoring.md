@@ -120,9 +120,12 @@ only on deployments with few banks or tenants. The backlog gauges always carry `
 - `source`: Where the operation was triggered from (`api`, `reflect`, `internal`, `worker`)
 - `budget`: Budget level if specified (`low`, `mid`, `high`)
 - `max_tokens`: Max tokens if specified
-- `success`: How the operation ended: `true`, `false`, or `cancelled` when the client disconnected
-  before a recall or reflect finished. A cancellation is not a failure, so `success="false"` stays a
-  server-side signal; the `cancelled` duration shows how long clients waited before giving up.
+- `success`: How the operation ended: `true`, `false`, `cancelled` when the client disconnected
+  before a recall or reflect finished, or `rejected` when it was refused before it ran (an
+  [operation validator](./extensions.md#rejecting-an-operation) rejected it, or the caller's tag
+  scope does not allow it). Neither a cancellation nor a rejection is a failure, so
+  `success="false"` stays a server-side signal; the `cancelled` duration shows how long clients
+  waited before giving up.
 - `memories_backend`: The store serving the bank, when the memories extension names one
   (`MemoriesExtension.backend_name_for`). Absent by default, so existing series are unchanged; a
   deployment whose banks live in different stores uses it to compare their latency without
@@ -385,9 +388,12 @@ Supports any OTLP-compatible backend (Grafana LGTM, Langfuse, OpenLIT, DataDog, 
 - `gen_ai.operation.name` - Always `"chat"`
 - `gen_ai.provider.name` - Provider (`openai`, `anthropic`, `google`, etc.)
 - `gen_ai.request.model` - Model name
-- `gen_ai.usage.input_tokens` - Input tokens
+- `gen_ai.usage.input_tokens` - Input tokens, cached ones included
 - `gen_ai.usage.output_tokens` - Output tokens
+- `gen_ai.usage.cache_read.input_tokens` - Cached input tokens, already counted in `input_tokens` (only when the provider reports them)
+- `gen_ai.usage.reasoning_tokens` - Reasoning tokens (only when the provider reports them)
 - `hindsight.scope` - LLM call purpose (`memory`, `reflect`, `consolidation`, etc.)
+- `hindsight.bank_id` - Memory bank ID. Every span started inside a bank operation carries it, so a collector can route spans, and their token usage, per bank
 
 **Events:**
 - `gen_ai.client.inference.operation.details` - Full prompts and completions

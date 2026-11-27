@@ -12,8 +12,10 @@ This plugin integrates [hindsight-embed](https://vectorize.io/hindsight/cli), a 
 **Step 1: Install the plugin**
 
 ```bash
-openclaw plugins install @vectorize-io/hindsight-openclaw
+openclaw plugins install npm:@vectorize-io/hindsight-openclaw --force
 ```
+
+The `npm:` prefix matters on OpenClaw 2026.11+, where a bare name is looked up on ClawHub: the official plugin is not there, and the `hindsight` packages ClawHub does list are third-party. OpenClaw asks for `--force` because npm packages skip ClawHub's review. On older OpenClaw, use `openclaw plugins install @vectorize-io/hindsight-openclaw`.
 
 **Step 2: Run the setup wizard**
 
@@ -30,6 +32,8 @@ The wizard walks you through picking one of three install modes:
 - **Cloud** — managed Hindsight at `https://api.hindsight.vectorize.io`. Paste your cloud API token when prompted (masked input). No local setup needed.
 - **External API** — your own running Hindsight deployment. Prompts for the URL and, optionally, the token value (masked).
 - **Embedded daemon** — spawns a local `hindsight-embed` daemon on this machine. Prompts for the LLM provider (OpenAI / Anthropic / Gemini / Groq / Claude Code / OpenAI Codex / Ollama) and the API key (masked).
+
+The wizard also gives Hindsight OpenClaw's memory slot (`plugins.slots.memory`). OpenClaw keeps a memory plugin disabled until it holds that slot, so if you configure the plugin by hand, set it too: `openclaw config set plugins.slots.memory hindsight-openclaw`.
 
 The interactive wizard stores credentials **inline** in `openclaw.json` for simplicity. For CI / production you can store credentials as a [`SecretRef`](#llm-configuration) (resolved from an env var, file, or exec source at startup, never saved on disk) by either passing `--token-env` / `--api-key-env` to the non-interactive wizard or switching an existing field afterwards via `openclaw config set ... --ref-source env|file|exec`.
 
@@ -131,14 +135,15 @@ Optional settings in `~/.openclaw/openclaw.json`:
 - `excludeProviders` - Message providers to skip for recall/retain (e.g. `["slack"]`, `["telegram"]`, `["discord"]`)
 - `autoRecall` - Auto-inject memories before each turn (default: `true`). Set to `false` when the agent has its own recall tool.
 - `memoryMode` - `hybrid` (default): auto-recall plus the `hindsight_retain` / `hindsight_recall` / `hindsight_reflect` tools. `context`: auto-recall only. `tools`: tools only, no auto-recall. See [Agent tools](#agent-tools).
-- `allowKnowledgeDelete` - offer `hindsight_delete_knowledge_node`, which deletes a knowledge folder or page and everything under it. Cannot be undone. Default `false`. See [Agent tools](#agent-tools).
+- `allowPageDelete` - offer `hindsight_delete_page_node`, which deletes a folder or page and everything under it. Cannot be undone. Default `false`. The old name `allowKnowledgeDelete` still works. See [Agent tools](#agent-tools).
 - `autoRetain` - Auto-retain conversations after each turn (default: `true`)
 - `retainRoles` - Which message roles to retain (default: `["user", "assistant"]`). Options: `user`, `assistant`, `system`, `tool`
 - `recallBudget` - Recall effort: `"low"`, `"mid"`, or `"high"` (default: `"mid"`). Higher budgets use more retrieval strategies for better results.
-- `recallMaxTokens` - Max tokens for recall response (default: `1024`). Controls how much memory context is injected per turn.
+- `recallMaxTokens` - Max tokens for recall response (default: `1024`). Controls how much memory context is injected per turn. Recall fills this budget with the best matches it has, so on a small bank a narrow question can return most of it; lower it, or cut weak matches with `recallMinScores`.
 - `recallTopK` - Max number of memories to inject per turn (default: unlimited).
-- `recallTypes` - Memory types to recall (default: `["observation"]`). Options: `world`, `experience`, `observation`. Defaults to observations — the consolidated, deduplicated view — to avoid surfacing the same answer multiple times when many raw memories say the same thing.
+- `recallTypes` - Memory types to recall (default: `["observation"]`). Options: `world`, `experience`, `observation`. Defaults to observations — the consolidated, deduplicated view — to avoid surfacing the same answer multiple times when many raw memories say the same thing. Facts that are not consolidated yet (a fresh import or backfill, or a bank with `enableObservations: false`) stay invisible until you add `world` and `experience`.
 - `preferObservations` - When `true`, recall drops raw facts already consolidated into an observation while keeping unconsolidated ones (default: `false`). Pair it with a `recallTypes` that includes raw types (e.g. `["observation", "world", "experience"]`) to surface just-retained facts before consolidation catches up — for example after a `/reset` followed by "what did I just say?" — without duplicating already-consolidated content.
+- `recallIncludeChunks` - When `true`, `hindsight_recall` also returns the original text each memory was extracted from, with its document id, so the agent can check a memory against its source (default: `false`). Auto-recall is unaffected.
 - `recallMinScores` - Optional score floors for auto-recall, keyed by stage (for example `{"reranker": 0.3}`). Missing fields impose no floor; memories with missing or `null` scores pass. Reranker scores are query-local, so use this as a garbage gate rather than a calibrated relevance dial.
 - `recallContextTurns` - Number of prior user turns to include in the recall query (default: `1`).
 - `recallMaxQueryChars` - Max characters for the composed recall query (default: `800`).
@@ -176,7 +181,7 @@ In this example, memories are isolated per provider + user, meaning the same use
 Available isolation fields:
 
 - `agent` - The agent/bot identity
-- `channel` - The channel or conversation ID
+- `channel` - The channel or conversation ID. All Control UI (dashboard) tabs share one channel, `dashboard`; before plugin 1.2.2 each tab got its own bank.
 - `user` - The user interacting with the agent
 - `provider` - The message provider (e.g. Slack, Discord)
 
@@ -209,7 +214,7 @@ Those two modes are all-or-nothing. When you run several agents in one gateway a
 
 The `inbound` and `outbound` agents share the `ps-technology` bank, `limpieza` writes to `ps-limpieza`, and any agent not listed keeps the bank it would otherwise derive. The map is checked before both static and dynamic derivation, so it also takes precedence over a configured `bankId`.
 
-Agent ids are matched exactly (case-sensitive), and mapped bank names are used exactly as written — `bankIdPrefix` is not applied to them. Mapped banks still receive your configured bank defaults on first use, and auto-recall, auto-retain and the knowledge tools all resolve the same mapped bank.
+Agent ids are matched exactly (case-sensitive), and mapped bank names are used exactly as written — `bankIdPrefix` is not applied to them. Mapped banks still receive your configured bank defaults on first use, and auto-recall, auto-retain and the page tools all resolve the same mapped bank.
 
 ### Per-user bank defaults
 
@@ -432,7 +437,7 @@ uvx hindsight-embed@latest -p openclaw ui
 ## OpenClaw compatibility
 
 The plugin is tested against the current OpenClaw release and against older ones.
-Version 0.12.0 and later work with **OpenClaw 2026.7.x through 2026.10.x**.
+Version 0.12.0 and later work with **OpenClaw 2026.7.x through 2026.11.x**.
 
 **If you are on OpenClaw 2026.8.1 or later, upgrade to plugin 0.12.0.** OpenClaw
 2026.8.1 changed how it labels the conversation metadata it attaches to each
@@ -472,8 +477,12 @@ it is fixed in 0.12.0 — retry the install with the new version.
 openclaw plugins list | grep hindsight
 # Should show: ✓ enabled │ Hindsight Memory │ ...
 
+# Hindsight must hold the memory slot, or OpenClaw keeps it disabled
+# ("plugin disabled (memory slot set to "memory-core")"). The setup wizard sets it.
+openclaw config set plugins.slots.memory hindsight-openclaw
+
 # Reinstall if needed
-openclaw plugins install @vectorize-io/hindsight-openclaw
+openclaw plugins install npm:@vectorize-io/hindsight-openclaw --force
 ```
 
 ### Daemon not starting
@@ -529,18 +538,20 @@ If you used `--ref-source env`, double-check that the referenced env var
 The plugin gives the agent the same three memory tools the Hermes integration does:
 
 - `hindsight_retain` stores something the agent wants remembered (`content`, plus optional `context`, `tags` and `occurred_at`). Configured `retainTags` are added to its tags.
-- `hindsight_recall` searches memory with the same settings as auto-recall (`recallBudget`, `recallMaxTokens`, `recallTypes`, `preferObservations`, `recallMinScores`).
+- `hindsight_recall` searches memory with the same settings as auto-recall (`recallBudget`, `recallMaxTokens`, `recallTypes`, `preferObservations`, `recallMinScores`). With `recallIncludeChunks`, each memory is followed by the text it came from.
 - `hindsight_reflect` answers a question by reasoning over the memories.
 
-It also gives the agent Hindsight's knowledge-base tools, the same ones Hindsight's MCP server offers:
+It also gives the agent Hindsight's page tools, the same ones Hindsight's MCP server offers:
 
-- `hindsight_get_knowledge_base_tree`, `hindsight_search_knowledge_base` and `hindsight_get_knowledge_page` browse, search and read the knowledge pages.
-- `hindsight_create_knowledge_folder`, `hindsight_create_knowledge_page` and `hindsight_update_knowledge_node` organise them and create new pages, which Hindsight writes and keeps up to date from the memories.
-- `hindsight_delete_knowledge_node` deletes a folder or page and everything under it. It cannot be undone, so it is only offered with `allowKnowledgeDelete: true`.
+- `hindsight_get_page_tree`, `hindsight_search_pages` and `hindsight_get_page` browse, search and read the bank's pages.
+- `hindsight_create_page_folder`, `hindsight_create_page` and `hindsight_update_page_node` organise them and create new pages, which Hindsight writes and keeps up to date from the memories.
+- `hindsight_delete_page_node` deletes a folder or page and everything under it. It cannot be undone, so it is only offered with `allowPageDelete: true`.
+
+Before the rename these were `hindsight_get_knowledge_base_tree`, `hindsight_search_knowledge_base`, `hindsight_get_knowledge_page`, `hindsight_create_knowledge_folder`, `hindsight_create_knowledge_page`, `hindsight_update_knowledge_node` and `hindsight_delete_knowledge_node`. A tool allow-list in your OpenClaw config that names an old tool needs the new name; the plugin logs a warning at startup for each old name it finds there.
 
 No tool takes a bank. Each call uses the bank this session's auto-recall and auto-retain use, so `agentBankMap` and per-agent, per-channel and per-user banks all apply, and an agent can't reach another agent's or user's memory. A session that auto-recall would skip (for example one with no stable sender when banks are keyed by user) gets an error instead of a guessed bank.
 
-The session filters apply too: a session matching `ignoreSessionPatterns` gets no tools, and one matching `statelessSessionPatterns` gets no tools while `skipStatelessSessions` is on, and only the reading tools (`hindsight_recall`, `hindsight_reflect` and the knowledge-base reads) when it is off.
+The session filters apply too: a session matching `ignoreSessionPatterns` gets no tools, and one matching `statelessSessionPatterns` gets no tools while `skipStatelessSessions` is on, and only the reading tools (`hindsight_recall`, `hindsight_reflect` and the page reads) when it is off.
 
 `memoryMode` decides what the agent gets, like Hermes's `memory_mode`:
 
@@ -551,6 +562,10 @@ The session filters apply too: a session matching `ignoreSessionPatterns` gets n
 ```bash
 openclaw config set plugins.entries.hindsight-openclaw.config.memoryMode tools
 ```
+
+**Active Memory** (OpenClaw 2026.11+) runs its deep-recall turn with `hindsight_recall`; the plugin names it for Active Memory, so no `toolsAllow` list is needed. That turn gets no auto-recall and is not saved, since it is an internal search, not part of the conversation.
+
+**`memory_search` and `memory_get` are memory-core's tools, not Hindsight's.** Once Hindsight holds the memory slot, OpenClaw no longer offers them, and allow-listing them gives the model nothing. Allow `hindsight_recall` (and `hindsight_reflect`) instead; they search the same bank auto-recall uses.
 
 ## OpenClaw's memory page, status and search
 
