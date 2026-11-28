@@ -113,7 +113,14 @@ elif cmd == "seed":
             # exclude_mental_models: i mental model NON si nutrono a vicenda (evita il
             # feedback loop in cui un model vuoto/errato ne contamina altri). Leggono
             # solo i fatti reali del bank. Vedi memory mental-model-tag-filter.
-            "trigger": {"refresh_after_consolidation": True, "exclude_mental_models": True},
+            # Cron e non refresh_after_consolidation: rifare tutte le pagine dopo ogni
+            # consolidation era il 74% dei token OpenAI di Hindsight (2026-11-28).
+            "trigger": {
+                "mode": "delta",
+                "exclude_mental_models": True,
+                "refresh_cron": "0 3 * * *",
+                "full_refresh_cron": "0 3 * * 0",
+            },
         }
         resp = req("POST", "/mental-models", body)
         op = resp.get("operation_id") or resp.get("id") or "?"
@@ -176,7 +183,8 @@ elif cmd == "seed-kp":
                 "mode": "delta",
                 "fact_types": ["world", "experience"],
                 "exclude_mental_models": True,
-                "refresh_after_consolidation": True,
+                "refresh_cron": "0 3 * * *",
+                "full_refresh_cron": "0 3 * * 0",
             },
         }
         resp = req("POST", "/knowledge-base/pages", body)
