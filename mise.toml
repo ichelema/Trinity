@@ -109,6 +109,12 @@ HINDSIGHT_API_REFLECT_LLM_PROVIDER = "openai-responses"
 HINDSIGHT_API_REFLECT_LLM_MODEL = "gpt-5.6-luna"
 HINDSIGHT_API_REFLECT_LLM_REASONING_EFFORT = "low"
 
+# Pagine nuove create fuori dal seed (Control Plane, MCP): refresh a cron, non dopo ogni
+# consolidation (il 74% dei token OpenAI di Hindsight il 2026-11-28). Va fuso col default
+# built-in, che ha refresh_after_consolidation true: il false esplicito serve perché i due
+# trigger si escludono. Stessi valori del seed in hooks/hindsight/ops/hindsight-mental-models.sh.
+HINDSIGHT_API_PAGE_DEFAULT_TRIGGER = '{"refresh_after_consolidation": false, "refresh_cron": "0 3 * * *", "full_refresh_cron": "0 3 * * 0"}'
+
 # PRODUZIONE: gemini-embedding-001 (1536 dim) dal 2026-07-27, di nuovo dopo la parentesi
 # zembed-1 (2026-05-27 → 2026-07-27), chiusa perche' ZeroEntropy spegne tutto il 2026-09-04.
 # Scelto su benchmark vettoriale (bench_results/embed_20260727_000525.json, corpus ostico
